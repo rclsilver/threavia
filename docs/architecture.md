@@ -1,0 +1,126 @@
+# Architecture notes
+
+This document records the state of the implementation and every choice the
+specification deliberately left open. The architecture itself is defined in
+[`THREAVIA_SPEC_V1.md`](../THREAVIA_SPEC_V1.md) and is not restated here.
+
+## Scope of this skeleton
+
+Specification section 35 asks for a compilable repository skeleton rather than a
+working control plane. The rule applied throughout: **the structure is real, the
+behaviour is either implemented or explicitly absent, never faked**.
+
+Concretely:
+
+- Core does not acknowledge Job events it has not persisted, so a backend keeps
+  them in its local buffer and replays them when the event pipeline lands.
+- Every `/api/v1` route answers `501 Not Implemented` instead of an empty
+  result, so no client mistakes a missing endpoint for an empty collection.
+- The Claude runner returns `ErrNotImplemented`, and the adapter reports the
+  command as rejected, so Core never believes work started when it did not.
+- A Core Tool invocation is answered with an explicit error instead of being
+  dropped, so an agent never waits forever.
+
+## Choices made where the specification was open
+
+### Repository and module
+
+| Choice | Value | Why |
+| --- | --- | --- |
+| Go module | `github.com/rclsilver/threavia` | Section 25 leaves the module path to the chosen repository host. |
+| Go version | 1.25 | The lowest version the pinned gRPC and pgx releases support. |
+| License | Apache-2.0 | Permissive with an explicit patent grant, the norm for Kubernetes-adjacent infrastructure. |
+
+### Additions to the proposed tree
+
+Section 25 proposes a layout; four additions were needed.
+
+- **`gen/`** holds the generated Go bindings. Section 25 asks for a
+  deterministic, tooling-driven location; generating into `api/proto` alongside
+  the sources would make `buf generate --clean` destroy the `.proto` files.
+- **`internal/core/config`** owns environment loading for Core. It composes the
+  configuration structs the storage and auth packages define themselves, so no
+  package depends on the configuration loader.
+- **`internal/envutil`** holds the environment parsing helpers shared by the
+  Core and backend configuration loaders, which would otherwise be duplicated.
+- **`internal/logging`** holds the structured logger builder, so the Claude
+  backend does not have to import a Core package to get a logger.
+
+### Dependencies
+
+Six direct dependencies: `grpc`, `protobuf`, `pgx/v5`, `golang-migrate`, `uuid`
+and `x/sync`. HTTP routing uses the standard library `net/http` method patterns,
+and configuration parsing is hand-written: neither warranted a dependency.
+
+`golang-migrate` was chosen over `goose` because its dependency tree is far
+smaller: `goose` pulls ClickHouse, SQL Server, Vertica, YDB and SQLite drivers
+Threavia does not use.
+
+### Database schema
+
+The first migration creates exactly the tables section 35 asks for: `projects`,
+`backend_instances`, `sessions`, `runs`, `jobs` and `events`.
+
+- **No `users` table.** `owner_id` is an opaque identifier produced by the
+  configured authentication mode. Modelling user storage before the
+  authentication implementation lands would commit to a design prematurely.
+- **`sessions.working_directory_id` has no foreign key yet.** The column exists
+  because a Session has an optional logical working directory, but
+  `known_directories` is not modelled in this slice; the constraint is added
+  with that table.
+- **`runs.backend_instance_id` is `ON DELETE RESTRICT`.** BackendInstances are
+  user-owned and are not deleted with a Project (section 21).
+- **One active Job per Run is a partial unique index**, over the statuses
+  `JobStatus.Active` reports. The invariant of section 3.4 is enforced by the
+  database, not by application discipline.
+- **Backend event deduplication is `UNIQUE (backend_instance_id,
+  backend_event_id)`.** PostgreSQL treats `NULL`s as distinct, so
+  Core-generated events, which have neither, are unaffected.
+- **`events.global_sequence` is an identity column.** It is monotonic, as
+  section 4 requires. Two consequences are worth knowing before the SSE stream
+  is built: a rolled-back insert consumes a value, so the sequence has gaps, and
+  under concurrency a transaction holding a lower sequence can commit after a
+  higher one. The event ingestion path has to account for both; a cursor-based
+  catch-up must not assume contiguity.
+
+### Backend authentication
+
+Section 8 defines registration by shared key with a claim code, and by one-shot
+user token. Neither is implemented yet. Until they are, Core resolves the bearer
+credential presented on `Connect` through a `TokenResolver`, whose only
+implementation maps static tokens configured in `THREAVIA_BACKEND_DEV_TOKENS`.
+
+With no token configured — the default — every backend connection is rejected.
+This is a development stop-gap and is labelled as such everywhere it appears.
+
+### Job state machine
+
+The transitions of section 3.5 leave a few cases implicit; the implemented table
+resolves them like this:
+
+- a QUEUED Job has nothing running on a backend to confirm a stop, so it is
+  cancelled directly, without passing through CANCELLING;
+- CANCELLING may still resolve to COMPLETED or FAILED, because the backend is
+  the source of truth for what actually happened locally (section 9);
+- WAITING_BACKEND may resolve to any outcome, for the same reason: the backend
+  may have finished the work while it was disconnected.
+
+Each of these is pinned by a test in `internal/core/domain`.
+
+### Shutdown
+
+gRPC's graceful stop waits for in-flight RPCs, and the backend control stream is
+by design long-lived, so Core first ends every control connection and only then
+stops the server. A backend treats it as a normal disconnection and reconnects.
+Without this, every Core shutdown would take the full shutdown timeout.
+
+## Layering rules
+
+- `internal/core/domain` imports nothing from Threavia and knows no provider.
+- Core never imports a provider-specific package; the Claude translation is
+  confined to `internal/backends/claude`.
+- `pkg/backend-sdk` is provider-independent: a backend learns the Core Tools it
+  may call from the `ProjectContext` sent at Job start, and never hardcodes
+  their names.
+- The configuration structs live with the component they configure;
+  `internal/core/config` only loads them from the environment.

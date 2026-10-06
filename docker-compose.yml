@@ -1,0 +1,42 @@
+# Local development dependencies for Threavia Core.
+#
+# Core requires PostgreSQL and S3-compatible object storage
+# (THREAVIA_SPEC_V1.md section 19). MinIO is used here because it is convenient
+# locally; nothing in Core or in the Helm chart assumes it.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: threavia
+      POSTGRES_PASSWORD: threavia
+      POSTGRES_DB: threavia
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U threavia -d threavia"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  objectstore:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: threavia
+      MINIO_ROOT_PASSWORD: threavia-dev-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - objectstore-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+  objectstore-data:

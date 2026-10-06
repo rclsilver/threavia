@@ -1,0 +1,110 @@
+// BackendControl: the single long-lived bidirectional control stream between a
+// BackendInstance and Core (THREAVIA_SPEC_V1.md sections 9 and 26).
+//
+// The backend always initiates the outbound TLS/gRPC connection; Core never
+// needs inbound connectivity to a backend. The backend credential is presented
+// as an "authorization: Bearer <token>" gRPC metadata header on Connect.
+syntax = "proto3";
+
+package threavia.backend.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "threavia/backend/v1/commands.proto";
+import "threavia/backend/v1/common.proto";
+import "threavia/backend/v1/events.proto";
+
+option go_package = "github.com/rclsilver/threavia/gen/threavia/backend/v1;backendv1";
+
+service BackendControl {
+  rpc Connect(stream BackendToCore) returns (stream CoreToBackend);
+}
+
+// First message of the stream, sent by the backend right after connecting.
+message Hello {
+  ProtocolInfo protocol = 1;
+  SdkInfo sdk = 2;
+  BackendInfo backend = 3;
+  string instance_name = 4;
+  repeated Capability capabilities = 5;
+  FeatureFlags features = 6;
+  Capacity capacity = 7;
+}
+
+message Heartbeat {
+  google.protobuf.Timestamp sent_at = 1;
+  Capacity capacity = 2;
+}
+
+message StatusUpdate {
+  BackendOperationalStatus status = 1;
+  repeated Condition conditions = 2;
+  Capacity capacity = 3;
+  ProviderAuthState provider_auth_state = 4;
+}
+
+message JobState {
+  string job_id = 1;
+  JobStatus status = 2;
+  uint64 last_backend_sequence = 3;
+}
+
+message RunState {
+  string run_id = 1;
+  string native_session_id = 2;
+  ResumeStatus resume_status = 3;
+  repeated JobState jobs = 4;
+}
+
+// What the backend believes is actually happening locally, reported on every
+// (re)connection so Core can reconcile.
+message ReconcileState {
+  repeated RunState runs = 1;
+}
+
+// Result of a Core -> Backend command, correlated by CoreToBackend.command_id.
+message CommandResult {
+  string command_id = 1;
+  bool accepted = 2;
+  Error error = 3;
+}
+
+// Agent-issued Core Tool call, proxied by the backend (spec section 12).
+message CoreToolRequest {
+  string request_id = 1;
+  string run_id = 2;
+  string job_id = 3;
+  string name = 4;
+  google.protobuf.Struct input = 5;
+}
+
+message BackendToCore {
+  oneof message {
+    Hello hello = 1;
+    Heartbeat heartbeat = 2;
+    StatusUpdate status_update = 3;
+    ReconcileState reconcile_state = 4;
+    JobEvent job_event = 5;
+    EphemeralJobEvent ephemeral_job_event = 6;
+    CommandResult command_result = 7;
+    CoreToolRequest core_tool_request = 8;
+  }
+}
+
+message CoreToBackend {
+  // Correlation id for CommandResult. Empty for non-command messages.
+  string command_id = 1;
+
+  oneof message {
+    Welcome welcome = 2;
+    StartJob start_job = 3;
+    CancelJob cancel_job = 4;
+    ValidationResolution validation_resolution = 5;
+    UserInputResolution user_input_resolution = 6;
+    JobInputNow job_input_now = 7;
+    JobInputNext job_input_next = 8;
+    ReconcileInstruction reconcile_instruction = 9;
+    EventAck event_ack = 10;
+    CoreToolResponse core_tool_response = 11;
+  }
+}

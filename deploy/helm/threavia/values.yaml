@@ -1,0 +1,141 @@
+# Threavia Core.
+#
+# Core needs PostgreSQL and S3-compatible object storage. Neither is deployed by
+# this chart: point it at the ones you run.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/rclsilver/threavia-core
+  pullPolicy: IfNotPresent
+  # Defaults to the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+log:
+  level: info
+  format: json
+
+service:
+  type: ClusterIP
+  # Client HTTP/JSON + SSE.
+  httpPort: 8080
+  # Backend gRPC control stream.
+  grpcPort: 9090
+  annotations: {}
+
+ingress:
+  # Client API. TLS is required for remote access.
+  http:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: threavia.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+  # Backend control stream. It is a long-lived bidirectional gRPC stream:
+  # the ingress controller must be configured for gRPC and must not impose a
+  # read or idle timeout that would cut it.
+  grpc:
+    enabled: false
+    className: ""
+    annotations: {}
+    host: backends.threavia.example.com
+    tls: []
+
+# TLS directly on the backend gRPC listener. Leave disabled when an ingress
+# terminates TLS.
+grpcTLS:
+  enabled: false
+  existingSecret: ""
+  certFile: tls.crt
+  keyFile: tls.key
+
+postgres:
+  host: postgresql
+  port: 5432
+  user: threavia
+  database: threavia
+  sslMode: require
+  # Password source: either a literal, or an existing secret.
+  password: ""
+  existingSecret: ""
+  existingSecretPasswordKey: password
+  maxConns: 10
+  # Apply pending migrations at startup.
+  autoMigrate: true
+
+# S3-compatible object storage. Any implementation works: nothing here assumes
+# MinIO.
+s3:
+  enabled: false
+  endpoint: ""
+  region: us-east-1
+  bucket: threavia
+  useTLS: true
+  forcePathStyle: true
+  maxUploadBytes: 104857600
+  accessKeyId: ""
+  secretAccessKey: ""
+  existingSecret: ""
+  existingSecretAccessKeyIdKey: accessKeyId
+  existingSecretSecretAccessKeyKey: secretAccessKey
+
+auth:
+  # none | basic | oidc
+  mode: none
+  # mode none
+  devUserId: dev
+  # mode basic
+  basic:
+    username: ""
+    password: ""
+    existingSecret: ""
+    existingSecretPasswordKey: password
+  # mode oidc
+  oidc:
+    issuer: ""
+    clientId: ""
+    audience: ""
+
+backendRegistration:
+  heartbeatInterval: 15s
+  offlineAfter: 45s
+  # Shared registration key: a backend registers with it and becomes UNCLAIMED
+  # until a user enters its one-time claim code.
+  sharedKey:
+    enabled: false
+    # Supply your own secret, or let the chart generate a 32-byte key on first
+    # install and preserve it across upgrades.
+    existingSecret: ""
+    existingSecretKey: sharedKey
+
+# Extra environment variables, applied last.
+extraEnv: []

@@ -1,0 +1,184 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "threavia.fullname" . }}
+  labels:
+    {{- include "threavia.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "threavia.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "threavia.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "threavia.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: core
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 9090
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          env:
+            - name: THREAVIA_LOG_LEVEL
+              value: {{ .Values.log.level | quote }}
+            - name: THREAVIA_LOG_FORMAT
+              value: {{ .Values.log.format | quote }}
+            - name: THREAVIA_HTTP_ADDR
+              value: ":8080"
+            - name: THREAVIA_GRPC_ADDR
+              value: ":9090"
+            # --- PostgreSQL ---
+            - name: THREAVIA_POSTGRES_HOST
+              value: {{ .Values.postgres.host | quote }}
+            - name: THREAVIA_POSTGRES_PORT
+              value: {{ .Values.postgres.port | quote }}
+            - name: THREAVIA_POSTGRES_USER
+              value: {{ .Values.postgres.user | quote }}
+            - name: THREAVIA_POSTGRES_DATABASE
+              value: {{ .Values.postgres.database | quote }}
+            - name: THREAVIA_POSTGRES_SSLMODE
+              value: {{ .Values.postgres.sslMode | quote }}
+            - name: THREAVIA_POSTGRES_MAX_CONNS
+              value: {{ .Values.postgres.maxConns | quote }}
+            - name: THREAVIA_POSTGRES_AUTO_MIGRATE
+              value: {{ .Values.postgres.autoMigrate | quote }}
+            {{- if or .Values.postgres.existingSecret .Values.postgres.password }}
+            - name: THREAVIA_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.existingSecret | default (include "threavia.secretName" .) }}
+                  key: {{ if .Values.postgres.existingSecret }}{{ .Values.postgres.existingSecretPasswordKey }}{{ else }}postgresPassword{{ end }}
+            {{- end }}
+
+            # --- S3-compatible object storage ---
+            - name: THREAVIA_S3_ENABLED
+              value: {{ .Values.s3.enabled | quote }}
+            {{- if .Values.s3.enabled }}
+            - name: THREAVIA_S3_ENDPOINT
+              value: {{ .Values.s3.endpoint | quote }}
+            - name: THREAVIA_S3_REGION
+              value: {{ .Values.s3.region | quote }}
+            - name: THREAVIA_S3_BUCKET
+              value: {{ .Values.s3.bucket | quote }}
+            - name: THREAVIA_S3_USE_TLS
+              value: {{ .Values.s3.useTLS | quote }}
+            - name: THREAVIA_S3_FORCE_PATH_STYLE
+              value: {{ .Values.s3.forcePathStyle | quote }}
+            - name: THREAVIA_S3_MAX_UPLOAD_BYTES
+              value: {{ .Values.s3.maxUploadBytes | quote }}
+            - name: THREAVIA_S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.s3.existingSecret | default (include "threavia.secretName" .) }}
+                  key: {{ if .Values.s3.existingSecret }}{{ .Values.s3.existingSecretAccessKeyIdKey }}{{ else }}s3AccessKeyId{{ end }}
+            - name: THREAVIA_S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.s3.existingSecret | default (include "threavia.secretName" .) }}
+                  key: {{ if .Values.s3.existingSecret }}{{ .Values.s3.existingSecretSecretAccessKeyKey }}{{ else }}s3SecretAccessKey{{ end }}
+            {{- end }}
+
+            # --- Authentication ---
+            - name: THREAVIA_AUTH_MODE
+              value: {{ .Values.auth.mode | quote }}
+            {{- if eq .Values.auth.mode "none" }}
+            - name: THREAVIA_AUTH_DEV_USER_ID
+              value: {{ .Values.auth.devUserId | quote }}
+            {{- end }}
+            {{- if eq .Values.auth.mode "basic" }}
+            - name: THREAVIA_AUTH_BASIC_USERNAME
+              value: {{ .Values.auth.basic.username | quote }}
+            - name: THREAVIA_AUTH_BASIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.basic.existingSecret | default (include "threavia.secretName" .) }}
+                  key: {{ if .Values.auth.basic.existingSecret }}{{ .Values.auth.basic.existingSecretPasswordKey }}{{ else }}basicPassword{{ end }}
+            {{- end }}
+            {{- if eq .Values.auth.mode "oidc" }}
+            - name: THREAVIA_AUTH_OIDC_ISSUER
+              value: {{ .Values.auth.oidc.issuer | quote }}
+            - name: THREAVIA_AUTH_OIDC_CLIENT_ID
+              value: {{ .Values.auth.oidc.clientId | quote }}
+            - name: THREAVIA_AUTH_OIDC_AUDIENCE
+              value: {{ .Values.auth.oidc.audience | quote }}
+            {{- end }}
+
+            # --- Backend control plane ---
+            - name: THREAVIA_BACKEND_HEARTBEAT_INTERVAL
+              value: {{ .Values.backendRegistration.heartbeatInterval | quote }}
+            - name: THREAVIA_BACKEND_OFFLINE_AFTER
+              value: {{ .Values.backendRegistration.offlineAfter | quote }}
+            {{- if .Values.backendRegistration.sharedKey.enabled }}
+            - name: THREAVIA_BACKEND_SHARED_REGISTRATION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "threavia.registrationSecretName" . }}
+                  key: {{ .Values.backendRegistration.sharedKey.existingSecretKey }}
+            {{- end }}
+            {{- if .Values.grpcTLS.enabled }}
+            - name: THREAVIA_GRPC_TLS_CERT_FILE
+              value: /etc/threavia/tls/{{ .Values.grpcTLS.certFile }}
+            - name: THREAVIA_GRPC_TLS_KEY_FILE
+              value: /etc/threavia/tls/{{ .Values.grpcTLS.keyFile }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.grpcTLS.enabled }}
+            - name: grpc-tls
+              mountPath: /etc/threavia/tls
+              readOnly: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.grpcTLS.enabled }}
+        - name: grpc-tls
+          secret:
+            secretName: {{ .Values.grpcTLS.existingSecret }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

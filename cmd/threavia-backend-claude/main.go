@@ -1,0 +1,98 @@
+// Command threavia-backend-claude runs a Claude Code BackendInstance.
+//
+// It connects outbound to Threavia Core and keeps one long-lived bidirectional
+// control stream open. Provider credentials, the native sessions and the
+// filesystem stay here and never reach Core
+// (THREAVIA_SPEC_V1.md sections 2 and 7).
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/rclsilver/threavia/internal/backends/claude/adapter"
+	"github.com/rclsilver/threavia/internal/backends/claude/runner"
+	"github.com/rclsilver/threavia/internal/logging"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/client"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/state"
+)
+
+// version is overridden at build time with -ldflags "-X main.version=...".
+var version = "dev"
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "threavia-backend-claude: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	showVersion := flag.Bool("version", false, "print the version and exit")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		return nil
+	}
+
+	cfg, err := adapter.Load()
+	if err != nil {
+		return err
+	}
+	cfg.Client.BackendVersion = version
+
+	logger, err := logging.New(cfg.Log.Level, cfg.Log.Format, os.Stderr)
+	if err != nil {
+		return err
+	}
+	logger = logger.With(
+		slog.String("component", "backend-claude"),
+		slog.String("version", version),
+		slog.String("instance", cfg.Client.InstanceName),
+	)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	claude := runner.New(cfg.Claude.Binary)
+	if err := claude.Available(); err != nil {
+		// Not fatal: the backend connects anyway and reports DEGRADED so the
+		// user can see why it cannot work.
+		logger.Warn("claude code is not available", slog.String("error", err.Error()))
+	}
+
+	// The durable local state of specification section 10 is the next
+	// implementation step; until then the backend keeps its execution state in
+	// memory and loses buffered events on restart.
+	store := state.NewMemoryStore()
+	defer func() { _ = store.Close() }()
+	logger.Warn("using in-memory backend state, buffered events do not survive a restart",
+		slog.String("configuredStatePath", cfg.StatePath))
+
+	claudeAdapter := adapter.New(cfg, claude, logger)
+
+	sdk, err := client.New(cfg.Client, claudeAdapter, store, logger)
+	if err != nil {
+		return err
+	}
+	claudeAdapter.Bind(sdk)
+
+	logger.Info("starting",
+		slog.String("coreAddress", cfg.Client.CoreAddress),
+		slog.Bool("tls", cfg.Client.TLS.Enabled),
+		slog.Int("maxConcurrentRuns", int(cfg.Client.MaxConcurrentRuns)),
+		slog.Any("discoveryRoots", cfg.Claude.DiscoveryRoots),
+	)
+
+	if err := sdk.Run(ctx); err != nil {
+		return err
+	}
+	logger.Info("stopped")
+	return nil
+}

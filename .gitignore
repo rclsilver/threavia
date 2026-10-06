@@ -1,0 +1,16 @@
+# Build output
+/bin/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# Go
+*.test
+*.out

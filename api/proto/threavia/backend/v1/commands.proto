@@ -1,0 +1,164 @@
+// Core -> Backend commands (THREAVIA_SPEC_V1.md sections 9, 12, 17 and 26).
+syntax = "proto3";
+
+package threavia.backend.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "threavia/backend/v1/common.proto";
+
+option go_package = "github.com/rclsilver/threavia/gen/threavia/backend/v1;backendv1";
+
+// Welcome carries the connection lease. Only one connection is active for a
+// BackendInstance: a newly authenticated connection supersedes the previous one
+// for new commands (spec section 9).
+message Welcome {
+  string connection_id = 1;
+  string backend_instance_id = 2;
+  google.protobuf.Timestamp server_time = 3;
+  uint32 heartbeat_interval_seconds = 4;
+}
+
+// ExecutionPolicy (spec section 17). Limits must be enforced by Core/backend,
+// not only by prompt.
+enum ExecutionMode {
+  EXECUTION_MODE_UNSPECIFIED = 0;
+  EXECUTION_MODE_INTERACTIVE = 1;
+  EXECUTION_MODE_GUARDED = 2;
+  EXECUTION_MODE_AUTONOMOUS = 3;
+}
+
+message ExecutionPolicy {
+  ExecutionMode mode = 1;
+  bool allow_filesystem_write = 2;
+  bool allow_git_commit = 3;
+  bool allow_git_push = 4;
+  bool allow_network = 5;
+  uint32 max_duration_seconds = 6;
+  uint32 max_actions = 7;
+}
+
+message ContextDecision {
+  string id = 1;
+  string title = 2;
+  string content = 3;
+}
+
+message ContextTask {
+  string id = 1;
+  string title = 2;
+  string status = 3;
+}
+
+// Description of one Core Tool exposed to the agent. The backend adapter maps it
+// to the provider-specific tool mechanism; tool names are not hardcoded in the
+// backend (spec section 12).
+message CoreToolSpec {
+  string name = 1;
+  string description = 2;
+  google.protobuf.Struct input_schema = 3;
+}
+
+// Compact structured context built by Core at Run start (spec section 12).
+// Never a dump of the whole project history.
+message ProjectContext {
+  string project_id = 1;
+  string project_name = 2;
+  string project_description = 3;
+  // Resolved physical path of the Session working directory on this backend,
+  // when one applies.
+  string working_directory_path = 4;
+  string known_directory_id = 5;
+  // Active IMPORTANT decisions only.
+  repeated ContextDecision decisions = 6;
+  // Compact summary of relevant open tasks only.
+  repeated ContextTask tasks = 7;
+  repeated CoreToolSpec tools = 8;
+  // Provider-independent project instructions (spec section 18).
+  string project_instructions = 9;
+}
+
+message StartJob {
+  string project_id = 1;
+  string session_id = 2;
+  string run_id = 3;
+  string job_id = 4;
+  // Empty means: start a fresh provider native session for this Run. Otherwise
+  // the backend resumes it and validates its actual existence.
+  string native_session_id = 5;
+  string prompt = 6;
+  ProjectContext project_context = 7;
+  ExecutionPolicy execution_policy = 8;
+}
+
+message CancelJob {
+  string run_id = 1;
+  string job_id = 2;
+  string reason = 3;
+}
+
+message ValidationResolution {
+  string run_id = 1;
+  string job_id = 2;
+  string request_id = 3;
+  bool approved = 4;
+  string resolved_by_user_id = 5;
+  google.protobuf.Timestamp resolved_at = 6;
+  string note = 7;
+}
+
+message UserInputResolution {
+  string run_id = 1;
+  string job_id = 2;
+  string request_id = 3;
+  string value = 4;
+  string resolved_by_user_id = 5;
+  google.protobuf.Timestamp resolved_at = 6;
+}
+
+// Immediate interruption/reorientation. Optional CODE feature flag.
+message JobInputNow {
+  string run_id = 1;
+  string job_id = 2;
+  string text = 3;
+}
+
+// Injected as soon as practical after the current action. Optional CODE feature
+// flag.
+message JobInputNext {
+  string run_id = 1;
+  string job_id = 2;
+  string text = 3;
+}
+
+enum ReconcileAction {
+  RECONCILE_ACTION_UNSPECIFIED = 0;
+  RECONCILE_ACTION_REPLAY_EVENTS = 1;
+  RECONCILE_ACTION_REISSUE_CANCEL = 2;
+  RECONCILE_ACTION_ABANDON_JOB = 3;
+}
+
+// Core is source of truth for desired logical state; the backend is source of
+// truth for what actually happened locally (spec section 9).
+message ReconcileInstruction {
+  string run_id = 1;
+  string job_id = 2;
+  ReconcileAction action = 3;
+  // Replay from this backend sequence, inclusive.
+  uint64 from_backend_sequence = 4;
+}
+
+// Core acknowledgement of persisted backend events, up to and including
+// through_backend_sequence for that Job. The backend may then drop them from its
+// local durable buffer (spec section 10).
+message EventAck {
+  string run_id = 1;
+  string job_id = 2;
+  uint64 through_backend_sequence = 3;
+}
+
+message CoreToolResponse {
+  string request_id = 1;
+  google.protobuf.Struct result = 2;
+  Error error = 3;
+}

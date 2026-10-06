@@ -1,0 +1,36 @@
+Threavia Core {{ .Chart.AppVersion }} is installed as {{ include "threavia.fullname" . }}.
+
+Client API:            service {{ include "threavia.fullname" . }}:{{ .Values.service.httpPort }}
+Backend control plane: service {{ include "threavia.fullname" . }}:{{ .Values.service.grpcPort }}
+
+{{- if not .Values.ingress.http.enabled }}
+
+The client API is not exposed outside the cluster. Reach it with:
+
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "threavia.fullname" . }} {{ .Values.service.httpPort }}:{{ .Values.service.httpPort }}
+  curl http://localhost:{{ .Values.service.httpPort }}/healthz
+{{- end }}
+
+{{- if eq .Values.auth.mode "none" }}
+
+WARNING: authentication is disabled. Every request is attributed to the single
+user {{ .Values.auth.devUserId | quote }}. Do not expose this installation.
+{{- end }}
+
+{{- if not .Values.ingress.grpc.enabled }}
+
+Backends always connect outbound to Core, so the gRPC endpoint must be reachable
+from every laptop or pod running a BackendInstance. Enable ingress.grpc, and
+make sure the controller speaks gRPC and imposes no idle timeout on the
+long-lived control stream.
+{{- end }}
+
+{{- if .Values.backendRegistration.sharedKey.enabled }}
+{{- if not .Values.backendRegistration.sharedKey.existingSecret }}
+
+The shared registration key was generated on first install and is preserved
+across upgrades in the secret {{ include "threavia.registrationSecretName" . }}.
+That secret is the source of truth: back it up, and never recreate it, or every
+registered backend has to register again.
+{{- end }}
+{{- end }}

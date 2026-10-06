@@ -1,0 +1,112 @@
+// Common identifiers, enums and value objects shared by the Backend <-> Core
+// control protocol (THREAVIA_SPEC_V1.md sections 7, 9 and 26).
+syntax = "proto3";
+
+package threavia.backend.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/rclsilver/threavia/gen/threavia/backend/v1;backendv1";
+
+// Capability advertised by a BackendInstance (spec section 7).
+enum Capability {
+  CAPABILITY_UNSPECIFIED = 0;
+  CAPABILITY_CODE = 1;
+  CAPABILITY_INTERACTION = 2;
+  // REVIEW is declared for forward compatibility only; it is post-V1.
+  CAPABILITY_REVIEW = 3;
+}
+
+// Operational status a backend can report about itself.
+//
+// OFFLINE is deliberately absent: it is inferred by Core from a missing
+// heartbeat or a closed control stream and can never be self-reported.
+enum BackendOperationalStatus {
+  BACKEND_OPERATIONAL_STATUS_UNSPECIFIED = 0;
+  BACKEND_OPERATIONAL_STATUS_STARTING = 1;
+  BACKEND_OPERATIONAL_STATUS_READY = 2;
+  BACKEND_OPERATIONAL_STATUS_DEGRADED = 3;
+}
+
+// Coarse provider authentication state. Provider credentials themselves never
+// leave the BackendInstance (spec section 7).
+enum ProviderAuthState {
+  PROVIDER_AUTH_STATE_UNSPECIFIED = 0;
+  PROVIDER_AUTH_STATE_AUTHENTICATED = 1;
+  PROVIDER_AUTH_STATE_AUTHENTICATION_REQUIRED = 2;
+}
+
+// Job lifecycle status (spec section 3.5).
+enum JobStatus {
+  JOB_STATUS_UNSPECIFIED = 0;
+  JOB_STATUS_QUEUED = 1;
+  JOB_STATUS_RUNNING = 2;
+  JOB_STATUS_WAITING_INPUT = 3;
+  JOB_STATUS_WAITING_VALIDATION = 4;
+  JOB_STATUS_WAITING_BACKEND = 5;
+  JOB_STATUS_CANCELLING = 6;
+  JOB_STATUS_COMPLETED = 7;
+  JOB_STATUS_FAILED = 8;
+  JOB_STATUS_CANCELLED = 9;
+}
+
+// Resumability of the provider native session bound to a Run (spec section 3.4).
+// The unspecified value carries the spec's UNKNOWN meaning.
+enum ResumeStatus {
+  RESUME_STATUS_UNSPECIFIED = 0;
+  RESUME_STATUS_AVAILABLE = 1;
+  RESUME_STATUS_UNAVAILABLE = 2;
+}
+
+// Declared concurrency of a BackendInstance. Capacity is explicitly separate
+// from operational status; max_concurrent_runs = 0 drains the backend.
+message Capacity {
+  int32 max_concurrent_runs = 1;
+  int32 active_runs = 2;
+}
+
+// Kubernetes-style condition, typically used to explain DEGRADED.
+message Condition {
+  string type = 1;
+  // "True" | "False" | "Unknown".
+  string status = 2;
+  string reason = 3;
+  string message = 4;
+  google.protobuf.Timestamp last_transition_time = 5;
+}
+
+// Protocol version advertisement (spec section 9). The protocol version is the
+// contractual compatibility boundary.
+message ProtocolInfo {
+  uint32 version = 1;
+}
+
+message SdkInfo {
+  string name = 1;
+  string version = 2;
+}
+
+message BackendInfo {
+  string name = 1;
+  string version = 2;
+}
+
+// Optional CODE feature flags (spec sections 3.5 and 7). The rest of the CODE
+// semantic contract is mandatory and is not expressed as a flag.
+message FeatureFlags {
+  bool job_input_now = 1;
+  bool job_input_next = 2;
+}
+
+message Error {
+  string code = 1;
+  string message = 2;
+}
+
+// ProtocolVersion is the single source of truth for the wire protocol version
+// shared by Core and every backend SDK. The protocol version is the contractual
+// compatibility boundary (spec section 9).
+enum ProtocolVersion {
+  PROTOCOL_VERSION_UNSPECIFIED = 0;
+  PROTOCOL_VERSION_V1 = 1;
+}

@@ -1,0 +1,136 @@
+// Backend -> Core observable events (THREAVIA_SPEC_V1.md sections 3.6 and 4).
+syntax = "proto3";
+
+package threavia.backend.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "threavia/backend/v1/common.proto";
+
+option go_package = "github.com/rclsilver/threavia/gen/threavia/backend/v1;backendv1";
+
+// JobEvent is one persistent observable event produced by a backend during a
+// Job.
+//
+// Identity and ordering (spec section 4):
+//   backend_event_id  -> deduplication, unique per BackendInstance
+//   backend_sequence  -> monotonic per Job, used to detect replay gaps
+//   Core assigns the global sequence when it persists the event.
+message JobEvent {
+  string backend_event_id = 1;
+  uint64 backend_sequence = 2;
+  string run_id = 3;
+  string job_id = 4;
+  google.protobuf.Timestamp occurred_at = 5;
+
+  oneof body {
+    JobStarted job_started = 10;
+    NativeSessionBound native_session_bound = 11;
+    AgentMessage agent_message = 12;
+    ToolStarted tool_started = 13;
+    ToolCompleted tool_completed = 14;
+    ToolFailed tool_failed = 15;
+    ValidationRequested validation_requested = 16;
+    UserInputRequested user_input_requested = 17;
+    WorkspaceChanged workspace_changed = 18;
+    JobCompleted job_completed = 19;
+    JobFailed job_failed = 20;
+    JobCancelled job_cancelled = 21;
+  }
+}
+
+// EphemeralJobEvent is streamed for liveness only (progress, "agent working").
+// Core may fan it out to connected clients but does not persist it.
+message EphemeralJobEvent {
+  string run_id = 1;
+  string job_id = 2;
+  string kind = 3;
+  string detail = 4;
+  google.protobuf.Timestamp occurred_at = 5;
+}
+
+message JobStarted {}
+
+// Reported once the provider native session backing the Run is known. The Run
+// native session id is nullable until this arrives (spec section 3.4).
+message NativeSessionBound {
+  string native_session_id = 1;
+}
+
+message AgentMessage {
+  string text = 1;
+  // Artifact ids, never inline blobs (spec section 19).
+  repeated string artifact_ids = 2;
+}
+
+message ToolStarted {
+  string tool_call_id = 1;
+  string name = 2;
+  google.protobuf.Struct input = 3;
+}
+
+message ToolCompleted {
+  string tool_call_id = 1;
+  string name = 2;
+  google.protobuf.Struct output = 3;
+}
+
+message ToolFailed {
+  string tool_call_id = 1;
+  string name = 2;
+  Error error = 3;
+}
+
+// Provider-independent permission/approval request (spec section 16).
+message ValidationRequested {
+  // Backend-scoped request id; Core mints the durable ValidationRequest id.
+  string request_id = 1;
+  string title = 2;
+  string summary = 3;
+  // Canonical technical payload. Its SHA-256 is the security reference stored
+  // in the validation receipt.
+  google.protobuf.Struct request_payload = 4;
+  // Optional humanized presentation, for INTERACTION backends and audit
+  // convenience only. Never the security reference.
+  string humanized = 5;
+}
+
+// Request for an answer/choice/information, distinct from a validation.
+message UserInputRequested {
+  string request_id = 1;
+  string prompt = 2;
+  repeated string choices = 3;
+  bool free_text = 4;
+}
+
+enum FileState {
+  FILE_STATE_UNSPECIFIED = 0;
+  FILE_STATE_ADDED = 1;
+  FILE_STATE_MODIFIED = 2;
+  FILE_STATE_DELETED = 3;
+  FILE_STATE_RENAMED = 4;
+}
+
+message FileChange {
+  string path = 1;
+  FileState state = 2;
+}
+
+// Structured change summary (spec section 22). Detailed diffs stay backend-owned
+// and are fetched on demand.
+message WorkspaceChanged {
+  string known_directory_id = 1;
+  repeated FileChange files = 2;
+  int32 additions = 3;
+  int32 deletions = 4;
+}
+
+message JobCompleted {
+  string summary = 1;
+}
+
+message JobFailed {
+  Error error = 1;
+}
+
+message JobCancelled {}

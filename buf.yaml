@@ -1,0 +1,18 @@
+version: v2
+modules:
+  - path: api/proto
+lint:
+  use:
+    - STANDARD
+  except:
+    # The protocol is one bidirectional control stream by design
+    # (THREAVIA_SPEC_V1.md section 26), not request/response RPC pairs, so the
+    # Xxx(XxxRequest) returns (XxxResponse) naming rules do not apply.
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    # The service is named BackendControl in the specification.
+    - SERVICE_SUFFIX
+breaking:
+  use:
+    - FILE
