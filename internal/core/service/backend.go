@@ -45,8 +45,9 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 		return err
 	}
 
-	// Dispatching happens after the reconciliation report the backend sends
-	// next, so the work is released from a goroutine rather than inline.
+	// Only work that has never been dispatched is released here. Anything this
+	// backend may already have run waits for the reconciliation report it sends
+	// next, so Core never runs a Job twice.
 	go s.releaseQueuedWork(context.WithoutCancel(ctx), instanceID)
 	return nil
 }
@@ -151,7 +152,9 @@ func (s *Service) ReconcileState(ctx context.Context, instanceID domain.BackendI
 			continue
 		}
 
-		// Ask for whatever Core has not persisted yet.
+		// Ask for whatever Core has not persisted yet. A Job the backend already
+		// finished converges through those replayed events, never by being run
+		// again: the backend is the source of truth for what actually happened.
 		persisted, err := s.store.LastBackendSequence(ctx, job.ID)
 		if err != nil {
 			s.logger.Error("cannot read the persisted sequence", slog.String("jobId", string(job.ID)), slog.String("error", err.Error()))
@@ -172,7 +175,7 @@ func (s *Service) ReconcileState(ctx context.Context, instanceID domain.BackendI
 		}
 
 		// Core says CANCELLING and the backend is still working: reissue.
-		if job.Status == domain.JobCancelling {
+		if job.Status == domain.JobCancelling && !terminalJobStatus(reported.GetStatus()) {
 			conn.Send(&backendv1.CoreToBackend{
 				CommandId: domain.NewUUID(),
 				Message: &backendv1.CoreToBackend_CancelJob{
@@ -182,6 +185,18 @@ func (s *Service) ReconcileState(ctx context.Context, instanceID domain.BackendI
 				},
 			})
 		}
+	}
+}
+
+// terminalJobStatus reports whether a backend says a Job is over.
+func terminalJobStatus(status backendv1.JobStatus) bool {
+	switch status {
+	case backendv1.JobStatus_JOB_STATUS_COMPLETED,
+		backendv1.JobStatus_JOB_STATUS_FAILED,
+		backendv1.JobStatus_JOB_STATUS_CANCELLED:
+		return true
+	default:
+		return false
 	}
 }
 

@@ -191,13 +191,17 @@ func (s *Store) LoadJobContext(ctx context.Context, id domain.JobID) (JobContext
 	return jc, nil
 }
 
-// QueuedJobsForBackend returns the queued Jobs waiting on one BackendInstance,
-// oldest first. Core dispatches them when the backend connects.
+// QueuedJobsForBackend returns the Jobs that have never been dispatched to one
+// BackendInstance, oldest first.
+//
+// It deliberately excludes WAITING_BACKEND: such a Job was already sent
+// somewhere and the backend may have finished it while Core was away, so
+// re-dispatching it before reconciliation would run the work twice.
 func (s *Store) QueuedJobsForBackend(ctx context.Context, instanceID domain.BackendInstanceID) ([]domain.JobID, error) {
 	rows, err := s.q.Query(ctx, `
 		SELECT j.id
 		FROM jobs j JOIN runs r ON r.id = j.run_id
-		WHERE r.backend_instance_id = $1 AND j.status IN ('QUEUED', 'WAITING_BACKEND')
+		WHERE r.backend_instance_id = $1 AND j.status = 'QUEUED'
 		ORDER BY j.created_at`, instanceID)
 	if err != nil {
 		return nil, classify(err, "list queued jobs")

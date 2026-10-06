@@ -1,1 +1,87 @@
-<!doctype html><title>Threavia</title><p>placeholder
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Threavia</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app" class="layout">
+  <aside class="sidebar">
+    <header class="brand">
+      <h1>Threavia</h1>
+      <span id="connection" class="pill pill-muted" title="Realtime stream">offline</span>
+    </header>
+
+    <section class="panel">
+      <label class="label" for="project">Project</label>
+      <div class="row">
+        <select id="project"></select>
+        <button id="new-project" class="icon" title="New project">+</button>
+      </div>
+    </section>
+
+    <section class="panel grow">
+      <div class="panel-head">
+        <span class="label">Sessions</span>
+        <button id="new-session" class="icon" title="New session">+</button>
+      </div>
+      <ul id="sessions" class="sessions"></ul>
+    </section>
+
+    <section class="panel">
+      <span class="label">Backends</span>
+      <ul id="backends" class="backends"></ul>
+    </section>
+  </aside>
+
+  <main class="main">
+    <!-- New session is a local draft: nothing exists in Core until the first send. -->
+    <section id="draft" class="view hidden">
+      <h2>New session</h2>
+      <p class="hint">Nothing is created until you send the first message.</p>
+
+      <label class="label" for="draft-backend">Backend</label>
+      <select id="draft-backend"></select>
+
+      <label class="label" for="draft-directory">Working directory</label>
+      <div class="row">
+        <select id="draft-directory"></select>
+        <button id="new-directory" class="icon" title="New known directory">+</button>
+      </div>
+      <p class="hint">Optional. It is the initial directory, not a boundary.</p>
+
+      <label class="label" for="draft-message">First message</label>
+      <textarea id="draft-message" rows="5" placeholder="Analyse ce projet"></textarea>
+      <button id="draft-send" class="primary">Start session</button>
+    </section>
+
+    <section id="session" class="view hidden">
+      <header class="session-head">
+        <div>
+          <h2 id="session-title"></h2>
+          <p id="session-meta" class="hint"></p>
+        </div>
+        <button id="cancel-job" class="danger hidden">Cancel</button>
+      </header>
+
+      <div id="attention" class="attention"></div>
+      <div id="timeline" class="timeline"></div>
+
+      <form id="composer" class="composer">
+        <textarea id="message" rows="3" placeholder="Send a message…"></textarea>
+        <button type="submit" class="primary">Send</button>
+      </form>
+    </section>
+
+    <section id="empty" class="view empty">
+      <p>Select a session, or start a new one.</p>
+    </section>
+  </main>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script src="app.js"></script>
+</body>
+</html>
