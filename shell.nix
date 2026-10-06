@@ -12,9 +12,10 @@
 
 pkgs.mkShell {
   packages = [
-    # go.mod requires Go 1.25; fall back to the channel default when the
-    # versioned attribute is gone, with GOTOOLCHAIN below as the safety net.
-    (pkgs.go_1_25 or pkgs.go)
+    # go.mod requires Go 1.26 (modernc.org/sqlite). Fall back through the
+    # versioned attributes to the channel default; GOTOOLCHAIN below fetches
+    # the right toolchain when the one here is older.
+    (pkgs.go_1_26 or pkgs.go_1_25 or pkgs.go)
 
     # Required by `make test-race` only.
     pkgs.gcc

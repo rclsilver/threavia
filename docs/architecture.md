@@ -28,7 +28,7 @@ Concretely:
 | Choice | Value | Why |
 | --- | --- | --- |
 | Go module | `github.com/rclsilver/threavia` | Section 25 leaves the module path to the chosen repository host. |
-| Go version | 1.25 | The lowest version the pinned gRPC and pgx releases support. |
+| Go version | 1.26 | The lowest version the pinned dependencies support, driven by modernc.org/sqlite. |
 | License | Apache-2.0 | Permissive with an explicit patent grant, the norm for Kubernetes-adjacent infrastructure. |
 
 ### Additions to the proposed tree
@@ -45,6 +45,7 @@ Section 25 proposes a layout; four additions were needed.
   Core and backend configuration loaders, which would otherwise be duplicated.
 - **`internal/logging`** holds the structured logger builder, so the Claude
   backend does not have to import a Core package to get a logger.
+- **`web/`** serves the client as embedded assets, so Core ships as one binary.
 
 ### Dependencies
 
@@ -124,3 +125,17 @@ Without this, every Core shutdown would take the full shutdown timeout.
   their names.
 - The configuration structs live with the component they configure;
   `internal/core/config` only loads them from the environment.
+
+### Backend durable state
+
+The Go SDK stores its local execution state in SQLite, as specification
+section 10 suggests, through `modernc.org/sqlite`: a pure Go driver, so a
+backend binary needs no C toolchain and cross-compiles like any other Go
+program. It is what sets the Go 1.26 floor.
+
+The schema holds the persistent identity, the known Runs and their native
+sessions, the per-Job sequences and the unacknowledged events. Nothing in it is
+part of the wire protocol contract: a backend written in another language stores
+its state however it likes, as long as it honours the same guarantees — a
+monotonic per-Job sequence that survives a restart, and events kept until Core
+acknowledges them.

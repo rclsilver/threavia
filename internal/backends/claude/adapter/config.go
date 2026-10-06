@@ -35,11 +35,26 @@ type ClaudeConfig struct {
 	DiscoveryRoots []string
 }
 
+// RegistrationConfig is how a backend obtains its credential the first time
+// (spec section 8). Once registered it stores its identity locally and never
+// needs these again.
+type RegistrationConfig struct {
+	// CoreAPI is the Core HTTP base URL, used only to register.
+	CoreAPI string
+	// Token is a one-shot token a user created, which owns the instance
+	// immediately.
+	Token string
+	// SharedKey is the shared registration key, which creates an UNCLAIMED
+	// instance plus a one-time claim code.
+	SharedKey string
+}
+
 // Config is the complete Claude backend configuration.
 type Config struct {
-	Log    LogConfig
-	Client client.Config
-	Claude ClaudeConfig
+	Log          LogConfig
+	Client       client.Config
+	Claude       ClaudeConfig
+	Registration RegistrationConfig
 
 	// StatePath is where the durable local execution state lives
 	// (spec section 10).
@@ -89,6 +104,10 @@ func Load() (Config, error) {
 	cfg.Claude.Binary = l.String("CLAUDE_BINARY", cfg.Claude.Binary)
 	cfg.Claude.DiscoveryRoots = l.StringSlice("DISCOVERY_ROOTS", cfg.Claude.DiscoveryRoots)
 
+	cfg.Registration.CoreAPI = l.String("CORE_API", cfg.Registration.CoreAPI)
+	cfg.Registration.Token = l.String("REGISTRATION_TOKEN", cfg.Registration.Token)
+	cfg.Registration.SharedKey = l.String("SHARED_KEY", cfg.Registration.SharedKey)
+
 	cfg.StatePath = l.String("STATE_PATH", cfg.StatePath)
 
 	// A CODE backend must support the whole mandatory CODE semantic contract;
@@ -118,7 +137,13 @@ func (c Config) Validate() error {
 	if c.Claude.Binary == "" {
 		return errors.New(EnvPrefix + "CLAUDE_BINARY: an executable is required")
 	}
-	return c.Client.Validate()
+	// The credential is resolved at startup, from the local identity or by
+	// registering, so it is not required here.
+	probe := c.Client
+	if probe.Token == "" {
+		probe.Token = "resolved-at-startup"
+	}
+	return probe.Validate()
 }
 
 // defaultInstanceName names the instance after the host it runs on.

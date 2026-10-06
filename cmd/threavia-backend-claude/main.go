@@ -67,13 +67,20 @@ func run() error {
 		logger.Warn("claude code is not available", slog.String("error", err.Error()))
 	}
 
-	// The durable local state of specification section 10 is the next
-	// implementation step; until then the backend keeps its execution state in
-	// memory and loses buffered events on restart.
-	store := state.NewMemoryStore()
+	// Durable local execution state: it is what lets this backend keep working
+	// through a Core outage and replay afterwards.
+	store, err := state.OpenSQLite(cfg.StatePath)
+	if err != nil {
+		return err
+	}
 	defer func() { _ = store.Close() }()
-	logger.Warn("using in-memory backend state, buffered events do not survive a restart",
-		slog.String("configuredStatePath", cfg.StatePath))
+	logger.Info("local state opened", slog.String("path", cfg.StatePath))
+
+	credential, err := adapter.Credential(ctx, cfg, store, logger)
+	if err != nil {
+		return err
+	}
+	cfg.Client.Token = credential
 
 	claudeAdapter := adapter.New(cfg, claude, logger)
 

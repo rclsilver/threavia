@@ -49,7 +49,8 @@ Every one of these has its interface in place; none of them is faked.
 
 ## Requirements
 
-- Go 1.25 or later
+- Go 1.26 or later. `GOTOOLCHAIN=auto`, the default, fetches it when the
+  installed Go is older.
 - Docker, for the local PostgreSQL and S3-compatible storage
 - A C compiler, only for `make test-race`: the race detector is
   ThreadSanitizer, a C++ runtime, so a race-enabled binary needs cgo and the
