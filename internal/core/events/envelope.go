@@ -2,6 +2,7 @@ package events
 
 import (
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/rclsilver/threavia/internal/core/domain"
@@ -49,4 +50,14 @@ type Record struct {
 // per-Session cursor.
 type Cursor struct {
 	After domain.Sequence `json:"after"`
+}
+
+// EventID is the SSE id of an event: the global sequence, so a reconnecting
+// browser resumes exactly where it stopped. Ephemeral signals carry no sequence
+// and therefore no id.
+func (e Envelope) EventID() string {
+	if e.Sequence == 0 {
+		return ""
+	}
+	return strconv.FormatInt(int64(e.Sequence), 10)
 }

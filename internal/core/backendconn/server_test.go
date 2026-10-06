@@ -27,7 +27,7 @@ func newTestCore(t *testing.T) (*Server, *grpc.ClientConn) {
 
 	registry := NewRegistry()
 	resolver := NewStaticTokenResolver(map[string]string{testToken: "backend-1"})
-	server := NewServer(registry, resolver, Options{HeartbeatInterval: time.Second},
+	server := NewServer(registry, resolver, NopSink{}, Options{HeartbeatInterval: time.Second},
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	listener := bufconn.Listen(1 << 20)

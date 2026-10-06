@@ -130,7 +130,10 @@ CREATE TABLE backend_registration_tokens (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at   TIMESTAMPTZ NOT NULL,
     used_at      TIMESTAMPTZ,
-    backend_instance_id UUID REFERENCES backend_instances (id) ON DELETE SET NULL,
+    -- Written in the same transaction as the instance it points at, in either
+    -- order, so the reference is checked at commit rather than per statement.
+    backend_instance_id UUID REFERENCES backend_instances (id) ON DELETE SET NULL
+        DEFERRABLE INITIALLY DEFERRED,
 
     CONSTRAINT backend_registration_tokens_used_shape CHECK (
         (used_at IS NULL AND backend_instance_id IS NULL) OR

@@ -160,3 +160,17 @@ func scanEnvelope(row scanner) (events.Envelope, error) {
 		&envelope.SessionID, &envelope.RunID, &envelope.JobID, &envelope.Payload, &envelope.Timestamp)
 	return envelope, classify(err, "read event")
 }
+
+// JobPrompt returns the user message that initiated a Job. The prompt is not
+// duplicated onto the job row: messages are events, and this reads the timeline
+// rather than maintaining a competing message store.
+func (s *Store) JobPrompt(ctx context.Context, jobID domain.JobID) (string, error) {
+	var prompt string
+	err := s.q.QueryRow(ctx, `
+		SELECT COALESCE(payload->>'text', '')
+		FROM events
+		WHERE job_id = $1 AND type = 'user.message'
+		ORDER BY global_sequence
+		LIMIT 1`, jobID).Scan(&prompt)
+	return prompt, classify(err, "read job prompt")
+}

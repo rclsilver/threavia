@@ -1,41 +1,10 @@
 package api
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"time"
-
-	"github.com/rclsilver/threavia/internal/core/auth"
 )
-
-type contextKey struct{ name string }
-
-var identityContextKey = contextKey{name: "identity"}
-
-// IdentityFrom returns the authenticated caller carried by ctx.
-func IdentityFrom(ctx context.Context) (auth.Identity, bool) {
-	identity, ok := ctx.Value(identityContextKey).(auth.Identity)
-	return identity, ok
-}
-
-// authenticated resolves the caller identity and attaches it to the request
-// context. Every user-scoped handler then reads it instead of trusting a client
-// supplied identifier (spec sections 20 and 28).
-func authenticated(authenticator auth.Authenticator, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		identity, err := authenticator.Authenticate(r)
-		if err != nil {
-			if authenticator.Mode() == auth.ModeBasic {
-				w.Header().Set("WWW-Authenticate", `Basic realm="threavia", charset="UTF-8"`)
-			}
-			writeError(w, http.StatusUnauthorized, "unauthenticated", "valid credentials are required")
-			return
-		}
-		ctx := context.WithValue(r.Context(), identityContextKey, identity)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
 
 // statusRecorder captures the response status for access logging.
 type statusRecorder struct {

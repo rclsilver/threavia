@@ -18,6 +18,9 @@ import (
 	"github.com/rclsilver/threavia/internal/core/domain"
 )
 
+// ErrCoreToolUnavailable is returned when no Core Tool implementation is wired.
+var ErrCoreToolUnavailable = errors.New("core tools are not available")
+
 // Options configures the control server.
 type Options struct {
 	// HeartbeatInterval is advertised to backends in the Welcome message.
@@ -26,29 +29,31 @@ type Options struct {
 
 // Server implements the BackendControl service.
 //
-// This is the connection skeleton: it authenticates the backend, performs the
-// Hello/Welcome handshake, installs the connection lease and keeps the stream
-// alive. Persisting events, dispatching Jobs and reconciling state are the next
-// implementation steps and are deliberately not faked here: in particular, Core
-// does not acknowledge Job events it has not persisted, so backends keep them in
-// their local durable buffer and replay them later (spec section 10).
+// It owns the transport only: the stream, the handshake, the connection lease
+// and the ordering guarantees. Everything it learns is handed to a Sink, so this
+// package knows nothing about Core state.
 type Server struct {
 	backendv1.UnimplementedBackendControlServer
 
 	registry *Registry
 	resolver TokenResolver
+	sink     Sink
 	logger   *slog.Logger
 	opts     Options
 }
 
 // NewServer builds the control server.
-func NewServer(registry *Registry, resolver TokenResolver, opts Options, logger *slog.Logger) *Server {
+func NewServer(registry *Registry, resolver TokenResolver, sink Sink, opts Options, logger *slog.Logger) *Server {
 	if opts.HeartbeatInterval <= 0 {
 		opts.HeartbeatInterval = 15 * time.Second
+	}
+	if sink == nil {
+		sink = NopSink{}
 	}
 	return &Server{
 		registry: registry,
 		resolver: resolver,
+		sink:     sink,
 		logger:   logger,
 		opts:     opts,
 	}
@@ -96,7 +101,6 @@ func (s *Server) Connect(stream backendv1.BackendControl_ConnectServer) error {
 		slog.Any("capabilities", capabilityNames(hello.GetCapabilities())),
 		slog.Int("maxConcurrentRuns", int(hello.GetCapacity().GetMaxConcurrentRuns())),
 	)
-	defer logger.Info("backend disconnected")
 
 	// The Welcome must be the first message Core sends, before the writer
 	// goroutine may interleave anything else.
@@ -112,6 +116,18 @@ func (s *Server) Connect(stream backendv1.BackendControl_ConnectServer) error {
 	}
 	if err := stream.Send(welcome); err != nil {
 		return err
+	}
+
+	// Detached from the stream context so that the disconnection bookkeeping
+	// still runs once the stream is gone.
+	lifecycleCtx := context.WithoutCancel(ctx)
+	defer func() {
+		s.sink.Disconnected(lifecycleCtx, instanceID, conn.ID())
+		logger.Info("backend disconnected")
+	}()
+
+	if err := s.sink.Connected(ctx, instanceID, conn.ID(), hello); err != nil {
+		return status.Errorf(codes.Internal, "cannot accept the backend connection: %v", err)
 	}
 
 	writerDone := make(chan error, 1)
@@ -162,7 +178,7 @@ func (s *Server) Connect(stream backendv1.BackendControl_ConnectServer) error {
 			if result.err != nil {
 				return streamError(result.err)
 			}
-			if err := s.handle(conn, result.msg, logger); err != nil {
+			if err := s.handle(ctx, instanceID, conn, result.msg, logger); err != nil {
 				return err
 			}
 		}
@@ -212,7 +228,7 @@ func (s *Server) receiveHello(stream backendv1.BackendControl_ConnectServer) (*b
 }
 
 // handle processes one backend message.
-func (s *Server) handle(conn *Connection, msg *backendv1.BackendToCore, logger *slog.Logger) error {
+func (s *Server) handle(ctx context.Context, instanceID domain.BackendInstanceID, conn *Connection, msg *backendv1.BackendToCore, logger *slog.Logger) error {
 	switch body := msg.GetMessage().(type) {
 	case *backendv1.BackendToCore_Hello:
 		return status.Error(codes.InvalidArgument, "hello may only be sent once, at the start of the stream")
@@ -223,7 +239,7 @@ func (s *Server) handle(conn *Connection, msg *backendv1.BackendToCore, logger *
 			at = time.Now()
 		}
 		conn.NoteHeartbeat(at)
-		logger.Debug("heartbeat", slog.Time("sentAt", at))
+		s.sink.Heartbeat(ctx, instanceID, at, body.Heartbeat.GetCapacity())
 		return nil
 
 	case *backendv1.BackendToCore_StatusUpdate:
@@ -231,53 +247,62 @@ func (s *Server) handle(conn *Connection, msg *backendv1.BackendToCore, logger *
 			slog.String("status", body.StatusUpdate.GetStatus().String()),
 			slog.String("providerAuth", body.StatusUpdate.GetProviderAuthState().String()),
 			slog.Int("activeRuns", int(body.StatusUpdate.GetCapacity().GetActiveRuns())),
-			slog.Int("maxConcurrentRuns", int(body.StatusUpdate.GetCapacity().GetMaxConcurrentRuns())),
 		)
+		s.sink.StatusUpdate(ctx, instanceID, body.StatusUpdate)
 		return nil
 
 	case *backendv1.BackendToCore_ReconcileState:
 		logger.Info("backend reconcile state", slog.Int("runs", len(body.ReconcileState.GetRuns())))
+		s.sink.ReconcileState(ctx, instanceID, body.ReconcileState)
 		return nil
 
 	case *backendv1.BackendToCore_JobEvent:
-		// Not persisted yet, and therefore not acknowledged: the backend keeps
-		// the event in its durable local buffer and replays it after the Core
-		// event pipeline lands.
-		logger.Debug("job event received but not persisted yet",
-			slog.String("jobId", body.JobEvent.GetJobId()),
-			slog.Uint64("backendSequence", body.JobEvent.GetBackendSequence()),
-		)
+		event := body.JobEvent
+		acked, err := s.sink.JobEvent(ctx, instanceID, event)
+		if err != nil {
+			// Not acknowledged: the backend keeps the event buffered and
+			// replays it. Dropping the connection would only delay the retry.
+			logger.Error("cannot persist a job event",
+				slog.String("jobId", event.GetJobId()),
+				slog.Uint64("backendSequence", event.GetBackendSequence()),
+				slog.String("error", err.Error()))
+			return nil
+		}
+		if acked > 0 {
+			conn.Send(&backendv1.CoreToBackend{
+				Message: &backendv1.CoreToBackend_EventAck{
+					EventAck: &backendv1.EventAck{
+						RunId:                  event.GetRunId(),
+						JobId:                  event.GetJobId(),
+						ThroughBackendSequence: acked,
+					},
+				},
+			})
+		}
 		return nil
 
 	case *backendv1.BackendToCore_EphemeralJobEvent:
-		logger.Debug("ephemeral job event",
-			slog.String("jobId", body.EphemeralJobEvent.GetJobId()),
-			slog.String("kind", body.EphemeralJobEvent.GetKind()),
-		)
+		s.sink.EphemeralJobEvent(ctx, instanceID, body.EphemeralJobEvent)
 		return nil
 
 	case *backendv1.BackendToCore_CommandResult:
-		logger.Debug("command result",
-			slog.String("commandId", body.CommandResult.GetCommandId()),
-			slog.Bool("accepted", body.CommandResult.GetAccepted()),
-		)
+		s.sink.CommandResult(ctx, instanceID, body.CommandResult)
 		return nil
 
 	case *backendv1.BackendToCore_CoreToolRequest:
-		// Core Tools are not implemented yet. Answering with an explicit error
-		// keeps the agent from waiting forever.
 		request := body.CoreToolRequest
-		logger.Debug("core tool request rejected", slog.String("tool", request.GetName()))
+		result, err := s.sink.CoreToolRequest(ctx, instanceID, request)
+		response := &backendv1.CoreToolResponse{RequestId: request.GetRequestId(), Result: result}
+		if err != nil {
+			// Answering with an explicit error keeps the agent from waiting
+			// forever on a tool Core cannot run.
+			response.Error = &backendv1.Error{
+				Code:    codes.Unimplemented.String(),
+				Message: fmt.Sprintf("core tool %q: %v", request.GetName(), err),
+			}
+		}
 		conn.Send(&backendv1.CoreToBackend{
-			Message: &backendv1.CoreToBackend_CoreToolResponse{
-				CoreToolResponse: &backendv1.CoreToolResponse{
-					RequestId: request.GetRequestId(),
-					Error: &backendv1.Error{
-						Code:    codes.Unimplemented.String(),
-						Message: fmt.Sprintf("core tool %q is not implemented yet", request.GetName()),
-					},
-				},
-			},
+			Message: &backendv1.CoreToBackend_CoreToolResponse{CoreToolResponse: response},
 		})
 		return nil
 

@@ -28,8 +28,11 @@ import (
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/backendconn"
 	"github.com/rclsilver/threavia/internal/core/config"
+	"github.com/rclsilver/threavia/internal/core/events"
+	"github.com/rclsilver/threavia/internal/core/service"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 	"github.com/rclsilver/threavia/internal/logging"
+	"github.com/rclsilver/threavia/web"
 )
 
 // version is overridden at build time with -ldflags "-X main.version=...".
@@ -96,19 +99,17 @@ func run() error {
 			slog.String("user", cfg.Auth.DevUserID))
 	}
 
-	resolver := backendconn.NewStaticTokenResolver(cfg.Backend.DevTokens)
-	if resolver.Len() == 0 {
-		logger.Warn("no backend credential is configured, every backend connection will be rejected",
-			slog.String("configure", config.EnvPrefix+"BACKEND_DEV_TOKENS"))
-	}
-
-	if cfg.Backend.SharedRegistrationKey != "" {
-		logger.Warn("a shared registration key is configured but the registration flow is not implemented yet",
-			slog.String("specification", "section 8"))
-	}
-
 	registry := backendconn.NewRegistry()
-	controlServer := backendconn.NewServer(registry, resolver,
+	svc := service.New(postgres.NewStore(db), events.NewBroker(), registry, logger)
+	svc.SetRegistration(service.RegistrationConfig{SharedKey: cfg.Backend.SharedRegistrationKey})
+
+	if cfg.Backend.SharedRegistrationKey == "" {
+		logger.Info("shared key registration is disabled, backends register with one-shot user tokens",
+			slog.String("configure", config.EnvPrefix+"BACKEND_SHARED_REGISTRATION_KEY"))
+	}
+
+	// The service resolves the credential a backend presents on Connect.
+	controlServer := backendconn.NewServer(registry, svc, svc,
 		backendconn.Options{HeartbeatInterval: cfg.Backend.HeartbeatInterval}, logger)
 
 	grpcServer, err := newGRPCServer(cfg.GRPC, cfg.Backend.HeartbeatInterval)
@@ -117,13 +118,20 @@ func run() error {
 	}
 	backendv1.RegisterBackendControlServer(grpcServer, controlServer)
 
+	webUI, err := web.Handler()
+	if err != nil {
+		return err
+	}
+
 	httpServer := &http.Server{
 		Addr: cfg.HTTP.Addr,
 		Handler: api.NewRouter(api.Options{
+			Service:       svc,
 			Authenticator: authenticator,
 			Database:      db,
 			Version:       version,
 			Logger:        logger,
+			WebUI:         webUI,
 		}),
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,

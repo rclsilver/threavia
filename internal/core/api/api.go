@@ -9,11 +9,20 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
+	"github.com/rclsilver/threavia/internal/core/domain"
+	"github.com/rclsilver/threavia/internal/core/service"
 )
+
+// maxRequestBytes bounds a JSON request body. Large content belongs in an
+// Artifact, never in a command payload.
+const maxRequestBytes = 1 << 20
 
 // Pinger is the readiness dependency of Core: PostgreSQL.
 type Pinger interface {
@@ -22,31 +31,68 @@ type Pinger interface {
 
 // Options wires the router dependencies.
 type Options struct {
+	Service       *service.Service
 	Authenticator auth.Authenticator
 	Database      Pinger
 	Version       string
 	Logger        *slog.Logger
+	// WebUI is served at the root when set.
+	WebUI http.Handler
+}
+
+type handler struct {
+	svc     *service.Service
+	auth    auth.Authenticator
+	db      Pinger
+	version string
+	logger  *slog.Logger
 }
 
 // NewRouter builds the Core HTTP handler.
-//
-// The routed surface is currently limited to liveness, readiness and version.
-// Every /api/v1 route answers 501 until the corresponding Core service lands, so
-// a client never mistakes a missing endpoint for an empty result.
 func NewRouter(opts Options) http.Handler {
-	mux := http.NewServeMux()
+	h := &handler{
+		svc:     opts.Service,
+		auth:    opts.Authenticator,
+		db:      opts.Database,
+		version: opts.Version,
+		logger:  opts.Logger,
+	}
 
+	mux := http.NewServeMux()
+	h.registerOperational(mux)
+	h.registerRegistration(mux)
+	h.registerProjects(mux)
+	h.registerBackends(mux)
+	h.registerSessions(mux)
+	h.registerJobs(mux)
+	h.registerAttention(mux)
+	h.registerStream(mux)
+
+	// Anything else under the versioned prefix is a route that does not exist
+	// yet; answering 501 keeps a client from reading it as an empty result.
+	mux.Handle("/api/v1/", h.secured(func(w http.ResponseWriter, r *http.Request, _ auth.Identity) {
+		writeError(w, http.StatusNotImplemented, "not_implemented",
+			"this endpoint is part of the V1 client API but is not implemented yet")
+	}))
+
+	if opts.WebUI != nil {
+		mux.Handle("/", opts.WebUI)
+	}
+	return requestLogger(opts.Logger, mux)
+}
+
+func (h *handler) registerOperational(mux *http.ServeMux) {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
-		if opts.Database == nil {
+		if h.db == nil {
 			writeError(w, http.StatusServiceUnavailable, "not_ready", "database is not configured")
 			return
 		}
-		if err := opts.Database.Ping(r.Context()); err != nil {
-			opts.Logger.Warn("readiness probe failed", slog.String("error", err.Error()))
+		if err := h.db.Ping(r.Context()); err != nil {
+			h.logger.Warn("readiness probe failed", slog.String("error", err.Error()))
 			writeError(w, http.StatusServiceUnavailable, "not_ready", "database is unreachable")
 			return
 		}
@@ -54,17 +100,30 @@ func NewRouter(opts Options) http.Handler {
 	})
 
 	mux.HandleFunc("GET /version", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"version": opts.Version})
+		writeJSON(w, http.StatusOK, map[string]string{"version": h.version})
 	})
+}
 
-	api := http.NewServeMux()
-	api.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, http.StatusNotImplemented, "not_implemented",
-			"this endpoint is part of the V1 client API but is not implemented yet")
+// secured resolves the caller identity before running the handler. Every
+// user-scoped route goes through here, so no handler ever trusts an identifier
+// supplied by the client.
+func (h *handler) secured(fn func(http.ResponseWriter, *http.Request, auth.Identity)) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		identity, err := h.auth.Authenticate(r)
+		if err != nil {
+			if h.auth.Mode() == auth.ModeBasic {
+				w.Header().Set("WWW-Authenticate", `Basic realm="threavia", charset="UTF-8"`)
+			}
+			writeError(w, http.StatusUnauthorized, "unauthenticated", "valid credentials are required")
+			return
+		}
+		fn(w, r, identity)
 	})
-	mux.Handle("/api/v1/", authenticated(opts.Authenticator, api))
+}
 
-	return requestLogger(opts.Logger, mux)
+// handle registers a secured route.
+func (h *handler) handle(mux *http.ServeMux, pattern string, fn func(http.ResponseWriter, *http.Request, auth.Identity)) {
+	mux.Handle(pattern, h.secured(fn))
 }
 
 // errorBody is the single error shape returned by the Core client API.
@@ -86,4 +145,81 @@ func writeError(w http.ResponseWriter, statusCode int, code, message string) {
 	body.Error.Code = code
 	body.Error.Message = message
 	writeJSON(w, statusCode, body)
+}
+
+// fail maps a service error onto an HTTP status. ErrNotFound covers both "does
+// not exist" and "not yours", so an identifier cannot be probed.
+func (h *handler) fail(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, service.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "not found")
+	case errors.Is(err, service.ErrInvalid):
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	case errors.Is(err, service.ErrConflict):
+		writeError(w, http.StatusConflict, "conflict", err.Error())
+	case errors.Is(err, service.ErrRegistrationRejected):
+		writeError(w, http.StatusForbidden, "registration_rejected", err.Error())
+	case errors.Is(err, service.ErrBackendUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "backend_unavailable", err.Error())
+	default:
+		h.logger.Error("request failed", slog.String("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+	}
+}
+
+// decode reads a bounded JSON body.
+func decode[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
+	var target T
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBytes))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&target); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid_request", "malformed JSON body: "+err.Error())
+		return target, false
+	}
+	return target, true
+}
+
+// list is the envelope every collection response uses, so adding pagination
+// later never changes the shape.
+type list[T any] struct {
+	Items []T `json:"items"`
+}
+
+func writeList[T any](w http.ResponseWriter, items []T) {
+	if items == nil {
+		items = []T{}
+	}
+	writeJSON(w, http.StatusOK, list[T]{Items: items})
+}
+
+// queryInt reads an optional integer query parameter.
+func queryInt(r *http.Request, name string, fallback int) int {
+	raw := r.URL.Query().Get(name)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	return value
+}
+
+// querySequence reads an optional global event sequence cursor.
+func querySequence(r *http.Request, name string) domain.Sequence {
+	raw := r.URL.Query().Get(name)
+	if raw == "" {
+		return 0
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value < 0 {
+		return 0
+	}
+	return domain.Sequence(value)
+}
+
+// queryBool reads an optional boolean query parameter.
+func queryBool(r *http.Request, name string) bool {
+	value, err := strconv.ParseBool(r.URL.Query().Get(name))
+	return err == nil && value
 }

@@ -87,3 +87,9 @@ func scanRun(row scanner) (domain.Run, error) {
 		&run.ResumeStatus, &run.ResumeReason, &run.CreatedAt, &run.UpdatedAt)
 	return run, classify(err, "read run")
 }
+
+// RunByID returns a Run without an ownership check, for the backend-facing
+// paths where the BackendInstance identity is already authenticated.
+func (s *Store) RunByID(ctx context.Context, id domain.RunID) (domain.Run, error) {
+	return scanRun(s.q.QueryRow(ctx, `SELECT `+runColumns+` FROM runs r WHERE r.id = $1`, id))
+}

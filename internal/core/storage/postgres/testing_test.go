@@ -2,81 +2,18 @@ package postgres_test
 
 import (
 	"context"
-	"fmt"
-	"io"
-	"log/slog"
-	"os"
-	"strings"
 	"testing"
-
-	"github.com/jackc/pgx/v5"
 
 	"github.com/rclsilver/threavia/internal/core/domain"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
+	"github.com/rclsilver/threavia/internal/core/storage/postgres/pgtest"
 )
 
-// TestPostgresURLEnv names the database the integration tests run against.
-// Without it they skip, so `go test ./...` stays green on a machine with no
-// database.
-const TestPostgresURLEnv = "THREAVIA_TEST_POSTGRES_URL"
-
-// newTestStore gives each test its own PostgreSQL schema, migrated from scratch
-// and dropped afterwards, so tests never see each other's rows.
+// newTestStore gives each test its own migrated schema.
 func newTestStore(t *testing.T) (*postgres.Store, context.Context) {
 	t.Helper()
-
-	baseURL := os.Getenv(TestPostgresURLEnv)
-	if baseURL == "" {
-		t.Skipf("set %s to run the database integration tests", TestPostgresURLEnv)
-	}
-
-	ctx := context.Background()
-	schema := "test_" + strings.ReplaceAll(domain.NewUUID(), "-", "")[:24]
-
-	admin, err := pgx.Connect(ctx, baseURL)
-	if err != nil {
-		t.Fatalf("connecting to %s: %v", TestPostgresURLEnv, err)
-	}
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
-		_ = admin.Close(ctx)
-		t.Fatalf("creating the test schema: %v", err)
-	}
-	_ = admin.Close(ctx)
-
-	t.Cleanup(func() {
-		cleanup, err := pgx.Connect(context.WithoutCancel(ctx), baseURL)
-		if err != nil {
-			t.Logf("cannot drop the test schema: %v", err)
-			return
-		}
-		defer func() { _ = cleanup.Close(context.WithoutCancel(ctx)) }()
-		if _, err := cleanup.Exec(context.WithoutCancel(ctx), "DROP SCHEMA "+schema+" CASCADE"); err != nil {
-			t.Logf("cannot drop the test schema: %v", err)
-		}
-	})
-
-	cfg := postgres.Config{URL: scopedURL(baseURL, schema), MaxConns: 4}
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	if err := postgres.MigrateUp(cfg, logger); err != nil {
-		t.Fatalf("migrating the test schema: %v", err)
-	}
-
-	db, err := postgres.Open(ctx, cfg)
-	if err != nil {
-		t.Fatalf("opening the test pool: %v", err)
-	}
-	t.Cleanup(db.Close)
-
-	return postgres.NewStore(db), ctx
-}
-
-// scopedURL pins every connection to the test schema.
-func scopedURL(baseURL, schema string) string {
-	separator := "?"
-	if strings.Contains(baseURL, "?") {
-		separator = "&"
-	}
-	return fmt.Sprintf("%s%ssearch_path=%s", baseURL, separator, schema)
+	store, _ := pgtest.New(t)
+	return store, context.Background()
 }
 
 // fixture builds a Project, a BackendInstance, a Session, a Run and a Job, which
@@ -137,5 +74,3 @@ func newFixture(t *testing.T, store *postgres.Store, ctx context.Context) fixtur
 
 	return f
 }
-
-var _ = io.Discard
