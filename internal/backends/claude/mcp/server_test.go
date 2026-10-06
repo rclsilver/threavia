@@ -1,0 +1,300 @@
+package mcp_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
+	"net/http"
+	"testing"
+
+	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
+)
+
+// stubAsker stands in for the Threavia user.
+type stubAsker struct {
+	decision mcp.Decision
+	answer   string
+	err      error
+
+	jobID    string
+	toolName string
+	input    map[string]any
+	prompt   string
+	choices  []string
+}
+
+func (s *stubAsker) AskPermission(_ context.Context, jobID, toolName string, input map[string]any) (mcp.Decision, error) {
+	s.jobID, s.toolName, s.input = jobID, toolName, input
+	return s.decision, s.err
+}
+
+func (s *stubAsker) AskUser(_ context.Context, jobID, prompt string, choices []string) (string, error) {
+	s.jobID, s.prompt, s.choices = jobID, prompt, choices
+	return s.answer, s.err
+}
+
+func newServer(t *testing.T, asker mcp.Asker) (*mcp.Server, string) {
+	t.Helper()
+
+	server := mcp.New(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	server.SetAsker(asker)
+	if err := server.Start(); err != nil {
+		t.Fatalf("starting the tool endpoint: %v", err)
+	}
+	t.Cleanup(func() { _ = server.Close(context.Background()) })
+
+	return server, server.Register("job-1", "token-1")
+}
+
+// rpc performs one JSON-RPC call and returns the decoded result.
+func rpc(t *testing.T, endpoint, method string, params any) (map[string]any, map[string]any) {
+	t.Helper()
+
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": method, "params": params,
+	})
+	if err != nil {
+		t.Fatalf("encoding the request: %v", err)
+	}
+
+	resp, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("calling %s: %v", method, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var decoded struct {
+		Result map[string]any `json:"result"`
+		Error  map[string]any `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decoding the response of %s: %v", method, err)
+	}
+	return decoded.Result, decoded.Error
+}
+
+// toolText extracts the single text content block a tool returns.
+func toolText(t *testing.T, result map[string]any) string {
+	t.Helper()
+
+	content, ok := result["content"].([]any)
+	if !ok || len(content) == 0 {
+		t.Fatalf("result %v carries no content", result)
+	}
+	block, ok := content[0].(map[string]any)
+	if !ok {
+		t.Fatalf("content block %v is malformed", content[0])
+	}
+	text, _ := block["text"].(string)
+	return text
+}
+
+// TestHandshakeAndTools pins what Claude Code needs to discover the endpoint.
+func TestHandshakeAndTools(t *testing.T) {
+	t.Parallel()
+
+	_, endpoint := newServer(t, &stubAsker{})
+
+	result, rpcErr := rpc(t, endpoint, "initialize", map[string]any{"protocolVersion": "2025-11-25"})
+	if rpcErr != nil {
+		t.Fatalf("initialize failed: %v", rpcErr)
+	}
+	// Echoing the client version is what keeps this compatible across protocol
+	// revisions.
+	if result["protocolVersion"] != "2025-11-25" {
+		t.Errorf("protocolVersion = %v, want the one the client offered", result["protocolVersion"])
+	}
+
+	result, rpcErr = rpc(t, endpoint, "tools/list", map[string]any{})
+	if rpcErr != nil {
+		t.Fatalf("tools/list failed: %v", rpcErr)
+	}
+	tools, _ := result["tools"].([]any)
+	if len(tools) != 2 {
+		t.Fatalf("%d tools exposed, want 2", len(tools))
+	}
+
+	names := map[string]bool{}
+	for _, tool := range tools {
+		entry, _ := tool.(map[string]any)
+		name, _ := entry["name"].(string)
+		names[name] = true
+	}
+	if !names[mcp.ToolApprovalPrompt] || !names[mcp.ToolAskUser] {
+		t.Fatalf("tools = %v, want the approval prompt and the question tool", names)
+	}
+}
+
+// TestApprovalIsAllowed pins the shape Claude Code expects when a permission is
+// granted: the tool proceeds with its input.
+func TestApprovalIsAllowed(t *testing.T) {
+	t.Parallel()
+
+	asker := &stubAsker{decision: mcp.Decision{Approved: true}}
+	_, endpoint := newServer(t, asker)
+
+	result, rpcErr := rpc(t, endpoint, "tools/call", map[string]any{
+		"name": mcp.ToolApprovalPrompt,
+		"arguments": map[string]any{
+			"tool_name": "Write",
+			"input":     map[string]any{"file_path": "/tmp/foo", "content": "bonjour"},
+		},
+	})
+	if rpcErr != nil {
+		t.Fatalf("the tool call failed: %v", rpcErr)
+	}
+
+	var payload struct {
+		Behavior     string         `json:"behavior"`
+		UpdatedInput map[string]any `json:"updatedInput"`
+	}
+	if err := json.Unmarshal([]byte(toolText(t, result)), &payload); err != nil {
+		t.Fatalf("decoding the decision: %v", err)
+	}
+	if payload.Behavior != "allow" {
+		t.Fatalf("behavior = %q, want allow", payload.Behavior)
+	}
+	if payload.UpdatedInput["file_path"] != "/tmp/foo" {
+		t.Fatalf("updatedInput = %v, want the original input", payload.UpdatedInput)
+	}
+
+	if asker.jobID != "job-1" || asker.toolName != "Write" {
+		t.Fatalf("the request reached the user as %s/%s", asker.jobID, asker.toolName)
+	}
+}
+
+// TestDenialCarriesTheReason pins that a refusal reaches the agent with an
+// explanation.
+func TestDenialCarriesTheReason(t *testing.T) {
+	t.Parallel()
+
+	asker := &stubAsker{decision: mcp.Decision{Approved: false, Reason: "pas en production"}}
+	_, endpoint := newServer(t, asker)
+
+	result, _ := rpc(t, endpoint, "tools/call", map[string]any{
+		"name":      mcp.ToolApprovalPrompt,
+		"arguments": map[string]any{"tool_name": "Bash", "input": map[string]any{"command": "rm -rf /"}},
+	})
+
+	var payload struct {
+		Behavior string `json:"behavior"`
+		Message  string `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(toolText(t, result)), &payload); err != nil {
+		t.Fatalf("decoding the decision: %v", err)
+	}
+	if payload.Behavior != "deny" || payload.Message != "pas en production" {
+		t.Fatalf("decision = %+v, want a denial carrying the reason", payload)
+	}
+}
+
+// TestUnansweredPermissionFailsClosed pins the safety rule: a permission
+// request that cannot be answered is never an approval.
+func TestUnansweredPermissionFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	asker := &stubAsker{err: errors.New("core unreachable")}
+	_, endpoint := newServer(t, asker)
+
+	result, _ := rpc(t, endpoint, "tools/call", map[string]any{
+		"name":      mcp.ToolApprovalPrompt,
+		"arguments": map[string]any{"tool_name": "Write", "input": map[string]any{}},
+	})
+
+	var payload struct {
+		Behavior string `json:"behavior"`
+	}
+	if err := json.Unmarshal([]byte(toolText(t, result)), &payload); err != nil {
+		t.Fatalf("decoding the decision: %v", err)
+	}
+	if payload.Behavior != "deny" {
+		t.Fatalf("behavior = %q, want deny when no decision could be obtained", payload.Behavior)
+	}
+}
+
+// TestAskUserReachesTheUser pins the question path.
+func TestAskUserReachesTheUser(t *testing.T) {
+	t.Parallel()
+
+	asker := &stubAsker{answer: "staging"}
+	_, endpoint := newServer(t, asker)
+
+	result, rpcErr := rpc(t, endpoint, "tools/call", map[string]any{
+		"name": mcp.ToolAskUser,
+		"arguments": map[string]any{
+			"prompt":  "Quel environnement ?",
+			"choices": []any{"staging", "production"},
+		},
+	})
+	if rpcErr != nil {
+		t.Fatalf("the tool call failed: %v", rpcErr)
+	}
+	if got := toolText(t, result); got != "staging" {
+		t.Fatalf("answer = %q, want staging", got)
+	}
+	if asker.prompt != "Quel environnement ?" || len(asker.choices) != 2 {
+		t.Fatalf("the question reached the user as %q %v", asker.prompt, asker.choices)
+	}
+}
+
+// TestEndpointIsScopedToItsJob pins the only thing standing between a local
+// process and another Job's prompts: an unguessable per-Job token.
+func TestEndpointIsScopedToItsJob(t *testing.T) {
+	t.Parallel()
+
+	server, endpoint := newServer(t, &stubAsker{decision: mcp.Decision{Approved: true}})
+
+	body := bytes.NewReader([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	resp, err := http.Post(endpoint+"-wrong", "application/json", body)
+	if err != nil {
+		t.Fatalf("calling an unknown endpoint: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("an unknown token returned %d, want 404", resp.StatusCode)
+	}
+
+	// Once the Job is gone, so is its endpoint: a late call from a lingering
+	// process reaches nothing.
+	server.Unregister("token-1")
+	resp, err = http.Post(endpoint, "application/json",
+		bytes.NewReader([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)))
+	if err != nil {
+		t.Fatalf("calling an unregistered endpoint: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("an unregistered endpoint returned %d, want 404", resp.StatusCode)
+	}
+}
+
+// TestConfigPointsAtTheEndpoint pins the --mcp-config value handed to Claude
+// Code.
+func TestConfigPointsAtTheEndpoint(t *testing.T) {
+	t.Parallel()
+
+	encoded, err := mcp.Config("http://127.0.0.1:1234/mcp/token")
+	if err != nil {
+		t.Fatalf("rendering the config: %v", err)
+	}
+
+	var decoded struct {
+		MCPServers map[string]struct {
+			Type string `json:"type"`
+			URL  string `json:"url"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal([]byte(encoded), &decoded); err != nil {
+		t.Fatalf("decoding the config: %v", err)
+	}
+	server, ok := decoded.MCPServers[mcp.ServerName]
+	if !ok {
+		t.Fatalf("config %s must declare the %s server", encoded, mcp.ServerName)
+	}
+	if server.Type != "http" || server.URL != "http://127.0.0.1:1234/mcp/token" {
+		t.Fatalf("server = %+v, want the loopback endpoint over http", server)
+	}
+}

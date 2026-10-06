@@ -2,36 +2,63 @@ package adapter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 
+	"google.golang.org/protobuf/types/known/structpb"
+
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
+	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
 	"github.com/rclsilver/threavia/internal/backends/claude/runner"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/client"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/state"
 )
 
-// Adapter implements the backend SDK Handler for Claude Code.
-//
-// This is the translation skeleton: the control plane side is complete
-// (handshake, status reporting, command routing, durable event buffering), while
-// actually driving Claude Code is delegated to the runner, which is the next
-// implementation step. Unimplemented commands are explicitly rejected rather
-// than silently accepted, so Core never believes work started when it did not.
+// ErrJobAbandoned is delivered to anything still waiting on a Job that ended.
+var ErrJobAbandoned = errors.New("the job ended before the request was answered")
+
+// Adapter implements the backend SDK Handler for Claude Code, and is the only
+// place where Claude concepts and Threavia concepts meet.
 type Adapter struct {
 	client.BaseHandler
 
 	cfg    Config
 	runner runner.Runner
+	store  state.Store
 	logger *slog.Logger
 
-	mu     sync.RWMutex
-	client *client.Client
+	mu      sync.Mutex
+	client  *client.Client
+	jobs    map[string]*jobState
+	waiters map[string]*waiter
+}
+
+// jobState is what the adapter remembers about a Job it is running.
+type jobState struct {
+	runID    string
+	requests map[string]struct{}
+}
+
+// waiter is a pending question, blocked until Core brings an answer back.
+type waiter struct {
+	jobID    string
+	approved chan mcp.Decision
+	answer   chan string
+	failed   chan error
 }
 
 // New builds the Claude adapter.
-func New(cfg Config, claudeRunner runner.Runner, logger *slog.Logger) *Adapter {
-	return &Adapter{cfg: cfg, runner: claudeRunner, logger: logger}
+func New(cfg Config, claudeRunner runner.Runner, store state.Store, logger *slog.Logger) *Adapter {
+	return &Adapter{
+		cfg:     cfg,
+		runner:  claudeRunner,
+		store:   store,
+		logger:  logger,
+		jobs:    make(map[string]*jobState),
+		waiters: make(map[string]*waiter),
+	}
 }
 
 // Bind gives the adapter the SDK client it reports through. It is called once,
@@ -44,8 +71,8 @@ func (a *Adapter) Bind(c *client.Client) {
 }
 
 func (a *Adapter) sdk() *client.Client {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	return a.client
 }
 
@@ -61,33 +88,29 @@ func (a *Adapter) OnConnected(ctx context.Context, welcome *backendv1.Welcome) e
 	}
 
 	status := backendv1.BackendOperationalStatus_BACKEND_OPERATIONAL_STATUS_READY
+	providerAuth := backendv1.ProviderAuthState_PROVIDER_AUTH_STATE_AUTHENTICATED
 	var conditions []*backendv1.Condition
 
-	if available, ok := a.runner.(interface{ Available() error }); ok {
-		if err := available.Available(); err != nil {
-			status = backendv1.BackendOperationalStatus_BACKEND_OPERATIONAL_STATUS_DEGRADED
-			conditions = append(conditions, &backendv1.Condition{
-				Type:    "ProviderAvailable",
-				Status:  "False",
-				Reason:  "ExecutableNotFound",
-				Message: err.Error(),
-			})
-		}
+	if err := a.runner.Available(); err != nil {
+		status = backendv1.BackendOperationalStatus_BACKEND_OPERATIONAL_STATUS_DEGRADED
+		providerAuth = backendv1.ProviderAuthState_PROVIDER_AUTH_STATE_AUTHENTICATION_REQUIRED
+		conditions = append(conditions, &backendv1.Condition{
+			Type:    "ProviderAvailable",
+			Status:  "False",
+			Reason:  "ExecutableNotFound",
+			Message: err.Error(),
+		})
 	}
-
-	// Provider authentication is entirely backend-owned; Core only ever sees
-	// this coarse state. Reporting it accurately is part of the runner work.
-	providerAuth := backendv1.ProviderAuthState_PROVIDER_AUTH_STATE_UNSPECIFIED
 
 	a.logger.Info("reporting backend status",
 		slog.String("connectionId", welcome.GetConnectionId()),
-		slog.String("status", status.String()),
-	)
+		slog.String("status", status.String()))
 	return sdk.SendStatus(ctx, status, providerAuth, conditions...)
 }
 
 // OnDisconnected logs the loss of the control stream. Local execution keeps
-// running: a Core outage must never stop agent work.
+// running: a Core outage must never stop agent work, and events are buffered
+// durably until Core comes back.
 func (a *Adapter) OnDisconnected(_ context.Context, cause error) {
 	if cause != nil {
 		a.logger.Warn("disconnected from core", slog.String("cause", cause.Error()))
@@ -96,45 +119,179 @@ func (a *Adapter) OnDisconnected(_ context.Context, cause error) {
 	a.logger.Info("disconnected from core")
 }
 
-// OnStartJob starts or resumes the provider native session for a Run.
+// OnStartJob starts or resumes the provider session for a Run.
+//
+// It returns as soon as the work is accepted: a Job runs for minutes and the
+// control stream must stay responsive, so the process is driven from its own
+// goroutine and everything it produces travels back as events.
 func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error {
 	params := runner.StartParams{
-		RunID:            cmd.GetRunId(),
-		JobID:            cmd.GetJobId(),
-		NativeSessionID:  cmd.GetNativeSessionId(),
-		WorkingDirectory: cmd.GetProjectContext().GetWorkingDirectoryPath(),
-		Prompt:           cmd.GetPrompt(),
+		RunID:              cmd.GetRunId(),
+		JobID:              cmd.GetJobId(),
+		NativeSessionID:    cmd.GetNativeSessionId(),
+		WorkingDirectory:   cmd.GetProjectContext().GetWorkingDirectoryPath(),
+		Prompt:             cmd.GetPrompt(),
+		ProjectName:        cmd.GetProjectContext().GetProjectName(),
+		ProjectDescription: cmd.GetProjectContext().GetProjectDescription(),
+	}
+	if params.RunID == "" || params.JobID == "" {
+		return fmt.Errorf("a run id and a job id are required")
 	}
 
-	a.logger.Info("start job requested",
-		slog.String("runId", params.RunID),
-		slog.String("jobId", params.JobID),
-		slog.Bool("resume", params.NativeSessionID != ""),
-		slog.String("workingDirectory", params.WorkingDirectory),
-	)
-
-	var err error
-	if params.NativeSessionID == "" {
-		_, err = a.runner.Start(ctx, params)
-	} else {
-		_, err = a.runner.Resume(ctx, params)
+	a.mu.Lock()
+	if _, busy := a.jobs[params.JobID]; busy {
+		a.mu.Unlock()
+		return nil // Already running: a redelivered command is not a new Job.
 	}
-	if err != nil {
-		return fmt.Errorf("start job %s: %w", params.JobID, err)
+	a.jobs[params.JobID] = &jobState{runID: params.RunID, requests: make(map[string]struct{})}
+	a.mu.Unlock()
+
+	if err := a.store.SaveJob(context.WithoutCancel(ctx), state.JobRecord{
+		JobID:  params.JobID,
+		RunID:  params.RunID,
+		Status: backendv1.JobStatus_JOB_STATUS_RUNNING,
+	}); err != nil {
+		a.logger.Error("cannot record the job locally", slog.String("error", err.Error()))
+	}
+	a.updateActiveRuns()
+
+	// Detached from the command context: the Job outlives the message that
+	// started it.
+	go a.execute(context.WithoutCancel(ctx), params)
+	return nil
+}
+
+// execute drives one Job and cleans up after it.
+func (a *Adapter) execute(ctx context.Context, params runner.StartParams) {
+	defer func() {
+		a.releaseJob(params.JobID, ErrJobAbandoned)
+		a.updateActiveRuns()
+	}()
+
+	if err := a.runner.Run(ctx, params, a); err != nil {
+		a.logger.Error("job failed to run",
+			slog.String("jobId", params.JobID), slog.String("error", err.Error()))
+	}
+}
+
+// OnCancelJob asks the runner to stop. Core only moves the Job to CANCELLED
+// once the backend confirms the stop with a job cancelled event.
+func (a *Adapter) OnCancelJob(_ context.Context, cmd *backendv1.CancelJob) error {
+	a.logger.Info("cancel requested",
+		slog.String("jobId", cmd.GetJobId()), slog.String("reason", cmd.GetReason()))
+
+	if err := a.runner.Cancel(cmd.GetJobId()); err != nil {
+		if errors.Is(err, runner.ErrUnknownJob) {
+			// Nothing is running here. Reconciliation converges Core, so this is
+			// not a command failure.
+			a.logger.Info("nothing to cancel for this job", slog.String("jobId", cmd.GetJobId()))
+			return nil
+		}
+		return err
 	}
 	return nil
 }
 
-// OnCancelJob asks the runner to stop a Job. Core only moves the Job to
-// CANCELLED once the backend confirms the stop.
-func (a *Adapter) OnCancelJob(ctx context.Context, cmd *backendv1.CancelJob) error {
-	a.logger.Info("cancel job requested",
-		slog.String("runId", cmd.GetRunId()),
-		slog.String("jobId", cmd.GetJobId()),
-		slog.String("reason", cmd.GetReason()),
-	)
-	if err := a.runner.Cancel(ctx, cmd.GetJobId()); err != nil {
-		return fmt.Errorf("cancel job %s: %w", cmd.GetJobId(), err)
+// OnValidationResolution delivers a permission decision to the blocked tool
+// call.
+func (a *Adapter) OnValidationResolution(_ context.Context, cmd *backendv1.ValidationResolution) error {
+	w := a.takeWaiter(cmd.GetRequestId())
+	if w == nil {
+		// The Job already ended, or this Core process is replaying. Dropping it
+		// is correct: nothing is waiting.
+		return nil
 	}
+	w.approved <- mcp.Decision{Approved: cmd.GetApproved(), Reason: cmd.GetNote()}
 	return nil
+}
+
+// OnUserInputResolution delivers an answer to the blocked question.
+func (a *Adapter) OnUserInputResolution(_ context.Context, cmd *backendv1.UserInputResolution) error {
+	w := a.takeWaiter(cmd.GetRequestId())
+	if w == nil {
+		return nil
+	}
+	w.answer <- cmd.GetValue()
+	return nil
+}
+
+// OnReconcileInstruction applies a Core reconciliation decision.
+func (a *Adapter) OnReconcileInstruction(ctx context.Context, cmd *backendv1.ReconcileInstruction) error {
+	switch cmd.GetAction() {
+	case backendv1.ReconcileAction_RECONCILE_ACTION_REPLAY_EVENTS:
+		// The SDK already replays everything Core has not acknowledged on every
+		// reconnection, so there is nothing more to do here.
+		a.logger.Info("core asked for an event replay",
+			slog.String("jobId", cmd.GetJobId()),
+			slog.Uint64("fromSequence", cmd.GetFromBackendSequence()))
+		return nil
+
+	case backendv1.ReconcileAction_RECONCILE_ACTION_REISSUE_CANCEL:
+		return a.OnCancelJob(ctx, &backendv1.CancelJob{
+			RunId: cmd.GetRunId(), JobId: cmd.GetJobId(), Reason: "reissued after reconnection",
+		})
+
+	case backendv1.ReconcileAction_RECONCILE_ACTION_ABANDON_JOB:
+		a.releaseJob(cmd.GetJobId(), ErrJobAbandoned)
+		return a.runner.Cancel(cmd.GetJobId())
+
+	default:
+		return nil
+	}
+}
+
+// updateActiveRuns reports how many Jobs are live, so Core sees real capacity.
+func (a *Adapter) updateActiveRuns() {
+	a.mu.Lock()
+	active := int32(len(a.jobs))
+	a.mu.Unlock()
+
+	if sdk := a.sdk(); sdk != nil {
+		sdk.SetActiveRuns(active)
+	}
+}
+
+// takeWaiter removes and returns a pending request.
+func (a *Adapter) takeWaiter(requestID string) *waiter {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	w, ok := a.waiters[requestID]
+	if !ok {
+		return nil
+	}
+	delete(a.waiters, requestID)
+	if job, ok := a.jobs[w.jobID]; ok {
+		delete(job.requests, requestID)
+	}
+	return w
+}
+
+// releaseJob forgets a Job and fails anything still waiting on it, so a
+// cancelled or finished Job never leaves a blocked tool call behind.
+func (a *Adapter) releaseJob(jobID string, cause error) {
+	a.mu.Lock()
+	job, ok := a.jobs[jobID]
+	delete(a.jobs, jobID)
+
+	var orphaned []*waiter
+	if ok {
+		for requestID := range job.requests {
+			if w, exists := a.waiters[requestID]; exists {
+				orphaned = append(orphaned, w)
+				delete(a.waiters, requestID)
+			}
+		}
+	}
+	a.mu.Unlock()
+
+	for _, w := range orphaned {
+		w.failed <- cause
+	}
+}
+
+// emptyStruct is the payload of a request with nothing structured to carry.
+func emptyStruct() *structpb.Struct {
+	value, _ := structpb.NewStruct(map[string]any{})
+	return value
 }

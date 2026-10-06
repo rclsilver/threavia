@@ -14,8 +14,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/rclsilver/threavia/internal/backends/claude/adapter"
+	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
 	"github.com/rclsilver/threavia/internal/backends/claude/runner"
 	"github.com/rclsilver/threavia/internal/logging"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/client"
@@ -60,13 +62,6 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	claude := runner.New(cfg.Claude.Binary)
-	if err := claude.Available(); err != nil {
-		// Not fatal: the backend connects anyway and reports DEGRADED so the
-		// user can see why it cannot work.
-		logger.Warn("claude code is not available", slog.String("error", err.Error()))
-	}
-
 	// Durable local execution state: it is what lets this backend keep working
 	// through a Core outage and replay afterwards.
 	store, err := state.OpenSQLite(cfg.StatePath)
@@ -82,7 +77,27 @@ func run() error {
 	}
 	cfg.Client.Token = credential
 
-	claudeAdapter := adapter.New(cfg, claude, logger)
+	// The local tool endpoint: where Claude Code permission prompts and agent
+	// questions become Threavia requests. It is wired before it starts serving.
+	tools := mcp.New(logger)
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = tools.Close(shutdownCtx)
+	}()
+
+	claude := runner.NewClaude(cfg.Claude.Binary, tools, logger)
+	if err := claude.Available(); err != nil {
+		// Not fatal: the backend connects anyway and reports DEGRADED so the
+		// user can see why it cannot work.
+		logger.Warn("claude code is not available", slog.String("error", err.Error()))
+	}
+
+	claudeAdapter := adapter.New(cfg, claude, store, logger)
+	tools.SetAsker(claudeAdapter)
+	if err := tools.Start(); err != nil {
+		return err
+	}
 
 	sdk, err := client.New(cfg.Client, claudeAdapter, store, logger)
 	if err != nil {

@@ -1,8 +1,9 @@
 // Package runner drives the local Claude Code provider process.
 //
-// Everything provider-specific lives here: credentials, the native session, the
-// filesystem and the local tools all belong to the BackendInstance
-// (THREAVIA_SPEC_V1.md section 7). Core never sees any of it.
+// Everything provider-specific lives here: the credentials, the native session,
+// the filesystem and the local tools all belong to the BackendInstance
+// (THREAVIA_SPEC_V1.md section 7). Core never sees any of it, and nothing in
+// this package knows about Core.
 package runner
 
 import (
@@ -12,9 +13,13 @@ import (
 	"os/exec"
 )
 
-// ErrNotImplemented is returned by the Claude runner until the provider
-// integration lands (specification section 31, step 6).
-var ErrNotImplemented = errors.New("claude runner not implemented yet")
+// Errors returned by the runner.
+var (
+	// ErrUnknownJob is returned when cancelling a Job that is not running here.
+	ErrUnknownJob = errors.New("job is not running on this backend")
+	// ErrProviderUnavailable means the Claude Code CLI cannot be found.
+	ErrProviderUnavailable = errors.New("claude code is not available")
+)
 
 // StartParams describes the work to start or resume.
 type StartParams struct {
@@ -29,65 +34,32 @@ type StartParams struct {
 	// real OS permissions.
 	WorkingDirectory string
 	Prompt           string
-}
-
-// Session is the provider native session backing a Run.
-type Session struct {
-	NativeSessionID string
+	// ProjectName and ProjectDescription come from the compact ProjectContext
+	// Core builds at Job start.
+	ProjectName        string
+	ProjectDescription string
 }
 
 // Runner is the provider integration contract the adapter depends on.
 type Runner interface {
-	// Start creates a new provider native session and begins the Job.
-	Start(ctx context.Context, params StartParams) (*Session, error)
-	// Resume continues an existing provider native session.
-	Resume(ctx context.Context, params StartParams) (*Session, error)
+	// Run executes a Job to completion, emitting everything it observes to the
+	// sink. It returns when the provider process has exited.
+	Run(ctx context.Context, params StartParams, sink Sink) error
 	// Cancel stops a running Job. The Job only reaches CANCELLED once this has
 	// actually stopped the work.
-	Cancel(ctx context.Context, jobID string) error
+	Cancel(jobID string) error
+	// Available reports whether the provider can run at all.
+	Available() error
 }
 
-// Claude runs the Claude Code CLI.
-type Claude struct {
-	binary string
-}
-
-// New returns a Claude runner using the given executable, "claude" by default.
-func New(binary string) *Claude {
-	if binary == "" {
-		binary = "claude"
-	}
-	return &Claude{binary: binary}
-}
-
-// Binary returns the configured executable.
-func (c *Claude) Binary() string { return c.binary }
-
-// Available reports whether the Claude Code CLI can be found. A missing CLI is a
-// DEGRADED condition, not a fatal startup error: the backend stays connected and
-// reports why it cannot work.
-func (c *Claude) Available() error {
-	path, err := exec.LookPath(c.binary)
+// lookPath reports whether an executable can be found.
+func lookPath(binary string) error {
+	path, err := exec.LookPath(binary)
 	if err != nil {
-		return fmt.Errorf("claude executable %q not found: %w", c.binary, err)
+		return fmt.Errorf("%w: %q not found: %v", ErrProviderUnavailable, binary, err)
 	}
 	if path == "" {
-		return fmt.Errorf("claude executable %q not found", c.binary)
+		return fmt.Errorf("%w: %q not found", ErrProviderUnavailable, binary)
 	}
 	return nil
-}
-
-// Start implements Runner.
-func (c *Claude) Start(context.Context, StartParams) (*Session, error) {
-	return nil, ErrNotImplemented
-}
-
-// Resume implements Runner.
-func (c *Claude) Resume(context.Context, StartParams) (*Session, error) {
-	return nil, ErrNotImplemented
-}
-
-// Cancel implements Runner.
-func (c *Claude) Cancel(context.Context, string) error {
-	return ErrNotImplemented
 }
