@@ -5,7 +5,8 @@ BUF_VERSION             ?= v1.47.2
 PROTOC_GEN_GO_VERSION   ?= v1.36.6
 PROTOC_GEN_GRPC_VERSION ?= v1.5.1
 
-GOBIN   ?= $(shell go env GOPATH)/bin
+GOBIN   ?= 100 1 57 67 100 131shell go env GOPATH)/bin
+TEST_POSTGRES_URL ?= postgres://threavia:threavia@localhost:5432/threavia?sslmode=disable
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -X main.version=$(VERSION)
 
@@ -85,3 +86,7 @@ run-backend: ## Run the Claude backend against a local Core
 .PHONY: clean
 clean: ## Remove the build output
 	rm -rf bin
+
+.PHONY: test-db
+test-db: ## Run the test suite including the database integration tests
+	THREAVIA_TEST_POSTGRES_URL=$(TEST_POSTGRES_URL) go test ./...

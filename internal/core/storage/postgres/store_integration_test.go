@@ -1,0 +1,363 @@
+package postgres_test
+
+import (
+	"encoding/json"
+	"errors"
+	"testing"
+
+	"github.com/rclsilver/threavia/internal/core/domain"
+	"github.com/rclsilver/threavia/internal/core/events"
+	"github.com/rclsilver/threavia/internal/core/storage/postgres"
+)
+
+// TestOwnershipIsolation pins that a user never sees another user's Project, and
+// that an identifier they do not own is indistinguishable from one that does not
+// exist.
+func TestOwnershipIsolation(t *testing.T) {
+	store, ctx := newTestStore(t)
+	f := newFixture(t, store, ctx)
+
+	stranger := domain.UserID("stranger")
+	if _, err := store.GetProject(ctx, stranger, f.project.ID); !errors.Is(err, postgres.ErrNotFound) {
+		t.Fatalf("reading another user's project: got %v, want ErrNotFound", err)
+	}
+	if _, err := store.GetSession(ctx, stranger, f.session.ID); !errors.Is(err, postgres.ErrNotFound) {
+		t.Fatalf("reading another user's session: got %v, want ErrNotFound", err)
+	}
+	if _, err := store.GetJob(ctx, stranger, f.job.ID); !errors.Is(err, postgres.ErrNotFound) {
+		t.Fatalf("reading another user's job: got %v, want ErrNotFound", err)
+	}
+
+	projects, err := store.ListProjects(ctx, stranger, true)
+	if err != nil {
+		t.Fatalf("listing projects: %v", err)
+	}
+	if len(projects) != 0 {
+		t.Fatalf("a stranger sees %d projects, want 0", len(projects))
+	}
+}
+
+// TestOneActiveJobPerRun pins the invariant of specification section 3.4 at the
+// storage level: queued Jobs may pile up, a second active one may not.
+func TestOneActiveJobPerRun(t *testing.T) {
+	store, ctx := newTestStore(t)
+	f := newFixture(t, store, ctx)
+
+	if _, err := store.TransitionJob(ctx, f.job.ID, domain.JobQueued, domain.JobRunning, nil); err != nil {
+		t.Fatalf("starting the first job: %v", err)
+	}
+
+	second := domain.Job{ID: domain.NewJobID(), RunID: f.run.ID, Status: domain.JobQueued}
+	if err := store.CreateJob(ctx, &second); err != nil {
+		t.Fatalf("queueing a second job: %v", err)
+	}
+	third := domain.Job{ID: domain.NewJobID(), RunID: f.run.ID, Status: domain.JobQueued}
+	if err := store.CreateJob(ctx, &third); err != nil {
+		t.Fatalf("queueing a third job: %v", err)
+	}
+
+	if _, err := store.TransitionJob(ctx, second.ID, domain.JobQueued, domain.JobRunning, nil); !errors.Is(err, postgres.ErrJobSlotTaken) {
+		t.Fatalf("starting a second active job: got %v, want ErrJobSlotTaken", err)
+	}
+
+	// Queued Jobs are FIFO.
+	next, err := store.NextQueuedJob(ctx, f.run.ID)
+	if err != nil {
+		t.Fatalf("reading the next queued job: %v", err)
+	}
+	if next.ID != second.ID {
+		t.Fatalf("next queued job = %s, want the oldest one %s", next.ID, second.ID)
+	}
+
+	// Once the active Job ends, the slot frees up.
+	if _, err := store.TransitionJob(ctx, f.job.ID, domain.JobRunning, domain.JobCompleted, nil); err != nil {
+		t.Fatalf("completing the first job: %v", err)
+	}
+	if _, err := store.TransitionJob(ctx, second.ID, domain.JobQueued, domain.JobRunning, nil); err != nil {
+		t.Fatalf("starting the next job: %v", err)
+	}
+}
+
+// TestTransitionJobIsIdempotent pins that a replayed transition is a no-op
+// rather than a corruption: the row only moves from the expected status.
+func TestTransitionJobIsIdempotent(t *testing.T) {
+	store, ctx := newTestStore(t)
+	f := newFixture(t, store, ctx)
+
+	if _, err := store.TransitionJob(ctx, f.job.ID, domain.JobQueued, domain.JobRunning, nil); err != nil {
+		t.Fatalf("starting the job: %v", err)
+	}
+	if _, err := store.TransitionJob(ctx, f.job.ID, domain.JobQueued, domain.JobRunning, nil); !errors.Is(err, postgres.ErrNotFound) {
+		t.Fatalf("replaying the transition: got %v, want ErrNotFound", err)
+	}
+
+	job, err := store.JobByID(ctx, f.job.ID)
+	if err != nil {
+		t.Fatalf("reading the job: %v", err)
+	}
+	if job.Status != domain.JobRunning {
+		t.Fatalf("job status = %s, want RUNNING", job.Status)
+	}
+	if job.StartedAt == nil {
+		t.Error("starting a job must stamp startedAt")
+	}
+}
+
+// TestBackendEventDeduplication pins that at-least-once backend delivery becomes
+// exactly-once Core observation.
+func TestBackendEventDeduplication(t *testing.T) {
+	store, ctx := newTestStore(t)
+	f := newFixture(t, store, ctx)
+
+	record := func() *events.Record {
+		return &events.Record{
+			Envelope: events.Envelope{
+				Type:      events.TypeAgentMessage,
+				ProjectID: &f.project.ID,
+				SessionID: &f.session.ID,
+				RunID:     &f.run.ID,
+				JobID:     &f.job.ID,
+				Payload:   json.RawMessage(`{"text":"bonjour"}`),
+			},
+			Origin: &events.BackendOrigin{
+				BackendInstanceID: f.backend.ID,
+				BackendEventID:    "evt-1",
+				BackendSequence:   1,
+			},
+		}
+	}
+
+	first := record()
+	if err := store.AppendEvent(ctx, first); err != nil {
+		t.Fatalf("appending the event: %v", err)
+	}
+	if first.Sequence == 0 {
+		t.Fatal("a persisted event must receive a global sequence")
+	}
+
+	if err := store.AppendEvent(ctx, record()); !errors.Is(err, postgres.ErrDuplicateEvent) {
+		t.Fatalf("replaying the event: got %v, want ErrDuplicateEvent", err)
+	}
+
+	timeline, err := store.SessionEvents(ctx, f.owner, f.session.ID, 0, 50)
+	if err != nil {
+		t.Fatalf("reading the timeline: %v", err)
+	}
+	if len(timeline) != 1 {
+		t.Fatalf("the timeline holds %d events, want 1: a replay must not duplicate history", len(timeline))
+	}
+}
+
+// TestGlobalSequenceIsTheClientCursor pins the catch-up behaviour behind the SSE
+// stream: a client reconnecting after a sequence receives exactly what it
+// missed, in order.
+func TestGlobalSequenceIsTheClientCursor(t *testing.T) {
+	store, ctx := newTestStore(t)
+	f := newFixture(t, store, ctx)
+
+	var sequences []domain.Sequence
+	for i := range 5 {
+		record := &events.Record{Envelope: events.Envelope{
+			Type:      events.TypeAgentMessage,
+			ProjectID: &f.project.ID,
+			SessionID: &f.session.ID,
+			Payload:   json.RawMessage(`{}`),
+		}}
+		if err := store.AppendEvent(ctx, record); err != nil {
+			t.Fatalf("appending event %d: %v", i, err)
+		}
+		sequences = append(sequences, record.Sequence)
+	}
+
+	for i := 1; i < len(sequences); i++ {
+		if sequences[i] <= sequences[i-1] {
+			t.Fatalf("global sequence is not monotonic: %v", sequences)
+		}
+	}
+
+	missed, err := store.EventsAfter(ctx, f.owner, sequences[1], 50)
+	if err != nil {
+		t.Fatalf("catching up: %v", err)
+	}
+	if len(missed) != 3 {
+		t.Fatalf("catch-up returned %d events, want 3", len(missed))
+	}
+	if missed[0].Sequence != sequences[2] {
+		t.Fatalf("catch-up starts at %d, want %d", missed[0].Sequence, sequences[2])
+	}
+
+	head, err := store.LatestSequence(ctx)
+	if err != nil {
+		t.Fatalf("reading the head sequence: %v", err)
+	}
+	if head != sequences[len(sequences)-1] {
+		t.Fatalf("head sequence = %d, want %d", head, sequences[len(sequences)-1])
+	}
+}
+
+// TestValidationResolutionIsAtomic pins that the first valid response wins and
+// that a second client resolving the same request changes nothing.
+func TestValidationResolutionIsAtomic(t *testing.T) {
+	store, ctx := newTestStore(t)
+	f := newFixture(t, store, ctx)
+
+	request := domain.ValidationRequest{
+		ID: domain.NewValidationRequestID(),
+		Scope: domain.Scope{
+			ProjectID: f.project.ID, SessionID: f.session.ID,
+			RunID: f.run.ID, JobID: f.job.ID,
+		},
+		BackendRequestID: "req-1",
+		Title:            "Write roles/foo/tasks/main.yml",
+		RequestPayload:   json.RawMessage(`{"tool":"Write"}`),
+		PayloadSHA256:    "abc123",
+	}
+	if err := store.CreateValidationRequest(ctx, &request); err != nil {
+		t.Fatalf("creating the validation request: %v", err)
+	}
+
+	// A replayed backend event resolves to the same request, never a second
+	// prompt.
+	replay := request
+	replay.ID = domain.NewValidationRequestID()
+	if err := store.CreateValidationRequest(ctx, &replay); err != nil {
+		t.Fatalf("replaying the validation request: %v", err)
+	}
+	if replay.ID != request.ID {
+		t.Fatalf("a replay created a second request %s, want %s", replay.ID, request.ID)
+	}
+
+	pending, err := store.PendingValidations(ctx, f.owner, f.session.ID)
+	if err != nil {
+		t.Fatalf("listing pending validations: %v", err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("%d pending validations, want 1", len(pending))
+	}
+
+	resolved, err := store.ResolveValidationRequest(ctx, request.ID, true, f.owner, "web", "")
+	if err != nil {
+		t.Fatalf("resolving the request: %v", err)
+	}
+	if resolved.Approved == nil || !*resolved.Approved {
+		t.Fatal("the request must be recorded as approved")
+	}
+
+	if _, err := store.ResolveValidationRequest(ctx, request.ID, false, f.owner, "android", ""); !errors.Is(err, postgres.ErrNotFound) {
+		t.Fatalf("a second resolution: got %v, want ErrNotFound", err)
+	}
+
+	pending, err = store.PendingValidations(ctx, f.owner, "")
+	if err != nil {
+		t.Fatalf("listing pending validations: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("%d validations still pending after resolution, want 0", len(pending))
+	}
+}
+
+// TestJobContextResolvesTheBackendPath pins that the same logical directory
+// resolves to the physical path of the backend that will execute the Job.
+func TestJobContextResolvesTheBackendPath(t *testing.T) {
+	store, ctx := newTestStore(t)
+	f := newFixture(t, store, ctx)
+
+	dir := domain.KnownDirectory{
+		ID: domain.NewKnownDirectoryID(), ProjectID: f.project.ID,
+		Name: "puppet", Description: "Configuration Puppet du homelab",
+	}
+	if err := store.CreateKnownDirectory(ctx, &dir); err != nil {
+		t.Fatalf("creating the known directory: %v", err)
+	}
+
+	other := domain.BackendInstance{
+		ID: domain.NewBackendInstanceID(), OwnerID: &f.owner, Name: "work-laptop",
+		OwnershipStatus: domain.BackendClaimed,
+		Capabilities:    []domain.Capability{domain.CapabilityCode},
+		Capacity:        domain.Capacity{MaxConcurrentRuns: 1},
+	}
+	if err := store.CreateBackendInstance(ctx, &other, "hash-"+domain.NewUUID(), nil, nil); err != nil {
+		t.Fatalf("creating the second backend: %v", err)
+	}
+
+	for instance, path := range map[domain.BackendInstanceID]string{
+		f.backend.ID: "/home/thomas/git/puppet",
+		other.ID:     "/work/src/puppet",
+	} {
+		binding := domain.KnownDirectoryBinding{KnownDirectoryID: dir.ID, BackendInstanceID: instance, Path: path}
+		if err := store.BindKnownDirectory(ctx, &binding); err != nil {
+			t.Fatalf("binding the directory: %v", err)
+		}
+	}
+
+	dirID := dir.ID
+	if _, err := store.SetSessionWorkingDirectory(ctx, f.owner, f.session.ID, &dirID); err != nil {
+		t.Fatalf("setting the session working directory: %v", err)
+	}
+
+	jc, err := store.LoadJobContext(ctx, f.job.ID)
+	if err != nil {
+		t.Fatalf("loading the job context: %v", err)
+	}
+	if jc.WorkingDirectoryPath == nil || *jc.WorkingDirectoryPath != "/home/thomas/git/puppet" {
+		t.Fatalf("working directory = %v, want the path bound on the executing backend", jc.WorkingDirectoryPath)
+	}
+	if jc.ProjectID != f.project.ID || jc.OwnerID != f.owner {
+		t.Fatalf("job context resolved to the wrong project: %+v", jc)
+	}
+
+	// The same directory on the other backend is a different path.
+	path, err := store.ResolveBinding(ctx, dir.ID, other.ID)
+	if err != nil {
+		t.Fatalf("resolving the other binding: %v", err)
+	}
+	if path != "/work/src/puppet" {
+		t.Fatalf("other binding = %q, want /work/src/puppet", path)
+	}
+}
+
+// TestDeletingAProjectKeepsTheBackend pins specification section 21:
+// BackendInstances are user-owned and survive the deletion of a Project.
+func TestDeletingAProjectKeepsTheBackend(t *testing.T) {
+	store, ctx := newTestStore(t)
+	f := newFixture(t, store, ctx)
+
+	if err := store.DeleteProject(ctx, f.owner, f.project.ID); err != nil {
+		t.Fatalf("deleting the project: %v", err)
+	}
+	if _, err := store.GetSession(ctx, f.owner, f.session.ID); !errors.Is(err, postgres.ErrNotFound) {
+		t.Fatalf("the session must be gone: got %v", err)
+	}
+	if _, err := store.GetBackendInstance(ctx, f.owner, f.backend.ID); err != nil {
+		t.Fatalf("the backend instance must survive: %v", err)
+	}
+}
+
+// TestStartSessionIsAtomic pins that the first send creates everything or
+// nothing, so no empty or partially-created Session can exist.
+func TestStartSessionIsAtomic(t *testing.T) {
+	store, ctx := newTestStore(t)
+	f := newFixture(t, store, ctx)
+
+	sessionID := domain.NewSessionID()
+	wanted := errors.New("backend refused")
+
+	err := store.WithTx(ctx, func(tx *postgres.Store) error {
+		session := domain.Session{ID: sessionID, ProjectID: f.project.ID, Title: "Draft", Status: domain.SessionActive}
+		if err := tx.CreateSession(ctx, &session); err != nil {
+			return err
+		}
+		run := domain.Run{ID: domain.NewRunID(), SessionID: sessionID, BackendInstanceID: f.backend.ID, ResumeStatus: domain.ResumeUnknown}
+		if err := tx.CreateRun(ctx, &run); err != nil {
+			return err
+		}
+		return wanted
+	})
+	if !errors.Is(err, wanted) {
+		t.Fatalf("got %v, want the inner error", err)
+	}
+
+	if _, err := store.GetSession(ctx, f.owner, sessionID); !errors.Is(err, postgres.ErrNotFound) {
+		t.Fatalf("a failed first send must leave no session behind: got %v", err)
+	}
+}
