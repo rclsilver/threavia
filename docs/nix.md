@@ -106,3 +106,22 @@ person's shell.
 `nix/backend-claude.nix` pins a `vendorHash` over the Go module graph. Changing
 a dependency changes it; set it to `lib.fakeHash`, build once, and copy the hash
 the error reports.
+
+## In CI
+
+The flake is not published anywhere, because there is nothing to publish: a
+flake is fetched from the repository, so the tag is the release.
+
+```nix
+inputs.threavia.url = "github:rclsilver/threavia/v1.0.0";
+```
+
+CI builds it on every run and evaluates the NixOS module against the package it
+just built. That is what the flake needs from CI: the `vendorHash` pins the Go
+module graph, so adding a dependency makes it stale, and without this the error
+would land on the person rebuilding their laptop rather than on the commit that
+caused it.
+
+Nothing pushes the built binary to a binary cache, so `nix build` compiles it.
+A cache would be a `cachix/cachix-action` step and a token — worth it when more
+than one machine builds the same backend.

@@ -148,6 +148,32 @@ jobs:
           retention-days: 7
           include-hidden-files: true
 
+  # The flake is how a NixOS machine installs a backend, and nothing else here
+  # would notice it breaking: the package pins a hash over the Go module graph,
+  # so adding a dependency makes it stale, and the error lands on the person
+  # rebuilding their laptop rather than on the commit that caused it.
+  nix:
+    name: "Nix"
+    runs-on: "ubuntu-latest"
+
+    steps:
+      - name: "Checkout the repository"
+        uses: "actions/checkout@v7.0.1"
+
+      - name: "Set up Nix"
+        uses: "cachix/install-nix-action@v31"
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: "Cache the Nix store"
+        uses: "DeterminateSystems/magic-nix-cache-action@v13"
+
+      # Builds the backend and evaluates the NixOS module against it, which is
+      # what catches a renamed option or a setting the backend stopped reading.
+      - name: "Check the flake"
+        run: "nix flake check --print-build-logs"
+
   build:
     name: "Build"
     runs-on: "ubuntu-latest"
