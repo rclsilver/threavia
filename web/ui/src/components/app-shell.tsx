@@ -24,10 +24,12 @@ import {
   useTasks,
 } from '@/api/queries';
 import type { BackendInstance, Session } from '@/api/types';
+import { useWideLayout } from '@/use-layout';
 import { SelectedProject } from '@/use-project';
 import { useStream } from '@/use-stream';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { CheckboxField } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogClose,
@@ -339,6 +341,9 @@ function UserMenu({
   collapsed?: boolean;
 }) {
   const me = useMe();
+  // Read here because this is the one control mounted on every page: asking for
+  // it applies the stored choice before anything is laid out.
+  const [wide, setWide] = useWideLayout();
 
   // Authenticated or not is not a detail to smooth over: in ModeNone nobody was
   // asked to prove anything, and the id is whatever Core was configured with.
@@ -392,6 +397,18 @@ function UserMenu({
               : `Signed in with ${me.data?.authMode} as ${me.data?.userId}.`}
           </DialogDescription>
         </div>
+
+        <section className="border-border space-y-2 border-t pt-4">
+          <h3 className="text-sm font-medium">Appearance</h3>
+          <CheckboxField checked={wide} onCheckedChange={setWide}>
+            use the full width of the window
+          </CheckboxField>
+          <p className="text-muted text-xs">
+            A conversation is held to a reading width by default, because a line
+            running the whole of a wide screen loses the eye on the way back to the left
+            margin. Lists take whatever room there is.
+          </p>
+        </section>
 
         <section className="border-border space-y-3 border-t pt-4">
           <h3 className="text-sm font-medium">Backends</h3>

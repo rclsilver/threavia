@@ -45,7 +45,7 @@ function Section({
     // Lists, not prose, so the column is wider than a conversation's — but still
     // a column: a record and the buttons that act on it should not end up at
     // opposite ends of a wide screen.
-    <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 overflow-y-auto p-6">
+    <div className="mx-auto flex min-h-0 w-full max-w-page flex-1 flex-col gap-4 overflow-y-auto p-6">
       <header>
         <h2 className="text-lg font-semibold">{title}</h2>
         <p className="text-muted text-sm">

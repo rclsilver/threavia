@@ -83,7 +83,7 @@ export function TasksView() {
   ];
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-5 overflow-y-auto p-6">
+    <div className="mx-auto flex min-h-0 w-full max-w-page flex-1 flex-col gap-5 overflow-y-auto p-6">
       <header>
         <h2 className="text-lg font-semibold">Tasks</h2>
         <p className="text-muted text-sm">

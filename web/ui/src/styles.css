@@ -34,6 +34,8 @@
    * column shares this bound; the frame around it keeps the whole window.
    */
   --container-reading: 46rem;
+  /* Lists and forms are scanned rather than read, so they take more room. */
+  --container-page: 64rem;
   --font-mono:
     ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
 }
@@ -65,6 +67,16 @@
     --color-warn: oklch(80% 0.14 80);
     --color-danger: oklch(68% 0.18 22);
   }
+}
+
+/*
+ * The wide layout, for someone who would rather use their screen than read a
+ * comfortable line length. It is a real trade and not one to decide for them,
+ * so it is a preference: the bounds move, nothing else does.
+ */
+:root[data-wide='true'] {
+  --container-reading: 60rem;
+  --container-page: 100%;
 }
 
 @layer base {
