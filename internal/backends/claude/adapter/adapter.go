@@ -11,6 +11,7 @@ import (
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
+	"github.com/rclsilver/threavia/internal/backends/claude/policy"
 	"github.com/rclsilver/threavia/internal/backends/claude/runner"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/client"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/state"
@@ -39,6 +40,10 @@ type Adapter struct {
 type jobState struct {
 	runID    string
 	requests map[string]struct{}
+	// policy is what Core allows this Job to do. The permission gate consults it
+	// before anything reaches the user, so a forbidden action is refused rather
+	// than offered as a choice.
+	policy policy.Policy
 }
 
 // waiter is a pending question, blocked until Core brings an answer back.
@@ -141,6 +146,7 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 		ProjectName:        cmd.GetProjectContext().GetProjectName(),
 		ProjectDescription: cmd.GetProjectContext().GetProjectDescription(),
 		CoreTools:          coreTools(cmd.GetProjectContext()),
+		Policy:             policy.From(cmd.GetExecutionPolicy()),
 	}
 	if params.RunID == "" || params.JobID == "" {
 		return fmt.Errorf("a run id and a job id are required")
@@ -151,7 +157,11 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 		a.mu.Unlock()
 		return nil // Already running: a redelivered command is not a new Job.
 	}
-	a.jobs[params.JobID] = &jobState{runID: params.RunID, requests: make(map[string]struct{})}
+	a.jobs[params.JobID] = &jobState{
+		runID:    params.RunID,
+		requests: make(map[string]struct{}),
+		policy:   policy.From(cmd.GetExecutionPolicy()),
+	}
 	a.mu.Unlock()
 
 	if err := a.store.SaveJob(context.WithoutCancel(ctx), state.JobRecord{

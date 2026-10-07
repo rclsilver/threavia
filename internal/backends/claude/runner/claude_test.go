@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
+	"github.com/rclsilver/threavia/internal/backends/claude/policy"
 	"github.com/rclsilver/threavia/internal/backends/claude/runner"
 )
 
@@ -378,4 +380,79 @@ func waitFor(t *testing.T, what string, condition func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %s", what)
+}
+
+// TestActionLimitStopsTheRun pins the half of a policy no permission gate can
+// enforce: a Run that asks for nothing can still take too many steps.
+func TestActionLimitStopsTheRun(t *testing.T) {
+	t.Parallel()
+
+	// Three tool calls, where the policy allows two.
+	script := `
+cat <<'OUT'
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"c1","name":"Read","input":{}}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"c2","name":"Read","input":{}}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"c3","name":"Read","input":{}}]}}
+{"type":"result","subtype":"success","is_error":false,"result":"done"}
+OUT
+`
+	binary, _ := fakeClaude(t, script)
+	sink := &recordingSink{}
+
+	err := newRunner(t, binary).Run(context.Background(), runner.StartParams{
+		RunID: "run-1", JobID: "job-1", WorkingDirectory: t.TempDir(),
+		Policy: policy.Policy{
+			Mode:       backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS,
+			MaxActions: 2,
+		},
+	}, sink)
+	if err != nil {
+		t.Fatalf("running the job: %v", err)
+	}
+
+	if !strings.Contains(sink.failure, "POLICY_LIMIT") {
+		t.Fatalf("failure = %q, want a policy limit", sink.failure)
+	}
+	if !strings.Contains(sink.failure, "2 actions") {
+		t.Errorf("failure = %q, want it to name the limit", sink.failure)
+	}
+	// It stopped at the limit rather than running to completion.
+	if contains(sink.timeline(), "job.completed") {
+		t.Error("a run stopped by its policy must not also complete")
+	}
+	if count := countEntries(sink.timeline(), "tool.started"); count != 2 {
+		t.Errorf("%d actions were taken, want the 2 the policy allowed", count)
+	}
+}
+
+// TestDurationLimitStopsTheRun pins the other limit: wall-clock time.
+func TestDurationLimitStopsTheRun(t *testing.T) {
+	t.Parallel()
+
+	binary, _ := fakeClaude(t, `sleep 300`)
+	sink := &recordingSink{}
+
+	err := newRunner(t, binary).Run(context.Background(), runner.StartParams{
+		RunID: "run-1", JobID: "job-1", WorkingDirectory: t.TempDir(),
+		Policy: policy.Policy{
+			Mode:               backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS,
+			MaxDurationSeconds: 1,
+		},
+	}, sink)
+	if err != nil {
+		t.Fatalf("running the job: %v", err)
+	}
+	if !strings.Contains(sink.failure, "POLICY_LIMIT") {
+		t.Fatalf("failure = %q, want a policy limit", sink.failure)
+	}
+}
+
+func countEntries(values []string, want string) int {
+	count := 0
+	for _, value := range values {
+		if value == want {
+			count++
+		}
+	}
+	return count
 }

@@ -67,6 +67,7 @@ func NewRouter(opts Options) http.Handler {
 	h.registerJobs(mux)
 	h.registerAttention(mux)
 	h.registerKnowledge(mux)
+	h.registerPolicy(mux)
 	h.registerStream(mux)
 
 	// Anything else under the versioned prefix is a route that does not exist

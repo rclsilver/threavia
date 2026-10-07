@@ -152,3 +152,13 @@ type DecisionPayload struct {
 	// SupersededBy is set on decision.superseded.
 	SupersededBy string `json:"supersededBy,omitempty"`
 }
+
+// mustJSON encodes a value for an audit detail. The values passed are small
+// structs with no unencodable field, so a failure is a programming error.
+func mustJSON(value any) json.RawMessage {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return encoded
+}

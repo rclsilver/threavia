@@ -3,6 +3,8 @@ package api_test
 import (
 	"context"
 	"strings"
+
+	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"testing"
 )
 
@@ -158,4 +160,94 @@ func TestToolCallsCannotLeaveTheirProject(t *testing.T) {
 	// Nor can it invent a tool.
 	backend.callCoreToolExpectingFailure(t, ctx, start.GetRunId(), start.GetJobId(),
 		"delete_everything", map[string]any{})
+}
+
+// TestExecutionPolicyReachesTheBackend pins that a policy set on a Session
+// travels with every Job dispatched from it. The enforcement itself is in the
+// backend gate; this is the half Core owns.
+func TestExecutionPolicyReachesTheBackend(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	session := c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
+	first := receive(t, "the first job", backend.starts)
+
+	// The default is the restrained one: ask before acting, refuse to push.
+	if first.GetExecutionPolicy().GetMode().String() != "EXECUTION_MODE_INTERACTIVE" {
+		t.Errorf("default mode = %s, want INTERACTIVE", first.GetExecutionPolicy().GetMode())
+	}
+	if first.GetExecutionPolicy().GetAllowGitPush() {
+		t.Error("the default policy must not allow pushing")
+	}
+
+	c.mustDo("PUT", "/api/v1/sessions/"+session+"/policy", map[string]any{
+		"mode":                 "AUTONOMOUS",
+		"allowFilesystemWrite": true,
+		"allowGitCommit":       true,
+		"allowGitPush":         false,
+		"allowNetwork":         false,
+		"maxActions":           50,
+	}, nil, 200)
+
+	ctx := context.Background()
+	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
+		return backend.events.JobCompleted(ctx, first.GetRunId(), first.GetJobId(), "fait")
+	}))
+	waitUntil(t, "the first job to complete", func() bool {
+		return c.jobStatus(session, first.GetJobId()) == "COMPLETED"
+	})
+
+	var second struct {
+		ID string `json:"id"`
+	}
+	c.mustDo("POST", "/api/v1/sessions/"+session+"/messages",
+		map[string]any{"message": "continue"}, &second, 201)
+
+	next := receive(t, "the second job", backend.starts)
+	policy := next.GetExecutionPolicy()
+	if policy.GetMode().String() != "EXECUTION_MODE_AUTONOMOUS" {
+		t.Errorf("mode = %s, want AUTONOMOUS", policy.GetMode())
+	}
+	if policy.GetAllowGitPush() || policy.GetAllowNetwork() {
+		t.Error("the forbidden capabilities must stay forbidden")
+	}
+	if policy.GetMaxActions() != 50 {
+		t.Errorf("maxActions = %d, want 50", policy.GetMaxActions())
+	}
+}
+
+// TestAutonomousNeedsALimit pins the one combination section 17 exists to
+// prevent: an autonomous Run nobody can stop.
+func TestAutonomousNeedsALimit(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	session := c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
+	receive(t, "the dispatched job", backend.starts)
+
+	c.mustDo("PUT", "/api/v1/sessions/"+session+"/policy", map[string]any{
+		"mode": "AUTONOMOUS", "allowFilesystemWrite": true,
+	}, nil, 400)
+}
+
+// TestPolicyChangesAreAudited pins that loosening what an agent may do leaves a
+// record, as does every validation decision.
+func TestPolicyChangesAreAudited(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	session := c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
+	receive(t, "the dispatched job", backend.starts)
+
+	c.mustDo("PUT", "/api/v1/sessions/"+session+"/policy", map[string]any{
+		"mode": "GUARDED", "allowFilesystemWrite": true, "allowGitCommit": true,
+	}, nil, 200)
+
+	var audit struct {
+		Items []struct {
+			Action    string `json:"action"`
+			SubjectID string `json:"subjectId"`
+		} `json:"items"`
+	}
+	c.mustDo("GET", "/api/v1/me/audit", nil, &audit, 200)
+	if len(audit.Items) != 1 || audit.Items[0].Action != "execution_policy.set" {
+		t.Fatalf("audit = %+v, want the policy change", audit.Items)
+	}
+	if audit.Items[0].SubjectID != session {
+		t.Errorf("subject = %q, want the session", audit.Items[0].SubjectID)
+	}
 }

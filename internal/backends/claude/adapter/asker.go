@@ -3,12 +3,14 @@ package adapter
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
+	"github.com/rclsilver/threavia/internal/backends/claude/policy"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/tools"
 )
 
@@ -21,6 +23,18 @@ var _ mcp.Asker = (*Adapter)(nil)
 // There is no timeout, by design: the user may be on another device, and a
 // permission request waits as long as it takes (spec section 16).
 func (a *Adapter) AskPermission(ctx context.Context, jobID, toolName string, input map[string]any) (mcp.Decision, error) {
+	// The policy answers first. A forbidden action is refused outright rather
+	// than offered to the user as a choice: section 17 is explicit that a policy
+	// is enforced, not suggested.
+	switch decision := a.policyOf(jobID).Evaluate(toolName, input); decision.Verdict {
+	case policy.Deny:
+		a.logger.Info("refused by the execution policy",
+			slog.String("jobId", jobID), slog.String("tool", toolName))
+		return mcp.Decision{Approved: false, Reason: decision.Reason}, nil
+	case policy.Allow:
+		return mcp.Decision{Approved: true}, nil
+	}
+
 	requestID := uuid.NewString()
 	w, err := a.registerWaiter(jobID, requestID)
 	if err != nil {
@@ -165,4 +179,15 @@ func (a *Adapter) knows(jobID string) bool {
 	defer a.mu.Unlock()
 	_, ok := a.jobs[jobID]
 	return ok
+}
+
+// policyOf returns what a Job is allowed to do. A Job this backend does not know
+// gets the restrained default rather than a permissive one.
+func (a *Adapter) policyOf(jobID string) policy.Policy {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if job, ok := a.jobs[jobID]; ok {
+		return job.policy
+	}
+	return policy.From(nil)
 }

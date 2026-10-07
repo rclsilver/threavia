@@ -3,6 +3,8 @@ package runner
 import (
 	"bufio"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os/exec"
@@ -102,7 +104,12 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 		nativeSessionID = uuid.NewString()
 	}
 
+	// The duration limit is enforced here because no permission gate can see
+	// time passing: a Run that asks for nothing can still run forever.
 	runCtx, stop := context.WithCancel(ctx)
+	if seconds := params.Policy.MaxDurationSeconds; seconds > 0 {
+		runCtx, stop = context.WithTimeout(ctx, time.Duration(seconds)*time.Second)
+	}
 	defer stop()
 
 	live := &execution{stop: stop}
@@ -166,6 +173,17 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	if cancelled {
 		c.logger.Info("claude code cancelled", slog.String("jobId", params.JobID))
 		return sink.JobCancelled(ctx, params.RunID, params.JobID)
+	}
+
+	// A policy stop is not a user cancellation and not a provider failure: the
+	// Run was stopped because it reached a limit someone set, and the agent and
+	// the timeline should both say so.
+	if outcome.stoppedBy != "" {
+		return sink.JobFailed(ctx, params.RunID, params.JobID, "POLICY_LIMIT", outcome.stoppedBy)
+	}
+	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+		return sink.JobFailed(ctx, params.RunID, params.JobID, "POLICY_LIMIT",
+			fmt.Sprintf("stopped by the execution policy after %d seconds", params.Policy.MaxDurationSeconds))
 	}
 
 	switch {

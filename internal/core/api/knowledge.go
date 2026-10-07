@@ -150,3 +150,51 @@ func (h *handler) searchProject(w http.ResponseWriter, r *http.Request, identity
 		"history":   history,
 	})
 }
+
+func (h *handler) registerPolicy(mux *http.ServeMux) {
+	h.handle(mux, "GET /api/v1/sessions/{sessionId}/policy", h.getPolicy)
+	h.handle(mux, "PUT /api/v1/sessions/{sessionId}/policy", h.setPolicy)
+	h.handle(mux, "GET /api/v1/me/audit", h.listAudit)
+}
+
+func (h *handler) getPolicy(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	policy, err := h.svc.SessionExecutionPolicy(r.Context(), identity,
+		domain.SessionID(r.PathValue("sessionId")))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, policy)
+}
+
+// setPolicy changes what the agent may do in a Session. An empty body resets it
+// to the restrained default rather than leaving the previous one in place.
+func (h *handler) setPolicy(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	body, ok := decode[domain.ExecutionPolicy](w, r)
+	if !ok {
+		return
+	}
+
+	var policy *domain.ExecutionPolicy
+	if body.Mode != "" {
+		policy = &body
+	}
+
+	effective, err := h.svc.SetSessionExecutionPolicy(r.Context(), identity,
+		domain.SessionID(r.PathValue("sessionId")), policy)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, effective)
+}
+
+// listAudit returns the trail of recorded decisions and privileged actions.
+func (h *handler) listAudit(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	entries, err := h.svc.Audit(r.Context(), identity, queryInt(r, "limit", 0))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeList(w, entries)
+}

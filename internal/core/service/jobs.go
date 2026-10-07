@@ -59,6 +59,14 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 		return
 	}
 
+	// The policy travels with the Job: the backend gate enforces it, so a limit
+	// is a limit rather than a request the model may decline to honour.
+	policy, err := s.store.EffectivePolicy(ctx, jobID)
+	if err != nil {
+		s.logger.Error("cannot read the execution policy", slog.String("jobId", string(jobID)), slog.String("error", err.Error()))
+		return
+	}
+
 	// Reserving the active slot before sending is what keeps a second Job of the
 	// same Run from being dispatched concurrently.
 	if _, err := s.store.TransitionJob(ctx, jobID, from, domain.JobRunning, nil); err != nil {
@@ -81,12 +89,7 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 				NativeSessionId: derefString(jc.NativeSessionID),
 				Prompt:          prompt,
 				ProjectContext:  s.projectContext(ctx, jc),
-				ExecutionPolicy: &backendv1.ExecutionPolicy{
-					// The breadth of specification section 17 is deferred; the
-					// first slice runs interactively, which is what makes the
-					// validation flow observable.
-					Mode: backendv1.ExecutionMode_EXECUTION_MODE_INTERACTIVE,
-				},
+				ExecutionPolicy: policyToProto(policy),
 			},
 		},
 	}
@@ -279,6 +282,17 @@ func (s *Service) ResolveValidation(ctx context.Context, identity auth.Identity,
 		Note:          note,
 	})
 
+	s.audit(ctx, identity, postgres.AuditEntry{
+		Action:        "validation.resolved",
+		ProjectID:     string(resolved.Scope.ProjectID),
+		SessionID:     string(resolved.Scope.SessionID),
+		JobID:         string(resolved.Scope.JobID),
+		SubjectID:     string(resolved.ID),
+		Channel:       channel,
+		PayloadSHA256: resolved.PayloadSHA256,
+		Detail:        mustJSON(map[string]any{"approved": approved, "title": resolved.Title, "note": note}),
+	})
+
 	s.resumeAfterAttention(ctx, resolved.Scope.JobID, domain.JobWaitingValidation)
 	s.sendToBackend(ctx, resolved.Scope, &backendv1.CoreToBackend{
 		Message: &backendv1.CoreToBackend_ValidationResolution{
@@ -369,4 +383,24 @@ func derefString(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+// policyToProto renders an execution policy for the wire.
+func policyToProto(policy domain.ExecutionPolicy) *backendv1.ExecutionPolicy {
+	mode := backendv1.ExecutionMode_EXECUTION_MODE_INTERACTIVE
+	switch policy.Mode {
+	case domain.ExecutionGuarded:
+		mode = backendv1.ExecutionMode_EXECUTION_MODE_GUARDED
+	case domain.ExecutionAutonomous:
+		mode = backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS
+	}
+	return &backendv1.ExecutionPolicy{
+		Mode:                 mode,
+		AllowFilesystemWrite: policy.AllowFilesystemWrite,
+		AllowGitCommit:       policy.AllowGitCommit,
+		AllowGitPush:         policy.AllowGitPush,
+		AllowNetwork:         policy.AllowNetwork,
+		MaxDurationSeconds:   uint32(policy.MaxDurationSeconds),
+		MaxActions:           uint32(policy.MaxActions),
+	}
 }

@@ -296,3 +296,41 @@ longer true, and the second would spend context on something nobody marked
 important.
 
 Everything else is found on demand, which is why the search tools exist at all.
+
+### ExecutionPolicy
+
+Section 17 is explicit that a policy is enforced rather than suggested: one
+forbidding a push rejects the push instead of asking the model not to. So the
+policy travels with every dispatched Job and is evaluated in the backend
+permission gate, before anything reaches the user. A forbidden action is refused
+outright, with a reason that tells the agent the refusal is structural rather
+than a user who happened to say no.
+
+The three modes differ only in who is asked about what. INTERACTIVE asks about
+everything; GUARDED lets reading through and asks about anything that changes
+something; AUTONOMOUS stops asking but does not stop refusing — the capability
+flags still apply, which is what makes the mode safe to offer at all. An
+unclassified tool or an unrecognised shell command counts as mutating, because
+guessing the other way is how a guard rail stops being one.
+
+Two limits cannot be seen by any gate, so the runner enforces them: wall-clock
+duration and a count of actions. A Run that asks for nothing can still run
+forever, and a validation refused on those grounds would never arrive. Core
+refuses an AUTONOMOUS policy that sets neither, since that is the one
+combination the section exists to prevent.
+
+What this is not is a sandbox. The gate reads a command as written, so an agent
+determined to evade it could. That has never been Threavia's model: filesystem
+and process access are the real permissions of the account the backend runs as,
+and section 28 says in as many words not to mistake Threavia metadata for a
+security boundary.
+
+### The audit trail
+
+Validation receipts are already events, but an event belongs to a timeline that
+a project deletion takes with it. The `audit_entries` table of section 23 outlives
+its subject deliberately: its identifiers are plain text rather than foreign
+keys, so the record of a decision survives the deletion of what was decided
+about. It records who decided what, through which client, over which canonical
+payload hash — and every change to an execution policy, because loosening what
+an agent may do is exactly the kind of act such a trail exists for.

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -49,6 +50,8 @@ type outcome struct {
 	completed bool
 	failed    bool
 	summary   string
+	// stoppedBy is set when a policy limit ended the Run rather than the agent.
+	stoppedBy string
 }
 
 // consume reads the provider output stream and emits normalised events.
@@ -56,7 +59,10 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 	// Remembering which tool each call id belongs to lets a tool result be
 	// reported with the name of the tool it answers.
 	toolNames := make(map[string]string)
-	var result outcome
+	var (
+		result  outcome
+		actions int
+	)
 
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 0, 64<<10), maxLine)
@@ -81,7 +87,10 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 			}
 
 		case "assistant":
-			c.emitAssistant(ctx, params, line, toolNames, sink)
+			if stopped := c.emitAssistant(ctx, params, line, toolNames, sink, &actions); stopped != "" {
+				result.stoppedBy = stopped
+				return result
+			}
 
 		case "user":
 			c.emitToolResults(ctx, params, line, toolNames, sink)
@@ -108,9 +117,9 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 }
 
 // emitAssistant turns an assistant turn into agent messages and tool calls.
-func (c *Claude) emitAssistant(ctx context.Context, params StartParams, line streamLine, toolNames map[string]string, sink Sink) {
+func (c *Claude) emitAssistant(ctx context.Context, params StartParams, line streamLine, toolNames map[string]string, sink Sink, actions *int) string {
 	if line.Message == nil {
-		return
+		return ""
 	}
 	for _, block := range line.Message.Content {
 		switch block.Type {
@@ -123,12 +132,20 @@ func (c *Claude) emitAssistant(ctx context.Context, params StartParams, line str
 
 		case "tool_use":
 			toolNames[block.ID] = block.Name
+			*actions++
+			if limit := params.Policy.MaxActions; limit > 0 && *actions > limit {
+				// Counted here because this is where actions are visible. The
+				// caller stops the process; reporting it as a policy stop is
+				// what keeps it from looking like a crash.
+				return fmt.Sprintf("stopped by the execution policy after %d actions", limit)
+			}
 			if err := sink.ToolStarted(ctx, params.RunID, params.JobID,
 				block.ID, block.Name, decodeObject(block.Input)); err != nil {
 				c.logger.Error("cannot report a tool call", slog.String("error", err.Error()))
 			}
 		}
 	}
+	return ""
 }
 
 // emitToolResults turns the synthetic user turn carrying tool results into tool

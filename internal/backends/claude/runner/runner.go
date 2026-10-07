@@ -13,6 +13,7 @@ import (
 	"os/exec"
 
 	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
+	"github.com/rclsilver/threavia/internal/backends/claude/policy"
 )
 
 // Errors returned by the runner.
@@ -44,6 +45,9 @@ type StartParams struct {
 	// The runner forwards them to the local tool endpoint and never interprets
 	// them: a backend hardcodes no tool name.
 	CoreTools []mcp.CoreTool
+	// Policy bounds the Run. The permission gate enforces what the agent may do;
+	// the runner enforces how long and how much, which no gate can see.
+	Policy policy.Policy
 }
 
 // Runner is the provider integration contract the adapter depends on.
