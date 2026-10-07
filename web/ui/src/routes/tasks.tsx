@@ -1,5 +1,5 @@
-import { Link, useParams } from '@tanstack/react-router';
-import { ArrowRight, CircleDot, Lock, Plus, X } from 'lucide-react';
+import { useParams } from '@tanstack/react-router';
+import { CircleDot, Lock, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
 import {
@@ -84,21 +84,13 @@ export function TasksView() {
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-5 overflow-y-auto p-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Tasks</h2>
-          <p className="text-muted text-sm">
-            {open.length === 0
-              ? 'Nothing open. Ask an agent for something, or file a task.'
-              : `${open.length} open · ${readyIds.size} ready to start`}
-          </p>
-        </div>
-        <Button asChild variant="secondary" size="sm">
-          <Link to="/projects/$projectId" params={{ projectId }}>
-            Project memory
-            <ArrowRight />
-          </Link>
-        </Button>
+      <header>
+        <h2 className="text-lg font-semibold">Tasks</h2>
+        <p className="text-muted text-sm">
+          {open.length === 0
+            ? 'Nothing open. Ask an agent for something, or file a task.'
+            : `${open.length} open · ${readyIds.size} ready to start`}
+        </p>
       </header>
 
       <form

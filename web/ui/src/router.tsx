@@ -3,11 +3,18 @@ import {
   createRoute,
   createRouter,
   Outlet,
+  redirect,
 } from '@tanstack/react-router';
 
 import { AppShell } from '@/components/app-shell';
 import { DraftView } from '@/routes/draft';
-import { ProjectView } from '@/routes/project';
+import {
+  ArtifactsView,
+  AuditView,
+  InstructionsView,
+  MemoryView,
+  SkillsView,
+} from '@/routes/project';
 import { SessionView } from '@/routes/session';
 import { TasksView } from '@/routes/tasks';
 
@@ -26,12 +33,6 @@ const indexRoute = createRoute({
   component: TasksView,
 });
 
-const tasksRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/projects/$projectId/tasks',
-  component: TasksView,
-});
-
 const draftRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions/new',
@@ -47,10 +48,57 @@ const sessionRoute = createRoute({
   component: SessionView,
 });
 
+/**
+ * One route per part of a Project, so each is asked for by name.
+ *
+ * The bare Project path keeps working — links to it predate the split — and
+ * lands on the tasks, which is what a Project is mostly consulted for.
+ */
 const projectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/projects/$projectId',
-  component: ProjectView,
+  beforeLoad: ({ params }) => {
+    // The router signals a redirect by throwing it. The thrown value is a
+    // route, not an error, which the rule has no way of knowing.
+    // eslint-disable-next-line @typescript-eslint/only-throw-error
+    throw redirect({ to: '/projects/$projectId/tasks', params });
+  },
+});
+
+const tasksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects/$projectId/tasks',
+  component: TasksView,
+});
+
+const memoryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects/$projectId/memory',
+  component: MemoryView,
+});
+
+const artifactsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects/$projectId/artifacts',
+  component: ArtifactsView,
+});
+
+const skillsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects/$projectId/skills',
+  component: SkillsView,
+});
+
+const instructionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects/$projectId/instructions',
+  component: InstructionsView,
+});
+
+const auditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects/$projectId/audit',
+  component: AuditView,
 });
 
 const routeTree = rootRoute.addChildren([
@@ -58,6 +106,11 @@ const routeTree = rootRoute.addChildren([
   draftRoute,
   sessionRoute,
   tasksRoute,
+  memoryRoute,
+  artifactsRoute,
+  skillsRoute,
+  instructionsRoute,
+  auditRoute,
   projectRoute,
 ]);
 

@@ -1,5 +1,15 @@
 import { Link, useParams } from '@tanstack/react-router';
-import { ListChecks, PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react';
+import {
+  BookText,
+  FileText,
+  History,
+  ListChecks,
+  Package,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  Sparkles,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import {
@@ -122,17 +132,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Select>
             <NewProjectButton onCreated={setProjectId} />
           </div>
+          {/* One entry per part of the Project, each asked for by name: a list
+              of what is in there beats a link that only says there is more. */}
           {projectId && (
-            <div className="space-y-0.5">
+            <nav className="space-y-0.5">
               <OpenTasks projectId={projectId} />
-              <Link
-                to="/projects/$projectId"
-                params={{ projectId }}
-                className="text-muted hover:bg-surface-2 hover:text-text block rounded-lg px-2 py-1.5 text-sm"
-              >
-                Decisions, artifacts, skills…
+              <Link to="/projects/$projectId/memory" params={{ projectId }} {...nav}>
+                <BookText className="text-muted size-4" />
+                Memory
               </Link>
-            </div>
+              <Link to="/projects/$projectId/artifacts" params={{ projectId }} {...nav}>
+                <Package className="text-muted size-4" />
+                Artifacts
+              </Link>
+              <Link to="/projects/$projectId/skills" params={{ projectId }} {...nav}>
+                <Sparkles className="text-muted size-4" />
+                Skills
+              </Link>
+              <Link to="/projects/$projectId/instructions" params={{ projectId }} {...nav}>
+                <FileText className="text-muted size-4" />
+                Instructions
+              </Link>
+              <Link to="/projects/$projectId/audit" params={{ projectId }} {...nav}>
+                <History className="text-muted size-4" />
+                Audit
+              </Link>
+            </nav>
           )}
         </section>
 
@@ -219,6 +244,15 @@ function groupSessions(sessions: Session[]): { label: string; sessions: Session[
 }
 
 /**
+ * What every Project navigation entry looks like, and how it says it is the
+ * one on screen.
+ */
+const nav = {
+  className: 'hover:bg-surface-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm',
+  activeProps: { className: 'bg-surface-2 font-medium' },
+};
+
+/**
  * The work still owed on this Project, as a count that is always on screen.
  *
  * Tasks are what an agent and a person agree is left to do, and they were a tab
@@ -247,12 +281,7 @@ function OpenTasks({ projectId, collapsed = false }: { projectId: string; collap
   }
 
   return (
-    <Link
-      to="/projects/$projectId/tasks"
-      params={{ projectId }}
-      title={title}
-      className="hover:bg-surface-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm"
-    >
+    <Link to="/projects/$projectId/tasks" params={{ projectId }} title={title} {...nav}>
       <ListChecks className="text-muted size-4" />
       <span className="flex-1">Tasks</span>
       {/* Nothing left is worth saying too: an empty badge reads as a bug. */}

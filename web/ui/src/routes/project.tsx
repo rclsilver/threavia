@@ -21,56 +21,92 @@ import { Button } from '@/components/ui/button';
 import { Card, EmptyState } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { bytes, humanise, when } from '@/lib/utils';
 
 /**
- * Everything a Project carries beyond its Sessions: the memory an agent reads
- * and writes across sessions, the Skills it may use, the rules it follows, and
- * the trail of what was decided about execution.
+ * One part of what a Project carries beyond its Sessions.
+ *
+ * Each is a route of its own rather than a tab: the sidebar asks for them from
+ * anywhere, and a tab only opens when the view around it is already on screen.
  */
-export function ProjectView() {
-  const { projectId } = useParams({ from: '/projects/$projectId' });
+function Section({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  const { projectId } = useParams({ strict: false });
   const project = useProject(projectId);
 
   return (
     // Lists, not prose, so the column is wider than a conversation's — but still
-    // a column: a task title and the buttons that act on it should not end up at
+    // a column: a record and the buttons that act on it should not end up at
     // opposite ends of a wide screen.
-    <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 p-6">
+    <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 overflow-y-auto p-6">
       <header>
-        <h2 className="text-lg font-semibold">{project.data?.name ?? 'Project'}</h2>
-        <p className="text-muted text-sm">Project memory, skills and audit trail.</p>
+        <h2 className="text-lg font-semibold">{title}</h2>
+        <p className="text-muted text-sm">
+          {subtitle}
+          {project.data?.name && <span className="opacity-70"> · {project.data.name}</span>}
+        </p>
       </header>
-
-      {/* Tasks have a route of their own: they are asked for from anywhere,
-          and a tab only opens when the view around it is already on screen. */}
-      <Tabs defaultValue="decisions" className="flex min-h-0 flex-1 flex-col">
-        <TabsList>
-          <TabsTrigger value="decisions">Decisions</TabsTrigger>
-          <TabsTrigger value="artifacts">Artifacts</TabsTrigger>
-          <TabsTrigger value="skills">Skills</TabsTrigger>
-          <TabsTrigger value="instructions">Instructions</TabsTrigger>
-          <TabsTrigger value="audit">Audit</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="decisions">
-          <DecisionsPane projectId={projectId} />
-        </TabsContent>
-        <TabsContent value="artifacts">
-          <ArtifactsPane projectId={projectId} />
-        </TabsContent>
-        <TabsContent value="skills">
-          <SkillsPane projectId={projectId} />
-        </TabsContent>
-        <TabsContent value="instructions">
-          <InstructionsPane projectId={projectId} />
-        </TabsContent>
-        <TabsContent value="audit">
-          <AuditPane />
-        </TabsContent>
-      </Tabs>
+      {children}
     </div>
+  );
+}
+
+/** The projectId of the route, which every section below is scoped to. */
+function useProjectId(): string {
+  return useParams({ strict: false }).projectId ?? '';
+}
+
+export function MemoryView() {
+  const projectId = useProjectId();
+  return (
+    <Section
+      title="Memory"
+      subtitle="What was decided, and why. Important decisions travel with every Job."
+    >
+      <DecisionsPane projectId={projectId} />
+    </Section>
+  );
+}
+
+export function ArtifactsView() {
+  const projectId = useProjectId();
+  return (
+    <Section title="Artifacts" subtitle="Files produced by the work, kept with the Project.">
+      <ArtifactsPane projectId={projectId} />
+    </Section>
+  );
+}
+
+export function SkillsView() {
+  const projectId = useProjectId();
+  return (
+    <Section title="Skills" subtitle="What an agent may use here, and where it came from.">
+      <SkillsPane projectId={projectId} />
+    </Section>
+  );
+}
+
+export function InstructionsView() {
+  const projectId = useProjectId();
+  return (
+    <Section title="Instructions" subtitle="The standing rules every Job of this Project reads.">
+      <InstructionsPane projectId={projectId} />
+    </Section>
+  );
+}
+
+export function AuditView() {
+  return (
+    <Section title="Audit" subtitle="Who decided what, through which client.">
+      <AuditPane />
+    </Section>
   );
 }
 
