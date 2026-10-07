@@ -40,6 +40,7 @@ const state = {
   projectId: null,
   sessionId: null,
   jobs: new Map(),
+  tab: 'tasks',
   cursor: 0,
   stream: null,
 };
@@ -55,7 +56,7 @@ function toast(message) {
 }
 
 function show(view) {
-  for (const name of ['draft', 'session', 'empty']) {
+  for (const name of ['draft', 'project-view', 'session', 'empty']) {
     el(name).classList.toggle('hidden', name !== view);
   }
 }
@@ -211,6 +212,283 @@ async function sendDraft() {
   } finally {
     button.disabled = false;
   }
+}
+
+
+// ------------------------------------------------------------------ project
+//
+// Everything a Project carries beyond its Sessions: the memory an agent reads
+// and writes across sessions, the Skills it may use, the rules it follows, and
+// the trail of what was decided about execution.
+
+async function openProject() {
+  if (!state.projectId) {
+    toast('Create a project first.');
+    return;
+  }
+
+  state.sessionId = null;
+  renderSessions();
+  el('project-name').textContent = currentProject()?.name ?? 'Project';
+  show('project-view');
+  await loadTab(state.tab);
+}
+
+function currentProject() {
+  return state.projects.find((project) => project.id === state.projectId);
+}
+
+function selectTab(tab) {
+  state.tab = tab;
+  for (const button of el('project-tabs').children) {
+    button.classList.toggle('active', button.dataset.tab === tab);
+  }
+  for (const pane of document.querySelectorAll('#project-view .pane')) {
+    pane.classList.toggle('hidden', pane.dataset.pane !== tab);
+  }
+  loadTab(tab).catch((error) => toast(error.message));
+}
+
+async function loadTab(tab) {
+  switch (tab) {
+    case 'tasks': return loadTasks();
+    case 'decisions': return loadDecisions();
+    case 'artifacts': return loadArtifacts();
+    case 'skills': return loadSkills();
+    case 'instructions': return loadInstructions();
+    case 'audit': return loadAudit();
+    default: return undefined;
+  }
+}
+
+// record builds one list entry: a title line, an optional body, and a muted
+// meta line. Every project list uses it, so they read the same way.
+function record({ title, badge, body, meta, actions = [] }) {
+  const item = document.createElement('li');
+
+  const head = document.createElement('div');
+  head.className = 'record-head';
+  const name = document.createElement('span');
+  name.className = 'record-title';
+  name.textContent = title;
+  head.append(name);
+  if (badge) {
+    const pill = document.createElement('span');
+    pill.className = `pill ${badge.className ?? 'pill-muted'}`;
+    pill.textContent = badge.text;
+    head.append(pill);
+  }
+  for (const action of actions) {
+    const button = document.createElement('button');
+    button.className = action.className ?? 'link';
+    button.textContent = action.label;
+    button.addEventListener('click', action.run);
+    head.append(button);
+  }
+  item.append(head);
+
+  if (body) {
+    const text = document.createElement('p');
+    text.className = 'record-body';
+    text.textContent = body;
+    item.append(text);
+  }
+  if (meta) {
+    const line = document.createElement('p');
+    line.className = 'record-meta';
+    line.textContent = meta;
+    item.append(line);
+  }
+  return item;
+}
+
+function fill(listId, items, render) {
+  const list = el(listId);
+  list.innerHTML = '';
+  if (items.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'record-empty';
+    empty.textContent = 'Nothing yet.';
+    list.append(empty);
+    return;
+  }
+  for (const item of items) list.append(render(item));
+}
+
+async function loadTasks() {
+  const includeDone = el('task-done').checked;
+  const { items } = await api.get(
+    `/api/v1/projects/${state.projectId}/tasks?includeDone=${includeDone}`);
+
+  fill('tasks', items, (task) => record({
+    title: task.title,
+    badge: { text: task.status.toLowerCase().replace(/_/g, ' '), className: taskPill(task.status) },
+    body: task.description,
+    meta: task.dependsOn?.length ? `depends on ${task.dependsOn.length} task(s)` : '',
+    actions: nextStatuses(task.status).map((status) => ({
+      label: status.toLowerCase().replace(/_/g, ' '),
+      run: async () => {
+        try {
+          await api.call('PATCH', `/api/v1/tasks/${task.id}`, { status });
+          await loadTasks();
+        } catch (error) {
+          toast(error.message);
+        }
+      },
+    })),
+  }));
+}
+
+function taskPill(status) {
+  if (status === 'DONE') return 'pill-ok';
+  if (status === 'IN_PROGRESS') return 'pill-warn';
+  return 'pill-muted';
+}
+
+// nextStatuses offers the moves that make sense from here. Blocked is derived
+// from the dependency graph, never set by hand.
+function nextStatuses(status) {
+  switch (status) {
+    case 'TODO': return ['IN_PROGRESS', 'DONE'];
+    case 'IN_PROGRESS': return ['DONE', 'TODO'];
+    default: return ['TODO'];
+  }
+}
+
+async function loadDecisions() {
+  const { items } = await api.get(`/api/v1/projects/${state.projectId}/decisions`);
+  fill('decisions', items, (decision) => record({
+    title: decision.title,
+    badge: decision.importance === 'IMPORTANT'
+      ? { text: 'important', className: 'pill-warn' }
+      : null,
+    body: decision.content,
+    meta: when(decision.createdAt),
+  }));
+}
+
+async function loadArtifacts() {
+  const { items } = await api.get(`/api/v1/projects/${state.projectId}/artifacts`);
+  fill('artifacts', items, (artifact) => record({
+    title: artifact.filename,
+    body: '',
+    meta: `${bytes(artifact.size)} · ${artifact.sha256.slice(0, 12)} · ${when(artifact.createdAt)}`,
+    actions: [
+      {
+        label: 'download',
+        run: () => window.open(`/api/v1/artifacts/${artifact.id}/content`, '_blank'),
+      },
+      {
+        label: 'delete',
+        className: 'link danger-link',
+        run: async () => {
+          try {
+            await api.call('DELETE', `/api/v1/artifacts/${artifact.id}`);
+            await loadArtifacts();
+          } catch (error) {
+            toast(error.message);
+          }
+        },
+      },
+    ],
+  }));
+}
+
+function bytes(size) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} kB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function loadSkills() {
+  const { items } = await api.get(`/api/v1/projects/${state.projectId}/skills`);
+  fill('skills', items, (skill) => record({
+    title: skill.name,
+    badge: { text: skill.source.type.toLowerCase(), className: 'pill-muted' },
+    body: skill.description,
+    // The installed revision is the immutable identity of what is actually
+    // there, which is not the same as the branch someone asked for.
+    meta: `${skill.installedRevision.slice(0, 12)} · ${skill.source.url || 'uploaded'} · ${when(skill.installedAt)}`,
+    actions: [{
+      label: 'uninstall',
+      className: 'link danger-link',
+      run: async () => {
+        try {
+          await api.call('DELETE', `/api/v1/skills/${skill.id}`);
+          await loadSkills();
+        } catch (error) {
+          toast(error.message);
+        }
+      },
+    }],
+  }));
+}
+
+async function loadInstructions() {
+  const project = await api.get(`/api/v1/projects/${state.projectId}`);
+  el('instructions').value = project.instructions ?? '';
+}
+
+async function loadAudit() {
+  const { items } = await api.get('/api/v1/me/audit?limit=100');
+  fill('audit', items, (entry) => record({
+    title: entry.action.replace(/[._]/g, ' '),
+    body: describeDetail(entry.detail),
+    meta: [entry.actorId, entry.channel, when(entry.createdAt)].filter(Boolean).join(' · '),
+  }));
+}
+
+// describeDetail flattens the recorded payload into readable pairs. The entry is
+// an audit record, so what it says has to be legible without a JSON viewer.
+function describeDetail(detail) {
+  if (!detail || typeof detail !== 'object') return '';
+  return Object.entries(detail)
+    .filter(([, value]) => value !== null && value !== '' && value !== 0 && value !== false)
+    .map(([key, value]) => `${key.replace(/([A-Z])/g, ' $1').toLowerCase()}: ${value}`)
+    .join('\n');
+}
+
+// upload posts a file without the JSON envelope: an artifact and a skill bundle
+// both travel as bytes, not as a field in a command.
+async function upload(path, file) {
+  const form = new FormData();
+  form.append('file', file);
+
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { 'X-Threavia-Channel': CHANNEL },
+    body: form,
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || `upload failed (${response.status})`);
+  }
+  return payload;
+}
+
+// ------------------------------------------------------------------- policy
+
+async function loadPolicy() {
+  const policy = await api.get(`/api/v1/sessions/${state.sessionId}/policy`);
+  el('policy-mode').value = policy.mode;
+  el('policy-write').checked = policy.allowFilesystemWrite;
+  el('policy-commit').checked = policy.allowGitCommit;
+  el('policy-push').checked = policy.allowGitPush;
+  el('policy-network').checked = policy.allowNetwork;
+  el('policy-duration').value = policy.maxDurationSeconds || '';
+  el('policy-actions').value = policy.maxActions || '';
+}
+
+async function savePolicy() {
+  await api.call('PUT', `/api/v1/sessions/${state.sessionId}/policy`, {
+    mode: el('policy-mode').value,
+    allowFilesystemWrite: el('policy-write').checked,
+    allowGitCommit: el('policy-commit').checked,
+    allowGitPush: el('policy-push').checked,
+    allowNetwork: el('policy-network').checked,
+    maxDurationSeconds: Number(el('policy-duration').value) || 0,
+    maxActions: Number(el('policy-actions').value) || 0,
+  });
 }
 
 // ------------------------------------------------------------------ session
@@ -543,6 +821,137 @@ function wireEvents() {
       }
       await loadProjectContent();
       openDraft();
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+
+  el('open-project').addEventListener('click', () => {
+    openProject().catch((error) => toast(error.message));
+  });
+
+  el('project-tabs').addEventListener('click', (event) => {
+    const tab = event.target.dataset?.tab;
+    if (tab) selectTab(tab);
+  });
+
+  el('task-done').addEventListener('change', () => {
+    loadTasks().catch((error) => toast(error.message));
+  });
+
+  el('task-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const field = el('task-title');
+    const title = field.value.trim();
+    if (!title) return;
+    try {
+      await api.post(`/api/v1/projects/${state.projectId}/tasks`, { title, description: '' });
+      field.value = '';
+      await loadTasks();
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+
+  el('decision-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const title = el('decision-title').value.trim();
+    if (!title) return;
+    try {
+      await api.post(`/api/v1/projects/${state.projectId}/decisions`, {
+        title,
+        content: el('decision-content').value.trim(),
+        importance: el('decision-importance').value,
+      });
+      el('decision-title').value = '';
+      el('decision-content').value = '';
+      await loadDecisions();
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+
+  el('artifact-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const file = el('artifact-file').files?.[0];
+    if (!file) return;
+    try {
+      await upload(`/api/v1/projects/${state.projectId}/artifacts`, file);
+      el('artifact-file').value = '';
+      await loadArtifacts();
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+
+  // An uploaded skill carries bytes; a git or archive skill carries a url. The
+  // form shows whichever the chosen source needs.
+  el('skill-source').addEventListener('change', () => {
+    const upload = el('skill-source').value === 'UPLOAD';
+    el('skill-file').classList.toggle('hidden', !upload);
+    el('skill-url').classList.toggle('hidden', upload);
+  });
+
+  el('skill-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const type = el('skill-source').value;
+    try {
+      if (type === 'UPLOAD') {
+        const file = el('skill-file').files?.[0];
+        if (!file) return;
+        const path = el('skill-path').value.trim();
+        await upload(
+          `/api/v1/projects/${state.projectId}/skills${path ? `?path=${encodeURIComponent(path)}` : ''}`,
+          file);
+        el('skill-file').value = '';
+      } else {
+        const url = el('skill-url').value.trim();
+        if (!url) return;
+        await api.post(`/api/v1/projects/${state.projectId}/skills`, {
+          source: {
+            type,
+            url,
+            path: el('skill-path').value.trim(),
+            revision: el('skill-revision').value.trim(),
+          },
+        });
+        el('skill-url').value = '';
+      }
+      await loadSkills();
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+
+  el('save-instructions').addEventListener('click', async () => {
+    try {
+      await api.call('PATCH', `/api/v1/projects/${state.projectId}`, {
+        instructions: el('instructions').value,
+      });
+      toast('Instructions saved.');
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+
+  el('toggle-policy').addEventListener('click', async () => {
+    const form = el('policy');
+    const opening = form.classList.contains('hidden');
+    form.classList.toggle('hidden', !opening);
+    if (opening) {
+      try {
+        await loadPolicy();
+      } catch (error) {
+        toast(error.message);
+      }
+    }
+  });
+
+  el('policy').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      await savePolicy();
+      toast('Execution policy applied.');
     } catch (error) {
       toast(error.message);
     }

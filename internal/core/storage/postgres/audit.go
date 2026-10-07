@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/rclsilver/threavia/internal/core/domain"
 )
@@ -24,7 +25,7 @@ type AuditEntry struct {
 	Channel       string          `json:"channel,omitempty"`
 	PayloadSHA256 string          `json:"payloadSha256,omitempty"`
 	Detail        json.RawMessage `json:"detail,omitempty"`
-	CreatedAt     string          `json:"createdAt"`
+	CreatedAt     time.Time       `json:"createdAt"`
 }
 
 // RecordAudit appends an audit entry.
@@ -51,7 +52,7 @@ func (s *Store) ListAudit(ctx context.Context, ownerID domain.UserID, limit int)
 		SELECT id, owner_id, actor_id, action,
 		       coalesce(project_id,''), coalesce(session_id,''), coalesce(job_id,''),
 		       coalesce(subject_id,''), channel, payload_sha256, detail,
-		       to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SSOF')
+		       created_at
 		FROM audit_entries
 		WHERE owner_id = $1
 		ORDER BY created_at DESC

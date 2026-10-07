@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -215,4 +216,42 @@ func TestAFreeTextQuestionNeedsNoChoices(t *testing.T) {
 	waitUntil(t, "the job to wait for input", func() bool {
 		return c.jobStatus(session, start.GetJobId()) == "WAITING_INPUT"
 	})
+}
+
+// TestTheAuditTrailNamesTheClient pins that a privileged change records where it
+// came from, which is what makes the trail of section 23 answer "who, from
+// where" rather than only "who".
+func TestTheAuditTrailNamesTheClient(t *testing.T) {
+	t.Parallel()
+
+	c := newCore(t)
+	project := c.createProject("homelab")
+	backendID, credential := c.registerBackend("laptop")
+	c.connectBackend(credential)
+
+	session := c.startSessionFrom(project, backendID, "vscode", "deploy the chart")
+
+	c.mustDo(http.MethodPut, "/api/v1/sessions/"+session+"/policy",
+		map[string]any{"mode": "GUARDED", "allowGitPush": true, "maxActions": 20},
+		nil, http.StatusOK, [2]string{"X-Threavia-Channel", "vscode"})
+
+	var audit struct {
+		Items []struct {
+			Action    string    `json:"action"`
+			Channel   string    `json:"channel"`
+			CreatedAt time.Time `json:"createdAt"`
+		} `json:"items"`
+	}
+	c.mustDo(http.MethodGet, "/api/v1/me/audit", nil, &audit, http.StatusOK)
+
+	if len(audit.Items) != 1 || audit.Items[0].Action != "execution_policy.set" {
+		t.Fatalf("audit = %+v, want the policy change", audit.Items)
+	}
+	if audit.Items[0].Channel != "vscode" {
+		t.Fatalf("channel = %q, want the client that made the change", audit.Items[0].Channel)
+	}
+	// A timestamp a client can parse, which a bespoke SQL format was not.
+	if audit.Items[0].CreatedAt.IsZero() {
+		t.Fatal("the entry must carry a readable timestamp")
+	}
 }

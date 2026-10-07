@@ -327,3 +327,33 @@ func TestBackendSkillInventoryIsRecorded(t *testing.T) {
 		t.Fatalf("recorded = %+v, want the reported skill", listed.Items[0])
 	}
 }
+
+// TestSkillBundlesAreNotProjectArtifacts pins that the bytes behind an installed
+// Skill are not offered as something to manage: deleting one would only produce
+// a conflict with the Skill that points at it.
+func TestSkillBundlesAreNotProjectArtifacts(t *testing.T) {
+	t.Parallel()
+
+	c := newCore(t)
+	c.svc.SetObjectStore(newMemoryObjects(), 8<<20)
+	c.svc.SetSkillAcquirer(skills.NewAcquirer(skills.DefaultLimits()))
+
+	project := c.createProject("homelab")
+
+	var uploaded artifactResponse
+	c.mustUpload("/api/v1/projects/"+project+"/artifacts?filename=build.log",
+		"text/plain", "a line\n", &uploaded)
+
+	var installed skillResponse
+	c.mustUpload("/api/v1/projects/"+project+"/skills?filename=skill.tar.gz",
+		"application/gzip", skillArchive(t, "deploy-helm"), &installed)
+
+	var listed struct {
+		Items []artifactResponse `json:"items"`
+	}
+	c.mustDo(http.MethodGet, "/api/v1/projects/"+project+"/artifacts", nil, &listed, http.StatusOK)
+
+	if len(listed.Items) != 1 || listed.Items[0].ID != uploaded.ID {
+		t.Fatalf("listing = %+v, want only the uploaded artifact", listed.Items)
+	}
+}

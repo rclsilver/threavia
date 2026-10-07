@@ -56,6 +56,9 @@ func (s *Service) SessionExecutionPolicy(ctx context.Context, identity auth.Iden
 // line in a log nobody is yet reading.
 func (s *Service) audit(ctx context.Context, identity auth.Identity, entry postgres.AuditEntry) {
 	entry.OwnerID = identity.UserID
+	if entry.Channel == "" {
+		entry.Channel = domain.ChannelFrom(ctx).String()
+	}
 	if entry.ActorID == "" {
 		entry.ActorID = string(identity.UserID)
 	}

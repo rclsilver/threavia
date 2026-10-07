@@ -122,9 +122,12 @@ button:disabled { opacity: 0.5; cursor: default; }
 .pill-danger { color: var(--danger); }
 .pill-muted { color: var(--muted); }
 
+/* One utility for every element the client shows and hides. It wins on purpose:
+   a hidden element is hidden whatever its own display rule says. */
+.hidden { display: none !important; }
+
 .main { display: flex; flex-direction: column; overflow: hidden; }
 .view { display: flex; flex-direction: column; gap: 10px; padding: 20px; overflow: hidden; height: 100%; }
-.view.hidden { display: none; }
 .view.empty { align-items: center; justify-content: center; color: var(--muted); }
 #draft { max-width: 620px; overflow-y: auto; }
 #draft h2, .session-head h2 { margin: 0; font-size: 18px; }
@@ -195,9 +198,93 @@ button:disabled { opacity: 0.5; cursor: default; }
   color: #fff;
   box-shadow: 0 6px 24px rgb(0 0 0 / 0.2);
 }
-.toast.hidden { display: none; }
 
 @media (max-width: 760px) {
   .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .sidebar { max-height: 42vh; }
 }
+
+/* ------------------------------------------------------------- project view */
+
+.session-actions { display: flex; gap: 12px; align-items: center; }
+
+.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.link:hover { text-decoration: underline; }
+.danger-link { color: var(--danger); }
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+.tabs button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 10px;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+
+.tab-body { flex: 1; min-height: 0; overflow-y: auto; }
+.pane { display: flex; flex-direction: column; gap: 10px; }
+.pane form { display: flex; flex-direction: column; gap: 8px; }
+.pane form.row { flex-direction: row; }
+.pane .row { align-items: center; }
+.pane .row input[type="text"], .pane .row input:not([type]) { flex: 1; }
+
+.checkbox { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.checkbox input { width: auto; }
+
+.records { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.records li {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--surface);
+}
+.record-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.record-title { font-weight: 600; overflow-wrap: anywhere; }
+.record-head .link { margin-left: auto; }
+.record-head .link + .link { margin-left: 0; }
+.record-body { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.record-meta { margin: 6px 0 0; font-size: 12px; color: var(--muted); font-family: var(--mono); overflow-wrap: anywhere; }
+.record-empty { color: var(--muted); border-style: dashed; }
+
+/* ------------------------------------------------------------------- policy */
+
+.policy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 12px;
+  background: var(--surface);
+}
+.policy .row { align-items: center; }
+.policy input[type="number"] { width: 110px; }
+.allowances { display: flex; flex-wrap: wrap; gap: 14px; }
+.policy .primary { align-self: flex-start; }
+
+/* A clicked tab keeps the mouse ring off, while a keyboard user still sees
+   where they are. */
+.tabs button:focus { outline: none; }
+.tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+
+/* A pane-level action button sizes to its text; one inside a form row stays on
+   the row. */
+.pane > .primary { align-self: flex-start; }

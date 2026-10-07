@@ -191,23 +191,24 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 	}
 	a.updateActiveRuns()
 
-	// Skills are prepared before the process starts: a bundle this backend does
-	// not have is fetched over the control stream and unpacked once.
-	params.SkillDirectory = a.prepareSkills(ctx, params.JobID, cmd.GetProjectContext().GetSkills())
-
 	// Detached from the command context: the Job outlives the message that
 	// started it.
-	go a.execute(context.WithoutCancel(ctx), params)
+	go a.execute(context.WithoutCancel(ctx), params, cmd.GetProjectContext().GetSkills())
 	return nil
 }
 
 // execute drives one Job and cleans up after it.
-func (a *Adapter) execute(ctx context.Context, params runner.StartParams) {
+func (a *Adapter) execute(ctx context.Context, params runner.StartParams, declaredSkills []*backendv1.ProjectSkill) {
 	defer func() {
 		a.releaseJob(params.JobID, ErrJobAbandoned)
 		a.releaseSkills(params.JobID)
 		a.updateActiveRuns()
 	}()
+
+	// Prepared here rather than where the command arrives: fetching a bundle is a
+	// round trip over the very stream that delivers commands, so doing it on the
+	// reading goroutine would wait for a reply that cannot arrive.
+	params.SkillDirectory = a.prepareSkills(ctx, params.JobID, declaredSkills)
 
 	if err := a.runner.Run(ctx, params, a); err != nil {
 		a.logger.Error("job failed to run",

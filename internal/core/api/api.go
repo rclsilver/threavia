@@ -124,7 +124,9 @@ func (h *handler) secured(fn func(http.ResponseWriter, *http.Request, auth.Ident
 			writeError(w, http.StatusUnauthorized, "unauthenticated", "valid credentials are required")
 			return
 		}
-		fn(w, r, identity)
+		// Every operation below can then say which client it is serving, which is
+		// what the audit trail and the notification relevance both read.
+		fn(w, r.WithContext(domain.WithChannel(r.Context(), channel(r))), identity)
 	})
 }
 

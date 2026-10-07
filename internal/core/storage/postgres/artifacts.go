@@ -31,11 +31,16 @@ func (s *Store) GetArtifact(ctx context.Context, ownerID domain.UserID, id domai
 }
 
 // ListArtifacts returns the Artifacts of a Project, most recent first.
+//
+// Skill bundles are left out: they are the content of an installed Skill, not
+// something a user uploaded, and offering to delete one would only produce a
+// conflict with the Skill that points at it.
 func (s *Store) ListArtifacts(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID, limit int) ([]domain.Artifact, error) {
 	rows, err := s.q.Query(ctx, `
 		SELECT `+artifactColumns+`
 		FROM artifacts a JOIN projects p ON p.id = a.project_id
 		WHERE a.project_id = $1 AND p.owner_id = $2
+		  AND NOT EXISTS (SELECT 1 FROM skills s WHERE s.artifact_id = a.id)
 		ORDER BY a.created_at DESC
 		LIMIT $3`, projectID, ownerID, limit)
 	if err != nil {

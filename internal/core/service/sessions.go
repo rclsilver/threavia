@@ -28,8 +28,6 @@ type StartSessionInput struct {
 	// IdempotencyKey makes a retried first send return the same Session rather
 	// than creating a second one.
 	IdempotencyKey string
-	// Channel is the kind of client that started this work (spec section 6).
-	Channel domain.Channel
 }
 
 // StartSessionResult is what the first send created.
@@ -90,7 +88,7 @@ func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in S
 		RunID:          result.Run.ID,
 		Status:         domain.JobQueued,
 		IdempotencyKey: optionalString(in.IdempotencyKey),
-		OriginChannel:  in.Channel,
+		OriginChannel:  domain.ChannelFrom(ctx),
 	}
 
 	scope := domain.Scope{
@@ -153,7 +151,7 @@ func (s *Service) replayStartSession(ctx context.Context, identity auth.Identity
 // PostMessage appends a message to an existing Session. It becomes a new Job on
 // the current Run, which is how a second message resumes the same provider
 // native session.
-func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string, originChannel domain.Channel) (domain.Job, error) {
+func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string) (domain.Job, error) {
 	message = strings.TrimSpace(message)
 	if message == "" {
 		return domain.Job{}, fmt.Errorf("%w: the message cannot be empty", ErrInvalid)
@@ -187,7 +185,7 @@ func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessi
 		RunID:          run.ID,
 		Status:         domain.JobQueued,
 		IdempotencyKey: optionalString(idempotencyKey),
-		OriginChannel:  originChannel,
+		OriginChannel:  domain.ChannelFrom(ctx),
 	}
 	scope := domain.Scope{ProjectID: session.ProjectID, SessionID: sessionID, RunID: run.ID, JobID: job.ID}
 	b := &batch{ownerID: identity.UserID}
