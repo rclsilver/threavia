@@ -90,14 +90,31 @@ func (a *Adapter) askForDirectory(ctx context.Context, jobID, name, gitRemote st
 	const cloneChoice = "clone it here"
 
 	choices := append([]string{}, candidates...)
-	prompt := fmt.Sprintf("Where is %q on this machine? Answer with an absolute path.", name)
+
+	// What the discovery roots turned up decides what to say. Claiming the
+	// directory is not here when several copies of it are would be a lie, and
+	// claiming nothing when the roots found nothing leaves the user guessing why
+	// they are being asked at all.
+	prompt := fmt.Sprintf("Where is %q on this machine?", name)
+	switch {
+	case len(candidates) > 1:
+		prompt += " Several copies are under the discovery roots, so pick one or answer with an absolute path."
+	case len(a.cfg.Claude.DiscoveryRoots) == 0:
+		prompt += " This backend has no discovery roots configured, so answer with an absolute path."
+	default:
+		prompt += fmt.Sprintf(" It is not under %s, so answer with an absolute path.",
+			strings.Join(a.cfg.Claude.DiscoveryRoots, ", "))
+	}
+
 	if gitRemote != "" && len(a.cfg.Claude.DiscoveryRoots) > 0 {
 		target := filepath.Join(a.cfg.Claude.DiscoveryRoots[0], name)
-		prompt += fmt.Sprintf("\nIt is not here. Answer %q to clone %s into %s.", cloneChoice, gitRemote, target)
+		prompt += fmt.Sprintf("\n\nOr answer %q to clone %s into %s.", cloneChoice, gitRemote, target)
 		choices = append(choices, cloneChoice)
 	}
 
-	answer, err := a.AskUser(ctx, jobID, prompt, choices)
+	// Free text whatever the choices are: every one of them is a shortcut, and
+	// the question is where the directory actually is.
+	answer, err := a.AskUser(ctx, jobID, prompt, choices, true)
 	if err != nil {
 		return "", err
 	}

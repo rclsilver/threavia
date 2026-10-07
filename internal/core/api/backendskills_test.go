@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -257,5 +258,69 @@ func TestAnUnresolvedDirectoryAsksTheUser(t *testing.T) {
 	params := receive(t, "the job to start", local.started)
 	if params.WorkingDirectory != elsewhere {
 		t.Fatalf("working directory = %q, want the answered one %q", params.WorkingDirectory, elsewhere)
+	}
+}
+
+// TestADirectoryQuestionAlwaysAcceptsAPath is a regression test.
+//
+// A KnownDirectory with a git remote offered "clone it here" as its only
+// choice, and the request declared no free text because it had a choice at all.
+// A client then showed a single button under a prompt asking for an absolute
+// path, so a user whose directory simply lived outside the discovery roots had
+// no way to say where it was.
+func TestADirectoryQuestionAlwaysAcceptsAPath(t *testing.T) {
+	t.Parallel()
+
+	c := newCore(t)
+	project := c.createProject("homelab")
+	backendID, credential := c.registerBackend("laptop")
+
+	var directory struct {
+		ID string `json:"id"`
+	}
+	c.mustDo(http.MethodPost, "/api/v1/projects/"+project+"/directories",
+		map[string]any{"name": "threavia", "gitRemote": "git@github.com:rclsilver/threavia.git"},
+		&directory, http.StatusCreated)
+
+	// The directory is real, and simply not under the discovery roots.
+	elsewhere := t.TempDir()
+	local := c.connectClaudeBackend(credential, t.TempDir(), t.TempDir())
+
+	var started startSessionResponse
+	c.mustDo(http.MethodPost, "/api/v1/sessions/start", map[string]any{
+		"projectId":          project,
+		"backendInstanceId":  backendID,
+		"workingDirectoryId": directory.ID,
+		"message":            "deploy the chart",
+	}, &started, http.StatusCreated)
+
+	var attention struct {
+		UserInputs []struct {
+			ID       string   `json:"id"`
+			Prompt   string   `json:"prompt"`
+			Choices  []string `json:"choices"`
+			FreeText bool     `json:"freeText"`
+		} `json:"userInputs"`
+	}
+	waitUntil(t, "the backend to ask where the directory is", func() bool {
+		c.mustDo(http.MethodGet, "/api/v1/me/attention", nil, &attention, http.StatusOK)
+		return len(attention.UserInputs) == 1
+	})
+
+	question := attention.UserInputs[0]
+	if !question.FreeText {
+		t.Fatalf("the question asks for a path and must accept one: %+v", question)
+	}
+	if !slices.Contains(question.Choices, "clone it here") {
+		t.Fatalf("choices = %v, want the clone shortcut offered too", question.Choices)
+	}
+
+	// And answering with a path, rather than taking the shortcut, works.
+	c.mustDo(http.MethodPost, "/api/v1/user-input/"+question.ID+"/resolve",
+		map[string]any{"value": elsewhere}, nil, http.StatusOK)
+
+	params := receive(t, "the job to start", local.started)
+	if params.WorkingDirectory != elsewhere {
+		t.Fatalf("working directory = %q, want the answered path %q", params.WorkingDirectory, elsewhere)
 	}
 }

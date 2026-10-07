@@ -66,7 +66,12 @@ type Asker interface {
 	// AskPermission raises a ValidationRequest for a tool invocation.
 	AskPermission(ctx context.Context, jobID, toolName string, input map[string]any) (Decision, error)
 	// AskUser raises a UserInputRequest.
-	AskUser(ctx context.Context, jobID, prompt string, choices []string) (string, error)
+	//
+	// freeText is explicit rather than derived from the absence of choices: a
+	// question may legitimately offer shortcuts and still accept an answer that
+	// is none of them, and a request that offers a choice while asking for a
+	// path contradicts itself.
+	AskUser(ctx context.Context, jobID, prompt string, choices []string, freeText bool) (string, error)
 	// CallCoreTool runs a Core Tool through Core and returns its result.
 	CallCoreTool(ctx context.Context, jobID, name string, input map[string]any) (map[string]any, error)
 }
@@ -307,7 +312,9 @@ func (s *Server) askUser(ctx context.Context, jobID string, args map[string]any)
 	}
 
 	s.logger.Info("user input requested", slog.String("jobId", jobID))
-	answer, err := s.asker.AskUser(ctx, jobID, prompt, choices)
+	// The tool describes `choices` as a closed list, so offering one is the
+	// agent saying it wants nothing else.
+	answer, err := s.asker.AskUser(ctx, jobID, prompt, choices, len(choices) == 0)
 	if err != nil {
 		return nil, &rpcError{Code: codeInternalError, Message: err.Error()}
 	}

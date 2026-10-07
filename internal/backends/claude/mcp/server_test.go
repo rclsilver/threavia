@@ -25,6 +25,7 @@ type stubAsker struct {
 	input    map[string]any
 	prompt   string
 	choices  []string
+	freeText bool
 }
 
 func (s *stubAsker) AskPermission(_ context.Context, jobID, toolName string, input map[string]any) (mcp.Decision, error) {
@@ -32,8 +33,8 @@ func (s *stubAsker) AskPermission(_ context.Context, jobID, toolName string, inp
 	return s.decision, s.err
 }
 
-func (s *stubAsker) AskUser(_ context.Context, jobID, prompt string, choices []string) (string, error) {
-	s.jobID, s.prompt, s.choices = jobID, prompt, choices
+func (s *stubAsker) AskUser(_ context.Context, jobID, prompt string, choices []string, freeText bool) (string, error) {
+	s.jobID, s.prompt, s.choices, s.freeText = jobID, prompt, choices, freeText
 	return s.answer, s.err
 }
 
@@ -243,6 +244,30 @@ func TestAskUserReachesTheUser(t *testing.T) {
 	}
 	if asker.prompt != "Quel environnement ?" || len(asker.choices) != 2 {
 		t.Fatalf("the question reached the user as %q %v", asker.prompt, asker.choices)
+	}
+	// The tool documents `choices` as a closed list, so offering one is the
+	// agent saying it wants nothing else.
+	if asker.freeText {
+		t.Error("a question with a closed list of choices must not invite free text")
+	}
+}
+
+// TestAskUserWithoutChoicesInvitesFreeText pins the other half of that contract:
+// a question with no list has to be answerable at all.
+func TestAskUserWithoutChoicesInvitesFreeText(t *testing.T) {
+	t.Parallel()
+
+	asker := &stubAsker{answer: "/srv/app"}
+	_, endpoint := newServer(t, asker)
+
+	if _, rpcErr := rpc(t, endpoint, "tools/call", map[string]any{
+		"name":      mcp.ToolAskUser,
+		"arguments": map[string]any{"prompt": "Where should I work?"},
+	}); rpcErr != nil {
+		t.Fatalf("the tool call failed: %v", rpcErr)
+	}
+	if !asker.freeText {
+		t.Error("a question with no choices must invite free text")
 	}
 }
 

@@ -68,7 +68,11 @@ func (a *Adapter) AskPermission(ctx context.Context, jobID, toolName string, inp
 }
 
 // AskUser raises a UserInputRequest and blocks until it is answered.
-func (a *Adapter) AskUser(ctx context.Context, jobID, prompt string, choices []string) (string, error) {
+//
+// freeText comes from the caller rather than from the absence of choices: a
+// question that offers a shortcut may still need an answer that is none of
+// them, and a client can only show the field if the request says so.
+func (a *Adapter) AskUser(ctx context.Context, jobID, prompt string, choices []string, freeText bool) (string, error) {
 	requestID := uuid.NewString()
 	w, err := a.registerWaiter(jobID, requestID)
 	if err != nil {
@@ -82,7 +86,7 @@ func (a *Adapter) AskUser(ctx context.Context, jobID, prompt string, choices []s
 			RequestId: requestID,
 			Prompt:    prompt,
 			Choices:   choices,
-			FreeText:  len(choices) == 0,
+			FreeText:  freeText,
 		})
 	})
 	if err != nil {
