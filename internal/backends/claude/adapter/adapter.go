@@ -229,20 +229,54 @@ func (a *Adapter) execute(ctx context.Context, params runner.StartParams, pc *ba
 
 // OnCancelJob asks the runner to stop. Core only moves the Job to CANCELLED
 // once the backend confirms the stop with a job cancelled event.
-func (a *Adapter) OnCancelJob(_ context.Context, cmd *backendv1.CancelJob) error {
+func (a *Adapter) OnCancelJob(ctx context.Context, cmd *backendv1.CancelJob) error {
 	a.logger.Info("cancel requested",
 		slog.String("jobId", cmd.GetJobId()), slog.String("reason", cmd.GetReason()))
 
 	if err := a.runner.Cancel(cmd.GetJobId()); err != nil {
 		if errors.Is(err, runner.ErrUnknownJob) {
-			// Nothing is running here. Reconciliation converges Core, so this is
-			// not a command failure.
+			// Nothing is running here, and saying so is the only thing that can
+			// move Core: it waits for the backend to confirm the stop, so a
+			// cancel it reissues at every reconnection to a Job no process owns
+			// would block the Run for good. A Job that already ended keeps the
+			// outcome it ended with.
 			a.logger.Info("nothing to cancel for this job", slog.String("jobId", cmd.GetJobId()))
-			return nil
+			if a.endedLocally(ctx, cmd.GetJobId()) {
+				return nil
+			}
+			return a.JobCancelled(ctx, cmd.GetRunId(), cmd.GetJobId())
 		}
 		return err
 	}
 	return nil
+}
+
+// endedLocally reports whether this backend already recorded an outcome for a
+// Job. It tells a cancel that arrives after the work finished apart from one
+// aimed at a Job nothing is running.
+func (a *Adapter) endedLocally(ctx context.Context, jobID string) bool {
+	jobs, err := a.store.Jobs(ctx)
+	if err != nil {
+		// Unable to tell, so say nothing: inventing an outcome is worse than
+		// leaving reconciliation to try again.
+		a.logger.Error("cannot read the local job state",
+			slog.String("jobId", jobID), slog.String("error", err.Error()))
+		return true
+	}
+	for _, job := range jobs {
+		if job.JobID != jobID {
+			continue
+		}
+		switch job.Status {
+		case backendv1.JobStatus_JOB_STATUS_COMPLETED,
+			backendv1.JobStatus_JOB_STATUS_FAILED,
+			backendv1.JobStatus_JOB_STATUS_CANCELLED:
+			return true
+		default:
+			return false
+		}
+	}
+	return false
 }
 
 // OnValidationResolution delivers a permission decision to the blocked tool
