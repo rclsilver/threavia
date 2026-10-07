@@ -1,30 +1,24 @@
 import { useParams } from '@tanstack/react-router';
-import { Download, Plus, Trash2, X } from 'lucide-react';
+import { Download, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import {
-  useAddTaskDependency,
   useArtifacts,
   useAudit,
   useCreateDecision,
-  useCreateTask,
   useDecisions,
   useDeleteArtifact,
   useInstallSkill,
   useProject,
-  useRemoveTaskDependency,
   useSkills,
   useUploadArtifact,
-  useTasks,
   useUninstallSkill,
   useUpdateProject,
-  useUpdateTask,
 } from '@/api/queries';
-import type { SkillSourceType, Task, TaskStatus } from '@/api/types';
-import { Badge, type BadgeTone } from '@/components/ui/badge';
+import type { SkillSourceType } from '@/api/types';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, EmptyState } from '@/components/ui/card';
-import { CheckboxField } from '@/components/ui/checkbox';
 import { Input, Textarea } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -49,9 +43,10 @@ export function ProjectView() {
         <p className="text-muted text-sm">Project memory, skills and audit trail.</p>
       </header>
 
-      <Tabs defaultValue="tasks" className="flex min-h-0 flex-1 flex-col">
+      {/* Tasks have a route of their own: they are asked for from anywhere,
+          and a tab only opens when the view around it is already on screen. */}
+      <Tabs defaultValue="decisions" className="flex min-h-0 flex-1 flex-col">
         <TabsList>
-          <TabsTrigger value="tasks">Tasks</TabsTrigger>
           <TabsTrigger value="decisions">Decisions</TabsTrigger>
           <TabsTrigger value="artifacts">Artifacts</TabsTrigger>
           <TabsTrigger value="skills">Skills</TabsTrigger>
@@ -59,9 +54,6 @@ export function ProjectView() {
           <TabsTrigger value="audit">Audit</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="tasks">
-          <TasksPane projectId={projectId} />
-        </TabsContent>
         <TabsContent value="decisions">
           <DecisionsPane projectId={projectId} />
         </TabsContent>
@@ -78,206 +70,6 @@ export function ProjectView() {
           <AuditPane />
         </TabsContent>
       </Tabs>
-    </div>
-  );
-}
-
-// --------------------------------------------------------------------- tasks
-
-/** The moves that make sense from here. Blocked is derived, never set by hand. */
-function nextStatuses(status: TaskStatus): TaskStatus[] {
-  switch (status) {
-    case 'TODO':
-      return ['IN_PROGRESS', 'DONE'];
-    case 'IN_PROGRESS':
-      return ['DONE', 'TODO'];
-    default:
-      return ['TODO'];
-  }
-}
-
-function taskTone(status: TaskStatus): BadgeTone {
-  if (status === 'DONE') return 'ok';
-  if (status === 'IN_PROGRESS') return 'warn';
-  return 'neutral';
-}
-
-/**
- * Whether making `task` wait on `blocker` would close a loop.
- *
- * Core refuses such an edge, because nothing on a cycle is ever ready. The
- * whole graph is already on screen, so the choice can simply not be offered
- * rather than be offered and refused.
- */
-function wouldCycle(tasks: Task[], task: Task, blocker: Task): boolean {
-  const byId = new Map(tasks.map((entry) => [entry.id, entry]));
-  const seen = new Set<string>();
-  const walk = (id: string): boolean => {
-    if (id === task.id) return true;
-    if (seen.has(id)) return false;
-    seen.add(id);
-    return (byId.get(id)?.dependsOn ?? []).some(walk);
-  };
-  return walk(blocker.id);
-}
-
-function TasksPane({ projectId }: { projectId: string }) {
-  const [includeDone, setIncludeDone] = useState(false);
-  const [title, setTitle] = useState('');
-  const tasks = useTasks(projectId, includeDone);
-  // The graph spans finished work too: a Task waiting on one that is done is
-  // the normal way of being ready, and its title has to be readable either way.
-  const everyTask = useTasks(projectId, true);
-  const create = useCreateTask(projectId);
-  const update = useUpdateTask();
-
-  return (
-    <div className="space-y-3">
-      <form
-        className="flex gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!title.trim()) return;
-          create.mutate(title.trim());
-          setTitle('');
-        }}
-      >
-        <Input
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="What needs doing"
-        />
-        <Button variant="primary" type="submit" disabled={create.isPending}>
-          Add
-        </Button>
-      </form>
-
-      <CheckboxField checked={includeDone} onCheckedChange={setIncludeDone}>
-        show finished
-      </CheckboxField>
-
-      <Records
-        items={tasks.data ?? []}
-        render={(task: Task) => (
-          <Card key={task.id}>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{task.title}</span>
-              <Badge tone={taskTone(task.status)}>{humanise(task.status)}</Badge>
-              <span className="ml-auto flex gap-3">
-                {nextStatuses(task.status).map((status) => (
-                  <Button
-                    key={status}
-                    variant="link"
-                    onClick={() => update.mutate({ id: task.id, status })}
-                  >
-                    {humanise(status)}
-                  </Button>
-                ))}
-              </span>
-            </div>
-            {task.description && <p className="mt-1.5 text-sm whitespace-pre-wrap">{task.description}</p>}
-            <Dependencies task={task} tasks={everyTask.data ?? []} />
-          </Card>
-        )}
-      />
-    </div>
-  );
-}
-
-/**
- * What a Task waits on, and the means to change it.
- *
- * Dependencies were only settable when a Task was filed, which is the one
- * moment nobody knows the shape of the work yet. They are named rather than
- * counted: "depends on 2 tasks" says nothing a person can act on.
- */
-function Dependencies({ task, tasks }: { task: Task; tasks: Task[] }) {
-  const add = useAddTaskDependency();
-  const remove = useRemoveTaskDependency();
-  const [choosing, setChoosing] = useState(false);
-
-  const blockers = (task.dependsOn ?? []).map((id) => ({
-    id,
-    task: tasks.find((entry) => entry.id === id),
-  }));
-
-  const candidates = tasks.filter(
-    (entry) =>
-      entry.id !== task.id &&
-      !(task.dependsOn ?? []).includes(entry.id) &&
-      !wouldCycle(tasks, task, entry),
-  );
-
-  const error = add.error ?? remove.error;
-
-  return (
-    <div className="mt-2 space-y-1.5">
-      {blockers.length > 0 && (
-        <ul className="flex flex-wrap items-center gap-1.5">
-          <li className="text-muted text-xs">Waits on</li>
-          {blockers.map((blocker) => (
-            <li key={blocker.id}>
-              <span className="bg-surface-2 border-border inline-flex items-center gap-1 rounded-md border py-0.5 pr-0.5 pl-2 text-xs">
-                <span
-                  className={blocker.task?.status === 'DONE' ? 'text-muted line-through' : undefined}
-                >
-                  {blocker.task?.title ?? 'a task of another project'}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-5 [&_svg]:size-3"
-                  title="Stop waiting on this one"
-                  disabled={remove.isPending}
-                  onClick={() => remove.mutate({ id: task.id, dependsOn: blocker.id })}
-                >
-                  <X />
-                </Button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {choosing ? (
-        <Select
-          value=""
-          onValueChange={(dependsOn) => {
-            setChoosing(false);
-            add.mutate({ id: task.id, dependsOn });
-          }}
-          onOpenChange={(open) => {
-            if (!open) setChoosing(false);
-          }}
-          open
-        >
-          <SelectTrigger className="h-7 max-w-sm text-xs">
-            <SelectValue placeholder="Which task must come first?" />
-          </SelectTrigger>
-          <SelectContent>
-            {candidates.map((entry) => (
-              <SelectItem key={entry.id} value={entry.id}>
-                {entry.title}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ) : (
-        candidates.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 gap-1.5 px-1.5 text-xs [&_svg]:size-3"
-            disabled={add.isPending}
-            onClick={() => setChoosing(true)}
-          >
-            <Plus />
-            Add a dependency
-          </Button>
-        )
-      )}
-
-      {error && <p className="text-danger text-xs">{error.message}</p>}
     </div>
   );
 }

@@ -234,7 +234,7 @@ function OpenTasks({ projectId, collapsed = false }: { projectId: string; collap
   if (collapsed) {
     return (
       <Button asChild variant="ghost" size="icon" title={title} className="relative self-center">
-        <Link to="/projects/$projectId" params={{ projectId }}>
+        <Link to="/projects/$projectId/tasks" params={{ projectId }}>
           <ListChecks />
           {open > 0 && (
             <span className="bg-accent text-accent-text ring-surface absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[0.625rem] font-medium ring-2">
@@ -248,7 +248,7 @@ function OpenTasks({ projectId, collapsed = false }: { projectId: string; collap
 
   return (
     <Link
-      to="/projects/$projectId"
+      to="/projects/$projectId/tasks"
       params={{ projectId }}
       title={title}
       className="hover:bg-surface-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm"

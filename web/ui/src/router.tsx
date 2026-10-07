@@ -6,10 +6,10 @@ import {
 } from '@tanstack/react-router';
 
 import { AppShell } from '@/components/app-shell';
-import { DashboardView } from '@/routes/dashboard';
 import { DraftView } from '@/routes/draft';
 import { ProjectView } from '@/routes/project';
 import { SessionView } from '@/routes/session';
+import { TasksView } from '@/routes/tasks';
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -21,8 +21,15 @@ const rootRoute = createRootRoute({
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
+  // Landing on the work still owed, for whichever Project the sidebar points at.
   path: '/',
-  component: DashboardView,
+  component: TasksView,
+});
+
+const tasksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects/$projectId/tasks',
+  component: TasksView,
 });
 
 const draftRoute = createRoute({
@@ -46,7 +53,13 @@ const projectRoute = createRoute({
   component: ProjectView,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, draftRoute, sessionRoute, projectRoute]);
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  draftRoute,
+  sessionRoute,
+  tasksRoute,
+  projectRoute,
+]);
 
 export const router = createRouter({ routeTree, defaultPreload: 'intent' });
 
