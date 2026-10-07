@@ -68,7 +68,10 @@ export function SessionView() {
             most of the titles it is there to edit. */}
         <div className="min-w-0 flex-1">
           <SessionTitle sessionId={sessionId} title={data.session.title ?? ''} />
-          <p className="text-muted text-xs">
+          {/* Indented like the title: the title carries padding so its hover
+              target is not glued to the text, and the status below has to
+              start at the same place or the two read as misaligned. */}
+          <p className="text-muted pl-1.5 text-xs">
             {active ? `Job ${humanise(active.status)}` : 'Idle'}
             {active && working && (
               // A liveness signal, not history: it says the agent is still
