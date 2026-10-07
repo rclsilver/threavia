@@ -33,6 +33,11 @@ type ClaudeConfig struct {
 	// They are explicitly not a security sandbox: filesystem access remains real
 	// OS behaviour (spec sections 11 and 28).
 	DiscoveryRoots []string
+	// DefaultWorkingDirectory is where a Job runs when its Session has no
+	// working directory. Without it the agent would inherit whatever directory
+	// the backend process happens to have been started from, which is accidental
+	// rather than chosen.
+	DefaultWorkingDirectory string
 }
 
 // RegistrationConfig is how a backend obtains its credential the first time
@@ -69,10 +74,14 @@ func Default() Config {
 	clientCfg.InstanceName = defaultInstanceName()
 
 	return Config{
-		Log:       LogConfig{Level: logging.LevelInfo, Format: logging.FormatText},
-		Client:    clientCfg,
-		Claude:    ClaudeConfig{Binary: "claude"},
-		StatePath: defaultStatePath(),
+		Log:    LogConfig{Level: logging.LevelInfo, Format: logging.FormatText},
+		Client: clientCfg,
+		Claude: ClaudeConfig{
+			Binary:                  "claude",
+			DefaultWorkingDirectory: defaultWorkingDirectory(),
+		},
+		Registration: RegistrationConfig{CoreAPI: "http://localhost:8080"},
+		StatePath:    defaultStatePath(),
 	}
 }
 
@@ -103,6 +112,7 @@ func Load() (Config, error) {
 
 	cfg.Claude.Binary = l.String("CLAUDE_BINARY", cfg.Claude.Binary)
 	cfg.Claude.DiscoveryRoots = l.StringSlice("DISCOVERY_ROOTS", cfg.Claude.DiscoveryRoots)
+	cfg.Claude.DefaultWorkingDirectory = l.String("DEFAULT_WORKING_DIRECTORY", cfg.Claude.DefaultWorkingDirectory)
 
 	cfg.Registration.CoreAPI = l.String("CORE_API", cfg.Registration.CoreAPI)
 	cfg.Registration.Token = l.String("REGISTRATION_TOKEN", cfg.Registration.Token)
@@ -137,6 +147,13 @@ func (c Config) Validate() error {
 	if c.Claude.Binary == "" {
 		return errors.New(EnvPrefix + "CLAUDE_BINARY: an executable is required")
 	}
+	if c.Claude.DefaultWorkingDirectory == "" {
+		return errors.New(EnvPrefix + "DEFAULT_WORKING_DIRECTORY: a directory is required for sessions without one")
+	}
+	// Registration material is useless without somewhere to present it.
+	if (c.Registration.Token != "" || c.Registration.SharedKey != "") && c.Registration.CoreAPI == "" {
+		return errors.New(EnvPrefix + "CORE_API: required to register with core")
+	}
 	// The credential is resolved at startup, from the local identity or by
 	// registering, so it is not required here.
 	probe := c.Client
@@ -163,4 +180,15 @@ func defaultStatePath() string {
 		return filepath.Join(os.TempDir(), "threavia", "backend.db")
 	}
 	return filepath.Join(home, ".threavia", "backend.db")
+}
+
+// defaultWorkingDirectory is where a Session with no working directory runs.
+// The user home is a deliberate, predictable choice; inheriting the directory
+// the backend was launched from is not.
+func defaultWorkingDirectory() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return os.TempDir()
+	}
+	return home
 }

@@ -125,11 +125,18 @@ func (a *Adapter) OnDisconnected(_ context.Context, cause error) {
 // control stream must stay responsive, so the process is driven from its own
 // goroutine and everything it produces travels back as events.
 func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error {
+	workingDirectory := cmd.GetProjectContext().GetWorkingDirectoryPath()
+	if workingDirectory == "" {
+		// The Session has no working directory, so this backend decides where
+		// unscoped work happens rather than inheriting its own launch directory.
+		workingDirectory = a.cfg.Claude.DefaultWorkingDirectory
+	}
+
 	params := runner.StartParams{
 		RunID:              cmd.GetRunId(),
 		JobID:              cmd.GetJobId(),
 		NativeSessionID:    cmd.GetNativeSessionId(),
-		WorkingDirectory:   cmd.GetProjectContext().GetWorkingDirectoryPath(),
+		WorkingDirectory:   workingDirectory,
 		Prompt:             cmd.GetPrompt(),
 		ProjectName:        cmd.GetProjectContext().GetProjectName(),
 		ProjectDescription: cmd.GetProjectContext().GetProjectDescription(),

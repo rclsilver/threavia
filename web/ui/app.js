@@ -393,7 +393,9 @@ function appendEvent(event, autoscroll = true) {
 function describe(event) {
   switch (event.type) {
     case 'session.created': return 'Session created.';
-    case 'job.completed': return `Done. ${event.payload.summary ?? ''}`.trim();
+    // The provider result repeats the last agent message, so only the fact
+    // that the turn ended is worth showing.
+    case 'job.completed': return 'Done.';
     case 'job.failed': return `Failed: ${event.payload.error ?? 'unknown error'}`;
     case 'job.cancelled': return 'Cancelled.';
     case 'validation.resolved':
