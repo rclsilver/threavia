@@ -12,6 +12,7 @@ func (h *handler) registerKnowledge(mux *http.ServeMux) {
 	h.handle(mux, "POST /api/v1/projects/{projectId}/tasks", h.createTask)
 	h.handle(mux, "GET /api/v1/projects/{projectId}/tasks/ready", h.readyTasks)
 	h.handle(mux, "PATCH /api/v1/tasks/{taskId}", h.updateTask)
+	h.handle(mux, "DELETE /api/v1/tasks/{taskId}", h.deleteTask)
 	h.handle(mux, "POST /api/v1/tasks/{taskId}/dependencies", h.addTaskDependency)
 	h.handle(mux, "DELETE /api/v1/tasks/{taskId}/dependencies/{dependsOnId}", h.removeTaskDependency)
 
@@ -84,6 +85,14 @@ func (h *handler) updateTask(w http.ResponseWriter, r *http.Request, identity au
 		return
 	}
 	writeJSON(w, http.StatusOK, task)
+}
+
+func (h *handler) deleteTask(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	if err := h.svc.DeleteTask(r.Context(), identity, domain.TaskID(r.PathValue("taskId"))); err != nil {
+		h.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *handler) addTaskDependency(w http.ResponseWriter, r *http.Request, identity auth.Identity) {

@@ -1846,7 +1846,32 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a Task
+         * @description Takes the Task out of the Project, with the dependency edges and Job links that only made sense while it existed. What was done about it stays in the timeline.
+         *
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    taskId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["Error"];
+            };
+        };
         options?: never;
         head?: never;
         /** Retitle a Task, or change its status */

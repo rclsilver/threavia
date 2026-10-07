@@ -983,6 +983,18 @@ paths:
               schema: { $ref: "#/components/schemas/Task" }
         "404":
           $ref: "#/components/responses/Error"
+    delete:
+      tags: [knowledge]
+      summary: Delete a Task
+      description: >
+        Takes the Task out of the Project, with the dependency edges and Job
+        links that only made sense while it existed. What was done about it
+        stays in the timeline.
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/Error"
 
   /api/v1/tasks/{taskId}/dependencies:
     parameters:

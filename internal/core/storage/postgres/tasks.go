@@ -194,6 +194,25 @@ func (s *Store) AddTaskDependency(ctx context.Context, taskID, dependsOn domain.
 	return classify(err, "add a task dependency")
 }
 
+// DeleteTask removes a Task for good.
+//
+// The edges of the graph and the Jobs that worked on it go with it, by the
+// cascade the schema declares: an edge to a Task that no longer exists would
+// block its dependents on nothing.
+func (s *Store) DeleteTask(ctx context.Context, ownerID domain.UserID, id domain.TaskID) error {
+	tag, err := s.q.Exec(ctx, `
+		DELETE FROM tasks t
+		USING projects p
+		WHERE t.id = $1 AND t.project_id = p.id AND p.owner_id = $2`, id, ownerID)
+	if err != nil {
+		return classify(err, "delete a task")
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // RemoveTaskDependency drops one edge of the graph.
 //
 // Removing what is not there succeeds: the caller asked for a Task that no

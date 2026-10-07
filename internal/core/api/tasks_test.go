@@ -102,3 +102,42 @@ func TestTheCallerIsTold(t *testing.T) {
 		t.Fatalf("authMode = %q, want none", me.AuthMode)
 	}
 }
+
+// TestDeletingATaskTakesItsEdgesWithIt covers filing being cheap: an agent
+// files tasks freely, so taking one back has to be cheap too, and an edge
+// pointing at work that no longer exists would block its dependents on nothing.
+func TestDeletingATaskTakesItsEdgesWithIt(t *testing.T) {
+	c := newCore(t)
+	projectID := c.createProject("homelab")
+
+	var foundation, walls task
+	c.mustDo(http.MethodPost, "/api/v1/projects/"+projectID+"/tasks",
+		map[string]any{"title": "pose the foundation"}, &foundation, http.StatusCreated)
+	c.mustDo(http.MethodPost, "/api/v1/projects/"+projectID+"/tasks",
+		map[string]any{"title": "raise the walls"}, &walls, http.StatusCreated)
+	c.mustDo(http.MethodPost, "/api/v1/tasks/"+walls.ID+"/dependencies",
+		map[string]any{"dependsOn": foundation.ID}, nil, http.StatusOK)
+
+	c.mustDo(http.MethodDelete, "/api/v1/tasks/"+foundation.ID, nil, nil, http.StatusNoContent)
+
+	var left struct {
+		Items []task `json:"items"`
+	}
+	c.mustDo(http.MethodGet, "/api/v1/projects/"+projectID+"/tasks", nil, &left, http.StatusOK)
+	if len(left.Items) != 1 || left.Items[0].ID != walls.ID {
+		t.Fatalf("tasks = %+v, want only the walls", left.Items)
+	}
+	if len(left.Items[0].DependsOn) != 0 {
+		t.Fatalf("dependsOn = %v, want the edge gone with the task", left.Items[0].DependsOn)
+	}
+
+	// Nothing waits on anything now, so the walls can be started.
+	ready := c.readyTasks(projectID)
+	if len(ready) != 1 || ready[0].ID != walls.ID {
+		t.Fatalf("ready = %+v, want the walls released", ready)
+	}
+
+	// A second delete is a 404 rather than a silent success: the caller asked
+	// about a task, and there is none.
+	c.mustDo(http.MethodDelete, "/api/v1/tasks/"+foundation.ID, nil, nil, http.StatusNotFound)
+}

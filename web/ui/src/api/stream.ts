@@ -144,6 +144,7 @@ export class EventStream {
       // without any client having asked for them.
       case 'task.created':
       case 'task.updated':
+      case 'task.deleted':
         void this.queries.invalidateQueries({ queryKey: ['tasks'] });
         break;
 

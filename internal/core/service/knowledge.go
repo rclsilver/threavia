@@ -97,6 +97,28 @@ func (s *Service) UpdateTask(ctx context.Context, identity auth.Identity, id dom
 	return task, nil
 }
 
+// DeleteTask removes a Task for good.
+//
+// Filing one is cheap and an agent files them freely, so taking one back has to
+// be cheap too, or a Project's list of what is left to do fills with work
+// nobody ever meant to do. What was done about it stays in the timeline, which
+// is where history lives; this only drops the entry from the list.
+func (s *Service) DeleteTask(ctx context.Context, identity auth.Identity, id domain.TaskID) error {
+	task, err := s.store.GetTask(ctx, identity.UserID, id)
+	if err != nil {
+		return translate(err)
+	}
+	if err := s.store.DeleteTask(ctx, identity.UserID, id); err != nil {
+		return translate(err)
+	}
+
+	s.emit(ctx, identity.UserID, events.TypeTaskDeleted,
+		domain.Scope{ProjectID: task.ProjectID}, TaskPayload{
+			TaskID: string(task.ID), Title: task.Title, Status: task.Status.String(),
+		})
+	return nil
+}
+
 // AddTaskDependency records that a Task waits on another.
 //
 // The two must belong to the same Project, and the edge must not close a loop:
