@@ -1,0 +1,326 @@
+name: "CI"
+
+on:
+  push:
+    branches:
+      - "master"
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  pull_request:
+    branches:
+      - "master"
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+env:
+  REGISTRY: "ghcr.io"
+  # A pull request is checked out detached, so the comparison target has to be
+  # the remote-tracking branch.
+  DEFAULT_BRANCH: "origin/master"
+
+jobs:
+  lint:
+    name: "Lint"
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Checkout the repository"
+        uses: "actions/checkout@v7.0.1"
+        with:
+          # buf compares the protocol against the default branch, which needs
+          # the history that branch lives in.
+          fetch-depth: 0
+
+      - name: "Set up Go"
+        uses: "actions/setup-go@v7.0.0"
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: "Cache the pinned code generation tools"
+        id: "tools"
+        uses: "actions/cache@v6.1.0"
+        with:
+          path: "~/go/bin"
+          key: "tools-${{ runner.os }}-${{ hashFiles('Makefile') }}"
+
+      - name: "Install the pinned code generation tools"
+        if: "steps.tools.outputs.cache-hit != 'true'"
+        run: "make tools"
+
+      - name: "Check formatting"
+        run: "make fmt-check"
+
+      - name: "Check that go.mod and go.sum are tidy"
+        run: "make tidy-check"
+
+      - name: "Check that the generated code is up to date"
+        run: "make generate-check"
+
+      - name: "Lint"
+        run: "make lint"
+
+      - name: "Check the protocol for breaking changes"
+        # A tag is cut from the default branch, so there is nothing to compare.
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        run: "make proto-breaking"
+
+  tests:
+    name: "Tests"
+    runs-on: "ubuntu-latest"
+
+    services:
+      postgres:
+        image: "postgres:17-alpine"
+        env:
+          POSTGRES_USER: "threavia"
+          POSTGRES_PASSWORD: "threavia"
+          POSTGRES_DB: "threavia"
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U threavia -d threavia"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: "Checkout the repository"
+        uses: "actions/checkout@v7.0.1"
+
+      - name: "Set up Go"
+        uses: "actions/setup-go@v7.0.0"
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      # The race detector is ThreadSanitizer, so it needs cgo and a C compiler.
+      # The database integration and end-to-end tests skip without a database,
+      # so the URL is what actually runs them.
+      - name: "Run the tests under the race detector"
+        env:
+          THREAVIA_TEST_POSTGRES_URL: "postgres://threavia:threavia@localhost:5432/threavia?sslmode=disable"
+          CGO_ENABLED: "1"
+        run: "go test -race ./..."
+
+  build:
+    name: "Build"
+    runs-on: "ubuntu-latest"
+    needs: ["lint", "tests"]
+
+    strategy:
+      matrix:
+        include:
+          - goos: "linux"
+            goarch: "amd64"
+          - goos: "linux"
+            goarch: "arm64"
+          - goos: "darwin"
+            goarch: "amd64"
+          - goos: "darwin"
+            goarch: "arm64"
+
+    steps:
+      - name: "Checkout the repository"
+        uses: "actions/checkout@v7.0.1"
+        with:
+          fetch-depth: 0
+
+      - name: "Set up Go"
+        uses: "actions/setup-go@v7.0.0"
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: "Get version"
+        run: |
+          # The version has to be a valid semantic version: Helm refuses
+          # anything else, and a bare commit sha is not one. Leaving --always
+          # out is what makes this empty when no tag matches, so the fallback
+          # below applies instead of a sha leaking through.
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            version="${GITHUB_REF#refs/tags/v}"
+          else
+            described="$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || true)"
+            if [ -n "${described}" ]; then
+              version="${described#v}"
+            else
+              version="0.0.0-$(git rev-list --count HEAD).$(git rev-parse --short HEAD)"
+            fi
+          fi
+          echo "version=${version}" >> "${GITHUB_ENV}"
+
+      - name: "Build the binaries"
+        env:
+          GOOS: "${{ matrix.goos }}"
+          GOARCH: "${{ matrix.goarch }}"
+          # Nothing in the tree uses cgo, so every target cross-compiles.
+          CGO_ENABLED: "0"
+        run: |
+          out="dist/threavia_${version}_${GOOS}_${GOARCH}"
+          mkdir -p "${out}"
+          for cmd in threavia-core threavia-backend-claude; do
+            go build -trimpath -ldflags "-s -w -X main.version=${version}" \
+              -o "${out}/${cmd}" "./cmd/${cmd}"
+          done
+          cp README.md LICENSE NOTICE "${out}/"
+          tar -czf "dist/threavia_${version}_${GOOS}_${GOARCH}.tar.gz" -C dist "$(basename "${out}")"
+
+      - name: "Upload the archive"
+        uses: "actions/upload-artifact@v7.0.1"
+        with:
+          name: "threavia_${{ matrix.goos }}_${{ matrix.goarch }}"
+          path: "dist/*.tar.gz"
+          retention-days: 7
+
+  package:
+    name: "Package"
+    runs-on: "ubuntu-latest"
+    needs: ["build"]
+
+    permissions:
+      contents: "read"
+      packages: "write"
+
+    steps:
+      - name: "Checkout the repository"
+        uses: "actions/checkout@v7.0.1"
+        with:
+          fetch-depth: 0
+
+      - name: "Get version"
+        run: |
+          # Identical to the build job: the chart and the image tags have to
+          # agree, and both have to be a valid semantic version.
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            version="${GITHUB_REF#refs/tags/v}"
+          else
+            described="$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || true)"
+            if [ -n "${described}" ]; then
+              version="${described#v}"
+            else
+              version="0.0.0-$(git rev-list --count HEAD).$(git rev-parse --short HEAD)"
+            fi
+          fi
+          echo "version=${version}" >> "${GITHUB_ENV}"
+
+      - name: "Set up QEMU"
+        uses: "docker/setup-qemu-action@v4.4.0"
+
+      - name: "Set up Buildx"
+        uses: "docker/setup-buildx-action@v4.4.1"
+
+      # Images and the chart are published on a tag only; every other run still
+      # builds them, so a broken Dockerfile is caught before release day.
+      - name: "Log in to the registry"
+        if: "startsWith(github.ref, 'refs/tags/v')"
+        uses: "docker/login-action@v4.6.0"
+        with:
+          registry: "${{ env.REGISTRY }}"
+          username: "${{ github.actor }}"
+          password: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: "Build the Core image"
+        uses: "docker/build-push-action@v7.4.0"
+        with:
+          context: "."
+          file: "deploy/docker/core.Dockerfile"
+          platforms: "${{ startsWith(github.ref, 'refs/tags/v') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}"
+          build-args: "VERSION=${{ env.version }}"
+          push: "${{ startsWith(github.ref, 'refs/tags/v') }}"
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/threavia-core:${{ env.version }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/threavia-core:latest
+          cache-from: "type=gha,scope=core"
+          cache-to: "type=gha,scope=core,mode=max"
+
+      - name: "Build the Claude backend image"
+        uses: "docker/build-push-action@v7.4.0"
+        with:
+          context: "."
+          file: "deploy/docker/backend-claude.Dockerfile"
+          platforms: "${{ startsWith(github.ref, 'refs/tags/v') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}"
+          build-args: "VERSION=${{ env.version }}"
+          push: "${{ startsWith(github.ref, 'refs/tags/v') }}"
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/threavia-backend-claude:${{ env.version }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/threavia-backend-claude:latest
+          cache-from: "type=gha,scope=backend-claude"
+          cache-to: "type=gha,scope=backend-claude,mode=max"
+
+      - name: "Set up Helm"
+        uses: "azure/setup-helm@v5.0.1"
+
+      - name: "Package the Helm chart"
+        run: |
+          helm lint deploy/helm/threavia
+          helm package deploy/helm/threavia \
+            --version "${version}" --app-version "${version}" --destination dist
+
+      - name: "Push the Helm chart"
+        if: "startsWith(github.ref, 'refs/tags/v')"
+        run: |
+          helm registry login "${REGISTRY}" \
+            --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}"
+          helm push "dist/threavia-${version}.tgz" \
+            "oci://${REGISTRY}/${{ github.repository_owner }}/charts"
+
+      - name: "Upload the chart"
+        uses: "actions/upload-artifact@v7.0.1"
+        with:
+          name: "helm-chart"
+          path: "dist/*.tgz"
+          retention-days: 7
+
+  release:
+    name: "Release"
+    runs-on: "ubuntu-latest"
+    needs: ["package"]
+    if: "startsWith(github.ref, 'refs/tags/v')"
+
+    permissions:
+      contents: "write"
+
+    steps:
+      - name: "Checkout the repository"
+        uses: "actions/checkout@v7.0.1"
+
+      - name: "Download every artifact"
+        uses: "actions/download-artifact@v8.0.1"
+        with:
+          path: "dist"
+          merge-multiple: true
+
+      - name: "Checksum the archives"
+        run: |
+          cd dist
+          sha256sum *.tar.gz *.tgz > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: "Publish the release"
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        run: |
+          version="${GITHUB_REF#refs/tags/}"
+          owner="${{ github.repository_owner }}"
+          cat > notes.md <<EOF
+          ## Container images
+
+          \`\`\`
+          ghcr.io/${owner}/threavia-core:${version#v}
+          ghcr.io/${owner}/threavia-backend-claude:${version#v}
+          \`\`\`
+
+          ## Helm chart
+
+          \`\`\`
+          helm install threavia oci://ghcr.io/${owner}/charts/threavia --version ${version#v}
+          \`\`\`
+
+          Binaries for linux and darwin, amd64 and arm64, are attached with their
+          checksums.
+          EOF
+          gh release create "${version}" dist/* \
+            --title "${version}" \
+            --notes-file notes.md \
+            --verify-tag

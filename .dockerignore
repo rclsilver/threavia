@@ -1,0 +1,8 @@
+.git
+.github
+bin
+web/ui/*.map
+deploy/helm
+docs
+*.md
+!README.md

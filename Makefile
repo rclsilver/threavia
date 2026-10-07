@@ -96,3 +96,34 @@ clean: ## Remove the build output
 .PHONY: test-db
 test-db: ## Run the test suite including the database integration tests
 	THREAVIA_TEST_POSTGRES_URL=$(TEST_POSTGRES_URL) go test ./...
+
+.PHONY: verify
+verify: fmt-check tidy-check generate-check lint test ## Run every check CI runs
+
+.PHONY: fmt-check
+fmt-check: ## Fail if any hand-written Go source is not gofmt-ed
+	@unformatted="$$(gofmt -l $$(find . -name '*.go' -not -path './gen/*'))"; \
+	if [ -n "$$unformatted" ]; then \
+		echo "not gofmt-ed:"; echo "$$unformatted"; exit 1; \
+	fi
+
+.PHONY: tidy-check
+tidy-check: ## Fail if go.mod or go.sum are not tidy
+	@cp go.mod go.mod.bak && cp go.sum go.sum.bak
+	@go mod tidy
+	@status=0; \
+	if ! diff -q go.mod go.mod.bak >/dev/null || ! diff -q go.sum go.sum.bak >/dev/null; then \
+		echo "go.mod or go.sum is not tidy, run: make tidy"; status=1; \
+	fi; \
+	mv go.mod.bak go.mod && mv go.sum.bak go.sum; exit $$status
+
+.PHONY: generate-check
+generate-check: generate ## Fail if the committed generated code is out of date
+	@if ! git diff --quiet -- gen; then \
+		echo "gen/ is out of date, run: make generate"; git diff --stat -- gen; exit 1; \
+	fi
+
+.PHONY: docker
+docker: ## Build both container images locally
+	docker build -f deploy/docker/core.Dockerfile --build-arg VERSION=$(VERSION) -t threavia-core:$(VERSION) .
+	docker build -f deploy/docker/backend-claude.Dockerfile --build-arg VERSION=$(VERSION) -t threavia-backend-claude:$(VERSION) .

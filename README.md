@@ -122,6 +122,36 @@ make test-race     # test suite under the race detector (needs a C compiler)
 make dev-reset     # stop the dependencies and delete their data
 ```
 
+## Releasing
+
+CI runs on every push and pull request: lint, then tests, then a build of every
+target. Container images and the Helm chart are built on every run too, so a
+broken Dockerfile surfaces long before release day, but they are published only
+from a tag.
+
+Tagging `vX.Y.Z` publishes:
+
+- `ghcr.io/rclsilver/threavia-core:X.Y.Z` and
+  `ghcr.io/rclsilver/threavia-backend-claude:X.Y.Z`, both linux/amd64 and
+  linux/arm64;
+- the Helm chart as an OCI artifact at `oci://ghcr.io/rclsilver/charts/threavia`;
+- a GitHub release with binary archives for linux and darwin, amd64 and arm64,
+  and their SHA-256 checksums.
+
+```bash
+git tag -a v0.1.0 -m "v0.1.0"
+git push origin v0.1.0
+```
+
+`make verify` runs locally exactly what the lint job runs: formatting, module
+tidiness, generated-code freshness, `go vet` and `buf lint`. `make docker`
+builds both images.
+
+The Core image is distroless and static, around 20 MB. The Claude backend image
+is larger by necessity: it ships Node, the Claude Code CLI and git, because the
+agent needs a real userland to work in. Provider credentials are supplied at
+runtime and never baked into it.
+
 ## Repository layout
 
 Matching specification section 25:
@@ -146,11 +176,13 @@ internal/envutil/                environment parsing helpers
 internal/logging/                shared structured logger
 pkg/backend-sdk/                 reusable Go SDK for BackendInstances
 migrations/                      embedded PostgreSQL migrations
-deploy/helm/threavia/            Helm chart
+deploy/docker/                   container images for Core and the Claude backend
+deploy/helm/threavia/            Helm chart for Core
 examples/backend-example/        smallest possible BackendInstance
 docs/                            architecture, protocol and API notes
 web/                             web client, served from the Core binary
 shell.nix                        NixOS development shell
+.github/workflows/ci.yml         lint, test, build, package, release
 ```
 
 `internal/core/config`, `internal/envutil`, `internal/logging` and `gen/` are the
