@@ -425,12 +425,13 @@ func (s *Service) checkBackendUsable(ctx context.Context, identity auth.Identity
 }
 
 // checkWorkingDirectory makes sure the chosen logical directory belongs to the
-// project and is bound on the backend that will execute the work.
+// project.
 //
-// The discovery and clone fallbacks of specification section 11 are not
-// implemented yet: an unbound directory is reported to the user instead of
-// being guessed at.
-func (s *Service) checkWorkingDirectory(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, instanceID domain.BackendInstanceID, dirID *domain.KnownDirectoryID) error {
+// A missing binding on the chosen backend is deliberately not an error: the
+// backend resolves the directory when the Job starts, searching its discovery
+// roots and asking the user if it has to (spec section 11). Refusing here would
+// make the user do by hand what the backend is in a position to work out.
+func (s *Service) checkWorkingDirectory(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, _ domain.BackendInstanceID, dirID *domain.KnownDirectoryID) error {
 	if dirID == nil {
 		return nil
 	}
@@ -440,12 +441,6 @@ func (s *Service) checkWorkingDirectory(ctx context.Context, identity auth.Ident
 	}
 	if dir.ProjectID != projectID {
 		return fmt.Errorf("%w: the directory belongs to another project", ErrInvalid)
-	}
-	if _, err := s.store.ResolveBinding(ctx, *dirID, instanceID); err != nil {
-		if errors.Is(err, postgres.ErrNotFound) {
-			return fmt.Errorf("%w: directory %q is not bound on this backend, bind it first", ErrConflict, dir.Name)
-		}
-		return translate(err)
 	}
 	return nil
 }

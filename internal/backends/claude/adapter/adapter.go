@@ -145,18 +145,12 @@ func (a *Adapter) OnDisconnected(_ context.Context, cause error) {
 // control stream must stay responsive, so the process is driven from its own
 // goroutine and everything it produces travels back as events.
 func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error {
-	workingDirectory := cmd.GetProjectContext().GetWorkingDirectoryPath()
-	if workingDirectory == "" {
-		// The Session has no working directory, so this backend decides where
-		// unscoped work happens rather than inheriting its own launch directory.
-		workingDirectory = a.cfg.Claude.DefaultWorkingDirectory
-	}
-
 	params := runner.StartParams{
-		RunID:               cmd.GetRunId(),
-		JobID:               cmd.GetJobId(),
-		NativeSessionID:     cmd.GetNativeSessionId(),
-		WorkingDirectory:    workingDirectory,
+		RunID:           cmd.GetRunId(),
+		JobID:           cmd.GetJobId(),
+		NativeSessionID: cmd.GetNativeSessionId(),
+		// Resolved in the job goroutine: it may need the user, which this one
+		// cannot wait for (spec section 11).
 		Prompt:              cmd.GetPrompt(),
 		ProjectName:         cmd.GetProjectContext().GetProjectName(),
 		ProjectDescription:  cmd.GetProjectContext().GetProjectDescription(),
@@ -193,12 +187,12 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 
 	// Detached from the command context: the Job outlives the message that
 	// started it.
-	go a.execute(context.WithoutCancel(ctx), params, cmd.GetProjectContext().GetSkills())
+	go a.execute(context.WithoutCancel(ctx), params, cmd.GetProjectContext())
 	return nil
 }
 
 // execute drives one Job and cleans up after it.
-func (a *Adapter) execute(ctx context.Context, params runner.StartParams, declaredSkills []*backendv1.ProjectSkill) {
+func (a *Adapter) execute(ctx context.Context, params runner.StartParams, pc *backendv1.ProjectContext) {
 	defer func() {
 		a.releaseJob(params.JobID, ErrJobAbandoned)
 		a.releaseSkills(params.JobID)
@@ -208,7 +202,23 @@ func (a *Adapter) execute(ctx context.Context, params runner.StartParams, declar
 	// Prepared here rather than where the command arrives: fetching a bundle is a
 	// round trip over the very stream that delivers commands, so doing it on the
 	// reading goroutine would wait for a reply that cannot arrive.
-	params.SkillDirectory = a.prepareSkills(ctx, params.JobID, declaredSkills)
+	params.SkillDirectory = a.prepareSkills(ctx, params.JobID, pc.GetSkills())
+
+	// Where the work happens. A Session whose working directory has no binding
+	// here is resolved now, possibly by asking the user, rather than started in a
+	// guessed directory.
+	workingDirectory, err := a.resolveWorkingDirectory(ctx, params.JobID, pc)
+	if err != nil {
+		a.logger.Error("cannot resolve the working directory",
+			slog.String("jobId", params.JobID), slog.String("error", err.Error()))
+		if reportErr := a.JobFailed(ctx, params.RunID, params.JobID,
+			"WORKING_DIRECTORY_UNRESOLVED", err.Error()); reportErr != nil {
+			a.logger.Error("cannot report the unresolved working directory",
+				slog.String("error", reportErr.Error()))
+		}
+		return
+	}
+	params.WorkingDirectory = workingDirectory
 
 	if err := a.runner.Run(ctx, params, a); err != nil {
 		a.logger.Error("job failed to run",

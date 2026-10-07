@@ -29,9 +29,9 @@ type LogConfig struct {
 type ClaudeConfig struct {
 	// Binary is the Claude Code executable.
 	Binary string
-	// DiscoveryRoots constrain automatic directory discovery and search only.
-	// They are explicitly not a security sandbox: filesystem access remains real
-	// OS behaviour (spec sections 11 and 28).
+	// DiscoveryRoots are where the backend looks for a KnownDirectory that has
+	// no binding here yet. They constrain discovery and search only: filesystem
+	// access remains real OS behaviour (spec sections 11 and 28).
 	DiscoveryRoots []string
 	// DefaultWorkingDirectory is where a Job runs when its Session has no
 	// working directory. Without it the agent would inherit whatever directory

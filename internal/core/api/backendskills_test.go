@@ -22,12 +22,28 @@ import (
 // idleRunner stands in for Claude Code: it records what it was asked to run and
 // never spawns anything. The point of these tests is the backend plumbing around
 // the provider, not the provider.
+//
+// Run blocks until the test releases it, because a Job's per-run directories are
+// cleaned up the moment it ends and the assertions are about what the provider
+// would have seen while it was live.
 type idleRunner struct {
 	started chan runner.StartParams
+	release chan struct{}
 }
 
-func (r *idleRunner) Run(_ context.Context, params runner.StartParams, _ runner.Sink) error {
+func newIdleRunner() *idleRunner {
+	return &idleRunner{
+		started: make(chan runner.StartParams, 4),
+		release: make(chan struct{}),
+	}
+}
+
+func (r *idleRunner) Run(ctx context.Context, params runner.StartParams, _ runner.Sink) error {
 	r.started <- params
+	select {
+	case <-r.release:
+	case <-ctx.Done():
+	}
 	return nil
 }
 
@@ -36,14 +52,16 @@ func (r *idleRunner) Available() error    { return nil }
 
 // connectClaudeBackend runs the real Claude adapter against this Core, over the
 // real control stream.
-func (c *core) connectClaudeBackend(credential, skillCache string) *idleRunner {
+func (c *core) connectClaudeBackend(credential, skillCache string, discoveryRoots ...string) *idleRunner {
 	c.t.Helper()
 
 	cfg := adapter.Default()
 	cfg.Claude.SkillCachePath = skillCache
 	cfg.Claude.DefaultWorkingDirectory = c.t.TempDir()
+	cfg.Claude.DiscoveryRoots = discoveryRoots
 
-	local := &idleRunner{started: make(chan runner.StartParams, 4)}
+	local := newIdleRunner()
+	c.t.Cleanup(func() { close(local.release) })
 	handler := adapter.New(cfg, local, sdkstate.NewMemoryStore(),
 		slog.New(slog.NewTextHandler(discard{}, nil)))
 
@@ -144,3 +162,100 @@ func TestProjectInstructionsReachTheBackend(t *testing.T) {
 // readFile is os.ReadFile, named here so the intent of the assertions above is
 // "the file exists and is readable" rather than a filesystem detail.
 func readFile(path string) ([]byte, error) { return os.ReadFile(path) }
+
+// TestADirectoryIsResolvedByDiscovery pins the first steps of specification
+// section 11: a Session whose working directory has no binding on this backend
+// is located under the configured discovery roots, and the binding is recorded
+// so the next Job costs nothing.
+func TestADirectoryIsResolvedByDiscovery(t *testing.T) {
+	t.Parallel()
+
+	c := newCore(t)
+	project := c.createProject("homelab")
+	backendID, credential := c.registerBackend("laptop")
+
+	var directory struct {
+		ID string `json:"id"`
+	}
+	c.mustDo(http.MethodPost, "/api/v1/projects/"+project+"/directories",
+		map[string]any{"name": "puppet"}, &directory, http.StatusCreated)
+
+	// The directory exists here but Core has never been told where.
+	root := t.TempDir()
+	expected := filepath.Join(root, "puppet")
+	if err := os.MkdirAll(expected, 0o755); err != nil {
+		t.Fatalf("creating the directory: %v", err)
+	}
+
+	local := c.connectClaudeBackend(credential, t.TempDir(), root)
+
+	var started startSessionResponse
+	c.mustDo(http.MethodPost, "/api/v1/sessions/start", map[string]any{
+		"projectId":          project,
+		"backendInstanceId":  backendID,
+		"workingDirectoryId": directory.ID,
+		"message":            "deploy the chart",
+	}, &started, http.StatusCreated)
+
+	params := receive(t, "the job to start", local.started)
+	if params.WorkingDirectory != expected {
+		t.Fatalf("working directory = %q, want the discovered one %q", params.WorkingDirectory, expected)
+	}
+
+	// Recorded, so the next Job resolves without searching anything.
+	var bindings struct {
+		Items []struct {
+			Path string `json:"path"`
+		} `json:"items"`
+	}
+	waitUntil(t, "the binding to be recorded", func() bool {
+		c.mustDo(http.MethodGet, "/api/v1/directories/"+directory.ID+"/bindings", nil, &bindings, http.StatusOK)
+		return len(bindings.Items) == 1
+	})
+	if bindings.Items[0].Path != expected {
+		t.Fatalf("binding = %q, want %q", bindings.Items[0].Path, expected)
+	}
+}
+
+// TestAnUnresolvedDirectoryAsksTheUser pins the rest of section 11: a directory
+// discovery cannot find is not guessed at. The Job waits for the user, and
+// starts where they say.
+func TestAnUnresolvedDirectoryAsksTheUser(t *testing.T) {
+	t.Parallel()
+
+	c := newCore(t)
+	project := c.createProject("homelab")
+	backendID, credential := c.registerBackend("laptop")
+
+	var directory struct {
+		ID string `json:"id"`
+	}
+	c.mustDo(http.MethodPost, "/api/v1/projects/"+project+"/directories",
+		map[string]any{"name": "puppet"}, &directory, http.StatusCreated)
+
+	// Nothing under the roots matches, so discovery finds nothing.
+	local := c.connectClaudeBackend(credential, t.TempDir(), t.TempDir())
+	elsewhere := t.TempDir()
+
+	var started startSessionResponse
+	c.mustDo(http.MethodPost, "/api/v1/sessions/start", map[string]any{
+		"projectId":          project,
+		"backendInstanceId":  backendID,
+		"workingDirectoryId": directory.ID,
+		"message":            "deploy the chart",
+	}, &started, http.StatusCreated)
+
+	var attention attentionResponse
+	waitUntil(t, "the backend to ask where the directory is", func() bool {
+		c.mustDo(http.MethodGet, "/api/v1/me/attention", nil, &attention, http.StatusOK)
+		return len(attention.UserInputs) == 1
+	})
+
+	c.mustDo(http.MethodPost, "/api/v1/user-input/"+attention.UserInputs[0].ID+"/resolve",
+		map[string]any{"value": elsewhere}, nil, http.StatusOK)
+
+	params := receive(t, "the job to start", local.started)
+	if params.WorkingDirectory != elsewhere {
+		t.Fatalf("working directory = %q, want the answered one %q", params.WorkingDirectory, elsewhere)
+	}
+}

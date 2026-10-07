@@ -404,9 +404,11 @@ func TestWorkWaitsForAnOfflineBackend(t *testing.T) {
 	}
 }
 
-// TestUnboundDirectoryIsReported pins that Core tells the user what to fix
-// instead of guessing a path on the backend filesystem.
-func TestUnboundDirectoryIsReported(t *testing.T) {
+// TestAnUnboundDirectoryStillStarts pins that a missing binding is the
+// backend's problem to solve, not the user's to pre-empt: Core accepts the
+// Session, and the backend resolves the directory when the Job starts, asking
+// the user only if it has to (spec section 11).
+func TestAnUnboundDirectoryStillStarts(t *testing.T) {
 	c := newCore(t)
 	backendID, _ := c.registerBackend("laptop")
 
@@ -422,7 +424,7 @@ func TestUnboundDirectoryIsReported(t *testing.T) {
 		"backendInstanceId":  backendID,
 		"workingDirectoryId": dir.ID,
 		"message":            "Analyse",
-	}, nil, http.StatusConflict)
+	}, nil, http.StatusCreated)
 }
 
 // TestStartSessionIsIdempotent pins specification section 27: a retried first

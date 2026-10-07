@@ -155,6 +155,10 @@ type JobContext struct {
 	BackendInstanceID   domain.BackendInstanceID
 	NativeSessionID     *string
 	KnownDirectoryID    *domain.KnownDirectoryID
+	// KnownDirectoryName and KnownDirectoryGitRemote let a backend with no
+	// binding resolve the directory rather than guess (spec section 11).
+	KnownDirectoryName      string
+	KnownDirectoryGitRemote string
 	// WorkingDirectoryPath is the physical path on this backend, empty when the
 	// Session has no working directory or no binding exists for the backend.
 	WorkingDirectoryPath *string
@@ -170,11 +174,12 @@ func (s *Store) LoadJobContext(ctx context.Context, id domain.JobID) (JobContext
 		       r.id, r.session_id, r.backend_instance_id, r.native_session_id,
 		       r.resume_status, r.resume_reason, r.created_at, r.updated_at,
 		       s.id, p.id, p.owner_id, p.name, p.description, p.instructions,
-		       s.working_directory_id, b.path
+		       s.working_directory_id, coalesce(d.name,''), coalesce(d.git_remote,''), b.path
 		FROM jobs j
 		JOIN runs r ON r.id = j.run_id
 		JOIN sessions s ON s.id = r.session_id
 		JOIN projects p ON p.id = s.project_id
+		LEFT JOIN known_directories d ON d.id = s.working_directory_id
 		LEFT JOIN known_directory_bindings b
 		       ON b.known_directory_id = s.working_directory_id
 		      AND b.backend_instance_id = r.backend_instance_id
@@ -186,7 +191,8 @@ func (s *Store) LoadJobContext(ctx context.Context, id domain.JobID) (JobContext
 		&jc.Run.ResumeStatus, &jc.Run.ResumeReason, &jc.Run.CreatedAt, &jc.Run.UpdatedAt,
 		&jc.SessionID, &jc.ProjectID, &jc.OwnerID, &jc.ProjectName, &jc.ProjectDesc,
 		&jc.ProjectInstructions,
-		&jc.KnownDirectoryID, &jc.WorkingDirectoryPath,
+		&jc.KnownDirectoryID, &jc.KnownDirectoryName, &jc.KnownDirectoryGitRemote,
+		&jc.WorkingDirectoryPath,
 	)
 	if err != nil {
 		return jc, classify(err, "load job context")

@@ -128,6 +128,8 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) *b
 	}
 	if jc.KnownDirectoryID != nil {
 		pc.KnownDirectoryId = string(*jc.KnownDirectoryID)
+		pc.KnownDirectoryName = jc.KnownDirectoryName
+		pc.KnownDirectoryGitRemote = jc.KnownDirectoryGitRemote
 	}
 
 	// Active IMPORTANT decisions only. A superseded or NORMAL one is searchable

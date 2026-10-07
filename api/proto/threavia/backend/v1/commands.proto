@@ -84,6 +84,10 @@ message ProjectContext {
   // when one applies.
   string working_directory_path = 4;
   string known_directory_id = 5;
+  // Name and git remote of that directory, so a backend with no binding can
+  // resolve it rather than guess (spec section 11).
+  string known_directory_name = 11;
+  string known_directory_git_remote = 12;
   // Active IMPORTANT decisions only.
   repeated ContextDecision decisions = 6;
   // Compact summary of relevant open tasks only.

@@ -98,6 +98,26 @@ Selected by `THREAVIA_AUTH_MODE`:
   an issuer guarantees to be stable and unique.
 
 
+## Working directories
+
+A Session may name a KnownDirectory: a logical directory of the Project, such as
+`puppet`. Where it actually lives is per-backend, so Core stores a binding of
+`(directory, backend) → path`.
+
+A Session whose directory has no binding on the chosen backend is accepted, not
+refused. The backend resolves it when the Job starts (section 11):
+
+1. it looks for the directory under its configured discovery roots;
+2. finding exactly one, it uses it and records the binding, so the next Job
+   costs nothing;
+3. otherwise it asks the user, offering a clone when the directory has a git
+   remote and is simply not here yet;
+4. the agent is never started in a guessed directory.
+
+Discovery roots constrain where the backend looks. They are not a sandbox:
+filesystem access is the real OS permissions of the backend account
+(sections 11 and 28).
+
 ## Notification relevance
 
 Every command may declare which kind of client sent it, with the

@@ -570,6 +570,10 @@ type ProjectContext struct {
 	// when one applies.
 	WorkingDirectoryPath string `protobuf:"bytes,4,opt,name=working_directory_path,json=workingDirectoryPath,proto3" json:"working_directory_path,omitempty"`
 	KnownDirectoryId     string `protobuf:"bytes,5,opt,name=known_directory_id,json=knownDirectoryId,proto3" json:"known_directory_id,omitempty"`
+	// Name and git remote of that directory, so a backend with no binding can
+	// resolve it rather than guess (spec section 11).
+	KnownDirectoryName      string `protobuf:"bytes,11,opt,name=known_directory_name,json=knownDirectoryName,proto3" json:"known_directory_name,omitempty"`
+	KnownDirectoryGitRemote string `protobuf:"bytes,12,opt,name=known_directory_git_remote,json=knownDirectoryGitRemote,proto3" json:"known_directory_git_remote,omitempty"`
 	// Active IMPORTANT decisions only.
 	Decisions []*ContextDecision `protobuf:"bytes,6,rep,name=decisions,proto3" json:"decisions,omitempty"`
 	// Compact summary of relevant open tasks only.
@@ -644,6 +648,20 @@ func (x *ProjectContext) GetWorkingDirectoryPath() string {
 func (x *ProjectContext) GetKnownDirectoryId() string {
 	if x != nil {
 		return x.KnownDirectoryId
+	}
+	return ""
+}
+
+func (x *ProjectContext) GetKnownDirectoryName() string {
+	if x != nil {
+		return x.KnownDirectoryName
+	}
+	return ""
+}
+
+func (x *ProjectContext) GetKnownDirectoryGitRemote() string {
+	if x != nil {
+		return x.KnownDirectoryGitRemote
 	}
 	return ""
 }
@@ -1481,14 +1499,16 @@ const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"\fCoreToolSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
-	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\"\x8a\x04\n" +
+	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\"\xf9\x04\n" +
 	"\x0eProjectContext\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12!\n" +
 	"\fproject_name\x18\x02 \x01(\tR\vprojectName\x12/\n" +
 	"\x13project_description\x18\x03 \x01(\tR\x12projectDescription\x124\n" +
 	"\x16working_directory_path\x18\x04 \x01(\tR\x14workingDirectoryPath\x12,\n" +
-	"\x12known_directory_id\x18\x05 \x01(\tR\x10knownDirectoryId\x12B\n" +
+	"\x12known_directory_id\x18\x05 \x01(\tR\x10knownDirectoryId\x120\n" +
+	"\x14known_directory_name\x18\v \x01(\tR\x12knownDirectoryName\x12;\n" +
+	"\x1aknown_directory_git_remote\x18\f \x01(\tR\x17knownDirectoryGitRemote\x12B\n" +
 	"\tdecisions\x18\x06 \x03(\v2$.threavia.backend.v1.ContextDecisionR\tdecisions\x126\n" +
 	"\x05tasks\x18\a \x03(\v2 .threavia.backend.v1.ContextTaskR\x05tasks\x127\n" +
 	"\x05tools\x18\b \x03(\v2!.threavia.backend.v1.CoreToolSpecR\x05tools\x121\n" +
