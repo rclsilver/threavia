@@ -72,16 +72,10 @@ type BackendConfig struct {
 	// OFFLINE (spec section 7).
 	OfflineAfter time.Duration
 
-	// DevTokens maps a static bearer token to a BackendInstance id. It is a
-	// development stop-gap until the registration and claim flows of
-	// specification section 8 are implemented, and it is empty by default: with
-	// no entry, every backend connection is rejected.
-	DevTokens map[string]string
-
 	// SharedRegistrationKey enables shared-key registration: a backend
 	// registering with it creates an UNCLAIMED BackendInstance that a user then
-	// claims with a one-time code (spec section 8). The registration endpoint
-	// consuming it is not implemented yet.
+	// claims with a one-time code (spec section 8). Leaving it empty restricts
+	// registration to the one-shot tokens a user creates.
 	SharedRegistrationKey string
 }
 
@@ -170,7 +164,6 @@ func Load() (Config, error) {
 
 	cfg.Backend.HeartbeatInterval = l.Duration("BACKEND_HEARTBEAT_INTERVAL", cfg.Backend.HeartbeatInterval)
 	cfg.Backend.OfflineAfter = l.Duration("BACKEND_OFFLINE_AFTER", cfg.Backend.OfflineAfter)
-	cfg.Backend.DevTokens = l.StringMap("BACKEND_DEV_TOKENS")
 	cfg.Backend.SharedRegistrationKey = l.String("BACKEND_SHARED_REGISTRATION_KEY", cfg.Backend.SharedRegistrationKey)
 
 	if err := l.Err(); err != nil {

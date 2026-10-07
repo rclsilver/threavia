@@ -29,9 +29,10 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.S3.Enabled {
 		t.Error("object storage must be off by default")
 	}
-	// With no credential configured, no backend can connect.
-	if len(cfg.Backend.DevTokens) != 0 {
-		t.Error("no backend credential must be configured by default")
+	// Shared-key registration is opt-in: by default a backend must present a
+	// one-shot token a user created.
+	if cfg.Backend.SharedRegistrationKey != "" {
+		t.Error("shared key registration must be off by default")
 	}
 }
 
@@ -52,7 +53,6 @@ func TestLoadFromEnvironment(t *testing.T) {
 	t.Setenv("THREAVIA_AUTH_BASIC_PASSWORD", "s3cr3t")
 	t.Setenv("THREAVIA_BACKEND_HEARTBEAT_INTERVAL", "5s")
 	t.Setenv("THREAVIA_BACKEND_OFFLINE_AFTER", "20s")
-	t.Setenv("THREAVIA_BACKEND_DEV_TOKENS", "token-a=backend-a,token-b=backend-b")
 
 	cfg, err := Load()
 	if err != nil {
@@ -76,9 +76,6 @@ func TestLoadFromEnvironment(t *testing.T) {
 	}
 	if cfg.Backend.HeartbeatInterval != 5*time.Second || cfg.Backend.OfflineAfter != 20*time.Second {
 		t.Errorf("backend timings = %+v", cfg.Backend)
-	}
-	if len(cfg.Backend.DevTokens) != 2 || cfg.Backend.DevTokens["token-a"] != "backend-a" {
-		t.Errorf("backend credentials = %v", cfg.Backend.DevTokens)
 	}
 }
 

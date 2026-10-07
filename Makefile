@@ -5,8 +5,9 @@ BUF_VERSION             ?= v1.47.2
 PROTOC_GEN_GO_VERSION   ?= v1.36.6
 PROTOC_GEN_GRPC_VERSION ?= v1.5.1
 
-GOBIN   ?= 100 1 57 67 100 131shell go env GOPATH)/bin
+GOBIN   ?= $(shell go env GOPATH)/bin
 TEST_POSTGRES_URL ?= postgres://threavia:threavia@localhost:5432/threavia?sslmode=disable
+DEFAULT_BRANCH ?= master
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -X main.version=$(VERSION)
 
@@ -32,7 +33,7 @@ proto-lint: ## Lint the protobuf definitions
 
 .PHONY: proto-breaking
 proto-breaking: ## Check the protobuf definitions for breaking changes against main
-	PATH="$(GOBIN):$$PATH" buf breaking --against '.git#branch=main'
+	PATH="$(GOBIN):$$PATH" buf breaking --against '.git#branch=$(DEFAULT_BRANCH)'
 
 .PHONY: build
 build: ## Build the Core and Claude backend binaries into bin/

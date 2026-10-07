@@ -4,22 +4,23 @@ This document records the state of the implementation and every choice the
 specification deliberately left open. The architecture itself is defined in
 [`THREAVIA_SPEC_V1.md`](../THREAVIA_SPEC_V1.md) and is not restated here.
 
-## Scope of this skeleton
+## The rule that shaped the code
 
-Specification section 35 asks for a compilable repository skeleton rather than a
-working control plane. The rule applied throughout: **the structure is real, the
-behaviour is either implemented or explicitly absent, never faked**.
+The repository started as the compilable skeleton of specification section 35
+and grew into the MVP vertical slice of section 30. One rule held throughout,
+and still does: **the structure is real, the behaviour is either implemented or
+explicitly absent, never faked**.
 
-Concretely:
+What that looks like in practice:
 
-- Core does not acknowledge Job events it has not persisted, so a backend keeps
-  them in its local buffer and replays them when the event pipeline lands.
-- Every `/api/v1` route answers `501 Not Implemented` instead of an empty
-  result, so no client mistakes a missing endpoint for an empty collection.
-- The Claude runner returns `ErrNotImplemented`, and the adapter reports the
-  command as rejected, so Core never believes work started when it did not.
-- A Core Tool invocation is answered with an explicit error instead of being
-  dropped, so an agent never waits forever.
+- a `/api/v1` route that does not exist yet answers `501 Not Implemented` rather
+  than an empty collection, so a client never mistakes absence for emptiness;
+- Core acknowledges a backend event only once it is durably persisted, so an
+  event it could not record stays buffered on the backend instead of vanishing;
+- a Core Tool invocation is answered with an explicit error rather than dropped,
+  so an agent never waits on a reply that will not come;
+- a command a backend cannot honour is rejected, so Core never believes work
+  started when it did not.
 
 ## Choices made where the specification was open
 
@@ -86,13 +87,18 @@ The first migration creates exactly the tables section 35 asks for: `projects`,
 
 ### Backend authentication
 
-Section 8 defines registration by shared key with a claim code, and by one-shot
-user token. Neither is implemented yet. Until they are, Core resolves the bearer
-credential presented on `Connect` through a `TokenResolver`, whose only
-implementation maps static tokens configured in `THREAVIA_BACKEND_DEV_TOKENS`.
+Section 8 defines two registration flows and both are implemented. A backend
+presents a persistent credential on `Connect`, and Core stores only its SHA-256:
+it can verify what a backend presents but never reproduce it.
 
-With no token configured — the default — every backend connection is rejected.
-This is a development stop-gap and is labelled as such everywhere it appears.
+A one-shot user token, from `POST /api/v1/backend-tokens`, owns the instance
+immediately. The shared registration key instead creates an UNCLAIMED instance
+plus a one-time claim code that the backend prints locally and a user enters
+once. A revoked instance never resolves again, so a returning backend has to
+register anew.
+
+A backend stores its identity locally once registered, which is why registration
+material is never needed at a later start.
 
 ### Job state machine
 

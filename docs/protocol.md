@@ -109,4 +109,4 @@ tool name.
 
 `ProtocolVersion` is declared in `common.proto` and is the single source of truth
 for both sides. Protobuf compatibility is preserved: fields are added, never
-renumbered or repurposed. `make proto-breaking` checks this against `main`.
+renumbered or repurposed. `make proto-breaking` checks this against the default branch.
