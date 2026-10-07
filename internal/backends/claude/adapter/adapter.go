@@ -40,6 +40,9 @@ type Adapter struct {
 type jobState struct {
 	runID    string
 	requests map[string]struct{}
+	// knownDirectoryID is the KnownDirectory Core resolved for this Job, when
+	// there is one. It attributes a change summary to a directory.
+	knownDirectoryID string
 	// policy is what Core allows this Job to do. The permission gate consults it
 	// before anything reaches the user, so a forbidden action is refused rather
 	// than offered as a choice.
@@ -158,9 +161,10 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 		return nil // Already running: a redelivered command is not a new Job.
 	}
 	a.jobs[params.JobID] = &jobState{
-		runID:    params.RunID,
-		requests: make(map[string]struct{}),
-		policy:   policy.From(cmd.GetExecutionPolicy()),
+		runID:            params.RunID,
+		requests:         make(map[string]struct{}),
+		policy:           policy.From(cmd.GetExecutionPolicy()),
+		knownDirectoryID: cmd.GetProjectContext().GetKnownDirectoryId(),
 	}
 	a.mu.Unlock()
 

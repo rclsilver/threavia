@@ -1,6 +1,10 @@
 package runner
 
-import "context"
+import (
+	"context"
+
+	"github.com/rclsilver/threavia/internal/backends/claude/workspace"
+)
 
 // Sink receives everything the provider produces, already normalised into the
 // provider-independent vocabulary of the Threavia protocol.
@@ -21,6 +25,11 @@ type Sink interface {
 	ToolCompleted(ctx context.Context, runID, jobID, callID, name string, output map[string]any) error
 	// ToolFailed reports a failed tool invocation.
 	ToolFailed(ctx context.Context, runID, jobID, callID, name, message string) error
+
+	// WorkspaceChanged reports what a Job did to the filesystem: the paths
+	// touched and the line counts. The detailed diff stays here, on the
+	// backend, and is fetched on demand (spec section 22).
+	WorkspaceChanged(ctx context.Context, runID, jobID string, summary workspace.Summary) error
 
 	// JobCompleted, JobFailed and JobCancelled are terminal: exactly one of them
 	// is emitted per Job.

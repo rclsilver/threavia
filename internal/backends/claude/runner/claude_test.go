@@ -16,18 +16,20 @@ import (
 	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
 	"github.com/rclsilver/threavia/internal/backends/claude/policy"
 	"github.com/rclsilver/threavia/internal/backends/claude/runner"
+	"github.com/rclsilver/threavia/internal/backends/claude/workspace"
 )
 
 // recordingSink captures everything the runner normalises out of provider
 // output.
 type recordingSink struct {
-	mu       sync.Mutex
-	events   []string
-	messages []string
-	tools    []string
-	native   string
-	summary  string
-	failure  string
+	mu        sync.Mutex
+	events    []string
+	messages  []string
+	tools     []string
+	native    string
+	workspace workspace.Summary
+	summary   string
+	failure   string
 }
 
 func (s *recordingSink) record(format string, args ...any) {
@@ -78,6 +80,14 @@ func (s *recordingSink) ToolFailed(_ context.Context, _, _, callID, name, messag
 	s.tools = append(s.tools, "failed:"+name+":"+message)
 	s.mu.Unlock()
 	s.record("tool.failed")
+	return nil
+}
+
+func (s *recordingSink) WorkspaceChanged(_ context.Context, _, _ string, summary workspace.Summary) error {
+	s.mu.Lock()
+	s.workspace = summary
+	s.mu.Unlock()
+	s.record("workspace.changed files=%d +%d -%d", len(summary.Files), summary.Additions, summary.Deletions)
 	return nil
 }
 

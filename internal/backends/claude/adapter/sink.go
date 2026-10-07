@@ -9,6 +9,7 @@ import (
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/backends/claude/runner"
+	"github.com/rclsilver/threavia/internal/backends/claude/workspace"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/state"
 )
 
@@ -79,6 +80,43 @@ func (a *Adapter) ToolFailed(ctx context.Context, runID, jobID, callID, name, me
 	})
 }
 
+// WorkspaceChanged implements runner.Sink. Core receives the list of paths and
+// the line counts; the diff itself never leaves the backend (spec section 22).
+func (a *Adapter) WorkspaceChanged(ctx context.Context, runID, jobID string, summary workspace.Summary) error {
+	files := make([]*backendv1.FileChange, 0, len(summary.Files))
+	for _, file := range summary.Files {
+		files = append(files, &backendv1.FileChange{
+			Path:  file.Path,
+			State: fileState(file.State),
+		})
+	}
+
+	return a.send(ctx, func() (*backendv1.JobEvent, error) {
+		return a.sdk().Events().WorkspaceChanged(ctx, runID, jobID, &backendv1.WorkspaceChanged{
+			KnownDirectoryId: a.knownDirectoryOf(jobID),
+			Files:            files,
+			Additions:        summary.Additions,
+			Deletions:        summary.Deletions,
+		})
+	})
+}
+
+// fileState maps a detected state onto the protocol enum.
+func fileState(state workspace.State) backendv1.FileState {
+	switch state {
+	case workspace.StateAdded:
+		return backendv1.FileState_FILE_STATE_ADDED
+	case workspace.StateDeleted:
+		return backendv1.FileState_FILE_STATE_DELETED
+	case workspace.StateRenamed:
+		return backendv1.FileState_FILE_STATE_RENAMED
+	case workspace.StateModified:
+		return backendv1.FileState_FILE_STATE_MODIFIED
+	default:
+		return backendv1.FileState_FILE_STATE_UNSPECIFIED
+	}
+}
+
 // JobCompleted implements runner.Sink.
 func (a *Adapter) JobCompleted(ctx context.Context, runID, jobID, summary string) error {
 	a.recordTerminal(ctx, runID, jobID, backendv1.JobStatus_JOB_STATUS_COMPLETED)
@@ -134,4 +172,17 @@ func toStruct(value map[string]any) *structpb.Struct {
 		return emptyStruct()
 	}
 	return encoded
+}
+
+// knownDirectoryOf returns the KnownDirectory a Job is working in, when Core
+// resolved one. It lets a change summary be attributed to a directory rather
+// than to a bare path.
+func (a *Adapter) knownDirectoryOf(jobID string) string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if job, ok := a.jobs[jobID]; ok {
+		return job.knownDirectoryID
+	}
+	return ""
 }

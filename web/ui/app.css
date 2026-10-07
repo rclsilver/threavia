@@ -171,6 +171,16 @@ button:disabled { opacity: 0.5; cursor: default; }
 .entry.system .body { background: transparent; border: none; padding: 2px 0; color: var(--muted); font-size: 13px; }
 .entry.tool .body { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
 
+/* A change summary: what a Job did on disk. The diff stays on the backend, so
+   this is a list, never an expandable patch. */
+.entry.workspace .body { font-size: 12.5px; white-space: normal; }
+.entry.workspace .counts { color: var(--muted); margin-bottom: 4px; }
+.entry.workspace .files { list-style: none; margin: 0; padding: 0; font-family: var(--mono); }
+.entry.workspace .files li { overflow-wrap: anywhere; }
+.entry.workspace .files li[data-state="ADDED"] { color: var(--ok); }
+.entry.workspace .files li[data-state="DELETED"] { color: var(--danger); }
+.entry.workspace .files .more { color: var(--muted); font-family: inherit; }
+
 .composer { display: flex; gap: 8px; align-items: flex-end; }
 .composer textarea { flex: 1; }
 

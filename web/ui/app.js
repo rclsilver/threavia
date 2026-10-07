@@ -347,6 +347,7 @@ const RENDERED = new Set([
   'user.message', 'agent.message', 'tool.started', 'tool.failed',
   'job.completed', 'job.failed', 'job.cancelled',
   'session.created', 'validation.resolved', 'user_input.resolved',
+  'workspace.changed',
 ]);
 
 function appendEvent(event, autoscroll = true) {
@@ -370,6 +371,10 @@ function appendEvent(event, autoscroll = true) {
       entry.className = 'entry tool';
       body.textContent = `▸ ${event.payload.name}`;
       break;
+    case 'workspace.changed':
+      entry.className = 'entry workspace';
+      body.append(workspaceSummary(event.payload));
+      break;
     case 'tool.failed':
       entry.className = 'entry tool';
       body.textContent = `✕ ${event.payload.name}: ${event.payload.error ?? ''}`;
@@ -389,6 +394,42 @@ function appendEvent(event, autoscroll = true) {
   timeline.append(entry);
   if (autoscroll) timeline.scrollTop = timeline.scrollHeight;
 }
+
+// workspaceSummary renders what a Job changed on disk. The list of files comes
+// from the backend; the diff itself never leaves it, so there is nothing to
+// expand here.
+function workspaceSummary(payload) {
+  const wrapper = document.createElement('div');
+
+  const counts = document.createElement('div');
+  counts.className = 'counts';
+  const files = payload.files ?? [];
+  counts.textContent =
+    `${files.length} file${files.length === 1 ? '' : 's'} changed, `
+    + `+${payload.additions ?? 0} −${payload.deletions ?? 0}`;
+  wrapper.append(counts);
+
+  const list = document.createElement('ul');
+  list.className = 'files';
+  for (const file of files.slice(0, 20)) {
+    const item = document.createElement('li');
+    item.dataset.state = file.state;
+    item.textContent = `${STATE_MARK[file.state] ?? '·'} ${file.path}`;
+    list.append(item);
+  }
+  if (files.length > 20) {
+    const more = document.createElement('li');
+    more.className = 'more';
+    more.textContent = `… and ${files.length - 20} more`;
+    list.append(more);
+  }
+  wrapper.append(list);
+  return wrapper;
+}
+
+const STATE_MARK = {
+  ADDED: '+', MODIFIED: '~', DELETED: '−', RENAMED: '→',
+};
 
 function describe(event) {
   switch (event.type) {

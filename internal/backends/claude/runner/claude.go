@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
+	"github.com/rclsilver/threavia/internal/backends/claude/workspace"
 )
 
 // stopGrace is how long a cancelled process gets to exit on its own before it
@@ -122,6 +123,10 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 		c.mu.Unlock()
 	}()
 
+	// Captured before the process starts, so what the agent changed is told
+	// apart from what was already dirty in the working directory.
+	before := workspace.Observe(ctx, params.WorkingDirectory)
+
 	cmd := c.command(runCtx, params, nativeSessionID, resuming, mcpConfig)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -163,6 +168,14 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	outcome := c.consume(ctx, stdout, params, sink)
 	wg.Wait()
 	waitErr := cmd.Wait()
+
+	// Reported before the terminal event, so a client that reacts to the end of
+	// a Job already has the change summary in hand.
+	if summary := workspace.Since(ctx, params.WorkingDirectory, before); !summary.Empty() {
+		if err := sink.WorkspaceChanged(ctx, params.RunID, params.JobID, summary); err != nil {
+			c.logger.Error("cannot report the workspace changes", slog.String("error", err.Error()))
+		}
+	}
 
 	c.mu.Lock()
 	cancelled := live.cancelled
