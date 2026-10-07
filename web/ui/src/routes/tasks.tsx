@@ -1,4 +1,4 @@
-import { useParams } from '@tanstack/react-router';
+import { Navigate, useParams } from '@tanstack/react-router';
 import { CircleDot, Lock, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -62,6 +62,12 @@ export function TasksView() {
         Create a project to begin.
       </div>
     );
+  }
+
+  // Landing on the bare path settles on the Project's own: one view reached by
+  // two URLs leaves the sidebar unable to say which entry you are looking at.
+  if (!params.projectId) {
+    return <Navigate to="/projects/$projectId/tasks" params={{ projectId }} replace />;
   }
 
   const listed = tasks.data ?? [];

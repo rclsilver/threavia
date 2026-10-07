@@ -87,19 +87,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           collapsed ? 'gap-2 p-2' : 'gap-4 p-4',
         )}
       >
+        {/* The mark says whose window this is and goes nowhere: every
+            destination is one of the entries below, and a logo that quietly
+            lands on one of them makes that entry look like two places. */}
         <header className={cn('flex items-center gap-2', collapsed && 'flex-col')}>
           {collapsed ? (
-            // The mark alone still says whose window this is, and is the way
-            // home when the name does not fit.
-            <Link to="/" title="Threavia" className="py-1">
+            <span title="Threavia" className="py-1">
               <Logo className="size-6" />
-            </Link>
+            </span>
           ) : (
             <>
-              <Link to="/" className="flex items-center gap-2 text-base font-semibold">
+              <span className="flex items-center gap-2 text-base font-semibold">
                 <Logo className="size-6" />
                 Threavia
-              </Link>
+              </span>
               <Badge tone={connected ? 'ok' : 'neutral'} title="Realtime stream" className="ml-auto">
                 {connected ? 'live' : 'offline'}
               </Badge>
