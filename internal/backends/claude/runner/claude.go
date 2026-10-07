@@ -86,7 +86,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	// A per-Job endpoint token: the only process that can reach this Job's
 	// prompts is the one started for it.
 	token := uuid.NewString()
-	endpoint := c.tools.Register(params.JobID, token)
+	endpoint := c.tools.Register(params.JobID, token, params.CoreTools)
 	defer c.tools.Unregister(token)
 
 	mcpConfig, err := mcp.Config(endpoint)
@@ -239,6 +239,16 @@ func systemPrompt(params StartParams) string {
 	b.WriteString("Whenever you need information, a choice or a decision from the user, ")
 	b.WriteString("call the mcp__" + mcp.ServerName + "__" + mcp.ToolAskUser + " tool and wait for the answer. ")
 	b.WriteString("Never guess, and never stop and ask in plain text: a plain-text question reaches nobody.\n")
+
+	if len(params.CoreTools) > 0 {
+		// The tool descriptions say when to use each one; this says why they
+		// exist at all, which is the part an agent cannot infer from a schema.
+		b.WriteString("\nThis project has a memory that outlives this conversation: ")
+		b.WriteString("decisions, tasks and the history of what was already done, possibly ")
+		b.WriteString("in another session or on another machine. The mcp__" + mcp.ServerName)
+		b.WriteString("__ tools read and write it. Search it before assuming work is new, ")
+		b.WriteString("and record what a later session would otherwise have to rediscover.\n")
+	}
 
 	if params.ProjectName != "" {
 		b.WriteString("\nProject: " + params.ProjectName)

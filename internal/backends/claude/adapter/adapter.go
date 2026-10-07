@@ -140,6 +140,7 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 		Prompt:             cmd.GetPrompt(),
 		ProjectName:        cmd.GetProjectContext().GetProjectName(),
 		ProjectDescription: cmd.GetProjectContext().GetProjectDescription(),
+		CoreTools:          coreTools(cmd.GetProjectContext()),
 	}
 	if params.RunID == "" || params.JobID == "" {
 		return fmt.Errorf("a run id and a job id are required")
@@ -301,4 +302,20 @@ func (a *Adapter) releaseJob(jobID string, cause error) {
 func emptyStruct() *structpb.Struct {
 	value, _ := structpb.NewStruct(map[string]any{})
 	return value
+}
+
+// coreTools translates what Core declared into what the local tool endpoint
+// exposes. The backend forwards names and schemas it does not interpret, which
+// is what lets Core add a tool without a backend release.
+func coreTools(pc *backendv1.ProjectContext) []mcp.CoreTool {
+	specs := pc.GetTools()
+	out := make([]mcp.CoreTool, 0, len(specs))
+	for _, spec := range specs {
+		tool := mcp.CoreTool{Name: spec.GetName(), Description: spec.GetDescription()}
+		if schema := spec.GetInputSchema(); schema != nil {
+			tool.InputSchema = schema.AsMap()
+		}
+		out = append(out, tool)
+	}
+	return out
 }

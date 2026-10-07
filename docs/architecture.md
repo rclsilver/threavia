@@ -265,3 +265,34 @@ that something went wrong.
 A connection that has only just opened is given the same grace as one that has
 been heartbeating, so a backend is never killed before it has had a chance to
 speak.
+
+### Core Tools
+
+Section 12 declares ten provider-independent tools. Core owns them; the backend
+adapts them to whatever tool mechanism its provider has, and hardcodes none of
+their names: it receives their specifications in the ProjectContext at Job start
+and forwards them to the local MCP endpoint untouched. Core can therefore add a
+tool without a backend release.
+
+A tool call arrives scoped to a Job, and that is what gives it an identity. The
+Project it may touch and the user it acts for are read from that Job, never from
+the request, and every tool taking an identifier re-checks that the target
+belongs to that Project. The MCP endpoint refuses any name that was not declared
+for the Job, so it never becomes a general proxy into Core.
+
+Two choices are worth recording. Completing a task answers with what it
+unblocked, because the dependency graph exists to answer exactly that and making
+the agent ask again wastes a turn. And the tool descriptions are written for the
+agent that reads them: they say when to reach for a tool, not what it does
+mechanically, because that is the only instruction an agent gets.
+
+### What a Run context carries
+
+Section 12 asks for a compact structured context, so the budget is spent
+deliberately: active IMPORTANT decisions only, a bounded summary of what is open
+and actionable, and the tool specifications. A superseded or NORMAL decision is
+searchable but never injected — injecting the first would assert something no
+longer true, and the second would spend context on something nobody marked
+important.
+
+Everything else is found on demand, which is why the search tools exist at all.

@@ -48,10 +48,18 @@ type Decision struct {
 	Reason string
 }
 
-// Asker is what the server needs from the backend: a way to turn a local prompt
-// into a Threavia request and wait for the answer.
+// CoreTool is one Core Tool, as Core declared it in the ProjectContext at Job
+// start. The backend hardcodes none of this: it forwards what it was told.
+type CoreTool struct {
+	Name        string
+	Description string
+	InputSchema map[string]any
+}
+
+// Asker is what the server needs from the backend: a way to turn a local tool
+// call into a Threavia request and wait for the answer.
 //
-// Both calls block until the user answers, the Job ends or the context is
+// The first two block until the user answers, the Job ends or the context is
 // cancelled. Waiting indefinitely is the specified behaviour: validation and
 // input requests never time out.
 type Asker interface {
@@ -59,6 +67,8 @@ type Asker interface {
 	AskPermission(ctx context.Context, jobID, toolName string, input map[string]any) (Decision, error)
 	// AskUser raises a UserInputRequest.
 	AskUser(ctx context.Context, jobID, prompt string, choices []string) (string, error)
+	// CallCoreTool runs a Core Tool through Core and returns its result.
+	CallCoreTool(ctx context.Context, jobID, name string, input map[string]any) (map[string]any, error)
 }
 
 // Server is the loopback MCP endpoint.
@@ -67,7 +77,7 @@ type Server struct {
 	logger *slog.Logger
 
 	mu       sync.RWMutex
-	sessions map[string]string // endpoint token -> job id
+	sessions map[string]*session // endpoint token -> job
 
 	listener net.Listener
 	http     *http.Server
@@ -77,7 +87,7 @@ type Server struct {
 func New(logger *slog.Logger) *Server {
 	return &Server{
 		logger:   logger,
-		sessions: make(map[string]string),
+		sessions: make(map[string]*session),
 	}
 }
 
@@ -114,12 +124,18 @@ func (s *Server) Close(ctx context.Context) error {
 	return s.http.Shutdown(ctx)
 }
 
+// session is one Job and what it may call.
+type session struct {
+	jobID     string
+	coreTools []CoreTool
+}
+
 // Register gives a Job its own endpoint and returns the URL to configure Claude
 // Code with. The token is the only thing standing between a local process and
-// another Job's prompts, so it must be unguessable.
-func (s *Server) Register(jobID, token string) string {
+// another Job's prompts and project knowledge, so it must be unguessable.
+func (s *Server) Register(jobID, token string, coreTools []CoreTool) string {
 	s.mu.Lock()
-	s.sessions[token] = jobID
+	s.sessions[token] = &session{jobID: jobID, coreTools: coreTools}
 	s.mu.Unlock()
 	return fmt.Sprintf("http://%s/mcp/%s", s.listener.Addr().String(), token)
 }
@@ -131,11 +147,11 @@ func (s *Server) Unregister(token string) {
 	s.mu.Unlock()
 }
 
-func (s *Server) jobFor(token string) (string, bool) {
+func (s *Server) sessionFor(token string) (*session, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	jobID, ok := s.sessions[token]
-	return jobID, ok
+	sess, ok := s.sessions[token]
+	return sess, ok
 }
 
 // JSON-RPC envelopes.
@@ -164,7 +180,7 @@ const (
 )
 
 func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
-	jobID, ok := s.jobFor(r.PathValue("token"))
+	sess, ok := s.sessionFor(r.PathValue("token"))
 	if !ok {
 		http.NotFound(w, r)
 		return
@@ -182,12 +198,12 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, rpcErr := s.dispatch(r.Context(), jobID, msg)
+	result, rpcErr := s.dispatch(r.Context(), sess, msg)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response{JSONRPC: "2.0", ID: msg.ID, Result: result, Error: rpcErr})
 }
 
-func (s *Server) dispatch(ctx context.Context, jobID string, msg request) (any, *rpcError) {
+func (s *Server) dispatch(ctx context.Context, sess *session, msg request) (any, *rpcError) {
 	switch msg.Method {
 	case "initialize":
 		var params struct {
@@ -203,17 +219,17 @@ func (s *Server) dispatch(ctx context.Context, jobID string, msg request) (any, 
 		}, nil
 
 	case "tools/list":
-		return map[string]any{"tools": toolDefinitions()}, nil
+		return map[string]any{"tools": toolDefinitions(sess.coreTools)}, nil
 
 	case "tools/call":
-		return s.call(ctx, jobID, msg.Params)
+		return s.call(ctx, sess, msg.Params)
 
 	default:
 		return nil, &rpcError{Code: codeMethodNotFound, Message: "unknown method " + msg.Method}
 	}
 }
 
-func (s *Server) call(ctx context.Context, jobID string, raw json.RawMessage) (any, *rpcError) {
+func (s *Server) call(ctx context.Context, sess *session, raw json.RawMessage) (any, *rpcError) {
 	var params struct {
 		Name      string         `json:"name"`
 		Arguments map[string]any `json:"arguments"`
@@ -224,12 +240,20 @@ func (s *Server) call(ctx context.Context, jobID string, raw json.RawMessage) (a
 
 	switch params.Name {
 	case ToolApprovalPrompt:
-		return s.approvalPrompt(ctx, jobID, params.Arguments)
+		return s.approvalPrompt(ctx, sess.jobID, params.Arguments)
 	case ToolAskUser:
-		return s.askUser(ctx, jobID, params.Arguments)
-	default:
-		return nil, &rpcError{Code: codeMethodNotFound, Message: "unknown tool " + params.Name}
+		return s.askUser(ctx, sess.jobID, params.Arguments)
 	}
+
+	// Anything else must be one of the Core Tools this Job was told about.
+	// Checking against that list, rather than forwarding whatever was asked,
+	// keeps the endpoint from becoming a general proxy into Core.
+	for _, tool := range sess.coreTools {
+		if tool.Name == params.Name {
+			return s.coreTool(ctx, sess.jobID, params.Name, params.Arguments)
+		}
+	}
+	return nil, &rpcError{Code: codeMethodNotFound, Message: "unknown tool " + params.Name}
 }
 
 // approvalPrompt turns a Claude Code permission prompt into a Threavia
@@ -299,8 +323,33 @@ func toolText(payload map[string]any) (any, *rpcError) {
 	return map[string]any{"content": []any{map[string]any{"type": "text", "text": string(encoded)}}}, nil
 }
 
-func toolDefinitions() []any {
-	return []any{
+// coreTool forwards a Core Tool call to Core and renders its result.
+//
+// The round trip can be slow and can fail; an explicit error reaches the agent
+// rather than an empty result it would read as "nothing found".
+func (s *Server) coreTool(ctx context.Context, jobID, name string, args map[string]any) (any, *rpcError) {
+	if args == nil {
+		args = map[string]any{}
+	}
+	s.logger.Info("core tool called",
+		slog.String("jobId", jobID), slog.String("tool", name))
+
+	result, err := s.asker.CallCoreTool(ctx, jobID, name, args)
+	if err != nil {
+		return nil, &rpcError{Code: codeInternalError, Message: err.Error()}
+	}
+
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return nil, &rpcError{Code: codeInternalError, Message: err.Error()}
+	}
+	return map[string]any{"content": []any{map[string]any{"type": "text", "text": string(encoded)}}}, nil
+}
+
+// toolDefinitions lists what this Job may call: the two Threavia-specific tools,
+// plus the Core Tools Core declared for it.
+func toolDefinitions(coreTools []CoreTool) []any {
+	definitions := []any{
 		map[string]any{
 			"name":        ToolApprovalPrompt,
 			"description": "Ask the Threavia user to approve or deny a tool invocation.",
@@ -332,6 +381,19 @@ func toolDefinitions() []any {
 			},
 		},
 	}
+
+	for _, tool := range coreTools {
+		schema := tool.InputSchema
+		if schema == nil {
+			schema = map[string]any{"type": "object", "properties": map[string]any{}}
+		}
+		definitions = append(definitions, map[string]any{
+			"name":        tool.Name,
+			"description": tool.Description,
+			"inputSchema": schema,
+		})
+	}
+	return definitions
 }
 
 // Config renders the --mcp-config value pointing Claude Code at a Job endpoint.

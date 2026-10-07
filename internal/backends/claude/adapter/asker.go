@@ -5,9 +5,11 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/tools"
 )
 
 // Adapter answers the local tool endpoint by asking the actual user, through
@@ -124,4 +126,43 @@ func permissionTitle(toolName string, input map[string]any) string {
 		}
 	}
 	return toolName
+}
+
+// CallCoreTool runs a Core Tool through the control stream and returns its
+// result.
+//
+// Unlike a permission or a question, nothing human is involved: this is Core
+// answering Core. It still goes over the same stream, because the backend holds
+// no project knowledge of its own and must not pretend to.
+func (a *Adapter) CallCoreTool(ctx context.Context, jobID, name string, input map[string]any) (map[string]any, error) {
+	if !a.knows(jobID) {
+		return nil, fmt.Errorf("job %s is not running here", jobID)
+	}
+
+	encoded, err := structpb.NewStruct(input)
+	if err != nil {
+		return nil, fmt.Errorf("encode the tool input: %w", err)
+	}
+
+	result, err := a.sdk().Invoke(ctx, tools.Call{
+		RunID: a.runOf(jobID),
+		JobID: jobID,
+		Name:  name,
+		Input: encoded,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return map[string]any{}, nil
+	}
+	return result.AsMap(), nil
+}
+
+// knows reports whether a Job is running on this backend.
+func (a *Adapter) knows(jobID string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	_, ok := a.jobs[jobID]
+	return ok
 }

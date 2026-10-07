@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+
+	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
 )
 
 // Errors returned by the runner.
@@ -38,6 +40,10 @@ type StartParams struct {
 	// Core builds at Job start.
 	ProjectName        string
 	ProjectDescription string
+	// CoreTools are the provider-independent tools Core declared for this Job.
+	// The runner forwards them to the local tool endpoint and never interprets
+	// them: a backend hardcodes no tool name.
+	CoreTools []mcp.CoreTool
 }
 
 // Runner is the provider integration contract the adapter depends on.

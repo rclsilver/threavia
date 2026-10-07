@@ -14,6 +14,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/core/api"
@@ -26,6 +27,7 @@ import (
 	sdkclient "github.com/rclsilver/threavia/pkg/backend-sdk/client"
 	sdkevents "github.com/rclsilver/threavia/pkg/backend-sdk/events"
 	sdkstate "github.com/rclsilver/threavia/pkg/backend-sdk/state"
+	sdktools "github.com/rclsilver/threavia/pkg/backend-sdk/tools"
 )
 
 // core is a whole Threavia Core wired the way the binary wires it: a real
@@ -343,4 +345,40 @@ func (b *fakeBackend) emit(t *testing.T, ctx context.Context, event *backendv1.J
 	if err := b.sdk.SendEvent(ctx, event); err != nil {
 		t.Fatalf("sending a backend event: %v", err)
 	}
+}
+
+// callCoreTool invokes a Core Tool the way an agent does: through the real
+// control stream, and waits for Core's answer.
+func (b *fakeBackend) callCoreTool(t *testing.T, ctx context.Context, runID, jobID, name string, input map[string]any) map[string]any {
+	t.Helper()
+
+	encoded, err := structpb.NewStruct(input)
+	if err != nil {
+		t.Fatalf("encoding the tool input: %v", err)
+	}
+
+	result, err := b.sdk.Invoke(ctx, sdktools.Call{
+		RunID: runID, JobID: jobID, Name: name, Input: encoded,
+	})
+	if err != nil {
+		t.Fatalf("core tool %s: %v", name, err)
+	}
+	if result == nil {
+		return map[string]any{}
+	}
+	return result.AsMap()
+}
+
+// callCoreToolExpectingFailure invokes a Core Tool that should be refused.
+func (b *fakeBackend) callCoreToolExpectingFailure(t *testing.T, ctx context.Context, runID, jobID, name string, input map[string]any) error {
+	t.Helper()
+
+	encoded, _ := structpb.NewStruct(input)
+	_, err := b.sdk.Invoke(ctx, sdktools.Call{
+		RunID: runID, JobID: jobID, Name: name, Input: encoded,
+	})
+	if err == nil {
+		t.Fatalf("core tool %s was expected to fail", name)
+	}
+	return err
 }

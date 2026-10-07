@@ -15,9 +15,10 @@ import (
 
 // stubAsker stands in for the Threavia user.
 type stubAsker struct {
-	decision mcp.Decision
-	answer   string
-	err      error
+	decision   mcp.Decision
+	answer     string
+	toolResult map[string]any
+	err        error
 
 	jobID    string
 	toolName string
@@ -36,7 +37,12 @@ func (s *stubAsker) AskUser(_ context.Context, jobID, prompt string, choices []s
 	return s.answer, s.err
 }
 
-func newServer(t *testing.T, asker mcp.Asker) (*mcp.Server, string) {
+func (s *stubAsker) CallCoreTool(_ context.Context, jobID, name string, input map[string]any) (map[string]any, error) {
+	s.jobID, s.toolName, s.input = jobID, name, input
+	return s.toolResult, s.err
+}
+
+func newServer(t *testing.T, asker mcp.Asker, coreTools ...mcp.CoreTool) (*mcp.Server, string) {
 	t.Helper()
 
 	server := mcp.New(slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -46,7 +52,7 @@ func newServer(t *testing.T, asker mcp.Asker) (*mcp.Server, string) {
 	}
 	t.Cleanup(func() { _ = server.Close(context.Background()) })
 
-	return server, server.Register("job-1", "token-1")
+	return server, server.Register("job-1", "token-1", coreTools)
 }
 
 // rpc performs one JSON-RPC call and returns the decoded result.
@@ -296,5 +302,88 @@ func TestConfigPointsAtTheEndpoint(t *testing.T) {
 	}
 	if server.Type != "http" || server.URL != "http://127.0.0.1:1234/mcp/token" {
 		t.Fatalf("server = %+v, want the loopback endpoint over http", server)
+	}
+}
+
+// TestCoreToolsAreForwarded pins that a backend hardcodes no tool name: what the
+// agent can call is exactly what Core declared for this Job, forwarded
+// unchanged.
+func TestCoreToolsAreForwarded(t *testing.T) {
+	t.Parallel()
+
+	asker := &stubAsker{toolResult: map[string]any{"taskId": "task-1", "status": "TODO"}}
+	_, endpoint := newServer(t, asker, mcp.CoreTool{
+		Name:        "task_create",
+		Description: "File a task.",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"title": map[string]any{"type": "string"}},
+			"required":   []any{"title"},
+		},
+	})
+
+	result, rpcErr := rpc(t, endpoint, "tools/list", map[string]any{})
+	if rpcErr != nil {
+		t.Fatalf("tools/list failed: %v", rpcErr)
+	}
+	tools, _ := result["tools"].([]any)
+	if len(tools) != 3 {
+		t.Fatalf("%d tools exposed, want the two built-ins plus the declared one", len(tools))
+	}
+
+	var declared map[string]any
+	for _, tool := range tools {
+		entry, _ := tool.(map[string]any)
+		if entry["name"] == "task_create" {
+			declared = entry
+		}
+	}
+	if declared == nil {
+		t.Fatal("the declared core tool must be exposed to the agent")
+	}
+	if declared["description"] != "File a task." {
+		t.Errorf("description = %v, want the one Core declared", declared["description"])
+	}
+	if declared["inputSchema"] == nil {
+		t.Error("the schema Core declared must reach the agent")
+	}
+
+	// Calling it reaches Core with the arguments untouched.
+	result, rpcErr = rpc(t, endpoint, "tools/call", map[string]any{
+		"name":      "task_create",
+		"arguments": map[string]any{"title": "Rewire the puppet manifest"},
+	})
+	if rpcErr != nil {
+		t.Fatalf("the tool call failed: %v", rpcErr)
+	}
+	if asker.toolName != "task_create" || asker.input["title"] != "Rewire the puppet manifest" {
+		t.Fatalf("Core received %q with %v", asker.toolName, asker.input)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(toolText(t, result)), &payload); err != nil {
+		t.Fatalf("decoding the tool result: %v", err)
+	}
+	if payload["taskId"] != "task-1" {
+		t.Fatalf("result = %v, want what Core returned", payload)
+	}
+}
+
+// TestUndeclaredToolsAreRefused pins that the endpoint is not a general proxy
+// into Core: only what this Job was told about can be called.
+func TestUndeclaredToolsAreRefused(t *testing.T) {
+	t.Parallel()
+
+	asker := &stubAsker{toolResult: map[string]any{}}
+	_, endpoint := newServer(t, asker, mcp.CoreTool{Name: "task_create"})
+
+	if _, rpcErr := rpc(t, endpoint, "tools/call", map[string]any{
+		"name":      "decision_create",
+		"arguments": map[string]any{"title": "sneaky"},
+	}); rpcErr == nil {
+		t.Fatal("a tool this job was not told about must be refused")
+	}
+	if asker.toolName != "" {
+		t.Fatalf("an undeclared tool reached Core as %q", asker.toolName)
 	}
 }
