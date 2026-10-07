@@ -79,6 +79,10 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 		// WorkingDirectoryID is a double pointer so that an explicit null clears
 		// the working directory, while an absent field leaves it alone.
 		WorkingDirectoryID **string `json:"workingDirectoryId"`
+		// BackendInstanceID moves the Session to another backend. It is an
+		// explicit act: the timeline stays continuous, but the native provider
+		// session does not travel (spec section 34).
+		BackendInstanceID *string `json:"backendInstanceId"`
 	}](w, r)
 	if !ok {
 		return
@@ -98,6 +102,19 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 			return
 		}
 		changed = true
+	}
+
+	if body.BackendInstanceID != nil && *body.BackendInstanceID != "" {
+		handoff, err := h.svc.MoveSessionToBackend(r.Context(), identity, sessionID,
+			domain.BackendInstanceID(*body.BackendInstanceID))
+		if err != nil {
+			h.fail(w, err)
+			return
+		}
+		// The handoff is answered on its own, because what it has to say — the
+		// local skills the new backend does not have — belongs to nothing else.
+		writeJSON(w, http.StatusOK, handoff)
+		return
 	}
 
 	if body.WorkingDirectoryID != nil {

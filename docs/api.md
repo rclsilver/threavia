@@ -31,7 +31,7 @@ for commands, queries, snapshots and history, and SSE for realtime events
 | `POST` | `/api/v1/backend-tokens` | yes | Issue a one-shot registration token |
 | `POST` | `/api/v1/sessions/start` | yes | Atomic first send |
 | `GET` | `/api/v1/sessions/{id}` | yes | Snapshot: state, history, attention, cursor |
-| `PATCH` | `/api/v1/sessions/{id}` | yes | Rename, or change the working directory |
+| `PATCH` | `/api/v1/sessions/{id}` | yes | Rename, change the working directory, or move to another backend |
 | `GET` | `/api/v1/sessions/{id}/events` | yes | Paged history |
 | `POST` | `/api/v1/sessions/{id}/messages` | yes | Append a message, creating a Job |
 | `POST` | `/api/v1/sessions/{id}/archive` | yes | Archive |
@@ -117,6 +117,14 @@ refused. The backend resolves it when the Job starts (section 11):
 Discovery roots constrain where the backend looks. They are not a sandbox:
 filesystem access is the real OS permissions of the backend account
 (sections 11 and 28).
+
+
+Moving a Session to another backend is explicit and answered on its own: the
+timeline stays continuous, a new Run starts there, and the response names the
+backend-local Skills the new machine does not have. The native provider session
+does not travel — it belongs to the machine holding it — so the next message
+starts a fresh one. Core refuses the move while a Job is still running rather
+than leaving work behind on a backend nobody is watching.
 
 ## Notification relevance
 

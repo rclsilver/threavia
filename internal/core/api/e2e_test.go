@@ -36,6 +36,10 @@ type (
 			ID    string `json:"id"`
 			Title string `json:"title"`
 		} `json:"session"`
+		Runs []struct {
+			ID                string `json:"id"`
+			BackendInstanceID string `json:"backendInstanceId"`
+		} `json:"runs"`
 		Jobs []struct {
 			ID     string `json:"id"`
 			Status string `json:"status"`

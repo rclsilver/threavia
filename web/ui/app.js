@@ -934,6 +934,32 @@ function wireEvents() {
     }
   });
 
+  // A backend change is explicit, and says what it costs: the native provider
+  // session stays where it was, and a skill that only exists on the old machine
+  // does not travel (specification sections 18 and 34).
+  el('move-session').addEventListener('click', async () => {
+    const choices = state.backends
+      .filter((backend) => backend.ownershipStatus !== 'REVOKED')
+      .map((backend) => `${backend.name} (${backend.id})`)
+      .join('\n');
+    const answer = prompt(`Move this session to which backend?\n\n${choices}\n\nAnswer with its id.`);
+    if (!answer) return;
+
+    try {
+      const handoff = await api.call('PATCH', `/api/v1/sessions/${state.sessionId}`, {
+        backendInstanceId: answer.trim(),
+      });
+      await openSession(state.sessionId);
+      if (handoff.missingSkills?.length) {
+        toast(`Moved. These local skills are not on the new backend: ${handoff.missingSkills.join(', ')}.`);
+      } else {
+        toast('Moved. The next message starts a fresh provider session there.');
+      }
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+
   el('toggle-policy').addEventListener('click', async () => {
     const form = el('policy');
     const opening = form.classList.contains('hidden');
