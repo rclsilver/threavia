@@ -40,15 +40,10 @@ func (m Mode) Valid() bool {
 	}
 }
 
-// Errors returned by Authenticator implementations.
-var (
-	// ErrUnauthenticated means the request carried no usable credential or an
-	// invalid one.
-	ErrUnauthenticated = errors.New("unauthenticated")
-	// ErrNotImplemented means the configured mode is a valid V1 target but is
-	// not wired yet. The interface deliberately does not preclude it.
-	ErrNotImplemented = errors.New("authentication mode not implemented yet")
-)
+// ErrUnauthenticated means the request carried no usable credential or an
+// invalid one. It is the single answer to every authentication failure: an
+// expired token and a forged one are not told apart.
+var ErrUnauthenticated = errors.New("unauthenticated")
 
 // Identity is the authenticated caller. Every user-scoped query and mutation in
 // Core is checked against Identity.UserID (spec sections 20 and 28).
@@ -83,6 +78,10 @@ type Config struct {
 	OIDCIssuer   string
 	OIDCClientID string
 	OIDCAudience string
+	// OIDCUserClaim names the claim that identifies the user. The subject is the
+	// only claim an issuer guarantees to be stable and unique, so it is the
+	// default; a deployment that prefers a readable identifier says so.
+	OIDCUserClaim string
 }
 
 // Validate checks the configuration consistency for the selected mode.
@@ -118,9 +117,7 @@ func New(cfg Config) (Authenticator, error) {
 	case ModeBasic:
 		return basicAuthenticator{username: cfg.BasicUsername, password: cfg.BasicPassword}, nil
 	case ModeOIDC:
-		// Token verification against the issuer JWKS is the remaining work; the
-		// Authenticator contract already accommodates it.
-		return nil, fmt.Errorf("%w: oidc", ErrNotImplemented)
+		return newOIDCAuthenticator(cfg)
 	default:
 		return nil, fmt.Errorf("unknown authentication mode %q", cfg.Mode)
 	}

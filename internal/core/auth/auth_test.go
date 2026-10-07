@@ -69,17 +69,6 @@ func TestModeBasic(t *testing.T) {
 	}
 }
 
-// TestModeOIDCIsDeclaredButNotWired pins that the configured mode is accepted by
-// the contract and fails explicitly rather than silently degrading to no auth.
-func TestModeOIDCIsDeclaredButNotWired(t *testing.T) {
-	t.Parallel()
-
-	_, err := New(Config{Mode: ModeOIDC, OIDCIssuer: "https://keycloak.example/realms/threavia", OIDCClientID: "threavia"})
-	if !errors.Is(err, ErrNotImplemented) {
-		t.Fatalf("got %v, want ErrNotImplemented", err)
-	}
-}
-
 func TestConfigValidate(t *testing.T) {
 	t.Parallel()
 

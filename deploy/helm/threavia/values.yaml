@@ -135,6 +135,10 @@ auth:
     issuer: ""
     clientId: ""
     audience: ""
+    # Which claim identifies the user. The subject is the only claim an issuer
+    # guarantees to be stable and unique; email or preferred_username are
+    # readable alternatives a deployment may prefer.
+    userClaim: sub
 
 backendRegistration:
   heartbeatInterval: 15s

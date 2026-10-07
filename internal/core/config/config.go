@@ -169,6 +169,7 @@ func Load() (Config, error) {
 	cfg.Auth.OIDCIssuer = l.String("AUTH_OIDC_ISSUER", cfg.Auth.OIDCIssuer)
 	cfg.Auth.OIDCClientID = l.String("AUTH_OIDC_CLIENT_ID", cfg.Auth.OIDCClientID)
 	cfg.Auth.OIDCAudience = l.String("AUTH_OIDC_AUDIENCE", cfg.Auth.OIDCAudience)
+	cfg.Auth.OIDCUserClaim = l.String("AUTH_OIDC_USER_CLAIM", cfg.Auth.OIDCUserClaim)
 
 	cfg.Backend.HeartbeatInterval = l.Duration("BACKEND_HEARTBEAT_INTERVAL", cfg.Backend.HeartbeatInterval)
 	cfg.Backend.OfflineAfter = l.Duration("BACKEND_OFFLINE_AFTER", cfg.Backend.OfflineAfter)

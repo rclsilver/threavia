@@ -89,8 +89,13 @@ Selected by `THREAVIA_AUTH_MODE`:
 - `none` — every request is attributed to `THREAVIA_AUTH_DEV_USER_ID`. Local
   development only; Core logs a warning at startup.
 - `basic` — HTTP basic authentication against a configured credential.
-- `oidc` — declared and accepted by the contract, not wired yet: Core refuses to
-  start rather than silently degrading to no authentication.
+- `oidc` — a bearer token issued by an OIDC provider such as Keycloak. Core
+  discovers the issuer at startup, so a misconfiguration fails where an operator
+  can see it, and verifies the signature, issuer, audience and expiry of every
+  token. Core never runs a login flow: a client obtains its token from the
+  provider and presents it here. `THREAVIA_AUTH_OIDC_USER_CLAIM` selects the
+  claim that identifies the user, `sub` by default because it is the only claim
+  an issuer guarantees to be stable and unique.
 
 ## Invariants to preserve
 

@@ -138,6 +138,8 @@ spec:
               value: {{ .Values.auth.oidc.issuer | quote }}
             - name: THREAVIA_AUTH_OIDC_CLIENT_ID
               value: {{ .Values.auth.oidc.clientId | quote }}
+            - name: THREAVIA_AUTH_OIDC_USER_CLAIM
+              value: {{ .Values.auth.oidc.userClaim | quote }}
             - name: THREAVIA_AUTH_OIDC_AUDIENCE
               value: {{ .Values.auth.oidc.audience | quote }}
             {{- end }}
