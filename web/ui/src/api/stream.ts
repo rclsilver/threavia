@@ -1,8 +1,9 @@
 import type { QueryClient } from '@tanstack/react-query';
 
+import { dropResolvedAttention } from './attention-cache';
 import { CHANNEL } from './client';
 import { keys } from './keys';
-import type { Event, Job, Snapshot } from './types';
+import { payloadOf, type Event, type Job, type Snapshot } from './types';
 
 /**
  * A liveness signal. It carries no sequence and is never stored: it says the
@@ -98,13 +99,23 @@ export class EventStream {
     }
 
     switch (event.type) {
-      // Pending attention is current state, not a count of unread events: the
-      // list is re-read rather than guessed at from the event.
+      // Pending attention is current state, not a count of unread events, and
+      // a Session carries its own copy in the snapshot it was opened with. Both
+      // have to follow, or a request answered elsewhere stays on screen here.
       case 'validation.requested':
-      case 'validation.resolved':
       case 'user_input.requested':
+        void this.queries.invalidateQueries({ queryKey: keys.attention() });
+        // Re-read rather than built from the event: what makes an item worth a
+        // notification is decided by Core, and this payload does not carry it.
+        void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
+        break;
+
+      case 'validation.resolved':
       case 'user_input.resolved':
         void this.queries.invalidateQueries({ queryKey: keys.attention() });
+        // A resolution names exactly what it resolved, so the card goes at
+        // once rather than after a round trip.
+        this.dropResolved(event);
         break;
 
       case 'session.created':
@@ -141,6 +152,20 @@ export class EventStream {
         void this.queries.invalidateQueries({ queryKey: ['directories'] });
         break;
     }
+  }
+
+  /**
+   * Removes a resolved request from the Session that is showing it.
+   *
+   * The resolution names exactly what it resolved, which is what makes this
+   * precise: the first valid answer wins, and every other client drops the same
+   * card on the same event rather than on its own schedule.
+   */
+  private dropResolved(event: Event) {
+    dropResolvedAttention(this.queries, event.sessionId, {
+      validationId: payloadOf(event, 'validation.resolved')?.validationId,
+      userInputId: payloadOf(event, 'user_input.resolved')?.requestId,
+    });
   }
 
   /**

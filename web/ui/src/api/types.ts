@@ -55,8 +55,8 @@ export interface EventPayloads {
   'tool.completed': { callId: string; name: string };
   'tool.failed': { callId: string; name: string; error?: string };
   'job.failed': { error?: string };
-  'validation.resolved': { approved: boolean; note?: string };
-  'user_input.resolved': { value: string };
+  'validation.resolved': { validationId: string; approved: boolean; note?: string };
+  'user_input.resolved': { requestId: string; value: string };
   'workspace.changed': {
     knownDirectoryId?: string;
     files?: { path: string; state: 'ADDED' | 'MODIFIED' | 'DELETED' | 'RENAMED' }[];

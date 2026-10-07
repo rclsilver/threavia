@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 
 import { api, idempotencyKey } from './client';
+import { dropResolvedAttention } from './attention-cache';
 import { keys } from './keys';
 import type {
   Artifact,
@@ -22,7 +23,9 @@ import type {
   SkillSource,
   Snapshot,
   Task,
+  UserInputRequest,
   TaskStatus,
+  ValidationRequest,
 } from './types';
 
 const items = <T>(list: List<T>) => list.items ?? [];
@@ -198,8 +201,16 @@ export function useResolveValidation() {
   const queries = useQueryClient();
   return useMutation({
     mutationFn: ({ id, approved, note }: { id: string; approved: boolean; note?: string }) =>
-      api.post(`/api/v1/validations/${id}/resolve`, { approved, note: note ?? '' }),
-    onSuccess: () => queries.invalidateQueries({ queryKey: keys.attention() }),
+      api.post<ValidationRequest>(`/api/v1/validations/${id}/resolve`, {
+        approved,
+        note: note ?? '',
+      }),
+    onSuccess: (resolved) => {
+      void queries.invalidateQueries({ queryKey: keys.attention() });
+      // The stream normally does this first. Doing it here too is what makes
+      // the card go when this client's own stream is down.
+      dropResolvedAttention(queries, resolved.scope.sessionId, { validationId: resolved.id });
+    },
   });
 }
 
@@ -207,8 +218,11 @@ export function useResolveUserInput() {
   const queries = useQueryClient();
   return useMutation({
     mutationFn: ({ id, value }: { id: string; value: string }) =>
-      api.post(`/api/v1/user-input/${id}/resolve`, { value }),
-    onSuccess: () => queries.invalidateQueries({ queryKey: keys.attention() }),
+      api.post<UserInputRequest>(`/api/v1/user-input/${id}/resolve`, { value }),
+    onSuccess: (resolved) => {
+      void queries.invalidateQueries({ queryKey: keys.attention() });
+      dropResolvedAttention(queries, resolved.scope.sessionId, { userInputId: resolved.id });
+    },
   });
 }
 
