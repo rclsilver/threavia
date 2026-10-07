@@ -140,3 +140,57 @@ func TestQueuedWorkIsStillReleasedOnConnect(t *testing.T) {
 		t.Fatalf("dispatched %s, want %s", start.GetJobId(), started.Job.ID)
 	}
 }
+
+// TestAJobTheBackendAlreadyEndedIsSettled is a regression test.
+//
+// Core held every event the backend had produced and still believed the Job
+// live, because the ending arrived in a state the Job state machine refused.
+// Reconnecting then found the two sides disagreeing with nothing left to
+// replay, and left the Job parked: the Session stayed silent for good. The
+// backend owns what actually happened (spec section 9), so Core takes its word
+// and lets the queue move.
+func TestAJobTheBackendAlreadyEndedIsSettled(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	session := c.startSession(projectID, c.backendID, dirID, "premier")
+	first := receive(t, "the dispatched job", backend.starts)
+
+	ctx := context.Background()
+	message := backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
+		return backend.events.AgentMessage(ctx, first.GetRunId(), first.GetJobId(), "voila")
+	})
+	backend.emit(t, ctx, message)
+	waitUntil(t, "core to persist what the backend sent", func() bool {
+		return c.countEvents(session, "agent.message") == 1
+	})
+
+	var second idOnly
+	c.mustDo(http.MethodPost, "/api/v1/sessions/"+session+"/messages",
+		map[string]any{"message": "deuxieme"}, &second, http.StatusCreated)
+
+	c.svc.Disconnected(ctx, backendInstance(t, c), "stale-connection")
+	waitUntil(t, "the job to be parked", func() bool {
+		return c.jobStatus(session, first.GetJobId()) == "WAITING_BACKEND"
+	})
+
+	// The backend reports the Job finished, and Core is not missing a single
+	// event: there is nothing left to converge through.
+	c.svc.ReconcileState(ctx, backendInstance(t, c), &backendv1.ReconcileState{
+		Runs: []*backendv1.RunState{{
+			RunId: first.GetRunId(),
+			Jobs: []*backendv1.JobState{{
+				JobId:               first.GetJobId(),
+				Status:              backendv1.JobStatus_JOB_STATUS_COMPLETED,
+				LastBackendSequence: message.GetBackendSequence(),
+			}},
+		}},
+	})
+
+	waitUntil(t, "the job to settle on what the backend reported", func() bool {
+		return c.jobStatus(session, first.GetJobId()) == "COMPLETED"
+	})
+
+	next := receive(t, "the queued message to be dispatched", backend.starts)
+	if next.GetJobId() != second.ID {
+		t.Fatalf("next job = %s, want the queued one %s", next.GetJobId(), second.ID)
+	}
+}

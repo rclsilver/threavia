@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
@@ -185,7 +186,8 @@ func (s *Service) ReconcileState(ctx context.Context, instanceID domain.BackendI
 			s.logger.Error("cannot read the persisted sequence", slog.String("jobId", string(job.ID)), slog.String("error", err.Error()))
 			continue
 		}
-		if reported.GetLastBackendSequence() > persisted {
+		behind := reported.GetLastBackendSequence() > persisted
+		if behind {
 			conn.Send(&backendv1.CoreToBackend{
 				CommandId: domain.NewUUID(),
 				Message: &backendv1.CoreToBackend_ReconcileInstruction{
@@ -199,6 +201,23 @@ func (s *Service) ReconcileState(ctx context.Context, instanceID domain.BackendI
 			})
 		}
 
+		// The backend says this Job is over and Core does not, with nothing left
+		// to explain the difference: Core holds every event the backend
+		// produced, the ending included, and simply never moved. The backend is
+		// the source of truth for what actually happened locally (spec section
+		// 9), so Core takes its word rather than waiting on a Job nothing is
+		// running. Without this, a terminal event Core could not apply when it
+		// arrived parks the Job for good, and every later message on that
+		// Session queues behind it.
+		//
+		// While Core is behind, the ending is in the events it is about to
+		// receive: converging through them keeps the timeline whole, so the
+		// disagreement is left to settle itself.
+		if !behind && terminalJobStatus(reported.GetStatus()) && !job.Status.Terminal() {
+			s.settleFromBackend(ctx, job, reported.GetStatus())
+			continue
+		}
+
 		// Core says CANCELLING and the backend is still working: reissue.
 		if job.Status == domain.JobCancelling && !terminalJobStatus(reported.GetStatus()) {
 			conn.Send(&backendv1.CoreToBackend{
@@ -210,6 +229,51 @@ func (s *Service) ReconcileState(ctx context.Context, instanceID domain.BackendI
 				},
 			})
 		}
+	}
+}
+
+// settleFromBackend ends a Job that Core still believes is live because the
+// backend says it already ended.
+//
+// It records why, so the timeline does not simply show a Job that stopped for
+// no stated reason: the event Core missed is gone, and saying "the backend
+// reported this finished" is the honest replacement.
+func (s *Service) settleFromBackend(ctx context.Context, job domain.Job, reported backendv1.JobStatus) {
+	status := jobStatusFromProto(reported)
+	s.logger.Info("settling a job the backend already ended",
+		slog.String("jobId", string(job.ID)),
+		slog.String("coreStatus", job.Status.String()),
+		slog.String("backendStatus", status.String()))
+
+	reason := "the backend reported this job as " + strings.ToLower(status.String()) +
+		"; core had it as " + strings.ToLower(job.Status.String())
+
+	var failure *string
+	if status == domain.JobFailed {
+		failure = &reason
+	}
+	if _, err := s.store.TransitionJob(ctx, job.ID, job.Status, status, failure); err != nil {
+		s.logger.Error("cannot settle a job from the backend report",
+			slog.String("jobId", string(job.ID)), slog.String("error", err.Error()))
+		return
+	}
+
+	// The Session may have messages queued behind it, and they have waited long
+	// enough.
+	s.dispatchNext(ctx, job.RunID)
+}
+
+// jobStatusFromProto translates a terminal status a backend reported. Anything
+// non-terminal becomes FAILED, because this is only ever called for a Job the
+// backend says is over.
+func jobStatusFromProto(status backendv1.JobStatus) domain.JobStatus {
+	switch status {
+	case backendv1.JobStatus_JOB_STATUS_COMPLETED:
+		return domain.JobCompleted
+	case backendv1.JobStatus_JOB_STATUS_CANCELLED:
+		return domain.JobCancelled
+	default:
+		return domain.JobFailed
 	}
 }
 
