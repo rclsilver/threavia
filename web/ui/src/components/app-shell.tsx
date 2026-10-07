@@ -1,5 +1,5 @@
 import { Link, useParams } from '@tanstack/react-router';
-import { Plus } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useBackends, useCreateProject, useProjects, useSessions } from '@/api/queries';
@@ -38,19 +38,51 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [projectId, projects.data]);
 
   const sessions = useSessions(projectId);
+  const [collapsed, setCollapsed] = useCollapsed();
 
+  // Collapsed, the sidebar keeps a rail rather than disappearing: the control
+  // that brings it back has to live somewhere a person can find without
+  // guessing, and the main view keeps a left edge of its own.
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-[17rem_1fr]">
-      <aside className="border-border bg-surface flex max-h-[40vh] min-h-0 flex-col gap-4 border-b p-4 md:max-h-none md:border-r md:border-b-0">
-        <header className="flex items-center justify-between">
-          <Link to="/" className="text-base font-semibold">
-            Threavia
-          </Link>
-          <Badge tone={connected ? 'ok' : 'neutral'} title="Realtime stream">
-            {connected ? 'live' : 'offline'}
-          </Badge>
+    <div
+      className={cn(
+        'grid h-full grid-cols-1',
+        collapsed ? 'md:grid-cols-[3rem_1fr]' : 'md:grid-cols-[17rem_1fr]',
+      )}
+    >
+      <aside
+        className={cn(
+          'border-border bg-surface flex max-h-[40vh] min-h-0 flex-col border-b md:max-h-none md:border-r md:border-b-0',
+          collapsed ? 'gap-2 p-2' : 'gap-4 p-4',
+        )}
+      >
+        <header className={cn('flex items-center gap-2', collapsed && 'flex-col')}>
+          {!collapsed && (
+            <>
+              <Link to="/" className="text-base font-semibold">
+                Threavia
+              </Link>
+              <Badge tone={connected ? 'ok' : 'neutral'} title="Realtime stream" className="ml-auto">
+                {connected ? 'live' : 'offline'}
+              </Badge>
+            </>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            title={collapsed ? 'Show the sidebar' : 'Hide the sidebar'}
+            onClick={() => setCollapsed(!collapsed)}
+          >
+            {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+          </Button>
         </header>
 
+        {collapsed ? (
+          // Nothing else fits legibly in a rail, and half a session title is
+          // worse than none: the rail is a way back, not a smaller sidebar.
+          <span className="sr-only">Sidebar hidden</span>
+        ) : (
+          <>
         <section className="space-y-2">
           <Label>Project</Label>
           <div className="flex gap-2">
@@ -121,19 +153,52 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </section>
 
-        <section className="space-y-2">
-          <Label>Backends</Label>
-          <ul className="space-y-2">
-            {(backends.data ?? []).map((backend) => (
-              <BackendRow key={backend.id} backend={backend} />
-            ))}
-          </ul>
-        </section>
+            <section className="space-y-2">
+              <Label>Backends</Label>
+              <ul className="space-y-2">
+                {(backends.data ?? []).map((backend) => (
+                  <BackendRow key={backend.id} backend={backend} />
+                ))}
+              </ul>
+            </section>
+          </>
+        )}
       </aside>
 
       <main className="flex min-h-0 flex-col overflow-hidden">{children}</main>
     </div>
   );
+}
+
+const COLLAPSED_KEY = 'threavia.sidebar.collapsed';
+
+/**
+ * Whether the sidebar is folded away, remembered between visits.
+ *
+ * Someone who hid it did so because they wanted the room, and having to hide it
+ * again on every reload is the same annoyance repeated. Browser storage can be
+ * unavailable or refused, and the sidebar showing is the state that still works
+ * when it is.
+ */
+function useCollapsed(): [boolean, (collapsed: boolean) => void] {
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(COLLAPSED_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const remember = (next: boolean) => {
+    setCollapsed(next);
+    try {
+      window.localStorage.setItem(COLLAPSED_KEY, String(next));
+    } catch {
+      // Nothing to do: the preference lasts this visit instead of every visit.
+    }
+  };
+
+  return [collapsed, remember];
 }
 
 /**
