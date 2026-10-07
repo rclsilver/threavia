@@ -1471,6 +1471,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller, as Core sees them
+         * @description The authentication mode comes with the identity: every user-scoped row
+         *     is attributed to a user id whether or not anyone proved who they are, so
+         *     a client reading the id alone would present a configured development
+         *     identity as a signed-in person.
+         *
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The caller */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Me"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/attention": {
         parameters: {
             query?: never;
@@ -2636,6 +2679,18 @@ export interface components {
              * @description Where the live stream takes over.
              */
             cursor: number;
+        };
+        Me: {
+            userId: string;
+            /**
+             * @description How the caller was authenticated. "none" means nobody was asked to prove anything and the id is whatever Core was configured with.
+             *
+             * @enum {string}
+             */
+            authMode: "none" | "basic" | "oidc";
+            subject?: string;
+            email?: string;
+            name?: string;
         };
         Attention: {
             validations: components["schemas"]["ValidationRequest"][] | null;

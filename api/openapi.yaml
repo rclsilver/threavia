@@ -764,6 +764,22 @@ paths:
         "409":
           $ref: "#/components/responses/Error"
 
+  /api/v1/me:
+    get:
+      tags: [attention]
+      summary: The caller, as Core sees them
+      description: |
+        The authentication mode comes with the identity: every user-scoped row
+        is attributed to a user id whether or not anyone proved who they are, so
+        a client reading the id alone would present a configured development
+        identity as a signed-in person.
+      responses:
+        "200":
+          description: The caller
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+
   /api/v1/me/attention:
     get:
       tags: [attention]
@@ -1614,6 +1630,21 @@ components:
           type: integer
           format: int64
           description: Where the live stream takes over.
+
+    Me:
+      type: object
+      required: [userId, authMode]
+      properties:
+        userId: { type: string }
+        authMode:
+          type: string
+          enum: [none, basic, oidc]
+          description: >
+            How the caller was authenticated. "none" means nobody was asked to
+            prove anything and the id is whatever Core was configured with.
+        subject: { type: string }
+        email: { type: string }
+        name: { type: string }
 
     Attention:
       type: object

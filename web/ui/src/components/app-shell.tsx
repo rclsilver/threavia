@@ -2,15 +2,31 @@ import { Link, useParams } from '@tanstack/react-router';
 import { PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { useBackends, useCreateProject, useProjects, useSessions } from '@/api/queries';
+import {
+  useBackends,
+  useClaimBackend,
+  useCreateProject,
+  useIssueBackendToken,
+  useMe,
+  useProjects,
+  useRevokeBackend,
+  useSessions,
+} from '@/api/queries';
 import type { BackendInstance, Session } from '@/api/types';
 import { useStream } from '@/use-stream';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Input, Label } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { cn, humanise } from '@/lib/utils';
+import { cn, humanise, when } from '@/lib/utils';
 
 /**
  * The frame every view sits in: which Project, its Sessions, and the backends
@@ -153,14 +169,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </section>
 
-            <section className="space-y-2">
-              <Label>Backends</Label>
-              <ul className="space-y-2">
-                {(backends.data ?? []).map((backend) => (
-                  <BackendRow key={backend.id} backend={backend} />
-                ))}
-              </ul>
-            </section>
+            <UserMenu backends={backends.data ?? []} />
           </>
         )}
       </aside>
@@ -168,6 +177,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="flex min-h-0 flex-col overflow-hidden">{children}</main>
     </div>
   );
+}
+
+/**
+ * Sessions bucketed by how recently they were touched.
+ *
+ * The buckets are the ones a person actually uses to find something again: what
+ * they were doing a moment ago, earlier today, this week, before that.
+ */
+function groupSessions(sessions: Session[]): { label: string; sessions: Session[] }[] {
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  const buckets: { label: string; within: number; sessions: Session[] }[] = [
+    { label: 'Today', within: day, sessions: [] },
+    { label: 'Previous 7 days', within: 7 * day, sessions: [] },
+    { label: 'Previous 30 days', within: 30 * day, sessions: [] },
+    { label: 'Older', within: Infinity, sessions: [] },
+  ];
+
+  for (const session of sessions) {
+    const age = now - Date.parse(session.updatedAt);
+    // An unreadable date compares false against every bound and lands in the
+    // last bucket, which beats disappearing from the list.
+    const bucket = buckets.find((candidate) => age < candidate.within) ?? buckets[buckets.length - 1];
+    bucket.sessions.push(session);
+  }
+  return buckets.filter((bucket) => bucket.sessions.length > 0);
 }
 
 const COLLAPSED_KEY = 'threavia.sidebar.collapsed';
@@ -202,53 +237,191 @@ function useCollapsed(): [boolean, (collapsed: boolean) => void] {
 }
 
 /**
- * Sessions bucketed by how recently they were touched.
+ * Who is using Threavia, and the machines that work for them.
  *
- * The buckets are the ones a person actually uses to find something again: what
- * they were doing a moment ago, earlier today, this week, before that.
+ * It sits at the foot of the sidebar because that is where a person looks for
+ * themselves, and it opens what it holds in one move: the whole of it fits on
+ * one panel, and a menu whose every branch leads to the same panel is a step
+ * that exists only to be clicked through. The warning dot is the part that
+ * cannot wait for anyone to open anything: a backend that is not ready is why
+ * nothing is answering.
  */
-function groupSessions(sessions: Session[]): { label: string; sessions: Session[] }[] {
-  const now = Date.now();
-  const day = 24 * 60 * 60 * 1000;
-  const buckets: { label: string; within: number; sessions: Session[] }[] = [
-    { label: 'Today', within: day, sessions: [] },
-    { label: 'Previous 7 days', within: 7 * day, sessions: [] },
-    { label: 'Previous 30 days', within: 30 * day, sessions: [] },
-    { label: 'Older', within: Infinity, sessions: [] },
-  ];
+function UserMenu({ backends }: { backends: BackendInstance[] }) {
+  const me = useMe();
 
-  for (const session of sessions) {
-    const age = now - Date.parse(session.updatedAt);
-    // An unreadable date compares false against every bound and lands in the
-    // last bucket, which beats disappearing from the list.
-    const bucket = buckets.find((candidate) => age < candidate.within) ?? buckets[buckets.length - 1];
-    bucket.sessions.push(session);
-  }
-  return buckets.filter((bucket) => bucket.sessions.length > 0);
-}
-
-function BackendRow({ backend }: { backend: BackendInstance }) {
-  const tone: BadgeTone =
-    backend.operationalStatus === 'READY'
-      ? 'ok'
-      : backend.operationalStatus === 'DEGRADED'
-        ? 'warn'
-        : 'neutral';
+  // Authenticated or not is not a detail to smooth over: in ModeNone nobody was
+  // asked to prove anything, and the id is whatever Core was configured with.
+  const anonymous = !me.data || me.data.authMode === 'none';
+  const name = anonymous ? 'anonymous' : me.data.name || me.data.email || me.data.userId;
+  const unwell = backends.filter((backend) => backend.operationalStatus !== 'READY');
 
   return (
-    <li className="text-sm">
-      <div className="flex items-center gap-2">
-        <span className="truncate">{backend.name}</span>
-        <Badge tone={tone}>{humanise(backend.operationalStatus)}</Badge>
-      </div>
-      {/* Why it is in that state. A status alone sends someone to the logs. */}
-      {(backend.conditions ?? []).map((condition) => (
-        <p key={condition.type} className="text-danger mt-0.5 text-xs break-words">
-          {condition.message || condition.reason || condition.type}
-        </p>
-      ))}
-    </li>
+    <Dialog>
+      <DialogTrigger asChild>
+        <button
+          type="button"
+          title="Your account and backends"
+          className="hover:bg-surface-2 border-border flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-sm"
+        >
+          <span className="bg-surface-2 text-muted flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium uppercase">
+            {name.slice(0, 1)}
+          </span>
+          <span className="min-w-0 flex-1 truncate">{name}</span>
+          {unwell.length > 0 && (
+            <span
+              className="bg-warn size-1.5 shrink-0 rounded-full"
+              title={`${unwell.length} backend(s) not ready`}
+            />
+          )}
+        </button>
+      </DialogTrigger>
+
+      <DialogContent className="w-[min(40rem,calc(100vw-2rem))]">
+        <div>
+          <DialogTitle>{name}</DialogTitle>
+          <DialogDescription>
+            {anonymous
+              ? 'No authentication is configured, so everything here is attributed to one user.'
+              : `Signed in with ${me.data?.authMode} as ${me.data?.userId}.`}
+          </DialogDescription>
+        </div>
+
+        <section className="border-border space-y-3 border-t pt-4">
+          <h3 className="text-sm font-medium">Backends</h3>
+          <BackendsPane backends={backends} />
+        </section>
+      </DialogContent>
+    </Dialog>
   );
+}
+
+/** The machines that can run work, and what can be done about them. */
+function BackendsPane({ backends }: { backends: BackendInstance[] }) {
+  const revoke = useRevokeBackend();
+  const issue = useIssueBackendToken();
+  const claim = useClaimBackend();
+  const [claimCode, setClaimCode] = useState('');
+  const [confirming, setConfirming] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-5">
+      <ul className="space-y-2">
+        {backends.length === 0 && (
+          <li className="text-muted text-sm">
+            None yet. Issue a registration token below and start a backend with it.
+          </li>
+        )}
+        {backends.map((backend) => (
+          <li key={backend.id} className="border-border rounded-[--radius-card] border p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">{backend.name}</span>
+              <Badge tone={backendTone(backend)}>{humanise(backend.operationalStatus)}</Badge>
+              {backend.ownershipStatus !== 'CLAIMED' && (
+                <Badge tone="warn">{humanise(backend.ownershipStatus)}</Badge>
+              )}
+              {backend.ownershipStatus !== 'REVOKED' &&
+                (confirming === backend.id ? (
+                  <span className="ml-auto flex items-center gap-2 text-xs">
+                    <span className="text-muted">Revoke its credential?</span>
+                    <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
+                      No
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={revoke.isPending}
+                      onClick={() => {
+                        revoke.mutate(backend.id);
+                        setConfirming(null);
+                      }}
+                    >
+                      Revoke
+                    </Button>
+                  </span>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto"
+                    onClick={() => setConfirming(backend.id)}
+                  >
+                    Revoke
+                  </Button>
+                ))}
+            </div>
+            <p className="text-muted mt-1 text-xs">
+              {(backend.capabilities ?? []).map(humanise).join(', ') || 'no capability'} ·{' '}
+              {backend.capacity?.activeRuns ?? 0}/{backend.capacity?.maxConcurrentRuns ?? 0} runs ·
+              last seen {when(backend.lastHeartbeatAt) || 'never'}
+            </p>
+            {(backend.conditions ?? []).map((condition) => (
+              <p key={condition.type} className="text-danger mt-1 text-xs break-words">
+                {condition.message || condition.reason || condition.type}
+              </p>
+            ))}
+          </li>
+        ))}
+      </ul>
+
+      {revoke.error && <p className="text-danger text-sm">{revoke.error.message}</p>}
+
+      <section className="border-border space-y-2 border-t pt-4">
+        <h3 className="text-sm font-medium">Add a backend</h3>
+        <p className="text-muted text-xs">
+          A one-shot token, good for one registration. Core returns it once and cannot show it
+          again.
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={issue.isPending}
+          onClick={() => issue.mutate({ label: 'issued from the web client', ttlSeconds: 3600 })}
+        >
+          New registration token
+        </Button>
+
+        {issue.data && (
+          <div className="space-y-1">
+            <code className="bg-surface-2 block rounded-md p-2 text-xs break-all">
+              {issue.data.token}
+            </code>
+            <p className="text-muted text-xs">Valid until {when(issue.data.expiresAt)}.</p>
+          </div>
+        )}
+        {issue.error && <p className="text-danger text-sm">{issue.error.message}</p>}
+      </section>
+
+      <section className="border-border space-y-2 border-t pt-4">
+        <h3 className="text-sm font-medium">Claim an instance</h3>
+        <p className="text-muted text-xs">
+          A backend that registered without a user prints a one-time code. Claiming it makes it
+          yours.
+        </p>
+        <div className="flex gap-2">
+          <Input
+            value={claimCode}
+            onChange={(event) => setClaimCode(event.target.value)}
+            placeholder="claim code"
+          />
+          <Button
+            variant="secondary"
+            disabled={!claimCode.trim() || claim.isPending}
+            onClick={() => claim.mutate(claimCode.trim(), { onSuccess: () => setClaimCode('') })}
+          >
+            Claim
+          </Button>
+        </div>
+        {claim.error && <p className="text-danger text-sm">{claim.error.message}</p>}
+      </section>
+    </div>
+  );
+}
+
+function backendTone(backend: BackendInstance): BadgeTone {
+  if (backend.ownershipStatus === 'REVOKED') return 'danger';
+  if (backend.operationalStatus === 'READY') return 'ok';
+  if (backend.operationalStatus === 'DEGRADED') return 'warn';
+  return 'neutral';
 }
 
 function NewProjectButton({ onCreated }: { onCreated: (projectId: string) => void }) {

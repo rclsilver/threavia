@@ -8,6 +8,7 @@ export const keys = {
   policy: (sessionId: string) => ['policy', sessionId] as const,
   attention: () => ['attention'] as const,
   audit: () => ['audit'] as const,
+  me: () => ['me'] as const,
   backends: () => ['backends'] as const,
   backendSkills: (backendId: string) => ['backend-skills', backendId] as const,
   directories: (projectId: string) => ['directories', projectId] as const,

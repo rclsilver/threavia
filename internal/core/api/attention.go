@@ -8,9 +8,32 @@ import (
 )
 
 func (h *handler) registerAttention(mux *http.ServeMux) {
+	h.handle(mux, "GET /api/v1/me", h.me)
 	h.handle(mux, "GET /api/v1/me/attention", h.attention)
 	h.handle(mux, "POST /api/v1/validations/{validationId}/resolve", h.resolveValidation)
 	h.handle(mux, "POST /api/v1/user-input/{requestId}/resolve", h.resolveUserInput)
+}
+
+// me returns the caller as Core sees them.
+//
+// The authentication mode comes with it, because every user-scoped row is
+// attributed to a user id whether or not anyone proved who they are: a client
+// that only read the id would present a configured development identity as a
+// signed-in person.
+func (h *handler) me(w http.ResponseWriter, _ *http.Request, identity auth.Identity) {
+	writeJSON(w, http.StatusOK, struct {
+		UserID   string `json:"userId"`
+		AuthMode string `json:"authMode"`
+		Subject  string `json:"subject,omitempty"`
+		Email    string `json:"email,omitempty"`
+		Name     string `json:"name,omitempty"`
+	}{
+		UserID:   string(identity.UserID),
+		AuthMode: h.auth.Mode().String(),
+		Subject:  identity.Subject,
+		Email:    identity.Email,
+		Name:     identity.Name,
+	})
 }
 
 // attention returns what is currently waiting for the user. It is state, not a

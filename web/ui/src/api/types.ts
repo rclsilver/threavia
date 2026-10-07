@@ -34,6 +34,7 @@ export type SkillSourceType = Schemas['SkillSourceType'];
 export type BackendSkill = Schemas['BackendSkill'];
 export type AuditEntry = Schemas['AuditEntry'];
 export type Usage = Schemas['Usage'];
+export type Me = Schemas['Me'];
 
 /** The envelope every collection response uses. */
 export interface List<T> {

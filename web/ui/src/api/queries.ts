@@ -17,6 +17,7 @@ import type {
   KnownDirectory,
   KnownDirectoryBinding,
   List,
+  Me,
   Project,
   Session,
   Skill,
@@ -104,6 +105,53 @@ export function useBackends() {
   return useQuery({
     queryKey: keys.backends(),
     queryFn: () => api.get<List<BackendInstance>>('/api/v1/backends').then(items),
+  });
+}
+
+/** Who Core thinks it is talking to, and whether anyone proved it. */
+export function useMe() {
+  return useQuery({
+    queryKey: keys.me(),
+    queryFn: () => api.get<Me>('/api/v1/me'),
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * A one-shot token a new backend registers with.
+ *
+ * Core returns it once and never again, so the result is held by the caller
+ * rather than refetched: a token nobody copied in time is replaced by issuing
+ * another, not by asking for the same one.
+ */
+export function useIssueBackendToken() {
+  return useMutation({
+    mutationFn: (input: { label: string; ttlSeconds: number }) =>
+      api.post<{ token: string; expiresAt: string }>('/api/v1/backend-tokens', input),
+  });
+}
+
+/**
+ * Revoking the persistent credential of a backend.
+ *
+ * The record stays, because Sessions point at it; what goes is the credential,
+ * and a returning backend must register anew.
+ */
+export function useRevokeBackend() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (backendId: string) => api.post<void>(`/api/v1/backends/${backendId}/revoke`, {}),
+    onSuccess: () => queries.invalidateQueries({ queryKey: keys.backends() }),
+  });
+}
+
+/** Taking ownership of an instance that registered without a user. */
+export function useClaimBackend() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (claimCode: string) =>
+      api.post<BackendInstance>('/api/v1/backends/claim', { claimCode }),
+    onSuccess: () => queries.invalidateQueries({ queryKey: keys.backends() }),
   });
 }
 

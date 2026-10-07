@@ -80,3 +80,25 @@ func TestATaskCannotWaitOnAnotherProject(t *testing.T) {
 	c.mustDo(http.MethodPost, "/api/v1/tasks/"+mine.ID+"/dependencies",
 		map[string]any{"dependsOn": theirs.ID}, nil, http.StatusBadRequest)
 }
+
+// TestTheCallerIsTold covers the one thing a client cannot work out on its own:
+// who Core thinks it is talking to, and whether anybody proved it.
+func TestTheCallerIsTold(t *testing.T) {
+	c := newCore(t)
+
+	var me struct {
+		UserID   string `json:"userId"`
+		AuthMode string `json:"authMode"`
+	}
+	c.mustDo(http.MethodGet, "/api/v1/me", nil, &me, http.StatusOK)
+
+	if me.UserID == "" {
+		t.Fatal("no user id, although every row is attributed to one")
+	}
+	// The harness runs without authentication, and saying so is the point: a
+	// client that only read the id would show a configured development identity
+	// as a signed-in person.
+	if me.AuthMode != "none" {
+		t.Fatalf("authMode = %q, want none", me.AuthMode)
+	}
+}
