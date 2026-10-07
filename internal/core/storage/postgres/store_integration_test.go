@@ -361,3 +361,51 @@ func TestStartSessionIsAtomic(t *testing.T) {
 		t.Fatalf("a failed first send must leave no session behind: got %v", err)
 	}
 }
+
+// TestDisconnectionIsScopedToItsConnection pins the lease rule at the storage
+// level: when a backend reconnects, the cleanup of the connection it replaced
+// must not mark the instance OFFLINE, or Core would believe a live backend is
+// gone and stop dispatching to it.
+func TestDisconnectionIsScopedToItsConnection(t *testing.T) {
+	store, ctx := newTestStore(t)
+	f := newFixture(t, store, ctx)
+
+	connect := func(connectionID string) {
+		t.Helper()
+		if err := store.MarkBackendConnected(ctx, f.backend.ID, connectionID, 1,
+			[]domain.Capability{domain.CapabilityCode}, 1, "go", "test", "claude", "test"); err != nil {
+			t.Fatalf("marking the backend connected: %v", err)
+		}
+	}
+
+	connect("connection-1")
+	connect("connection-2")
+
+	// The superseded connection cleans up late.
+	if err := store.MarkBackendDisconnected(ctx, f.backend.ID, "connection-1"); err != nil {
+		t.Fatalf("releasing the superseded connection: %v", err)
+	}
+
+	instance, err := store.GetBackendInstance(ctx, f.owner, f.backend.ID)
+	if err != nil {
+		t.Fatalf("reading the backend instance: %v", err)
+	}
+	if instance.OperationalStatus == domain.BackendOffline {
+		t.Fatal("a stale connection's cleanup must not take a live backend offline")
+	}
+
+	// The connection that actually holds the lease does take it offline.
+	if err := store.MarkBackendDisconnected(ctx, f.backend.ID, "connection-2"); err != nil {
+		t.Fatalf("releasing the active connection: %v", err)
+	}
+	instance, err = store.GetBackendInstance(ctx, f.owner, f.backend.ID)
+	if err != nil {
+		t.Fatalf("reading the backend instance: %v", err)
+	}
+	if instance.OperationalStatus != domain.BackendOffline {
+		t.Fatalf("operational status = %s, want OFFLINE", instance.OperationalStatus)
+	}
+	if instance.ConnectionID != nil {
+		t.Error("a disconnected backend must hold no connection lease")
+	}
+}

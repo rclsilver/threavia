@@ -29,6 +29,10 @@ const (
 	ReasonReleased CloseReason = "released"
 	// ReasonShutdown means Core is shutting down.
 	ReasonShutdown CloseReason = "shutdown"
+	// ReasonStale means the backend stopped heartbeating. The stream may still
+	// be open at the TCP level while the process behind it is wedged, which is
+	// precisely the case a dropped connection cannot detect.
+	ReasonStale CloseReason = "stale"
 )
 
 // Connection is one active control stream and its lease.
@@ -213,13 +217,18 @@ func (r *Registry) Stale(olderThan time.Duration) []*Connection {
 	cutoff := r.nowFn().Add(-olderThan)
 	var out []*Connection
 	for _, conn := range r.Connections() {
-		last := conn.LastHeartbeat()
-		if last.IsZero() {
-			last = conn.ConnectedAt()
-		}
-		if last.Before(cutoff) {
+		if conn.lastSignal().Before(cutoff) {
 			out = append(out, conn)
 		}
 	}
 	return out
+}
+
+// lastSignal is the most recent sign of life from a connection: its last
+// heartbeat, or the moment it was established when none has arrived yet.
+func (c *Connection) lastSignal() time.Time {
+	if last := c.LastHeartbeat(); !last.IsZero() {
+		return last
+	}
+	return c.ConnectedAt()
 }

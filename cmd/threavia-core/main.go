@@ -109,8 +109,10 @@ func run() error {
 	}
 
 	// The service resolves the credential a backend presents on Connect.
-	controlServer := backendconn.NewServer(registry, svc, svc,
-		backendconn.Options{HeartbeatInterval: cfg.Backend.HeartbeatInterval}, logger)
+	controlServer := backendconn.NewServer(registry, svc, svc, backendconn.Options{
+		HeartbeatInterval: cfg.Backend.HeartbeatInterval,
+		OfflineAfter:      cfg.Backend.OfflineAfter,
+	}, logger)
 
 	grpcServer, err := newGRPCServer(cfg.GRPC, cfg.Backend.HeartbeatInterval)
 	if err != nil {
@@ -166,6 +168,13 @@ func run() error {
 		if err := httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("client api: %w", err)
 		}
+		return nil
+	})
+
+	group.Go(func() error {
+		// A backend whose process wedges keeps its connection open and goes
+		// silent; only a heartbeat deadline can notice.
+		controlServer.Monitor(groupCtx)
 		return nil
 	})
 

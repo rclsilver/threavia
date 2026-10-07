@@ -238,3 +238,30 @@ the bucket and the key, and prints the credentials. It is idempotent.
 
 Garage is a local convenience, not a dependency: Core talks to a generic
 S3-compatible endpoint, and the Helm chart deploys no storage at all.
+
+### Inferring OFFLINE
+
+Section 7 says Core infers OFFLINE "from missing heartbeat/connection", and
+three different failures hide behind that phrase.
+
+A clean disconnection ends the stream, and Core notices immediately. A dead
+peer — host gone, network black hole, frozen process — stops acknowledging the
+gRPC keepalive pings, and the transport tears the connection down by itself;
+measured against a backend frozen with SIGSTOP, this is what fires, and faster
+than any application deadline. The third case is the one that needs code: a
+backend whose transport is healthy and answering pings while the application
+behind it has stopped, through a wedged event loop or an implementation that
+simply never heartbeats. Nothing below the application layer can see it, and
+without a deadline the instance would stay READY forever while Core kept
+dispatching work into a hole.
+
+So a watcher sweeps the live connections at the heartbeat interval and closes
+any that has said nothing for `THREAVIA_BACKEND_OFFLINE_AFTER`. Closing is all
+it does: the ordinary disconnection path then marks the instance OFFLINE and
+parks its Jobs, and the backend reconnects and reconciles. A connection has one
+way to end rather than two, and the backend is told to come back rather than
+that something went wrong.
+
+A connection that has only just opened is given the same grace as one that has
+been heartbeating, so a backend is never killed before it has had a chance to
+speak.

@@ -23,8 +23,12 @@ var ErrCoreToolUnavailable = errors.New("core tools are not available")
 
 // Options configures the control server.
 type Options struct {
-	// HeartbeatInterval is advertised to backends in the Welcome message.
+	// HeartbeatInterval is advertised to backends in the Welcome message, and is
+	// how often Monitor looks for backends that went quiet.
 	HeartbeatInterval time.Duration
+	// OfflineAfter is how long a connection may go without a heartbeat before
+	// Core infers OFFLINE and closes it. Zero disables the check.
+	OfflineAfter time.Duration
 }
 
 // Server implements the BackendControl service.
@@ -161,6 +165,8 @@ func (s *Server) Connect(stream backendv1.BackendControl_ConnectServer) error {
 				return status.Error(codes.Aborted, "connection superseded by a newer backend connection")
 			case ReasonShutdown:
 				return status.Error(codes.Unavailable, "core is shutting down")
+			case ReasonStale:
+				return status.Error(codes.DeadlineExceeded, "no heartbeat received, reconnect and reconcile")
 			default:
 				return status.Error(codes.Unavailable, "connection closed by core")
 			}
