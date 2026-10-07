@@ -11,6 +11,7 @@ import {
   useSnapshot,
 } from '@/api/queries';
 import { AttentionPanel } from '@/components/attention';
+import { Badge } from '@/components/ui/badge';
 import { PolicyPanel } from '@/components/policy-panel';
 import { Timeline, type Pending } from '@/components/timeline';
 import { Button } from '@/components/ui/button';
@@ -70,17 +71,25 @@ export function SessionView() {
           <SessionTitle sessionId={sessionId} title={data.session.title ?? ''} />
           {/* Indented like the title: the title carries padding so its hover
               target is not glued to the text, and the status below has to
-              start at the same place or the two read as misaligned. */}
-          <p className="text-muted pl-1.5 text-xs">
-            {active ? `Job ${humanise(active.status)}` : 'Idle'}
+              start at the same place or the two read as misaligned.
+              The badge rides here rather than beside the title, which has to
+              keep the whole width for the moment it becomes a rename field. */}
+          <div className="text-muted flex items-center gap-2 pl-1.5 text-xs">
+            {active ? (
+              <Badge tone={active.status === 'RUNNING' ? 'accent' : 'warn'}>
+                {humanise(active.status)}
+              </Badge>
+            ) : (
+              <span>Idle</span>
+            )}
             {active && working && (
               // A liveness signal, not history: it says the agent is still
               // there between two things worth remembering. Shown only while a
               // Job is running, because nothing orders these against the
               // timeline and one can arrive after the Job it describes ended.
-              <span className="text-accent ml-2">· {humanise(working)}…</span>
+              <span className="text-accent">{humanise(working)}…</span>
             )}
-          </p>
+          </div>
         </div>
         <SessionSettings sessionId={sessionId} />
       </header>
@@ -224,7 +233,7 @@ function Composer({ sessionId }: { sessionId: string }) {
             type="submit"
             variant="primary"
             size="icon"
-            className="rounded-full"
+            className="from-accent to-accent-2 rounded-full bg-linear-to-br"
             title="Send (Enter)"
             disabled={send.isPending || !message.trim()}
           >

@@ -1,6 +1,6 @@
 import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Terminal } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
+import { clock, cn } from '@/lib/utils';
 
 /** One tool call, with whatever is known about how it ended. */
 export interface ToolCall {
@@ -9,6 +9,8 @@ export interface ToolCall {
   input: Record<string, unknown>;
   output?: string;
   error?: string;
+  /** When it started, so the log reads as a record and not only a list. */
+  at: string;
   /** False while the result has not arrived, which is what makes it look live. */
   done: boolean;
 }
@@ -80,6 +82,13 @@ export function ToolCallEntry({
         ) : (
           <Terminal className="text-muted size-3.5 shrink-0" />
         )}
+
+        <time
+          dateTime={call.at}
+          className="text-muted shrink-0 font-mono text-[0.6875rem] opacity-60"
+        >
+          {clock(call.at)}
+        </time>
 
         <span className={cn('font-mono shrink-0', failed ? 'text-danger' : 'text-text')}>
           {label(call.name)}

@@ -1,5 +1,17 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { AlertTriangle, CheckCircle2, FileDiff, Square } from 'lucide-react';
+import {
+  AlertTriangle,
+  Ban,
+  CheckCircle2,
+  Circle,
+  CornerDownLeft,
+  FileDiff,
+  Flag,
+  ShieldCheck,
+  ShieldX,
+  Square,
+  type LucideIcon,
+} from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Markdown } from '@/components/markdown';
 import { ToolCallEntry, type ToolCall } from '@/components/tool-call';
 import { payloadOf, type Event, type JobStatus } from '@/api/types';
-import { cn, cost, duration, humanise, tokens } from '@/lib/utils';
+import { clock, cn, cost, duration, humanise, tokens } from '@/lib/utils';
 
 /**
  * The Jobs that have not finished, by id.
@@ -103,6 +115,7 @@ function rowsOf(events: Event[]): Row[] {
         call: {
           id: started.toolCallId || `${event.sequence}`,
           name: started.name,
+          at: event.timestamp,
           input: started.input ?? {},
           done: false,
         },
@@ -137,6 +150,7 @@ function rowsOf(events: Event[]): Row[] {
           call: {
             id: failed.toolCallId || `${event.sequence}`,
             name: failed.name,
+            at: event.timestamp,
             input: {},
             error: failed.error ?? '',
             done: true,
@@ -301,9 +315,17 @@ function Entry({
     return <WorkspaceChange change={changed} />;
   }
 
+  // Everything else is the log running between the messages: a mark, the time
+  // it happened, and one line. The mark is what makes a long Session scannable
+  // without reading it, and the time is what makes it a record.
+  const { Icon, tone, text } = describe(event);
   return (
-    <div className="text-muted flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.8125rem]">
-      <span className="break-all">{describe(event)}</span>
+    <div className="text-muted flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.8125rem]">
+      <Icon className={cn('size-3.5 shrink-0', tone)} />
+      <time dateTime={event.timestamp} className="shrink-0 font-mono text-[0.6875rem] opacity-60">
+        {clock(event.timestamp)}
+      </time>
+      <span className="break-all">{text}</span>
       <JobCost event={event} startedAt={startedAt} />
     </div>
   );
@@ -437,35 +459,41 @@ const MARK: Record<string, string> = {
   RENAMED: '→',
 };
 
-/** One line for an event the timeline shows but does not lay out specially. */
-function describe(event: Event): React.ReactNode {
+/** The mark and the line for an event the timeline does not lay out specially. */
+function describe(event: Event): {
+  Icon: LucideIcon;
+  tone?: string;
+  text: React.ReactNode;
+} {
   switch (event.type) {
     case 'session.created':
-      return 'Session created.';
+      return { Icon: Flag, text: 'Session created.' };
     // The provider result repeats the last agent message, so only the fact that
     // the turn ended is worth showing.
     case 'job.completed':
-      return (
-        <span className="inline-flex items-center gap-1.5">
-          <CheckCircle2 className="text-ok size-3.5" /> Done.
-        </span>
-      );
+      return { Icon: CheckCircle2, tone: 'text-ok', text: 'Done.' };
     case 'job.failed':
-      return (
-        <span className="text-danger inline-flex items-center gap-1.5">
-          <AlertTriangle className="size-3.5" />
-          Failed: {payloadOf(event, 'job.failed')?.error ?? 'unknown error'}
-        </span>
-      );
+      return {
+        Icon: AlertTriangle,
+        tone: 'text-danger',
+        text: (
+          <span className="text-danger">
+            Failed: {payloadOf(event, 'job.failed')?.error ?? 'unknown error'}
+          </span>
+        ),
+      };
     case 'job.cancelled':
-      return 'Cancelled.';
+      return { Icon: Ban, text: 'Cancelled.' };
     case 'validation.resolved':
       return payloadOf(event, 'validation.resolved')?.approved
-        ? 'Permission granted.'
-        : 'Permission denied.';
+        ? { Icon: ShieldCheck, tone: 'text-ok', text: 'Permission granted.' }
+        : { Icon: ShieldX, tone: 'text-danger', text: 'Permission denied.' };
     case 'user_input.resolved':
-      return `Answered: ${payloadOf(event, 'user_input.resolved')?.value ?? ''}`;
+      return {
+        Icon: CornerDownLeft,
+        text: `Answered: ${payloadOf(event, 'user_input.resolved')?.value ?? ''}`,
+      };
     default:
-      return <Badge>{event.type}</Badge>;
+      return { Icon: Circle, text: <Badge>{event.type}</Badge> };
   }
 }

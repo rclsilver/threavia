@@ -14,6 +14,9 @@
   --color-muted: oklch(55% 0.008 265);
   --color-accent: oklch(52% 0.19 275);
   --color-accent-text: oklch(99% 0 0);
+  /* The far end of the brand gradient: the mark and the send button, and
+     nothing else. A gradient that spreads stops meaning anything. */
+  --color-accent-2: oklch(58% 0.21 310);
   --color-ok: oklch(55% 0.14 155);
   --color-warn: oklch(68% 0.15 75);
   --color-danger: oklch(55% 0.2 25);
@@ -53,6 +56,7 @@
     --color-muted: oklch(66% 0.008 265);
     --color-accent: oklch(70% 0.15 275);
     --color-accent-text: oklch(17% 0.012 265);
+    --color-accent-2: oklch(72% 0.17 310);
     --color-ok: oklch(72% 0.16 155);
     --color-warn: oklch(80% 0.14 80);
     --color-danger: oklch(68% 0.18 22);

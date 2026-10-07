@@ -27,6 +27,7 @@ import type { BackendInstance, Session } from '@/api/types';
 import { useWideLayout } from '@/use-layout';
 import { SelectedProject } from '@/use-project';
 import { useStream } from '@/use-stream';
+import { Logo } from '@/components/logo';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CheckboxField } from '@/components/ui/checkbox';
@@ -87,9 +88,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
       >
         <header className={cn('flex items-center gap-2', collapsed && 'flex-col')}>
-          {!collapsed && (
+          {collapsed ? (
+            // The mark alone still says whose window this is, and is the way
+            // home when the name does not fit.
+            <Link to="/" title="Threavia" className="py-1">
+              <Logo className="size-6" />
+            </Link>
+          ) : (
             <>
-              <Link to="/" className="text-base font-semibold">
+              <Link to="/" className="flex items-center gap-2 text-base font-semibold">
+                <Logo className="size-6" />
                 Threavia
               </Link>
               <Badge tone={connected ? 'ok' : 'neutral'} title="Realtime stream" className="ml-auto">

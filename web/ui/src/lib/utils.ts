@@ -21,6 +21,14 @@ export function bytes(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** The time of day, for a line in a log that already says which day it is. */
+export function clock(value: string | undefined | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
 /** An enum value as prose: WAITING_INPUT becomes "waiting input". */
 export function humanise(value: string | undefined): string {
   return (value ?? '').toLowerCase().replace(/_/g, ' ');
