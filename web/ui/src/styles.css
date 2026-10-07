@@ -18,14 +18,6 @@
   --color-warn: oklch(68% 0.15 75);
   --color-danger: oklch(55% 0.2 25);
 
-  /*
-   * What the person said. It is its own colour rather than the accent: the
-   * accent is light on a dark page so that it reads as a link, and a bubble
-   * filled with it would invert the text of the one thing written by hand.
-   */
-  --color-bubble: oklch(52% 0.17 272);
-  --color-bubble-text: oklch(99% 0 0);
-
   --radius-card: 0.75rem;
   /*
    * How wide a line of prose is allowed to get. A conversation is read, not
@@ -61,8 +53,6 @@
     --color-muted: oklch(66% 0.008 265);
     --color-accent: oklch(70% 0.15 275);
     --color-accent-text: oklch(17% 0.012 265);
-    --color-bubble: oklch(45% 0.14 272);
-    --color-bubble-text: oklch(97% 0.004 265);
     --color-ok: oklch(72% 0.16 155);
     --color-warn: oklch(80% 0.14 80);
     --color-danger: oklch(68% 0.18 22);

@@ -272,15 +272,17 @@ function Entry({
   pending: Pending;
   onStop: (jobId: string) => void;
 }) {
+  // What the person said, marked by a rule rather than sent to the other side
+  // of the page. A column that reads top to bottom keeps every line starting at
+  // the same margin — which is what makes a wide window readable at all — and
+  // one of the two speakers has to carry a mark: unmarked is the agent.
   const user = payloadOf(event, 'user.message');
   if (user) {
     const jobId = event.jobId;
     const status = jobId ? pending[jobId] : undefined;
     return (
-      <div className="flex flex-col items-end gap-1">
-        <div className="bg-bubble text-bubble-text max-w-[85%] rounded-3xl px-4 py-2.5 text-sm whitespace-pre-wrap">
-          {user.text}
-        </div>
+      <div className="border-accent bg-surface-2/60 space-y-1 rounded-r-md border-l-2 py-2 pr-3 pl-3">
+        <p className="text-sm whitespace-pre-wrap">{user.text}</p>
         {jobId && status && <Stop status={status} onStop={() => onStop(jobId)} />}
       </div>
     );
@@ -331,7 +333,7 @@ function Stop({ status, onStop }: { status: JobStatus; onStop: () => void }) {
   // Core moves a Job to CANCELLED only once the backend confirms the stop, so
   // the wait is real and worth showing rather than hiding the control.
   if (status === 'CANCELLING') {
-    return <span className="text-muted px-2 text-xs">Stopping…</span>;
+    return <span className="text-muted text-xs">Stopping…</span>;
   }
 
   return (
@@ -340,7 +342,7 @@ function Stop({ status, onStop }: { status: JobStatus; onStop: () => void }) {
       <Button
         variant="ghost"
         size="sm"
-        className="h-6 gap-1.5 px-2 text-xs [&_svg]:size-3"
+        className="h-6 gap-1.5 px-1.5 text-xs [&_svg]:size-3"
         title={
           status === 'QUEUED'
             ? 'Drop this message before it runs'
