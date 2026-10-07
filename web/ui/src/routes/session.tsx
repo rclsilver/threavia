@@ -233,7 +233,10 @@ function Composer({ sessionId }: { sessionId: string }) {
             type="submit"
             variant="primary"
             size="icon"
-            className="from-accent to-accent-2 rounded-full bg-linear-to-br"
+            // As tall as one line of the field it sits in, so a single-line
+            // message has it centred and a grown one keeps it on the last line
+            // rather than floating up the side.
+            className="from-accent to-accent-2 size-9 rounded-full bg-linear-to-br"
             title="Send (Enter)"
             disabled={send.isPending || !message.trim()}
           >
