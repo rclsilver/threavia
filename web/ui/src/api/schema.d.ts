@@ -2408,6 +2408,28 @@ export interface components {
         SkillSourceType: "GIT" | "ARCHIVE" | "UPLOAD";
         /** @enum {string} */
         FileState: "ADDED" | "MODIFIED" | "DELETED" | "RENAMED";
+        /** @description What one Job consumed, as its backend reported it. Core stores it and
+         *     shows it; it prices nothing itself. Absent when the backend reported
+         *     nothing: unknown accounting is not the same as a free Job.
+         *      */
+        Usage: {
+            /** Format: int64 */
+            inputTokens: number;
+            /** Format: int64 */
+            outputTokens: number;
+            /**
+             * Format: int64
+             * @description Tokens served from a prompt cache. They are the bulk of a long Session.
+             */
+            cacheReadTokens: number;
+            /** Format: int64 */
+            cacheWriteTokens: number;
+            /**
+             * Format: double
+             * @description What the provider says it cost. Absent when it says nothing.
+             */
+            costUsd?: number;
+        };
         Project: {
             id: components["schemas"]["UUID"];
             ownerId: string;
@@ -2488,7 +2510,19 @@ export interface components {
             sessionId?: components["schemas"]["UUID"];
             runId?: components["schemas"]["UUID"];
             jobId?: components["schemas"]["UUID"];
-            /** @description The shape depends on `type`. See EventPayloads for the ones a client renders. */
+            /** @description The shape depends on `type`, and a backend may add one without a
+             *     Core release, so it is open. The ones a client renders:
+             *
+             *     - `user.message`, `agent.message`: `{ text }`
+             *     - `tool.started`: `{ toolCallId, name, input }`
+             *     - `tool.completed`: `{ toolCallId, name, output }`, the output a
+             *       bounded excerpt marked with an ellipsis when it was cut
+             *     - `tool.failed`: `{ toolCallId, name, error }`
+             *     - `job.completed`, `job.failed`: `{ summary | error, usage }`
+             *     - `workspace.changed`: `{ knownDirectoryId, files, additions, deletions }`
+             *     - `validation.resolved`: `{ validationId, approved, note }`
+             *     - `user_input.resolved`: `{ requestId, value }`
+             *      */
             payload?: {
                 [key: string]: unknown;
             };

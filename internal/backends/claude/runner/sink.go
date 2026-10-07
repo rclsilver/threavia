@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 
+	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/backends/claude/workspace"
 )
 
@@ -33,8 +34,11 @@ type Sink interface {
 
 	// JobCompleted, JobFailed and JobCancelled are terminal: exactly one of them
 	// is emitted per Job.
-	JobCompleted(ctx context.Context, runID, jobID, summary string) error
-	JobFailed(ctx context.Context, runID, jobID, code, message string) error
+	//
+	// usage is what the Job consumed, and is nil when the provider reported
+	// nothing: unknown accounting must not read as a free Job.
+	JobCompleted(ctx context.Context, runID, jobID, summary string, usage *backendv1.Usage) error
+	JobFailed(ctx context.Context, runID, jobID, code, message string, usage *backendv1.Usage) error
 	JobCancelled(ctx context.Context, runID, jobID string) error
 
 	// Progress streams a liveness-only signal. It is never persisted.

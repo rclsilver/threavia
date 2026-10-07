@@ -83,7 +83,7 @@ func (c *Claude) Cancel(jobID string) error {
 // Run implements Runner: it executes one Job to completion.
 func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	if err := c.Available(); err != nil {
-		return sink.JobFailed(ctx, params.RunID, params.JobID, "PROVIDER_UNAVAILABLE", err.Error())
+		return sink.JobFailed(ctx, params.RunID, params.JobID, "PROVIDER_UNAVAILABLE", err.Error(), nil)
 	}
 
 	// A per-Job endpoint token: the only process that can reach this Job's
@@ -94,7 +94,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 
 	mcpConfig, err := mcp.Config(endpoint)
 	if err != nil {
-		return sink.JobFailed(ctx, params.RunID, params.JobID, "INTERNAL", err.Error())
+		return sink.JobFailed(ctx, params.RunID, params.JobID, "INTERNAL", err.Error(), nil)
 	}
 
 	// The backend mints the native session id rather than discovering it, so a
@@ -130,11 +130,11 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	cmd := c.command(runCtx, params, nativeSessionID, resuming, mcpConfig)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return sink.JobFailed(ctx, params.RunID, params.JobID, "INTERNAL", err.Error())
+		return sink.JobFailed(ctx, params.RunID, params.JobID, "INTERNAL", err.Error(), nil)
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return sink.JobFailed(ctx, params.RunID, params.JobID, "INTERNAL", err.Error())
+		return sink.JobFailed(ctx, params.RunID, params.JobID, "INTERNAL", err.Error(), nil)
 	}
 	cmd.Stdin = strings.NewReader(params.Prompt)
 
@@ -145,7 +145,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 		slog.String("cwd", params.WorkingDirectory))
 
 	if err := cmd.Start(); err != nil {
-		return sink.JobFailed(ctx, params.RunID, params.JobID, "SPAWN_FAILED", err.Error())
+		return sink.JobFailed(ctx, params.RunID, params.JobID, "SPAWN_FAILED", err.Error(), nil)
 	}
 
 	if err := sink.JobStarted(ctx, params.RunID, params.JobID); err != nil {
@@ -192,18 +192,18 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	// Run was stopped because it reached a limit someone set, and the agent and
 	// the timeline should both say so.
 	if outcome.stoppedBy != "" {
-		return sink.JobFailed(ctx, params.RunID, params.JobID, "POLICY_LIMIT", outcome.stoppedBy)
+		return sink.JobFailed(ctx, params.RunID, params.JobID, "POLICY_LIMIT", outcome.stoppedBy, outcome.usage)
 	}
 	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "POLICY_LIMIT",
-			fmt.Sprintf("stopped by the execution policy after %d seconds", params.Policy.MaxDurationSeconds))
+			fmt.Sprintf("stopped by the execution policy after %d seconds", params.Policy.MaxDurationSeconds), outcome.usage)
 	}
 
 	switch {
 	case outcome.completed && !outcome.failed:
-		return sink.JobCompleted(ctx, params.RunID, params.JobID, outcome.summary)
+		return sink.JobCompleted(ctx, params.RunID, params.JobID, outcome.summary, outcome.usage)
 	case outcome.completed:
-		return sink.JobFailed(ctx, params.RunID, params.JobID, "PROVIDER_ERROR", outcome.summary)
+		return sink.JobFailed(ctx, params.RunID, params.JobID, "PROVIDER_ERROR", outcome.summary, outcome.usage)
 	default:
 		// The process ended without a result line: report what it printed,
 		// rather than pretending the Job finished.
@@ -217,7 +217,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 		if resuming {
 			message = "could not resume the provider session: " + message
 		}
-		return sink.JobFailed(ctx, params.RunID, params.JobID, "PROVIDER_ERROR", message)
+		return sink.JobFailed(ctx, params.RunID, params.JobID, "PROVIDER_ERROR", message, outcome.usage)
 	}
 }
 

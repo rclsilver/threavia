@@ -31,7 +31,7 @@ func TestJobFinishedDuringAnOutageIsNotRerun(t *testing.T) {
 
 	// The backend finishes the work while Core cannot hear it: the event is
 	// buffered locally rather than lost.
-	completed, err := backend.events.JobCompleted(ctx, start.GetRunId(), start.GetJobId(), "1 2 3 4 5")
+	completed, err := backend.events.JobCompleted(ctx, start.GetRunId(), start.GetJobId(), "1 2 3 4 5", nil)
 	if err != nil {
 		t.Fatalf("building the completion event: %v", err)
 	}

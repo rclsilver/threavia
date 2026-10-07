@@ -189,7 +189,7 @@ func TestExecutionPolicyReachesTheBackend(t *testing.T) {
 
 	ctx := context.Background()
 	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
-		return backend.events.JobCompleted(ctx, first.GetRunId(), first.GetJobId(), "fait")
+		return backend.events.JobCompleted(ctx, first.GetRunId(), first.GetJobId(), "fait", nil)
 	}))
 	waitUntil(t, "the first job to complete", func() bool {
 		return c.jobStatus(session, first.GetJobId()) == "COMPLETED"

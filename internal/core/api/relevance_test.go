@@ -317,3 +317,67 @@ func TestABackendExplainsItsState(t *testing.T) {
 		return len(recovered.Conditions) == 0
 	})
 }
+
+// TestUsageReachesTheTimeline pins the other end of the accounting: what a
+// backend reported about a Job has to survive into the event a client renders,
+// or the timeline can only ever say that something finished.
+func TestUsageReachesTheTimeline(t *testing.T) {
+	t.Parallel()
+
+	c := newCore(t)
+	project := c.createProject("homelab")
+	backendID, credential := c.registerBackend("laptop")
+	backend := c.connectBackend(credential)
+
+	session := c.startSessionFrom(project, backendID, "web", "deploy the chart")
+	start := receive(t, "the job to start", backend.starts)
+
+	ctx := context.Background()
+	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
+		return backend.events.JobCompleted(ctx, start.GetRunId(), start.GetJobId(), "done",
+			&backendv1.Usage{
+				InputTokens:      2,
+				OutputTokens:     90,
+				CacheReadTokens:  23357,
+				CacheWriteTokens: 305,
+				CostUsd:          0.1018,
+			})
+	}))
+
+	waitUntil(t, "the job to finish", func() bool {
+		return c.jobStatus(session, start.GetJobId()) == "COMPLETED"
+	})
+
+	var history struct {
+		Items []struct {
+			Type    string `json:"type"`
+			Payload struct {
+				Usage *struct {
+					InputTokens     uint64  `json:"inputTokens"`
+					OutputTokens    uint64  `json:"outputTokens"`
+					CacheReadTokens uint64  `json:"cacheReadTokens"`
+					CostUSD         float64 `json:"costUsd"`
+				} `json:"usage"`
+			} `json:"payload"`
+		} `json:"items"`
+	}
+	c.mustDo(http.MethodGet, "/api/v1/sessions/"+session+"/events", nil, &history, http.StatusOK)
+
+	for _, event := range history.Items {
+		if event.Type != "job.completed" {
+			continue
+		}
+		usage := event.Payload.Usage
+		if usage == nil {
+			t.Fatal("the completed job carries no usage")
+		}
+		if usage.OutputTokens != 90 || usage.CacheReadTokens != 23357 {
+			t.Fatalf("usage = %+v, want what the backend reported", usage)
+		}
+		if usage.CostUSD != 0.1018 {
+			t.Fatalf("cost = %v, want 0.1018", usage.CostUSD)
+		}
+		return
+	}
+	t.Fatal("no job.completed event in the timeline")
+}

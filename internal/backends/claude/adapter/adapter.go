@@ -211,8 +211,9 @@ func (a *Adapter) execute(ctx context.Context, params runner.StartParams, pc *ba
 	if err != nil {
 		a.logger.Error("cannot resolve the working directory",
 			slog.String("jobId", params.JobID), slog.String("error", err.Error()))
+		// No provider ran, so there is nothing to account for.
 		if reportErr := a.JobFailed(ctx, params.RunID, params.JobID,
-			"WORKING_DIRECTORY_UNRESOLVED", err.Error()); reportErr != nil {
+			"WORKING_DIRECTORY_UNRESOLVED", err.Error(), nil); reportErr != nil {
 			a.logger.Error("cannot report the unresolved working directory",
 				slog.String("error", reportErr.Error()))
 		}

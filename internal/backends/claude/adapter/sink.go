@@ -118,18 +118,18 @@ func fileState(state workspace.State) backendv1.FileState {
 }
 
 // JobCompleted implements runner.Sink.
-func (a *Adapter) JobCompleted(ctx context.Context, runID, jobID, summary string) error {
+func (a *Adapter) JobCompleted(ctx context.Context, runID, jobID, summary string, usage *backendv1.Usage) error {
 	a.recordTerminal(ctx, runID, jobID, backendv1.JobStatus_JOB_STATUS_COMPLETED)
 	return a.send(ctx, func() (*backendv1.JobEvent, error) {
-		return a.sdk().Events().JobCompleted(ctx, runID, jobID, summary)
+		return a.sdk().Events().JobCompleted(ctx, runID, jobID, summary, usage)
 	})
 }
 
 // JobFailed implements runner.Sink.
-func (a *Adapter) JobFailed(ctx context.Context, runID, jobID, code, message string) error {
+func (a *Adapter) JobFailed(ctx context.Context, runID, jobID, code, message string, usage *backendv1.Usage) error {
 	a.recordTerminal(ctx, runID, jobID, backendv1.JobStatus_JOB_STATUS_FAILED)
 	return a.send(ctx, func() (*backendv1.JobEvent, error) {
-		return a.sdk().Events().JobFailed(ctx, runID, jobID, code, message)
+		return a.sdk().Events().JobFailed(ctx, runID, jobID, code, message, usage)
 	})
 }
 

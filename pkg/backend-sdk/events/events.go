@@ -153,17 +153,26 @@ func (f *Factory) WorkspaceChanged(ctx context.Context, runID, jobID string, cha
 }
 
 // JobCompleted reports a successful Job.
-func (f *Factory) JobCompleted(ctx context.Context, runID, jobID, summary string) (*backendv1.JobEvent, error) {
+// usage is nil when the provider reported nothing, which is a valid answer: a
+// backend that cannot count must say so by omission rather than by zeroes that
+// read like a free Job.
+func (f *Factory) JobCompleted(ctx context.Context, runID, jobID, summary string, usage *backendv1.Usage) (*backendv1.JobEvent, error) {
 	return f.build(ctx, runID, jobID, func(e *backendv1.JobEvent) {
-		e.Body = &backendv1.JobEvent_JobCompleted{JobCompleted: &backendv1.JobCompleted{Summary: summary}}
+		e.Body = &backendv1.JobEvent_JobCompleted{
+			JobCompleted: &backendv1.JobCompleted{Summary: summary, Usage: usage},
+		}
 	})
 }
 
-// JobFailed reports a failed Job.
-func (f *Factory) JobFailed(ctx context.Context, runID, jobID, code, message string) (*backendv1.JobEvent, error) {
+// JobFailed reports a failed Job. A Job that failed still consumed what it
+// consumed, so it carries its usage too.
+func (f *Factory) JobFailed(ctx context.Context, runID, jobID, code, message string, usage *backendv1.Usage) (*backendv1.JobEvent, error) {
 	return f.build(ctx, runID, jobID, func(e *backendv1.JobEvent) {
 		e.Body = &backendv1.JobEvent_JobFailed{
-			JobFailed: &backendv1.JobFailed{Error: &backendv1.Error{Code: code, Message: message}},
+			JobFailed: &backendv1.JobFailed{
+				Error: &backendv1.Error{Code: code, Message: message},
+				Usage: usage,
+			},
 		}
 	})
 }

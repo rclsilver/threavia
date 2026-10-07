@@ -8,6 +8,8 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+
+	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 )
 
 // streamLine is one line of Claude Code --output-format stream-json output.
@@ -21,6 +23,23 @@ type streamLine struct {
 	Message   *providerMessage `json:"message"`
 	IsError   bool             `json:"is_error"`
 	Result    string           `json:"result"`
+
+	// What the turn consumed, reported on the result line.
+	Usage    *providerUsage `json:"usage"`
+	CostUSD  float64        `json:"total_cost_usd"`
+	Duration int64          `json:"duration_ms"`
+}
+
+// providerUsage is the subset of the provider accounting Threavia keeps.
+//
+// The provider reports far more — per-model breakdowns, service tiers, web
+// search counts. Core normalises to what every provider can be expected to
+// have, so a timeline reads the same whichever one produced it.
+type providerUsage struct {
+	InputTokens         uint64 `json:"input_tokens"`
+	OutputTokens        uint64 `json:"output_tokens"`
+	CacheReadTokens     uint64 `json:"cache_read_input_tokens"`
+	CacheCreationTokens uint64 `json:"cache_creation_input_tokens"`
 }
 
 type providerMessage struct {
@@ -52,6 +71,9 @@ type outcome struct {
 	summary   string
 	// stoppedBy is set when a policy limit ended the Run rather than the agent.
 	stoppedBy string
+	// usage is nil when the provider reported none, which a terminal event
+	// carries through: no accounting is not the same as a free Job.
+	usage *backendv1.Usage
 }
 
 // consume reads the provider output stream and emits normalised events.
@@ -102,6 +124,7 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 			if result.summary == "" && line.IsError {
 				result.summary = "claude code reported an error (" + line.Subtype + ")"
 			}
+			result.usage = normaliseUsage(line)
 
 		default:
 			// Rate limit notices and other provider bookkeeping are liveness at
@@ -224,4 +247,23 @@ func truncate(value string, limit int) string {
 		return value
 	}
 	return string(runes[:limit]) + "…"
+}
+
+// normaliseUsage turns what the provider reported into the protocol shape.
+//
+// It returns nil when the provider said nothing: a Job whose accounting is
+// unknown must not look like a Job that cost nothing.
+func normaliseUsage(line streamLine) *backendv1.Usage {
+	if line.Usage == nil && line.CostUSD == 0 {
+		return nil
+	}
+
+	usage := &backendv1.Usage{CostUsd: line.CostUSD}
+	if line.Usage != nil {
+		usage.InputTokens = line.Usage.InputTokens
+		usage.OutputTokens = line.Usage.OutputTokens
+		usage.CacheReadTokens = line.Usage.CacheReadTokens
+		usage.CacheWriteTokens = line.Usage.CacheCreationTokens
+	}
+	return usage
 }

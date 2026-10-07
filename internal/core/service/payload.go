@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 )
 
 // encodePayload serialises an event payload. Payloads stay small and structured;
@@ -64,6 +65,39 @@ type JobEndedPayload struct {
 	Summary string `json:"summary,omitempty"`
 	Error   string `json:"error,omitempty"`
 	Reason  string `json:"reason,omitempty"`
+	// Usage is absent when the backend reported none. A Job whose accounting is
+	// unknown must not read as a Job that cost nothing.
+	Usage *UsagePayload `json:"usage,omitempty"`
+}
+
+// UsagePayload is what a Job consumed, as the backend reported it.
+//
+// Core stores it and shows it; it prices nothing itself. The shape is
+// provider-neutral, so a timeline reads the same whichever provider produced it
+// and a provider that counts differently leaves what it cannot fill at zero.
+type UsagePayload struct {
+	InputTokens  uint64 `json:"inputTokens"`
+	OutputTokens uint64 `json:"outputTokens"`
+	// Tokens served from, and written to, a prompt cache. They are the bulk of
+	// a long Session and are worth telling apart from fresh input.
+	CacheReadTokens  uint64  `json:"cacheReadTokens"`
+	CacheWriteTokens uint64  `json:"cacheWriteTokens"`
+	CostUSD          float64 `json:"costUsd,omitempty"`
+}
+
+// usageFromProto translates reported usage, keeping "nothing reported" distinct
+// from "reported as zero".
+func usageFromProto(usage *backendv1.Usage) *UsagePayload {
+	if usage == nil {
+		return nil
+	}
+	return &UsagePayload{
+		InputTokens:      usage.GetInputTokens(),
+		OutputTokens:     usage.GetOutputTokens(),
+		CacheReadTokens:  usage.GetCacheReadTokens(),
+		CacheWriteTokens: usage.GetCacheWriteTokens(),
+		CostUSD:          usage.GetCostUsd(),
+	}
 }
 
 // ToolPayload is the body of the tool.* events.

@@ -279,7 +279,7 @@ func TestSecondMessageResumesTheNativeSession(t *testing.T) {
 		return backend.events.NativeSessionBound(ctx, first.GetRunId(), first.GetJobId(), native)
 	}))
 	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
-		return backend.events.JobCompleted(ctx, first.GetRunId(), first.GetJobId(), "fait")
+		return backend.events.JobCompleted(ctx, first.GetRunId(), first.GetJobId(), "fait", nil)
 	}))
 
 	waitUntil(t, "the first job to complete", func() bool {
@@ -322,7 +322,7 @@ func TestQueuedJobsAreFIFOAndSerialised(t *testing.T) {
 
 	ctx := context.Background()
 	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
-		return backend.events.JobCompleted(ctx, first.GetRunId(), first.GetJobId(), "fait")
+		return backend.events.JobCompleted(ctx, first.GetRunId(), first.GetJobId(), "fait", nil)
 	}))
 
 	next := receive(t, "the next queued job", backend.starts)

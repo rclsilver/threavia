@@ -136,3 +136,19 @@ should let it expire rather than keep claiming work is in progress.
 
 The Core HTTP server runs with no write timeout, because SSE responses are
 long-lived by design.
+
+## What a Job cost
+
+`job.completed` and `job.failed` carry a `usage` object: input and output
+tokens, the cache halves kept apart, and the cost the provider reported.
+
+It is absent when the backend reported nothing, and that absence is meaningful:
+a Job whose accounting is unknown must not read as a Job that cost nothing, so a
+client shows nothing there rather than zeroes.
+
+The shape is provider-neutral. Core stores it and shows it; it prices nothing
+itself, and a provider that counts differently fills what it can.
+
+A Job's duration is not in the payload, because the timeline already holds both
+ends: `job.started` and the terminal event carry timestamps, and asking the
+server for the difference would be slower and no more true.

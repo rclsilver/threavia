@@ -75,12 +75,12 @@ func TestEventBodies(t *testing.T) {
 		t.Errorf("native session id = %q, want %q", got, "native-42")
 	}
 
-	failed, _ := factory.JobFailed(ctx, "run-1", "job-1", "PROVIDER_ERROR", "boom")
+	failed, _ := factory.JobFailed(ctx, "run-1", "job-1", "PROVIDER_ERROR", "boom", nil)
 	if got := failed.GetJobFailed().GetError().GetCode(); got != "PROVIDER_ERROR" {
 		t.Errorf("error code = %q, want %q", got, "PROVIDER_ERROR")
 	}
 
-	completed, _ := factory.JobCompleted(ctx, "run-1", "job-1", "done")
+	completed, _ := factory.JobCompleted(ctx, "run-1", "job-1", "done", nil)
 	if got := completed.GetJobCompleted().GetSummary(); got != "done" {
 		t.Errorf("summary = %q, want %q", got, "done")
 	}

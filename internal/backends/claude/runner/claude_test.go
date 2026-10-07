@@ -28,6 +28,7 @@ type recordingSink struct {
 	tools     []string
 	native    string
 	workspace workspace.Summary
+	usage     *backendv1.Usage
 	summary   string
 	failure   string
 }
@@ -91,17 +92,19 @@ func (s *recordingSink) WorkspaceChanged(_ context.Context, _, _ string, summary
 	return nil
 }
 
-func (s *recordingSink) JobCompleted(_ context.Context, _, _, summary string) error {
+func (s *recordingSink) JobCompleted(_ context.Context, _, _, summary string, usage *backendv1.Usage) error {
 	s.mu.Lock()
 	s.summary = summary
+	s.usage = usage
 	s.mu.Unlock()
 	s.record("job.completed")
 	return nil
 }
 
-func (s *recordingSink) JobFailed(_ context.Context, _, _, code, message string) error {
+func (s *recordingSink) JobFailed(_ context.Context, _, _, code, message string, usage *backendv1.Usage) error {
 	s.mu.Lock()
 	s.failure = code + ": " + message
+	s.usage = usage
 	s.mu.Unlock()
 	s.record("job.failed")
 	return nil
@@ -465,4 +468,61 @@ func countEntries(values []string, want string) int {
 		}
 	}
 	return count
+}
+
+// TestRunReportsWhatTheJobConsumed pins the accounting of a Job: Core shows
+// what a turn cost, and it can only do that if the runner normalises what the
+// provider reported on its result line.
+func TestRunReportsWhatTheJobConsumed(t *testing.T) {
+	t.Parallel()
+
+	script := `
+cat <<'OUT'
+{"type":"result","subtype":"success","is_error":false,"result":"fait","total_cost_usd":0.0736,"usage":{"input_tokens":2,"output_tokens":4,"cache_read_input_tokens":10811,"cache_creation_input_tokens":8920}}
+OUT
+`
+	binary, _ := fakeClaude(t, script)
+	sink := &recordingSink{}
+
+	if err := newRunner(t, binary).Run(context.Background(), runner.StartParams{
+		RunID: "run-1", JobID: "job-1", Prompt: "Analyse", WorkingDirectory: t.TempDir(),
+	}, sink); err != nil {
+		t.Fatalf("running the job: %v", err)
+	}
+
+	usage := sink.usage
+	if usage == nil {
+		t.Fatal("the job reported no usage although the provider did")
+	}
+	if usage.GetInputTokens() != 2 || usage.GetOutputTokens() != 4 {
+		t.Errorf("tokens = %d in, %d out; want 2 and 4", usage.GetInputTokens(), usage.GetOutputTokens())
+	}
+	// The cache halves are kept apart: in a long Session they dwarf fresh input,
+	// and reading them as input would make every turn look enormous.
+	if usage.GetCacheReadTokens() != 10811 || usage.GetCacheWriteTokens() != 8920 {
+		t.Errorf("cache = %d read, %d written; want 10811 and 8920",
+			usage.GetCacheReadTokens(), usage.GetCacheWriteTokens())
+	}
+	if usage.GetCostUsd() != 0.0736 {
+		t.Errorf("cost = %v, want 0.0736", usage.GetCostUsd())
+	}
+}
+
+// TestAJobWithoutAccountingReportsNone pins the distinction that matters: a
+// provider that says nothing must not produce a Job that looks free.
+func TestAJobWithoutAccountingReportsNone(t *testing.T) {
+	t.Parallel()
+
+	binary, _ := fakeClaude(t,
+		`echo '{"type":"result","subtype":"success","is_error":false,"result":"fait"}'`)
+	sink := &recordingSink{}
+
+	if err := newRunner(t, binary).Run(context.Background(), runner.StartParams{
+		RunID: "run-1", JobID: "job-1", Prompt: "Analyse", WorkingDirectory: t.TempDir(),
+	}, sink); err != nil {
+		t.Fatalf("running the job: %v", err)
+	}
+	if sink.usage != nil {
+		t.Fatalf("usage = %v, want none reported", sink.usage)
+	}
 }

@@ -95,10 +95,16 @@ func translateJobEvent(event *backendv1.JobEvent) (events.Type, any, error) {
 		}, nil
 
 	case *backendv1.JobEvent_JobCompleted:
-		return events.TypeJobCompleted, JobEndedPayload{Summary: body.JobCompleted.GetSummary()}, nil
+		return events.TypeJobCompleted, JobEndedPayload{
+			Summary: body.JobCompleted.GetSummary(),
+			Usage:   usageFromProto(body.JobCompleted.GetUsage()),
+		}, nil
 
 	case *backendv1.JobEvent_JobFailed:
-		return events.TypeJobFailed, JobEndedPayload{Error: body.JobFailed.GetError().GetMessage()}, nil
+		return events.TypeJobFailed, JobEndedPayload{
+			Error: body.JobFailed.GetError().GetMessage(),
+			Usage: usageFromProto(body.JobFailed.GetUsage()),
+		}, nil
 
 	case *backendv1.JobEvent_JobCancelled:
 		return events.TypeJobCancelled, JobEndedPayload{}, nil

@@ -25,3 +25,35 @@ export function bytes(size: number): string {
 export function humanise(value: string | undefined): string {
   return (value ?? '').toLowerCase().replace(/_/g, ' ');
 }
+
+/** A duration a person can read, from a millisecond count. */
+export function duration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+
+  const minutes = Math.floor(seconds / 60);
+  const rest = Math.round(seconds % 60);
+  if (minutes < 60) return `${minutes}m ${rest}s`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+/** A token count, abbreviated the way people write them. */
+export function tokens(count: number): string {
+  if (count < 1000) return String(count);
+  if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0)}k`;
+  return `${(count / 1_000_000).toFixed(1)}M`;
+}
+
+/**
+ * A cost in US dollars.
+ *
+ * Small amounts keep the digits that distinguish them: a run costing $0.0007
+ * rounded to $0.00 would read as free, which is the one thing a cost line must
+ * never say by accident.
+ */
+export function cost(usd: number): string {
+  if (usd === 0) return '$0';
+  if (usd < 0.01) return `$${usd.toFixed(4)}`;
+  return `$${usd.toFixed(2)}`;
+}

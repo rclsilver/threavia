@@ -40,7 +40,7 @@ func TestMovingASessionStartsANewRun(t *testing.T) {
 		map[string]any{"backendInstanceId": backendID}, nil, http.StatusConflict)
 
 	laptop.emit(t, ctx, laptop.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
-		return laptop.events.JobCompleted(ctx, start.GetRunId(), start.GetJobId(), "done")
+		return laptop.events.JobCompleted(ctx, start.GetRunId(), start.GetJobId(), "done", nil)
 	}))
 	waitUntil(t, "the job to finish", func() bool {
 		return c.jobStatus(session, start.GetJobId()) == "COMPLETED"
@@ -114,7 +114,7 @@ func TestAHandoffReportsALostLocalSkill(t *testing.T) {
 	session := c.startSessionFrom(project, laptopID, "web", "deploy the chart")
 	start := receive(t, "the job to start", laptop.starts)
 	laptop.emit(t, ctx, laptop.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
-		return laptop.events.JobCompleted(ctx, start.GetRunId(), start.GetJobId(), "done")
+		return laptop.events.JobCompleted(ctx, start.GetRunId(), start.GetJobId(), "done", nil)
 	}))
 	waitUntil(t, "the job to finish", func() bool {
 		return c.jobStatus(session, start.GetJobId()) == "COMPLETED"

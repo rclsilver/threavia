@@ -125,12 +125,31 @@ message WorkspaceChanged {
   int32 deletions = 4;
 }
 
+// What one Job consumed.
+//
+// Provider-neutral on purpose: a token is a token, and a provider that counts
+// differently reports what it can and leaves the rest at zero. Core stores it
+// and shows it; it never prices anything itself.
+message Usage {
+  uint64 input_tokens = 1;
+  uint64 output_tokens = 2;
+  // Tokens served from, and written to, a prompt cache. They are the bulk of a
+  // long Session and are worth telling apart from fresh input.
+  uint64 cache_read_tokens = 3;
+  uint64 cache_write_tokens = 4;
+  // What the provider says it cost, in US dollars. Zero when it says nothing.
+  double cost_usd = 5;
+}
+
 message JobCompleted {
   string summary = 1;
+  Usage usage = 2;
 }
 
 message JobFailed {
   Error error = 1;
+  // A Job that failed still consumed what it consumed.
+  Usage usage = 2;
 }
 
 message JobCancelled {}

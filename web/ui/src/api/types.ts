@@ -33,6 +33,7 @@ export type SkillSource = Schemas['SkillSource'];
 export type SkillSourceType = Schemas['SkillSourceType'];
 export type BackendSkill = Schemas['BackendSkill'];
 export type AuditEntry = Schemas['AuditEntry'];
+export type Usage = Schemas['Usage'];
 
 /** The envelope every collection response uses. */
 export interface List<T> {
@@ -51,10 +52,13 @@ export interface EventPayloads {
   'session.created': { title: string };
   'user.message': { text: string };
   'agent.message': { text: string };
-  'tool.started': { callId: string; name: string; input?: unknown };
-  'tool.completed': { callId: string; name: string };
-  'tool.failed': { callId: string; name: string; error?: string };
-  'job.failed': { error?: string };
+  'tool.started': { toolCallId: string; name: string; input?: Record<string, unknown> };
+  // The backend keeps a bounded excerpt of the output and marks it with an
+  // ellipsis; the whole thing stays on the machine that produced it.
+  'tool.completed': { toolCallId: string; name: string; output?: { output?: string } };
+  'tool.failed': { toolCallId: string; name: string; error?: string };
+  'job.completed': { summary?: string; usage?: Usage };
+  'job.failed': { error?: string; usage?: Usage };
   'validation.resolved': { validationId: string; approved: boolean; note?: string };
   'user_input.resolved': { requestId: string; value: string };
   'workspace.changed': {
