@@ -30,10 +30,38 @@ const RENDERED = new Set([
   'job.cancelled',
 ]);
 
-/** One line of the timeline: a plain event, or a tool call and its result. */
+/** One line of the timeline: a plain event, a tool call, or a change of day. */
 type Row =
   | { kind: 'event'; key: number; event: Event; startedAt?: string }
-  | { kind: 'tool'; key: number; call: ToolCall };
+  | { kind: 'tool'; key: number; call: ToolCall }
+  | { kind: 'day'; key: number; label: string };
+
+/**
+ * The day an event belongs to, named the way a person would.
+ *
+ * A Session is long-lived: without this, work from last week and work from this
+ * morning are one undivided scroll.
+ */
+function dayOf(timestamp: string): { key: string; label: string } {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return { key: '', label: '' };
+
+  const key = date.toDateString();
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  if (key === today.toDateString()) return { key, label: 'Today' };
+  if (key === yesterday.toDateString()) return { key, label: 'Yesterday' };
+  return {
+    key,
+    label: date.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'long',
+      year: date.getFullYear() === today.getFullYear() ? undefined : 'numeric',
+    }),
+  };
+}
 
 /**
  * Folds the event stream into what a reader sees.
@@ -50,6 +78,17 @@ function rowsOf(events: Event[]): Row[] {
   // already carries both timestamps; asking the server again would be slower
   // and no more true.
   const startedAt = new Map<string, string>();
+  let day = '';
+
+  // A separator goes in front of the first row of each day, including the
+  // first of all: a reader opening a Session should see when it happened
+  // without reading a timestamp off every line.
+  const openDay = (event: Event) => {
+    const { key, label } = dayOf(event.timestamp);
+    if (!key || key === day) return;
+    day = key;
+    rows.push({ kind: 'day', key: -event.sequence, label });
+  };
 
   for (const event of events) {
     if (event.type === 'job.started' && event.jobId) {
@@ -57,6 +96,7 @@ function rowsOf(events: Event[]): Row[] {
     }
     const started = payloadOf(event, 'tool.started');
     if (started) {
+      openDay(event);
       const row = {
         kind: 'tool' as const,
         key: event.sequence,
@@ -90,6 +130,7 @@ function rowsOf(events: Event[]): Row[] {
         // A failure with no start, which happens when a Session is opened on a
         // window of history that begins mid-call. Showing it alone beats
         // dropping it.
+        openDay(event);
         rows.push({
           kind: 'tool',
           key: event.sequence,
@@ -106,6 +147,7 @@ function rowsOf(events: Event[]): Row[] {
     }
 
     if (RENDERED.has(event.type)) {
+      openDay(event);
       rows.push({
         kind: 'event',
         key: event.sequence,
@@ -180,8 +222,11 @@ export function Timeline({
   }
 
   return (
-    <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto px-1">
-      <div className="relative w-full" style={{ height }}>
+    // The scrollbar belongs to the window, the prose to a column inside it: the
+    // conversation stays readable on a wide screen without the page looking
+    // cropped.
+    <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto pb-6">
+      <div className="relative mx-auto w-full max-w-reading" style={{ height }}>
         {virtualizer.getVirtualItems().map((item) => {
           const row = rows[item.index];
           return (
@@ -189,7 +234,7 @@ export function Timeline({
               key={item.key}
               ref={virtualizer.measureElement}
               data-index={item.index}
-              className="absolute top-0 left-0 w-full py-1"
+              className="absolute left-0 top-0 w-full px-6 py-1.5"
               style={{ transform: `translateY(${item.start}px)` }}
             >
               {row.kind === 'tool' ? (
@@ -198,6 +243,8 @@ export function Timeline({
                   expanded={expanded.has(row.call.id)}
                   onToggle={() => toggle(row.call.id)}
                 />
+              ) : row.kind === 'day' ? (
+                <DaySeparator label={row.label} />
               ) : (
                 <Entry
                   event={row.event}
@@ -231,7 +278,7 @@ function Entry({
     const status = jobId ? pending[jobId] : undefined;
     return (
       <div className="flex flex-col items-end gap-1">
-        <div className="bg-accent text-accent-text max-w-[80%] rounded-[--radius-card] px-3 py-2 text-sm whitespace-pre-wrap">
+        <div className="bg-bubble text-bubble-text max-w-[85%] rounded-3xl px-4 py-2.5 text-sm whitespace-pre-wrap">
           {user.text}
         </div>
         {jobId && status && <Stop status={status} onStop={() => onStop(jobId)} />}
@@ -239,13 +286,12 @@ function Entry({
     );
   }
 
+  // The agent speaks on the page itself. A card around every answer frames the
+  // one thing the reader came for, and stacks a border between each paragraph
+  // of a long conversation.
   const agent = payloadOf(event, 'agent.message');
   if (agent) {
-    return (
-      <div className="bg-surface border-border max-w-[88%] rounded-[--radius-card] border px-3 py-2">
-        <Markdown>{agent.text}</Markdown>
-      </div>
-    );
+    return <Markdown>{agent.text}</Markdown>;
   }
 
   const changed = payloadOf(event, 'workspace.changed');
@@ -254,9 +300,20 @@ function Entry({
   }
 
   return (
-    <div className="text-muted flex flex-wrap items-center gap-x-3 gap-y-1 px-2 text-[0.8125rem]">
+    <div className="text-muted flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.8125rem]">
       <span className="break-all">{describe(event)}</span>
       <JobCost event={event} startedAt={startedAt} />
+    </div>
+  );
+}
+
+/** Where one day of a Session ends and the next begins. */
+function DaySeparator({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 py-3">
+      <span className="bg-border h-px flex-1" />
+      <span className="text-muted text-xs">{label}</span>
+      <span className="bg-border h-px flex-1" />
     </div>
   );
 }

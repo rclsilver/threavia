@@ -3,14 +3,14 @@ import { Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useBackends, useCreateProject, useProjects, useSessions } from '@/api/queries';
-import type { BackendInstance } from '@/api/types';
+import type { BackendInstance, Session } from '@/api/types';
 import { useStream } from '@/use-stream';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input, Label } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { cn, humanise, when } from '@/lib/utils';
+import { cn, humanise } from '@/lib/utils';
 
 /**
  * The frame every view sits in: which Project, its Sessions, and the backends
@@ -90,23 +90,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Button>
             )}
           </div>
-          <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
-            {(sessions.data ?? []).map((session) => (
-              <li key={session.id}>
-                <Link
-                  to="/sessions/$sessionId"
-                  params={{ sessionId: session.id }}
-                  className={cn(
-                    'hover:bg-surface-2 block rounded-md px-2 py-1.5',
-                    params.sessionId === session.id && 'bg-surface-2 border-accent border-l-2',
-                  )}
-                >
-                  <span className="block truncate text-sm">{session.title || 'Untitled session'}</span>
-                  <span className="text-muted text-xs">{when(session.updatedAt)}</span>
-                </Link>
-              </li>
+          {/*
+           * Grouped by when they were last touched, and titled by nothing else:
+           * a timestamp under every row doubles the height of the list to
+           * answer a question nobody asks per session, only per group.
+           */}
+          <div className="-mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
+            {groupSessions(sessions.data ?? []).map((group) => (
+              <div key={group.label} className="space-y-0.5">
+                <p className="text-muted/80 px-2 pb-1 text-xs">{group.label}</p>
+                <ul>
+                  {group.sessions.map((session) => (
+                    <li key={session.id}>
+                      <Link
+                        to="/sessions/$sessionId"
+                        params={{ sessionId: session.id }}
+                        title={session.title || 'Untitled session'}
+                        className={cn(
+                          'hover:bg-surface-2 block truncate rounded-lg px-2 py-1.5 text-sm',
+                          params.sessionId === session.id && 'bg-surface-2 font-medium',
+                        )}
+                      >
+                        {session.title || 'Untitled session'}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         </section>
 
         <section className="space-y-2">
@@ -122,6 +134,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="flex min-h-0 flex-col overflow-hidden">{children}</main>
     </div>
   );
+}
+
+/**
+ * Sessions bucketed by how recently they were touched.
+ *
+ * The buckets are the ones a person actually uses to find something again: what
+ * they were doing a moment ago, earlier today, this week, before that.
+ */
+function groupSessions(sessions: Session[]): { label: string; sessions: Session[] }[] {
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  const buckets: { label: string; within: number; sessions: Session[] }[] = [
+    { label: 'Today', within: day, sessions: [] },
+    { label: 'Previous 7 days', within: 7 * day, sessions: [] },
+    { label: 'Previous 30 days', within: 30 * day, sessions: [] },
+    { label: 'Older', within: Infinity, sessions: [] },
+  ];
+
+  for (const session of sessions) {
+    const age = now - Date.parse(session.updatedAt);
+    // An unreadable date compares false against every bound and lands in the
+    // last bucket, which beats disappearing from the list.
+    const bucket = buckets.find((candidate) => age < candidate.within) ?? buckets[buckets.length - 1];
+    bucket.sessions.push(session);
+  }
+  return buckets.filter((bucket) => bucket.sessions.length > 0);
 }
 
 function BackendRow({ backend }: { backend: BackendInstance }) {

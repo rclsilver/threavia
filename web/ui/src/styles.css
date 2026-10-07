@@ -6,33 +6,61 @@
  * theme change is a change here and nowhere else.
  */
 @theme {
-  --color-canvas: oklch(99% 0.002 260);
+  --color-canvas: oklch(99% 0.001 265);
   --color-surface: oklch(100% 0 0);
-  --color-surface-2: oklch(97% 0.004 260);
-  --color-border: oklch(91% 0.005 260);
-  --color-text: oklch(25% 0.012 260);
-  --color-muted: oklch(53% 0.014 260);
+  --color-surface-2: oklch(96.5% 0.002 265);
+  --color-border: oklch(92% 0.003 265);
+  --color-text: oklch(24% 0.006 265);
+  --color-muted: oklch(55% 0.008 265);
   --color-accent: oklch(52% 0.19 275);
   --color-accent-text: oklch(99% 0 0);
   --color-ok: oklch(55% 0.14 155);
   --color-warn: oklch(68% 0.15 75);
   --color-danger: oklch(55% 0.2 25);
 
-  --radius-card: 0.625rem;
+  /*
+   * What the person said. It is its own colour rather than the accent: the
+   * accent is light on a dark page so that it reads as a link, and a bubble
+   * filled with it would invert the text of the one thing written by hand.
+   */
+  --color-bubble: oklch(52% 0.17 272);
+  --color-bubble-text: oklch(99% 0 0);
+
+  --radius-card: 0.75rem;
+  /*
+   * How wide a line of prose is allowed to get. A conversation is read, not
+   * scanned, and a line running the full width of a desktop screen loses the
+   * reader on the way back to the left margin. Everything in the conversation
+   * column shares this bound; the frame around it keeps the whole window.
+   */
+  --container-reading: 46rem;
   --font-mono:
     ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
 }
 
+/*
+ * The dark scheme is near-neutral on purpose: a blue cast reads as a tint laid
+ * over the page, and the only colours that should carry meaning here are the
+ * accent and the three status hues.
+ *
+ * These are plain custom properties rather than a second @theme block: Tailwind
+ * hoists every @theme to :root whatever encloses it, so a themed dark block
+ * silently overwrites the light one and the page has one scheme for everyone.
+ * The utilities emit var(--color-…), so redefining the variables here is what
+ * actually switches the palette.
+ */
 @media (prefers-color-scheme: dark) {
-  @theme {
-    --color-canvas: oklch(17% 0.012 265);
-    --color-surface: oklch(21% 0.014 265);
-    --color-surface-2: oklch(25% 0.016 265);
-    --color-border: oklch(31% 0.018 265);
-    --color-text: oklch(93% 0.008 265);
-    --color-muted: oklch(68% 0.014 265);
+  :root {
+    --color-canvas: oklch(15.5% 0.003 265);
+    --color-surface: oklch(19.5% 0.004 265);
+    --color-surface-2: oklch(24% 0.005 265);
+    --color-border: oklch(29% 0.006 265);
+    --color-text: oklch(94% 0.004 265);
+    --color-muted: oklch(66% 0.008 265);
     --color-accent: oklch(70% 0.15 275);
     --color-accent-text: oklch(17% 0.012 265);
+    --color-bubble: oklch(45% 0.14 272);
+    --color-bubble-text: oklch(97% 0.004 265);
     --color-ok: oklch(72% 0.16 155);
     --color-warn: oklch(80% 0.14 80);
     --color-danger: oklch(68% 0.18 22);
@@ -58,11 +86,18 @@
     @apply outline-accent outline-2 outline-offset-2;
   }
 
+  /* A scrollbar that stays out of the way until there is something to drag. */
   ::-webkit-scrollbar {
-    @apply h-2 w-2;
+    @apply h-2.5 w-2.5;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-full;
+    @apply rounded-full bg-transparent;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  :hover::-webkit-scrollbar-thumb {
+    @apply bg-border;
+    background-clip: content-box;
   }
 }
 

@@ -40,7 +40,10 @@ export function ProjectView() {
   const project = useProject(projectId);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 p-5">
+    // Lists, not prose, so the column is wider than a conversation's — but still
+    // a column: a task title and the buttons that act on it should not end up at
+    // opposite ends of a wide screen.
+    <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 p-6">
       <header>
         <h2 className="text-lg font-semibold">{project.data?.name ?? 'Project'}</h2>
         <p className="text-muted text-sm">Project memory, skills and audit trail.</p>

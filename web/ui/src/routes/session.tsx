@@ -1,5 +1,6 @@
 import { useParams } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { ArrowUp } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import {
   useBackends,
@@ -19,7 +20,6 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useStream } from '@/use-stream';
 import { humanise } from '@/lib/utils';
@@ -60,13 +60,14 @@ export function SessionView() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 p-5">
-      <header className="flex flex-wrap items-start justify-between gap-3">
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* The frame keeps the window; only what is read is held to a column. */}
+      <header className="border-border/70 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b px-5 py-3">
         <div className="min-w-0">
-          <h2 className="truncate text-lg font-semibold">
+          <h2 className="truncate text-[0.9375rem] font-semibold">
             {data.session.title || 'Untitled session'}
           </h2>
-          <p className="text-muted text-sm">
+          <p className="text-muted text-xs">
             {active ? `Job ${humanise(active.status)}` : 'Idle'}
             {active && working && (
               // A liveness signal, not history: it says the agent is still
@@ -77,20 +78,28 @@ export function SessionView() {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1">
           <MoveSessionButton sessionId={sessionId} />
-          <Button variant="link" onClick={() => setShowPolicy((shown) => !shown)}>
+          <Button variant="ghost" size="sm" onClick={() => setShowPolicy((shown) => !shown)}>
             Execution policy
           </Button>
         </div>
       </header>
 
-      {showPolicy && <PolicyPanel sessionId={sessionId} />}
+      {showPolicy && (
+        <div className="mx-auto w-full max-w-reading px-6 pt-4">
+          <PolicyPanel sessionId={sessionId} />
+        </div>
+      )}
 
-      <AttentionPanel
-        validations={data.attention.validations ?? []}
-        userInputs={data.attention.userInputs ?? []}
-      />
+      {(data.attention.validations?.length || data.attention.userInputs?.length) && (
+        <div className="mx-auto w-full max-w-reading px-6 pt-4">
+          <AttentionPanel
+            validations={data.attention.validations ?? []}
+            userInputs={data.attention.userInputs ?? []}
+          />
+        </div>
+      )}
 
       <Timeline events={data.events} pending={pending} onStop={(jobId) => cancel.mutate(jobId)} />
 
@@ -99,9 +108,25 @@ export function SessionView() {
   );
 }
 
+/**
+ * Where a message is written.
+ *
+ * One rounded field holding its own send button, rather than a box and a
+ * detached button: the whole thing reads as the single place to type, and it
+ * grows with what is being written instead of hiding the top of a long message
+ * behind a fixed three rows.
+ */
 function Composer({ sessionId }: { sessionId: string }) {
   const send = usePostMessage(sessionId);
   const [message, setMessage] = useState('');
+  const field = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const element = field.current;
+    if (!element) return;
+    element.style.height = 'auto';
+    element.style.height = `${Math.min(element.scrollHeight, 240)}px`;
+  }, [message]);
 
   const submit = () => {
     const text = message.trim();
@@ -111,32 +136,48 @@ function Composer({ sessionId }: { sessionId: string }) {
   };
 
   return (
-    <form
-      className="flex items-end gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        submit();
-      }}
-    >
-      <Textarea
-        rows={3}
-        value={message}
-        onChange={(event) => setMessage(event.target.value)}
-        onKeyDown={(event) => {
-          // Enter sends, as in every chat. A newline is still reachable with
-          // Shift, which is where a person already looks for it. An Enter that
-          // closes an input method is composing text, not sending it.
-          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-            event.preventDefault();
-            submit();
-          }
+    <div className="mx-auto w-full max-w-reading px-6 pb-4">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
         }}
-        placeholder="Send a message… (Shift+Enter for a newline)"
-      />
-      <Button type="submit" variant="primary" disabled={send.isPending}>
-        Send
-      </Button>
-    </form>
+      >
+        <div className="bg-surface border-border focus-within:border-muted/60 flex items-end gap-2 rounded-3xl border py-1.5 pr-1.5 pl-4 transition-colors">
+          <textarea
+            ref={field}
+            rows={1}
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            onKeyDown={(event) => {
+              // Enter sends, as in every chat. A newline is still reachable
+              // with Shift, which is where a person already looks for it. An
+              // Enter that closes an input method is composing text, not
+              // sending it.
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                submit();
+              }
+            }}
+            placeholder="Send a message…"
+            className="placeholder:text-muted/80 max-h-60 flex-1 resize-none bg-transparent py-2 text-sm outline-none"
+          />
+          <Button
+            type="submit"
+            variant="primary"
+            size="icon"
+            className="rounded-full"
+            title="Send (Enter)"
+            disabled={send.isPending || !message.trim()}
+          >
+            <ArrowUp />
+          </Button>
+        </div>
+      </form>
+      <p className="text-muted/70 mt-2 text-center text-xs">
+        Enter sends · Shift+Enter for a newline
+      </p>
+    </div>
   );
 }
 
@@ -159,7 +200,7 @@ function MoveSessionButton({ sessionId }: { sessionId: string }) {
 
   return (
     <>
-      <Button variant="link" onClick={() => setOpen(true)}>
+      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
         Change backend
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
