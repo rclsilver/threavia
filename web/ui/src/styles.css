@@ -72,10 +72,14 @@
 /*
  * The wide layout, for someone who would rather use their screen than read a
  * comfortable line length. It is a real trade and not one to decide for them,
- * so it is a preference: the bounds move, nothing else does.
+ * so it is a preference: the bounds go, nothing else moves.
+ *
+ * Both of them go. A conversation held to a column while the lists around it
+ * run to the edge is not what "the full width of the window" says, and a
+ * setting that keeps part of its promise is worse than one that keeps none.
  */
 :root[data-wide='true'] {
-  --container-reading: 60rem;
+  --container-reading: 100%;
   --container-page: 100%;
 }
 

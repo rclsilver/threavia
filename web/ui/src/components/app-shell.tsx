@@ -404,9 +404,9 @@ function UserMenu({
             use the full width of the window
           </CheckboxField>
           <p className="text-muted text-xs">
-            A conversation is held to a reading width by default, because a line
-            running the whole of a wide screen loses the eye on the way back to the left
-            margin. Lists take whatever room there is.
+            A conversation is held to a reading width by default, because a line running
+            the whole of a wide screen loses the eye on the way back to the left margin.
+            Turn this on and nothing is held back.
           </p>
         </section>
 
