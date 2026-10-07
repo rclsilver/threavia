@@ -17,3 +17,7 @@
 
 # Web client
 web/ui/node_modules/
+
+# Nix build output: `nix build` symlinks its result here.
+/result
+/result-*
