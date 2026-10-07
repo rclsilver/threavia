@@ -1,0 +1,8 @@
+node_modules/
+*.tsbuildinfo
+
+# The build output is produced by `make web`, never committed. The directory
+# itself is kept so the Go embed has something to match in a fresh clone, where
+# nothing has been built yet.
+dist/*
+!dist/.gitkeep

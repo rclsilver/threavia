@@ -35,8 +35,57 @@ proto-lint: ## Lint the protobuf definitions
 proto-breaking: ## Check the protobuf definitions for breaking changes against main
 	PATH="$(GOBIN):$$PATH" buf breaking --against '.git#branch=$(DEFAULT_BRANCH)'
 
+# npm writes this on install, so it is the honest stamp for "the tree matches
+# the lockfile". Every web target depends on it, which is what lets `make
+# verify` work in a fresh clone without a separate install step.
+WEB_DEPS := web/ui/node_modules/.package-lock.json
+
+$(WEB_DEPS): web/ui/package-lock.json web/ui/package.json
+	cd web/ui && npm ci --no-audit --no-fund
+
+.PHONY: web-deps
+web-deps: $(WEB_DEPS) ## Install the web client dependencies from the lockfile
+
+.PHONY: web
+web: $(WEB_DEPS) ## Build the web client into web/ui/dist, which the Go binary embeds
+	cd web/ui && npm run build
+
+.PHONY: web-dev
+web-dev: $(WEB_DEPS) ## Run the web client dev server on the host, without Docker
+	cd web/ui && npm run dev
+
+.PHONY: web-generate
+web-generate: $(WEB_DEPS) ## Regenerate the TypeScript API types from api/openapi.yaml
+	cd web/ui && npm run generate:api
+
+.PHONY: web-generate-check
+web-generate-check: $(WEB_DEPS) ## Fail if the TypeScript API types are not what the contract generates
+	@cd web/ui && npm run generate:api >/dev/null 2>&1
+	@if ! git diff --quiet -- web/ui/src/api/schema.d.ts; then \
+		echo "web/ui/src/api/schema.d.ts is stale, run: make web-generate"; \
+		git diff --stat -- web/ui/src/api/schema.d.ts; \
+		exit 1; \
+	fi
+
+.PHONY: web-lint
+web-lint: $(WEB_DEPS) ## Type-check and lint the web client
+	cd web/ui && npm run typecheck && npm run lint
+
+.PHONY: dev-web
+dev-web: ## Serve the web client with hot reload on http://localhost:5173
+	docker compose --profile web up -d --build web
+	@echo
+	@echo "Web client:  http://localhost:5173"
+	@echo "It proxies to Core on the host at :8080, so run 'make run-core' too."
+	@echo "Editing web/ui reloads the browser; the Go binary is untouched."
+
 .PHONY: build
-build: ## Build the Core and Claude backend binaries into bin/
+build: web ## Build the web client, then the Core and Claude backend binaries into bin/
+	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/threavia-core ./cmd/threavia-core
+	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/threavia-backend-claude ./cmd/threavia-backend-claude
+
+.PHONY: build-go
+build-go: ## Build only the Go binaries, leaving whatever client is already built
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/threavia-core ./cmd/threavia-core
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/threavia-backend-claude ./cmd/threavia-backend-claude
 
@@ -91,6 +140,7 @@ run-backend: ## Run the Claude backend against a local Core
 
 .PHONY: clean
 clean: ## Remove the build output
+	rm -rf web/ui/dist/assets web/ui/dist/index.html
 	rm -rf bin
 
 .PHONY: test-db
@@ -98,7 +148,7 @@ test-db: ## Run the test suite including the database integration tests
 	THREAVIA_TEST_POSTGRES_URL=$(TEST_POSTGRES_URL) go test ./...
 
 .PHONY: verify
-verify: fmt-check tidy-check generate-check lint test ## Run every check CI runs
+verify: fmt-check tidy-check generate-check web-generate-check lint test ## Run every check CI runs
 
 .PHONY: fmt-check
 fmt-check: ## Fail if any hand-written Go source is not gofmt-ed

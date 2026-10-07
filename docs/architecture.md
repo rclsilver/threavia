@@ -422,3 +422,54 @@ say that moving the work loses them.
 Automatic migration and backend scoring stay out: section 33 defers them, and a
 backend change the user did not ask for is the opposite of the explicit
 transition section 34 wants.
+
+### The web client, and why it is shaped this way
+
+Three properties of the product decided the stack, not familiarity with it.
+
+**One SSE stream feeds every view.** A snapshot seeds the state, a cursor takes
+over, and a validation resolved on another device has to disappear here at
+once. That is a shared-cache invalidation problem rather than a data-fetching
+one, so TanStack Query holds the cache and the stream is its only other writer:
+one subscriber patches the cache and every mounted view follows. The alternative
+— each view polling, or each view holding its own copy — is how a multi-client
+product ends up showing two different truths at the same time.
+
+**The timeline is append-only and unbounded.** It is virtualised, so a Session
+with thousands of events stays a conversation rather than a frozen tab. Agent
+output is markdown with code in it, so it is parsed once per message and
+memoised, and highlighted by a grammar loaded on demand: a Session with no code
+in it pays for no highlighter, and one with Go in it does not also load Wolfram.
+
+**The API contract is generated, not transcribed.** `api/openapi.yaml` is the
+source of truth: Core serves it, the TypeScript types come from it, and
+`TestEveryRouteIsInTheOpenAPIDocument` fails in both directions — a route the
+server serves and the document omits is invisible to every generated client,
+and a path the document promises and the server does not serve answers 501. A
+field renamed in Go breaks the web build rather than a user's screen.
+
+The development loop was the other requirement. Vite serves the client and
+proxies everything else to Core, so editing a component reloads the browser
+without rebuilding or restarting the Go binary, and the browser stays on a
+single origin: no CORS, and the event stream behaves exactly as it does in
+production. In a release the built files are embedded, so a deployment is one
+binary with no asset directory to keep in step with it. A binary built without
+the client says so on the page, because a blank tab is the worst way to learn
+that a build step was skipped.
+
+### Running the client against Core in development
+
+`make dev-web` puts Vite in a container on the host network rather than on a
+bridge. Reaching a host service from a bridge network means
+`host.docker.internal`, a `host-gateway` mapping and a firewall that allows the
+docker interface — three things to get right on every machine, and on a
+firewalled Linux host the default is that none of them work. Sharing the host
+namespace has nothing to get right: Vite listens on `:5173` and reaches Core at
+`localhost:8080` exactly as a process on the host would.
+
+Core stays on the host deliberately. It is what a Go developer needs a terminal,
+a debugger and a rebuild loop for, and moving it into compose to simplify the
+client's networking would complicate the thing people work on more.
+
+`THREAVIA_CORE_URL` points the proxy elsewhere, and `make web-dev` runs the same
+server with no container at all.

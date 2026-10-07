@@ -21,7 +21,7 @@ func (h *handler) registerBackends(mux *http.ServeMux) {
 // user credential. It is gated by a one-shot registration token or by the shared
 // registration key, never by user authentication.
 func (h *handler) registerRegistration(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/v1/backends/register", h.registerBackend)
+	h.open(mux, "POST /api/v1/backends/register", h.registerBackend)
 }
 
 func (h *handler) listBackends(w http.ResponseWriter, r *http.Request, identity auth.Identity) {

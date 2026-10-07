@@ -39,7 +39,40 @@ services:
       timeout: 5s
       retries: 20
 
+  # The web client, served by Vite with hot reload (spec section 5).
+  #
+  # It sits behind a profile because Core serves the built client on its own:
+  # this is for working on the client itself. `make dev-web` starts it, and
+  # everything it calls is proxied to Core, so the browser stays on one origin
+  # and the event stream behaves as it does in production.
+  #
+  # Host networking, because Core runs on the host rather than in compose: it
+  # needs a terminal, a debugger and a rebuild loop of its own. Reaching the
+  # host from a bridge network means host.docker.internal and an open firewall
+  # on the docker interface, which is one more thing to get right on every
+  # machine; sharing the host namespace has nothing to get right. Set
+  # THREAVIA_CORE_URL to point somewhere else.
+  web:
+    profiles: ["web"]
+    build:
+      context: .
+      dockerfile: deploy/docker/web-dev.Dockerfile
+    network_mode: "host"
+    environment:
+      THREAVIA_CORE_URL: "${THREAVIA_CORE_URL:-http://localhost:8080}"
+    volumes:
+      - ./web/ui:/app
+      # Keeps the image's node_modules, which the mount above would otherwise
+      # hide behind an empty host directory.
+      - web-node-modules:/app/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:5173/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
 volumes:
   postgres-data:
   objectstore-meta:
   objectstore-data:
+  web-node-modules:

@@ -22,6 +22,11 @@ pkgs.mkShell {
 
     pkgs.gnumake
 
+    # The web client is a Vite + React application: Node is needed to build it
+    # and to run the dev server. The Go binary embeds the built output, so a
+    # release build needs this too, not only development.
+    pkgs.nodejs_22
+
     # `helm lint deploy/helm/threavia` and `helm template`.
     pkgs.kubernetes-helm
   ];

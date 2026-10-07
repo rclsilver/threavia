@@ -1,0 +1,1822 @@
+# The Threavia client API (THREAVIA_SPEC_V1.md section 5).
+#
+# This document is the contract, not a description written after the fact. A
+# route the server registers and this file does not describe fails
+# TestEveryRouteIsInTheOpenAPIDocument, and the TypeScript client is generated
+# from here, so a field renamed in Go breaks the web build rather than a user's
+# screen.
+openapi: 3.1.0
+
+info:
+  title: Threavia Core
+  version: "1.0.0"
+  description: |
+    HTTP/JSON for commands, queries, snapshots and history; SSE for realtime
+    events. No GraphQL and no WebSocket in V1.
+
+    Every user-scoped route is checked against the authenticated caller:
+    `404` covers both "does not exist" and "not yours", so an identifier cannot
+    be probed for existence.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: /
+    description: The Core instance serving this document
+
+tags:
+  - name: operational
+    description: Liveness, readiness and version. No authentication.
+  - name: projects
+    description: Projects, their directories and their instructions
+  - name: sessions
+    description: Sessions, their history and their execution policy
+  - name: jobs
+    description: Units of agent work
+  - name: attention
+    description: What is currently waiting for the user
+  - name: knowledge
+    description: Tasks, decisions and project history
+  - name: artifacts
+    description: Stored blobs
+  - name: skills
+    description: Core-managed project skills and backend-local skills
+  - name: backends
+    description: BackendInstances and their registration
+  - name: stream
+    description: The global event stream
+
+security:
+  - basicAuth: []
+  - bearerAuth: []
+
+paths:
+  /healthz:
+    get:
+      tags: [operational]
+      summary: Liveness
+      security: []
+      responses:
+        "200":
+          description: The process is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, examples: ["ok"] }
+
+  /readyz:
+    get:
+      tags: [operational]
+      summary: Readiness, which pings PostgreSQL
+      security: []
+      responses:
+        "200":
+          description: Ready to serve
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, examples: ["ready"] }
+        "503":
+          $ref: "#/components/responses/Error"
+
+  /version:
+    get:
+      tags: [operational]
+      summary: The Core version
+      security: []
+      responses:
+        "200":
+          description: The build version
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version]
+                properties:
+                  version: { type: string }
+
+  /api/spec.yaml:
+    get:
+      tags: [operational]
+      summary: This document
+      security: []
+      responses:
+        "200":
+          description: The OpenAPI document, in YAML
+          content:
+            application/yaml:
+              schema: { type: string }
+
+  /api/spec.json:
+    get:
+      tags: [operational]
+      summary: This document, as JSON
+      description: What a code generator consumes.
+      security: []
+      responses:
+        "200":
+          description: The OpenAPI document, in JSON
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/v1/backends/register:
+    post:
+      tags: [backends]
+      summary: Register a BackendInstance
+      description: |
+        The one route a backend calls before it has any user credential. It is
+        gated by a one-shot registration token or by the shared registration
+        key, never by user authentication, and returns the persistent
+        credential once.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, capabilities]
+              properties:
+                name: { type: string }
+                capabilities:
+                  type: array
+                  items: { $ref: "#/components/schemas/Capability" }
+                token:
+                  type: string
+                  description: A one-shot user token, which owns the instance immediately.
+                sharedKey:
+                  type: string
+                  description: The shared key, which creates an UNCLAIMED instance plus a claim code.
+      responses:
+        "201":
+          description: The instance and its persistent credential
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [backendInstanceId, credential, claimed]
+                properties:
+                  backendInstanceId: { $ref: "#/components/schemas/UUID" }
+                  credential: { type: string }
+                  claimed: { type: boolean }
+                  claimCode:
+                    type: string
+                    description: Present only when the instance is UNCLAIMED.
+        "403":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/projects:
+    get:
+      tags: [projects]
+      summary: List Projects
+      parameters:
+        - $ref: "#/components/parameters/IncludeArchived"
+      responses:
+        "200":
+          description: The Projects of the caller
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Project" }
+    post:
+      tags: [projects]
+      summary: Create a Project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        "201":
+          description: The created Project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "400":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/projects/{projectId}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      tags: [projects]
+      summary: One Project
+      responses:
+        "200":
+          description: The Project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      tags: [projects]
+      summary: Rename, redescribe, or set the ProjectInstructions
+      description: |
+        An absent or empty field keeps its current value, so editing the
+        instructions does not require resending the name.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                instructions:
+                  type: string
+                  description: Provider-independent project rules (spec section 18).
+      responses:
+        "200":
+          description: The updated Project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [projects]
+      summary: Permanently delete a Project and everything it owns
+      description: Archiving is the normal lifecycle; this is the explicit, separate operation of section 21.
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/projects/{projectId}/archive:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    post:
+      tags: [projects]
+      summary: Archive a Project
+      responses:
+        "200":
+          description: The archived Project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/projects/{projectId}/restore:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    post:
+      tags: [projects]
+      summary: Restore an archived Project
+      responses:
+        "200":
+          description: The restored Project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/projects/{projectId}/sessions:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      tags: [sessions]
+      summary: The Sessions of a Project
+      parameters:
+        - $ref: "#/components/parameters/IncludeArchived"
+      responses:
+        "200":
+          description: The Sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Session" }
+
+  /api/v1/projects/{projectId}/directories:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      tags: [projects]
+      summary: The KnownDirectories of a Project
+      responses:
+        "200":
+          description: The directories
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/KnownDirectory" }
+    post:
+      tags: [projects]
+      summary: Create a KnownDirectory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                gitRemote:
+                  type: [string, "null"]
+                  description: Lets a backend offer to clone the directory when it is not present.
+      responses:
+        "201":
+          description: The created directory
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnownDirectory" }
+
+  /api/v1/directories/{directoryId}/bindings:
+    parameters:
+      - $ref: "#/components/parameters/DirectoryID"
+    get:
+      tags: [projects]
+      summary: Where a directory lives on each backend
+      responses:
+        "200":
+          description: The bindings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/KnownDirectoryBinding" }
+    post:
+      tags: [projects]
+      summary: Bind a directory to a path on one backend
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [backendInstanceId, path]
+              properties:
+                backendInstanceId: { $ref: "#/components/schemas/UUID" }
+                path:
+                  type: string
+                  description: An absolute path on that backend.
+      responses:
+        "201":
+          description: The binding
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnownDirectoryBinding" }
+        "400":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/backends:
+    get:
+      tags: [backends]
+      summary: The BackendInstances of the caller
+      responses:
+        "200":
+          description: The instances
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/BackendInstance" }
+
+  /api/v1/backends/{backendId}:
+    parameters:
+      - $ref: "#/components/parameters/BackendID"
+    get:
+      tags: [backends]
+      summary: One BackendInstance
+      responses:
+        "200":
+          description: The instance
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BackendInstance" }
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/backends/{backendId}/revoke:
+    parameters:
+      - $ref: "#/components/parameters/BackendID"
+    post:
+      tags: [backends]
+      summary: Revoke the persistent credential
+      description: The record stays for historical references, and a returning backend must register anew.
+      responses:
+        "204":
+          description: Revoked
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/backends/{backendId}/skills:
+    parameters:
+      - $ref: "#/components/parameters/BackendID"
+    get:
+      tags: [skills]
+      summary: The Skills that exist only on that backend
+      description: |
+        Core knows their metadata and never their content: a local Skill may
+        only exist behind a corporate network (spec section 18).
+      responses:
+        "200":
+          description: The local Skills
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/BackendSkill" }
+
+  /api/v1/backends/claim:
+    post:
+      tags: [backends]
+      summary: Claim an UNCLAIMED instance with its one-time code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [claimCode]
+              properties:
+                claimCode: { type: string }
+      responses:
+        "200":
+          description: The claimed instance
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BackendInstance" }
+        "403":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/backend-tokens:
+    post:
+      tags: [backends]
+      summary: Issue a one-shot registration token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label: { type: string }
+                ttlSeconds: { type: integer, format: int64 }
+      responses:
+        "201":
+          description: The token, returned once
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expiresAt]
+                properties:
+                  token: { type: string }
+                  expiresAt: { type: string, format: date-time }
+
+  /api/v1/sessions/start:
+    post:
+      tags: [sessions]
+      summary: The atomic first send
+      description: |
+        Creates the Session, its first Run, its first Job and the first message
+        in one transaction, or nothing at all. A client-side draft exists only
+        in the client until this call.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/Channel"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectId, backendInstanceId, message]
+              properties:
+                projectId: { $ref: "#/components/schemas/UUID" }
+                backendInstanceId: { $ref: "#/components/schemas/UUID" }
+                workingDirectoryId:
+                  type: [string, "null"]
+                  format: uuid
+                message: { type: string }
+      responses:
+        "201":
+          description: What the first send created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, run, job]
+                properties:
+                  session: { $ref: "#/components/schemas/Session" }
+                  run: { $ref: "#/components/schemas/Run" }
+                  job: { $ref: "#/components/schemas/Job" }
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/sessions/{sessionId}:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    get:
+      tags: [sessions]
+      summary: The snapshot a client opens a Session with
+      description: |
+        State, a recent window of history, the pending attention items and the
+        cursor the live stream takes over from. A client never replays the
+        whole history to rebuild the present.
+      parameters:
+        - name: history
+          in: query
+          schema: { type: integer, default: 200 }
+          description: How many of the most recent events to include.
+      responses:
+        "200":
+          description: The snapshot
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Snapshot" }
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      tags: [sessions]
+      summary: Rename, change the working directory, or move to another backend
+      description: |
+        `workingDirectoryId` set to null clears the working directory, while an
+        absent field leaves it alone. `backendInstanceId` moves the Session and
+        answers with a handoff instead of the Session.
+      parameters:
+        - $ref: "#/components/parameters/Channel"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                workingDirectoryId:
+                  type: [string, "null"]
+                  format: uuid
+                backendInstanceId: { $ref: "#/components/schemas/UUID" }
+      responses:
+        "200":
+          description: The updated Session, or the handoff when the backend changed
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Session"
+                  - $ref: "#/components/schemas/Handoff"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/sessions/{sessionId}/events:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    get:
+      tags: [sessions]
+      summary: Paged history of a Session
+      parameters:
+        - name: after
+          in: query
+          schema: { type: integer, format: int64 }
+          description: Return events with a sequence strictly greater than this.
+        - name: limit
+          in: query
+          schema: { type: integer, default: 200 }
+      responses:
+        "200":
+          description: The events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Event" }
+
+  /api/v1/sessions/{sessionId}/messages:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    post:
+      tags: [sessions]
+      summary: Append a message, creating a Job
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/Channel"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string }
+      responses:
+        "201":
+          description: The created Job
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/sessions/{sessionId}/archive:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    post:
+      tags: [sessions]
+      summary: Archive a Session
+      responses:
+        "200":
+          description: The archived Session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+
+  /api/v1/sessions/{sessionId}/restore:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    post:
+      tags: [sessions]
+      summary: Restore an archived Session
+      responses:
+        "200":
+          description: The restored Session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+
+  /api/v1/sessions/{sessionId}/policy:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    get:
+      tags: [sessions]
+      summary: The effective ExecutionPolicy of a Session
+      responses:
+        "200":
+          description: The policy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecutionPolicy" }
+    put:
+      tags: [sessions]
+      summary: Set what the agent may do in a Session
+      description: |
+        An empty body resets to the restrained default rather than leaving the
+        previous policy in place. Limits are enforced by Core and the backend,
+        never by the prompt alone (spec section 17).
+      parameters:
+        - $ref: "#/components/parameters/Channel"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExecutionPolicy" }
+      responses:
+        "200":
+          description: The effective policy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecutionPolicy" }
+        "400":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/jobs/{jobId}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/JobID"
+    post:
+      tags: [jobs]
+      summary: Cancel a running Job
+      description: |
+        The Job moves to CANCELLING and reaches CANCELLED only once the backend
+        confirms it actually stopped.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "200":
+          description: The Job, now cancelling
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/jobs/{jobId}:
+    parameters:
+      - $ref: "#/components/parameters/JobID"
+    delete:
+      tags: [jobs]
+      summary: Delete a Job that never started
+      responses:
+        "204":
+          description: Deleted
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/me/attention:
+    get:
+      tags: [attention]
+      summary: Everything currently waiting for the user
+      description: |
+        Current state, never a count of unread events: once an item is resolved
+        it disappears from every client. Each item carries the channel that
+        started the work and whether a notification is worth sending.
+      parameters:
+        - name: sessionId
+          in: query
+          schema: { $ref: "#/components/schemas/UUID" }
+          description: Restrict to one Session.
+      responses:
+        "200":
+          description: Pending attention
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Attention" }
+
+  /api/v1/me/audit:
+    get:
+      tags: [attention]
+      summary: The audit trail of the caller
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100 }
+      responses:
+        "200":
+          description: The entries, most recent first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/AuditEntry" }
+
+  /api/v1/validations/{validationId}/resolve:
+    parameters:
+      - name: validationId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    post:
+      tags: [attention]
+      summary: Approve or deny a permission request
+      description: The first valid resolution wins; a second one is told it is already resolved.
+      parameters:
+        - $ref: "#/components/parameters/Channel"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approved]
+              properties:
+                approved: { type: boolean }
+                note: { type: string }
+                channel:
+                  type: string
+                  description: Overrides the request channel, for a client answering on behalf of another.
+      responses:
+        "200":
+          description: The resolved request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationRequest" }
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/user-input/{requestId}/resolve:
+    parameters:
+      - name: requestId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    post:
+      tags: [attention]
+      summary: Answer a question
+      parameters:
+        - $ref: "#/components/parameters/Channel"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: string }
+                channel: { type: string }
+      responses:
+        "200":
+          description: The answered request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserInputRequest" }
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/projects/{projectId}/tasks:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      tags: [knowledge]
+      summary: The Tasks of a Project
+      parameters:
+        - name: includeDone
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: The Tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Task" }
+    post:
+      tags: [knowledge]
+      summary: Create a Task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                description: { type: string }
+                dependsOn:
+                  type: array
+                  items: { $ref: "#/components/schemas/UUID" }
+      responses:
+        "201":
+          description: The created Task
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "400":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/projects/{projectId}/tasks/ready:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      tags: [knowledge]
+      summary: The Tasks that can be started now
+      description: TODO with every dependency done. Blocked is derived from the graph, never stored.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The ready Tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Task" }
+
+  /api/v1/tasks/{taskId}:
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    patch:
+      tags: [knowledge]
+      summary: Retitle a Task, or change its status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                description: { type: string }
+                status: { $ref: "#/components/schemas/TaskStatus" }
+      responses:
+        "200":
+          description: The updated Task
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/projects/{projectId}/decisions:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      tags: [knowledge]
+      summary: The Decisions of a Project
+      responses:
+        "200":
+          description: The Decisions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Decision" }
+    post:
+      tags: [knowledge]
+      summary: Record a Decision
+      description: Active IMPORTANT decisions travel with every Job of the Project.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                content: { type: string }
+                importance: { $ref: "#/components/schemas/DecisionImportance" }
+                supersedes:
+                  type: [string, "null"]
+                  format: uuid
+      responses:
+        "201":
+          description: The recorded Decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Decision" }
+
+  /api/v1/projects/{projectId}/search:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      tags: [knowledge]
+      summary: Search the project memory
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: What matched
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tasks, decisions, history]
+                properties:
+                  tasks:
+                    type: array
+                    items: { $ref: "#/components/schemas/Task" }
+                  decisions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Decision" }
+                  history:
+                    type: array
+                    items: { $ref: "#/components/schemas/Event" }
+
+  /api/v1/projects/{projectId}/artifacts:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      tags: [artifacts]
+      summary: The Artifacts of a Project
+      description: >-
+        Skill bundles are left out: they are the content of an installed Skill,
+        not a user upload.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: The Artifacts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Artifact" }
+    post:
+      tags: [artifacts]
+      summary: Upload an Artifact
+      description: |
+        A multipart form, which is what a browser sends, or a raw body, which is
+        what a script sends. The checksum is computed from what was actually
+        written and the object key is derived from identifiers, never from the
+        filename (spec section 24).
+      parameters:
+        - name: filename
+          in: query
+          schema: { type: string }
+        - name: sessionId
+          in: query
+          schema: { $ref: "#/components/schemas/UUID" }
+        - name: jobId
+          in: query
+          schema: { $ref: "#/components/schemas/UUID" }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                sessionId: { $ref: "#/components/schemas/UUID" }
+                jobId: { $ref: "#/components/schemas/UUID" }
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        "201":
+          description: The stored Artifact
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Artifact" }
+        "503":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/artifacts/{artifactId}:
+    parameters:
+      - $ref: "#/components/parameters/ArtifactID"
+    get:
+      tags: [artifacts]
+      summary: Artifact metadata
+      responses:
+        "200":
+          description: The Artifact
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Artifact" }
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [artifacts]
+      summary: Remove an Artifact and the bytes behind it
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/artifacts/{artifactId}/content:
+    parameters:
+      - $ref: "#/components/parameters/ArtifactID"
+    get:
+      tags: [artifacts]
+      summary: The bytes of an Artifact
+      description: |
+        Always served as an attachment with a fixed content type: Artifacts are
+        agent output, and letting a browser render one in the Threavia origin
+        would turn a produced file into a script running as the user.
+      responses:
+        "200":
+          description: The bytes
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/projects/{projectId}/skills:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      tags: [skills]
+      summary: The Core-managed Skills of a Project
+      responses:
+        "200":
+          description: The Skills
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Skill" }
+    post:
+      tags: [skills]
+      summary: Install a Skill from a git url, an archive url or an upload
+      description: |
+        A JSON body names a git or archive source; any other content type
+        carries an uploaded archive. Core fetches, inspects and repacks. It
+        never runs anything the source contains.
+      parameters:
+        - name: filename
+          in: query
+          schema: { type: string }
+          description: Selects the archive format of an upload. It shapes nothing stored.
+        - name: name
+          in: query
+          schema: { type: string }
+        - name: path
+          in: query
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source]
+              properties:
+                name: { type: string }
+                source: { $ref: "#/components/schemas/SkillSource" }
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                name: { type: string }
+                path: { type: string }
+          application/gzip:
+            schema: { type: string, format: binary }
+      responses:
+        "201":
+          description: The installed Skill
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Skill" }
+        "400":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/skills/{skillId}:
+    parameters:
+      - name: skillId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    delete:
+      tags: [skills]
+      summary: Uninstall a Skill and remove its bundle
+      responses:
+        "204":
+          description: Uninstalled
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/events:
+    get:
+      tags: [stream]
+      summary: The global event stream
+      description: |
+        One SSE stream per user carries every Session, so a client holds a
+        single cursor rather than one per Session. Reconnection replays from
+        that cursor: the database is the source of truth and the in-process
+        broker is only the fast path.
+
+        Frames are named, so a client listens per type rather than on the
+        default `message` type:
+
+        - `event` carries one timeline event, with the SSE `id` set to its
+          global sequence, so a browser resumes with `Last-Event-ID` on its own;
+        - `ephemeral` carries a liveness signal with no sequence. It is streamed
+          and never stored, never advances the cursor, and says only that
+          something is happening between two things worth remembering.
+      parameters:
+        - name: after
+          in: query
+          schema: { type: integer, format: int64 }
+          description: Resume from this sequence. `Last-Event-ID` takes precedence.
+        - $ref: "#/components/parameters/Channel"
+      responses:
+        "200":
+          description: An endless stream of events
+          content:
+            text/event-stream:
+              schema: { $ref: "#/components/schemas/Event" }
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: Used when THREAVIA_AUTH_MODE is basic.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        An OIDC token, used when THREAVIA_AUTH_MODE is oidc. Core runs no login
+        flow: a client obtains its token from the provider.
+
+  parameters:
+    ProjectID:
+      name: projectId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UUID" }
+    SessionID:
+      name: sessionId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UUID" }
+    JobID:
+      name: jobId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UUID" }
+    BackendID:
+      name: backendId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UUID" }
+    DirectoryID:
+      name: directoryId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UUID" }
+    ArtifactID:
+      name: artifactId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UUID" }
+    IncludeArchived:
+      name: includeArchived
+      in: query
+      schema: { type: boolean, default: false }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema: { type: string }
+      description: A retry returns what the first attempt created rather than creating a second one.
+    Channel:
+      name: X-Threavia-Channel
+      in: header
+      schema: { $ref: "#/components/schemas/Channel" }
+      description: |
+        Which kind of client is calling. Core records it on the work it creates,
+        so a device already following it is not also made to ring, and the audit
+        trail can say where a change came from.
+
+  responses:
+    Error:
+      description: The single error shape of the client API
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: object
+                required: [code, message]
+                properties:
+                  code: { type: string }
+                  message: { type: string }
+
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+
+    Channel:
+      type: string
+      description: |
+        A loose vocabulary, not a closed enumeration: a new client must not
+        require a Core release. An unknown value is recorded as `api`.
+      examples: ["web", "android", "vscode", "voice", "api"]
+
+    Capability:
+      type: string
+      enum: [CODE, INTERACTION, REVIEW]
+
+    ProjectStatus:
+      type: string
+      enum: [ACTIVE, ARCHIVED]
+
+    SessionStatus:
+      type: string
+      enum: [ACTIVE, ARCHIVED]
+
+    JobStatus:
+      type: string
+      enum:
+        - QUEUED
+        - RUNNING
+        - WAITING_INPUT
+        - WAITING_VALIDATION
+        - WAITING_BACKEND
+        - CANCELLING
+        - COMPLETED
+        - FAILED
+        - CANCELLED
+
+    ResumeStatus:
+      type: string
+      enum: [UNKNOWN, AVAILABLE, UNAVAILABLE]
+
+    TaskStatus:
+      type: string
+      description: There is deliberately no BLOCKED status; blocked is derived from incomplete dependencies.
+      enum: [TODO, IN_PROGRESS, DONE, CANCELLED]
+
+    DecisionImportance:
+      type: string
+      enum: [NORMAL, IMPORTANT]
+
+    DecisionStatus:
+      type: string
+      enum: [ACTIVE, SUPERSEDED]
+
+    AttentionStatus:
+      type: string
+      enum: [PENDING, RESOLVED]
+
+    BackendOwnershipStatus:
+      type: string
+      enum: [UNCLAIMED, CLAIMED, REVOKED]
+
+    BackendOperationalStatus:
+      type: string
+      description: BUSY is deliberately absent; capacity is modelled separately.
+      enum: [READY, DEGRADED, OFFLINE, UNAVAILABLE]
+
+    ProviderAuthState:
+      type: string
+      enum: [UNKNOWN, AUTHENTICATED, AUTHENTICATION_REQUIRED]
+
+    ExecutionMode:
+      type: string
+      enum: [INTERACTIVE, GUARDED, AUTONOMOUS]
+
+    SkillSourceType:
+      type: string
+      enum: [GIT, ARCHIVE, UPLOAD]
+
+    FileState:
+      type: string
+      enum: [ADDED, MODIFIED, DELETED, RENAMED]
+
+    Project:
+      type: object
+      required: [id, ownerId, name, status, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        ownerId: { type: string }
+        name: { type: string }
+        description: { type: string }
+        instructions:
+          type: string
+          description: Provider-independent project rules (spec section 18).
+        status: { $ref: "#/components/schemas/ProjectStatus" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        archivedAt: { type: string, format: date-time }
+
+    Session:
+      type: object
+      required: [id, projectId, title, status, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        projectId: { $ref: "#/components/schemas/UUID" }
+        title:
+          type: string
+          description: Generated, user-renamable, and with no technical meaning.
+        status: { $ref: "#/components/schemas/SessionStatus" }
+        workingDirectoryId:
+          type: string
+          format: uuid
+          description: The initial cwd only, never a filesystem boundary.
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        archivedAt: { type: string, format: date-time }
+
+    Run:
+      type: object
+      description: The binding between a Session and one BackendInstance. An infrastructure detail a client shows only when the user needs to choose or debug a backend.
+      required: [id, sessionId, backendInstanceId, resumeStatus, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        sessionId: { $ref: "#/components/schemas/UUID" }
+        backendInstanceId: { $ref: "#/components/schemas/UUID" }
+        nativeSessionId: { type: string }
+        resumeStatus: { $ref: "#/components/schemas/ResumeStatus" }
+        resumeReason: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Job:
+      type: object
+      required: [id, runId, status, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        runId: { $ref: "#/components/schemas/UUID" }
+        status: { $ref: "#/components/schemas/JobStatus" }
+        originChannel: { $ref: "#/components/schemas/Channel" }
+        error: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time }
+
+    Event:
+      type: object
+      required: [id, sequence, timestamp, type]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        sequence:
+          type: integer
+          format: int64
+          description: The Core-assigned global sequence, and the cursor of the stream.
+        timestamp: { type: string, format: date-time }
+        type: { type: string, examples: ["agent.message", "tool.started", "workspace.changed"] }
+        projectId: { $ref: "#/components/schemas/UUID" }
+        sessionId: { $ref: "#/components/schemas/UUID" }
+        runId: { $ref: "#/components/schemas/UUID" }
+        jobId: { $ref: "#/components/schemas/UUID" }
+        payload:
+          type: object
+          additionalProperties: true
+          description: The shape depends on `type`. See EventPayloads for the ones a client renders.
+
+    Snapshot:
+      type: object
+      required: [session, runs, jobs, events, attention, cursor]
+      properties:
+        session: { $ref: "#/components/schemas/Session" }
+        runs:
+          type: array
+          items: { $ref: "#/components/schemas/Run" }
+        jobs:
+          type: array
+          items: { $ref: "#/components/schemas/Job" }
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/Event" }
+        attention: { $ref: "#/components/schemas/Attention" }
+        cursor:
+          type: integer
+          format: int64
+          description: Where the live stream takes over.
+
+    Attention:
+      type: object
+      required: [validations, userInputs]
+      properties:
+        validations:
+          type: [array, "null"]
+          items: { $ref: "#/components/schemas/ValidationRequest" }
+        userInputs:
+          type: [array, "null"]
+          items: { $ref: "#/components/schemas/UserInputRequest" }
+
+    Scope:
+      type: object
+      required: [projectId, sessionId, runId, jobId]
+      properties:
+        projectId: { $ref: "#/components/schemas/UUID" }
+        sessionId: { $ref: "#/components/schemas/UUID" }
+        runId: { $ref: "#/components/schemas/UUID" }
+        jobId: { $ref: "#/components/schemas/UUID" }
+
+    ValidationRequest:
+      type: object
+      description: A permission request. It waits indefinitely and the first valid resolution wins.
+      required: [id, scope, status, title, requestPayload, payloadSha256, createdAt, notify]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        scope: { $ref: "#/components/schemas/Scope" }
+        status: { $ref: "#/components/schemas/AttentionStatus" }
+        title: { type: string }
+        summary: { type: string }
+        requestPayload:
+          type: object
+          additionalProperties: true
+          description: The canonical technical request. A technical client renders it.
+        payloadSha256:
+          type: string
+          description: The security reference of the validation receipt.
+        humanized: { type: string }
+        originChannel: { $ref: "#/components/schemas/Channel" }
+        notify:
+          type: boolean
+          description: False while the client that started the work still holds a live stream.
+        approved: { type: boolean }
+        resolvedByUserId: { type: string }
+        resolvedChannel: { type: string }
+        note: { type: string }
+        createdAt: { type: string, format: date-time }
+        resolvedAt: { type: string, format: date-time }
+
+    UserInputRequest:
+      type: object
+      description: A request for an answer, a choice or information. Distinct from a permission request.
+      required: [id, scope, status, prompt, freeText, createdAt, notify]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        scope: { $ref: "#/components/schemas/Scope" }
+        status: { $ref: "#/components/schemas/AttentionStatus" }
+        prompt: { type: string }
+        choices:
+          type: array
+          items: { type: string }
+        freeText: { type: boolean }
+        originChannel: { $ref: "#/components/schemas/Channel" }
+        notify: { type: boolean }
+        value: { type: string }
+        resolvedByUserId: { type: string }
+        resolvedChannel: { type: string }
+        createdAt: { type: string, format: date-time }
+        resolvedAt: { type: string, format: date-time }
+
+    ExecutionPolicy:
+      type: object
+      description: |
+        What an agent may do. The default is the most restrained of the three
+        modes: a policy that has to be loosened on purpose is a policy someone
+        thought about. It is a guard rail, not a sandbox: filesystem and process
+        access stay the real permissions of the backend account.
+      required: [mode, allowFilesystemWrite, allowGitCommit, allowGitPush, allowNetwork]
+      properties:
+        mode: { $ref: "#/components/schemas/ExecutionMode" }
+        allowFilesystemWrite: { type: boolean }
+        allowGitCommit: { type: boolean }
+        allowGitPush: { type: boolean }
+        allowNetwork: { type: boolean }
+        maxDurationSeconds:
+          type: integer
+          description: Stops a Run that has been going too long. Zero means no limit.
+        maxActions:
+          type: integer
+          description: Stops a Run that has taken too many steps. Zero means no limit.
+
+    KnownDirectory:
+      type: object
+      description: |
+        A project-level logical directory. Portability and discovery metadata,
+        never a sandbox: the agent may work in any directory the backend
+        filesystem allows.
+      required: [id, projectId, name, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        projectId: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        description: { type: string }
+        gitRemote: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    KnownDirectoryBinding:
+      type: object
+      description: Where a logical directory actually lives on one backend. The same directory has different paths on different backends.
+      required: [knownDirectoryId, backendInstanceId, path, createdAt, updatedAt]
+      properties:
+        knownDirectoryId: { $ref: "#/components/schemas/UUID" }
+        backendInstanceId: { $ref: "#/components/schemas/UUID" }
+        path: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Capacity:
+      type: object
+      required: [maxConcurrentRuns, activeRuns]
+      properties:
+        maxConcurrentRuns: { type: integer }
+        activeRuns: { type: integer }
+
+    Condition:
+      type: object
+      description: Why a backend is in the state it reports, in the vocabulary the backend chose. Core stores it without interpreting it.
+      required: [type, status, observedAt]
+      properties:
+        type: { type: string, examples: ["ProviderAvailable"] }
+        status: { type: string, examples: ["False"] }
+        reason: { type: string, examples: ["ExecutableNotFound"] }
+        message: { type: string }
+        observedAt: { type: string, format: date-time }
+
+    BackendInstance:
+      type: object
+      description: An autonomous remote execution participant. It belongs to a User, not to a Project.
+      required: [id, name, ownershipStatus, operationalStatus, providerAuthState, capabilities, capacity, protocolVersion, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        ownerId:
+          type: string
+          description: Absent while the instance is UNCLAIMED.
+        name: { type: string }
+        ownershipStatus: { $ref: "#/components/schemas/BackendOwnershipStatus" }
+        operationalStatus: { $ref: "#/components/schemas/BackendOperationalStatus" }
+        providerAuthState: { $ref: "#/components/schemas/ProviderAuthState" }
+        capabilities:
+          type: array
+          items: { $ref: "#/components/schemas/Capability" }
+        capacity: { $ref: "#/components/schemas/Capacity" }
+        conditions:
+          type: array
+          items: { $ref: "#/components/schemas/Condition" }
+        protocolVersion: { type: integer }
+        lastHeartbeatAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time }
+
+    Handoff:
+      type: object
+      description: What moving a Session to another BackendInstance produced.
+      required: [run]
+      properties:
+        run: { $ref: "#/components/schemas/Run" }
+        missingSkills:
+          type: array
+          items: { type: string }
+          description: |
+            The backend-local Skills the previous backend had and the new one
+            does not. Core knows their names and never their content, so this is
+            the most it can say.
+
+    Task:
+      type: object
+      required: [id, projectId, title, status, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        projectId: { $ref: "#/components/schemas/UUID" }
+        title: { type: string }
+        description: { type: string }
+        status: { $ref: "#/components/schemas/TaskStatus" }
+        dependsOn:
+          type: array
+          items: { $ref: "#/components/schemas/UUID" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+
+    Decision:
+      type: object
+      required: [id, projectId, title, importance, status, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        projectId: { $ref: "#/components/schemas/UUID" }
+        title: { type: string }
+        content: { type: string }
+        importance: { $ref: "#/components/schemas/DecisionImportance" }
+        status: { $ref: "#/components/schemas/DecisionStatus" }
+        supersedes: { $ref: "#/components/schemas/UUID" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Artifact:
+      type: object
+      description: A stored blob. Metadata in PostgreSQL, bytes in S3-compatible storage.
+      required: [id, ownerId, projectId, filename, mimeType, size, sha256, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        ownerId: { type: string }
+        projectId: { $ref: "#/components/schemas/UUID" }
+        filename:
+          type: string
+          description: Metadata only. The object key is derived from identifiers.
+        mimeType: { type: string }
+        size: { type: integer, format: int64 }
+        sha256: { type: string }
+        sessionId: { $ref: "#/components/schemas/UUID" }
+        jobId: { $ref: "#/components/schemas/UUID" }
+        createdAt: { type: string, format: date-time }
+
+    SkillSource:
+      type: object
+      description: What was asked for. Provenance, kept beside what was actually installed.
+      required: [type]
+      properties:
+        type: { $ref: "#/components/schemas/SkillSourceType" }
+        url: { type: string }
+        path:
+          type: string
+          description: Selects a subdirectory of the repository or archive.
+        revision:
+          type: string
+          description: The requested branch, tag or commit. It may move; installedRevision never does.
+
+    Skill:
+      type: object
+      description: A Core-managed Project Skill, an immutable versioned artefact with provenance.
+      required: [id, ownerId, projectId, name, source, installedRevision, installedAt, artifactId, bundleSha256, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        ownerId: { type: string }
+        projectId: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        description: { type: string }
+        source: { $ref: "#/components/schemas/SkillSource" }
+        installedRevision:
+          type: string
+          description: >-
+            The immutable identity of what was installed: a commit, or a
+            content hash.
+        installedAt: { type: string, format: date-time }
+        artifactId: { $ref: "#/components/schemas/UUID" }
+        bundleSha256: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    BackendSkill:
+      type: object
+      description: A Skill that exists only on one BackendInstance. Core knows its metadata and never its content.
+      required: [backendInstanceId, name, available, reportedAt]
+      properties:
+        backendInstanceId: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        description: { type: string }
+        available: { type: boolean }
+        reportedAt: { type: string, format: date-time }
+
+    AuditEntry:
+      type: object
+      description: |
+        One recorded decision or privileged action. Its subject identifiers are
+        plain text rather than foreign keys, so the record survives the deletion
+        of what it describes.
+      required: [id, ownerId, actorId, action, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        ownerId: { type: string }
+        actorId: { type: string }
+        action: { type: string, examples: ["execution_policy.set", "session.backend_changed"] }
+        projectId: { $ref: "#/components/schemas/UUID" }
+        sessionId: { $ref: "#/components/schemas/UUID" }
+        jobId: { $ref: "#/components/schemas/UUID" }
+        subjectId: { type: string }
+        channel: { $ref: "#/components/schemas/Channel" }
+        payloadSha256: { type: string }
+        detail:
+          type: object
+          additionalProperties: true
+        createdAt: { type: string, format: date-time }

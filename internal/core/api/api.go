@@ -13,6 +13,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -48,7 +49,11 @@ type handler struct {
 	auth    auth.Authenticator
 	db      Pinger
 	version string
-	logger  *slog.Logger
+	// routes records every pattern registered, so the OpenAPI document can be
+	// checked against what the server actually serves rather than against what
+	// someone remembered to write down.
+	routes []string
+	logger *slog.Logger
 }
 
 // NewRouter builds the Core HTTP handler.
@@ -74,6 +79,7 @@ func NewRouter(opts Options) http.Handler {
 	h.registerArtifacts(mux)
 	h.registerSkills(mux)
 	h.registerStream(mux)
+	h.registerSpec(mux)
 
 	// Anything else under the versioned prefix is a route that does not exist
 	// yet; answering 501 keeps a client from reading it as an empty result.
@@ -89,11 +95,11 @@ func NewRouter(opts Options) http.Handler {
 }
 
 func (h *handler) registerOperational(mux *http.ServeMux) {
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+	h.open(mux, "GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+	h.open(mux, "GET /readyz", func(w http.ResponseWriter, r *http.Request) {
 		if h.db == nil {
 			writeError(w, http.StatusServiceUnavailable, "not_ready", "database is not configured")
 			return
@@ -106,7 +112,7 @@ func (h *handler) registerOperational(mux *http.ServeMux) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})
 
-	mux.HandleFunc("GET /version", func(w http.ResponseWriter, _ *http.Request) {
+	h.open(mux, "GET /version", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"version": h.version})
 	})
 }
@@ -130,6 +136,17 @@ func (h *handler) secured(fn func(http.ResponseWriter, *http.Request, auth.Ident
 	})
 }
 
+// open registers a route that needs no user credential, and records it like any
+// other so the OpenAPI document is checked against the whole surface.
+func (h *handler) open(mux *http.ServeMux, pattern string, fn http.HandlerFunc) {
+	h.routes = append(h.routes, pattern)
+	mux.HandleFunc(pattern, fn)
+}
+
+// Routes returns every pattern this handler serves. It exists for the test that
+// holds the OpenAPI document and the server to each other.
+func (h *handler) Routes() []string { return slices.Clone(h.routes) }
+
 // handle registers a secured route.
 //
 // Every path wildcard in the Core API names an entity by UUID, so a value that
@@ -137,6 +154,8 @@ func (h *handler) secured(fn func(http.ResponseWriter, *http.Request, auth.Ident
 // is what an unknown identifier deserves, instead of letting PostgreSQL refuse
 // the cast and turning a typo into a 500.
 func (h *handler) handle(mux *http.ServeMux, pattern string, fn func(http.ResponseWriter, *http.Request, auth.Identity)) {
+	h.routes = append(h.routes, pattern)
+
 	wildcards := pathWildcards(pattern)
 	mux.Handle(pattern, h.secured(func(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
 		for _, name := range wildcards {

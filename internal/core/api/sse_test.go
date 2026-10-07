@@ -225,3 +225,51 @@ func TestStreamIsScopedToItsOwner(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 }
+
+// TestStreamFramesAreNamed pins the frame names every client listens on.
+//
+// The names are part of the contract and are the one part of it an OpenAPI
+// schema cannot express: a client that listens on the default `message` type
+// receives nothing at all, with a connection that looks perfectly healthy. This
+// cost the web client a silent failure once, so the names are held here.
+func TestStreamFramesAreNamed(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+
+	frames, closeStream := c.openStream(t, "")
+	defer closeStream()
+
+	session := c.startSession(projectID, c.backendID, dirID, "Analyse")
+	start := receive(t, "the dispatched job", backend.starts)
+
+	ctx := context.Background()
+	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
+		return backend.events.AgentMessage(ctx, start.GetRunId(), start.GetJobId(), "working")
+	}))
+
+	// A persisted event: named "event", and carrying the global sequence as the
+	// SSE id so a browser resumes on its own.
+	persisted := awaitFrame(t, frames, "agent.message")
+	if persisted.name != "event" {
+		t.Fatalf("persisted frame name = %q, want %q", persisted.name, "event")
+	}
+	if persisted.id == "" {
+		t.Fatal("a persisted frame must carry its sequence as the SSE id")
+	}
+
+	// A liveness signal: named "ephemeral", carrying no sequence, so it never
+	// advances a client cursor and never lands in history.
+	backend.sdk.SendEphemeral(ctx, backend.events.Ephemeral(
+		start.GetRunId(), start.GetJobId(), "agent.thinking", ""))
+
+	live := awaitFrame(t, frames, "agent.thinking")
+	if live.name != "ephemeral" {
+		t.Fatalf("ephemeral frame name = %q, want %q", live.name, "ephemeral")
+	}
+	if live.id != "" {
+		t.Fatalf("an ephemeral frame must carry no sequence, got id %q", live.id)
+	}
+	if live.event.Sequence != 0 {
+		t.Fatalf("ephemeral sequence = %d, want 0", live.event.Sequence)
+	}
+	_ = session
+}

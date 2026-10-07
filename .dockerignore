@@ -1,8 +1,7 @@
-.git
-.github
-bin
-web/ui/*.map
-deploy/helm
-docs
-*.md
-!README.md
+# Never ship a developer's local build into the image: the Dockerfile builds the
+# client itself, so the context carrying one would only risk embedding a stale
+# copy.
+web/ui/node_modules/
+web/ui/dist/
+bin/
+.git/

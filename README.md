@@ -62,6 +62,8 @@ What is deliberately not implemented, matching the non-goals of section 33:
 
 - Go 1.26 or later. `GOTOOLCHAIN=auto`, the default, fetches it when the
   installed Go is older.
+- Node 22 or later, to build the web client. The Go binary embeds it, so a
+  release build needs this too, not only development.
 - Docker, for the local PostgreSQL and S3-compatible storage
 - A C compiler, only for `make test-race`: the race detector is
   ThreadSanitizer, a C++ runtime, so a race-enabled binary needs cgo and the
@@ -69,9 +71,9 @@ What is deliberately not implemented, matching the non-goals of section 33:
 - `buf`, `protoc-gen-go` and `protoc-gen-go-grpc`, only to regenerate the
   protobuf bindings: `make tools` installs the pinned versions
 
-On NixOS, [`shell.nix`](shell.nix) provides Go, gcc and helm:
+On NixOS, [`shell.nix`](shell.nix) provides Go, Node, gcc and helm:
 
-```bash
+
 nix-shell              # enter the shell
 nix-shell --run make   # or run a single target
 ```
@@ -84,7 +86,7 @@ make migrate       # apply the database migrations
 make test          # run the test suite
 make test-db       # add the database integration and end-to-end tests
 make dev-up-storage # add S3-compatible object storage (Garage), configured
-make build         # build both binaries into bin/
+make build         # build the web client, then both binaries into bin/
 ```
 
 Run the whole thing: Core in one terminal, a backend in another, the client in a
@@ -123,12 +125,51 @@ export THREAVIA_BACKEND_DISCOVERY_ROOTS=$HOME/git,$HOME/dev
 
 `.env.example` lists every environment variable with its default.
 
+### Working on the web client
+
+The client is a React application built with Vite
+([`web/ui`](web/ui/README.md)). In development it is served by Vite rather than
+by Core, so editing a component reloads the browser without rebuilding or
+restarting the Go binary:
+
+```bash
+# terminal 1
+make run-core
+
+# terminal 2
+make dev-web       # http://localhost:5173, hot reload, in a container
+```
+
+Everything the client calls is proxied to Core, so the browser stays on a single
+origin: no CORS, and the event stream behaves exactly as it does in production.
+The container runs on the host network, so it reaches Core at `localhost:8080`
+with no gateway or firewall rule to arrange. `THREAVIA_CORE_URL` points the
+proxy elsewhere, and `make web-dev` runs the same server with no container.
+
+In production the client is built and embedded in the binary, so a release is
+one file:
+
+```bash
+make web           # build into web/ui/dist
+make build         # the client, then both binaries
+```
+
+A binary built without the client says so on the page rather than serving a
+blank one. The API is unaffected either way.
+
+The TypeScript types come from [`api/openapi.yaml`](api/openapi.yaml), which is
+the contract Core serves at `/api/spec.json`. A route the server registers and
+the document omits fails `TestEveryRouteIsInTheOpenAPIDocument`, and a renamed
+field breaks the web build rather than a user's screen.
+
 ### Other tasks
 
 ```bash
 make help          # list every target
 make generate      # regenerate gen/ from api/proto
+make web-generate  # regenerate the TypeScript API types from api/openapi.yaml
 make lint          # go vet + buf lint
+make web-lint      # type-check and lint the web client
 make test-race     # test suite under the race detector (needs a C compiler)
 make dev-reset     # stop the dependencies and delete their data
 ```
@@ -156,19 +197,20 @@ git push origin v0.1.0
 ```
 
 `make verify` runs locally exactly what the lint job runs: formatting, module
-tidiness, generated-code freshness, `go vet` and `buf lint`. `make docker`
-builds both images.
+tidiness, generated-code freshness for both the protocol and the API types,
+`go vet`, `buf lint` and the test suite. `make docker` builds both images.
 
-The Core image is distroless and static, around 20 MB. The Claude backend image
-is larger by necessity: it ships Node, the Claude Code CLI and git, because the
-agent needs a real userland to work in. Provider credentials are supplied at
-runtime and never baked into it.
+The Core image is distroless and static, around 26 MB with the web client
+embedded. The Claude backend image is larger by necessity: it ships Node, the
+Claude Code CLI and git, because the agent needs a real userland to work in.
+Provider credentials are supplied at runtime and never baked into it.
 
 ## Repository layout
 
 Matching specification section 25:
 
 ```text
+api/openapi.yaml                 the client API contract, served and generated from
 api/proto/threavia/backend/v1/   protobuf definitions of the backend protocol
 gen/threavia/backend/v1/         generated Go bindings, never edited by hand
 cmd/threavia-core/               Core binary
@@ -194,7 +236,8 @@ deploy/helm/threavia/            Helm chart for Core
 deploy/helm/threavia-backend-claude/  Helm chart for a Kubernetes backend
 examples/backend-example/        smallest possible BackendInstance
 docs/                            architecture, protocol and API notes
-web/                             web client, served from the Core binary
+web/                             the embed, and the fallback when nothing is built
+web/ui/                          React client: Vite, TanStack Query, Radix
 shell.nix                        NixOS development shell
 .github/workflows/ci.yml         lint, test, build, package, release
 ```
@@ -208,7 +251,8 @@ only additions to the proposed tree; the reasons are recorded in
 - [`docs/architecture.md`](docs/architecture.md) — what is implemented, and every
   implementation choice the specification left open
 - [`docs/protocol.md`](docs/protocol.md) — the Backend ↔ Core control protocol
-- [`docs/api.md`](docs/api.md) — the client HTTP API
+- [`docs/api.md`](docs/api.md) — the client HTTP API, and the contract it is
+  generated from
 
 ## License
 

@@ -1,0 +1,144 @@
+@import 'tailwindcss';
+
+/*
+ * The palette is defined once, in both schemes, and nothing below names a raw
+ * colour. A component that needs "the surface colour" asks for the token, so a
+ * theme change is a change here and nowhere else.
+ */
+@theme {
+  --color-canvas: oklch(99% 0.002 260);
+  --color-surface: oklch(100% 0 0);
+  --color-surface-2: oklch(97% 0.004 260);
+  --color-border: oklch(91% 0.005 260);
+  --color-text: oklch(25% 0.012 260);
+  --color-muted: oklch(53% 0.014 260);
+  --color-accent: oklch(52% 0.19 275);
+  --color-accent-text: oklch(99% 0 0);
+  --color-ok: oklch(55% 0.14 155);
+  --color-warn: oklch(68% 0.15 75);
+  --color-danger: oklch(55% 0.2 25);
+
+  --radius-card: 0.625rem;
+  --font-mono:
+    ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-canvas: oklch(17% 0.012 265);
+    --color-surface: oklch(21% 0.014 265);
+    --color-surface-2: oklch(25% 0.016 265);
+    --color-border: oklch(31% 0.018 265);
+    --color-text: oklch(93% 0.008 265);
+    --color-muted: oklch(68% 0.014 265);
+    --color-accent: oklch(70% 0.15 275);
+    --color-accent-text: oklch(17% 0.012 265);
+    --color-ok: oklch(72% 0.16 155);
+    --color-warn: oklch(80% 0.14 80);
+    --color-danger: oklch(68% 0.18 22);
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  body {
+    @apply bg-canvas text-text antialiased;
+    font-family:
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      sans-serif;
+  }
+
+  /* A focus ring that appears for a keyboard user and not for a mouse click. */
+  :focus-visible {
+    @apply outline-accent outline-2 outline-offset-2;
+  }
+
+  ::-webkit-scrollbar {
+    @apply h-2 w-2;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+}
+
+@layer components {
+  /*
+   * Agent output is markdown. These rules keep it readable without pulling in a
+   * typography plugin, which would style far more than this one container.
+   */
+  .prose-agent {
+    @apply text-[0.9375rem] leading-relaxed;
+  }
+  .prose-agent > * + * {
+    @apply mt-3;
+  }
+  .prose-agent h1,
+  .prose-agent h2,
+  .prose-agent h3 {
+    @apply mt-5 font-semibold;
+  }
+  .prose-agent h1 {
+    @apply text-lg;
+  }
+  .prose-agent h2 {
+    @apply text-base;
+  }
+  .prose-agent h3 {
+    @apply text-sm uppercase tracking-wide;
+  }
+  .prose-agent ul {
+    @apply list-disc space-y-1 pl-5;
+  }
+  .prose-agent ol {
+    @apply list-decimal space-y-1 pl-5;
+  }
+  .prose-agent a {
+    @apply text-accent underline underline-offset-2;
+  }
+  .prose-agent code {
+    @apply bg-surface-2 rounded px-1 py-0.5 font-mono text-[0.85em];
+  }
+  .prose-agent pre {
+    @apply bg-surface-2 border-border overflow-x-auto rounded-md border p-3 text-[0.8125rem];
+  }
+  .prose-agent pre code {
+    @apply bg-transparent p-0;
+  }
+  .prose-agent blockquote {
+    @apply border-border text-muted border-l-2 pl-3;
+  }
+  .prose-agent table {
+    @apply w-full border-collapse text-sm;
+  }
+  .prose-agent th,
+  .prose-agent td {
+    @apply border-border border px-2 py-1 text-left;
+  }
+}
+
+/*
+ * Shiki emits both themes on each token and picks with a CSS variable, so the
+ * highlighted block follows the reader's scheme without a second render.
+ */
+@layer components {
+  .shiki-block pre {
+    @apply bg-surface-2 border-border overflow-x-auto rounded-md border p-3 text-[0.8125rem];
+  }
+  .shiki-block code {
+    @apply bg-transparent p-0;
+  }
+
+  .shiki-block span {
+    color: var(--shiki-light);
+  }
+  @media (prefers-color-scheme: dark) {
+    .shiki-block span {
+      color: var(--shiki-dark);
+    }
+  }
+}

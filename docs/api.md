@@ -4,63 +4,28 @@ Clients — Web, Android, VS Code, and the Voice-facing services — use HTTP/JS
 for commands, queries, snapshots and history, and SSE for realtime events
 (specification section 5). There is no GraphQL and no WebSocket in V1.
 
-## Implemented
+## The contract
 
-| Method | Path | Auth | Description |
-| --- | --- | --- | --- |
-| `GET` | `/healthz` | no | Liveness |
-| `GET` | `/readyz` | no | Readiness, pings PostgreSQL |
-| `GET` | `/version` | no | Core version |
-| `POST` | `/api/v1/backends/register` | credential | A backend registers itself |
-| `GET` | `/api/v1/projects` | yes | List Projects |
-| `POST` | `/api/v1/projects` | yes | Create a Project |
-| `GET` | `/api/v1/projects/{id}` | yes | One Project |
-| `POST` | `/api/v1/projects/{id}/archive` | yes | Archive |
-| `POST` | `/api/v1/projects/{id}/restore` | yes | Restore |
-| `PATCH` | `/api/v1/projects/{id}` | yes | Rename, redescribe, set ProjectInstructions |
-| `DELETE` | `/api/v1/projects/{id}` | yes | Permanent deletion |
-| `GET` | `/api/v1/projects/{id}/sessions` | yes | Sessions of a Project |
-| `GET` | `/api/v1/projects/{id}/directories` | yes | KnownDirectories |
-| `POST` | `/api/v1/projects/{id}/directories` | yes | Create a KnownDirectory |
-| `GET` | `/api/v1/directories/{id}/bindings` | yes | Backend bindings |
-| `POST` | `/api/v1/directories/{id}/bindings` | yes | Bind to a backend path |
-| `GET` | `/api/v1/backends` | yes | BackendInstances of the user |
-| `GET` | `/api/v1/backends/{id}` | yes | One BackendInstance |
-| `POST` | `/api/v1/backends/{id}/revoke` | yes | Revoke its credential |
-| `POST` | `/api/v1/backends/claim` | yes | Claim with a one-time code |
-| `POST` | `/api/v1/backend-tokens` | yes | Issue a one-shot registration token |
-| `POST` | `/api/v1/sessions/start` | yes | Atomic first send |
-| `GET` | `/api/v1/sessions/{id}` | yes | Snapshot: state, history, attention, cursor |
-| `PATCH` | `/api/v1/sessions/{id}` | yes | Rename, change the working directory, or move to another backend |
-| `GET` | `/api/v1/sessions/{id}/events` | yes | Paged history |
-| `POST` | `/api/v1/sessions/{id}/messages` | yes | Append a message, creating a Job |
-| `POST` | `/api/v1/sessions/{id}/archive` | yes | Archive |
-| `POST` | `/api/v1/sessions/{id}/restore` | yes | Restore |
-| `POST` | `/api/v1/jobs/{id}/cancel` | yes | Cancel |
-| `DELETE` | `/api/v1/jobs/{id}` | yes | Delete a queued Job |
-| `GET` | `/api/v1/me/attention` | yes | Everything waiting for the user |
-| `POST` | `/api/v1/validations/{id}/resolve` | yes | Approve or deny |
-| `POST` | `/api/v1/user-input/{id}/resolve` | yes | Answer a question |
-| `GET` | `/api/v1/projects/{id}/tasks` | yes | Tasks of a Project |
-| `POST` | `/api/v1/projects/{id}/tasks` | yes | Create a Task |
-| `GET` | `/api/v1/projects/{id}/tasks/ready` | yes | Tasks whose dependencies are done |
-| `PATCH` | `/api/v1/tasks/{id}` | yes | Retitle, or change the status |
-| `GET` | `/api/v1/projects/{id}/decisions` | yes | Decisions of a Project |
-| `POST` | `/api/v1/projects/{id}/decisions` | yes | Record a Decision |
-| `GET` | `/api/v1/projects/{id}/search` | yes | Search the project history |
-| `GET` | `/api/v1/projects/{id}/artifacts` | yes | Artifacts of a Project |
-| `POST` | `/api/v1/projects/{id}/artifacts` | yes | Upload an Artifact |
-| `GET` | `/api/v1/artifacts/{id}` | yes | Artifact metadata |
-| `GET` | `/api/v1/artifacts/{id}/content` | yes | Artifact bytes, always as an attachment |
-| `DELETE` | `/api/v1/artifacts/{id}` | yes | Remove an Artifact and its bytes |
-| `GET` | `/api/v1/projects/{id}/skills` | yes | Core-managed Project Skills |
-| `POST` | `/api/v1/projects/{id}/skills` | yes | Install a Skill from git, an archive URL or an upload |
-| `DELETE` | `/api/v1/skills/{id}` | yes | Uninstall a Skill |
-| `GET` | `/api/v1/backends/{id}/skills` | yes | Skills that exist only on that backend |
-| `GET` | `/api/v1/sessions/{id}/policy` | yes | Effective ExecutionPolicy |
-| `PUT` | `/api/v1/sessions/{id}/policy` | yes | Set the Session ExecutionPolicy |
-| `GET` | `/api/v1/me/audit` | yes | Audit trail of policy changes and decisions |
-| `GET` | `/api/v1/events` | yes | SSE, the global event stream |
+[`api/openapi.yaml`](../api/openapi.yaml) is this API, and Core serves it at
+`/api/spec.yaml` and `/api/spec.json` without authentication: a generator or a
+person looking for the right route should not need a credential to find out
+what exists.
+
+It is the contract rather than a description written afterwards.
+`TestEveryRouteIsInTheOpenAPIDocument` compares it against the routes the router
+actually registers and fails in both directions, and the TypeScript client is
+generated from it, so a renamed field breaks a build rather than a screen.
+
+## What exists
+
+The contract lists every route, with its parameters, bodies and responses.
+There is deliberately no table of them here: a second list is a second thing to
+keep in step, and this one would be the one that drifts.
+
+```sh
+curl $CORE/api/spec.yaml          # read it
+curl $CORE/api/spec.json | jq     # or query it
+```
 
 Any other `/api/v1` route answers `501 Not Implemented` rather than an empty
 result, so no client mistakes a missing endpoint for empty data.
@@ -156,6 +121,18 @@ Two properties shape every endpoint above:
 `GET /api/v1/events` is the user-wide stream. Reconnection uses the global event
 sequence as cursor, through `Last-Event-ID` or an equivalent query parameter, so
 a client holds one cursor rather than one per Session.
+
+Frames are **named**, so a client listens per type rather than on the default
+`message`:
+
+| Frame | Carries | Persisted |
+| --- | --- | --- |
+| `event` | One timeline event, with its `id` set to the global sequence | yes |
+| `ephemeral` | A liveness signal with no sequence: the agent is still working | no |
+
+An `ephemeral` frame never advances the cursor and never belongs in history. It
+says something is happening between two things worth remembering, and a client
+should let it expire rather than keep claiming work is in progress.
 
 The Core HTTP server runs with no write timeout, because SSE responses are
 long-lived by design.
