@@ -49,6 +49,9 @@ type handler struct {
 	auth    auth.Authenticator
 	db      Pinger
 	version string
+	// spec is the contract as this build serves it: the document from the
+	// repository with this build's version written in.
+	spec *specDocument
 	// routes records every pattern registered, so the OpenAPI document can be
 	// checked against what the server actually serves rather than against what
 	// someone remembered to write down.
@@ -63,6 +66,7 @@ func NewRouter(opts Options) http.Handler {
 		auth:    opts.Authenticator,
 		db:      opts.Database,
 		version: opts.Version,
+		spec:    newSpecDocument(opts.Version),
 		logger:  opts.Logger,
 	}
 

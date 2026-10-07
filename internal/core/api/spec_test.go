@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -103,7 +104,7 @@ func TestEveryRouteIsInTheOpenAPIDocument(t *testing.T) {
 func TestTheDocumentIsServableAsJSON(t *testing.T) {
 	t.Parallel()
 
-	encoded, err := specJSON()
+	encoded, err := newSpecDocument("test").json()
 	if err != nil {
 		t.Fatalf("rendering the document as json: %v", err)
 	}
@@ -128,5 +129,76 @@ func TestTheDocumentDescribesTheDomain(t *testing.T) {
 		if _, ok := schemas[name]; !ok {
 			t.Errorf("the api document has no %s schema", name)
 		}
+	}
+}
+
+// TestTheServedDocumentCarriesTheBuildVersion covers the one thing the file in
+// the repository cannot say: which build is answering. A number written in the
+// file would be a line someone has to remember to change on release day.
+func TestTheServedDocumentCarriesTheBuildVersion(t *testing.T) {
+	t.Parallel()
+
+	spec := newSpecDocument("0.4.2")
+
+	for name, render := range map[string]func() ([]byte, error){
+		"yaml": spec.yaml,
+		"json": spec.json,
+	} {
+		rendered, err := render()
+		if err != nil {
+			t.Fatalf("rendering the %s document: %v", name, err)
+		}
+
+		var parsed struct {
+			Info struct {
+				Title   string `yaml:"title" json:"title"`
+				Version string `yaml:"version" json:"version"`
+			} `yaml:"info" json:"info"`
+		}
+		// YAML is a superset of JSON, so one parser reads both renderings.
+		if err := yaml.Unmarshal(rendered, &parsed); err != nil {
+			t.Fatalf("the %s document does not parse: %v", name, err)
+		}
+		if parsed.Info.Version != "0.4.2" {
+			t.Errorf("%s info.version = %q, want the build version", name, parsed.Info.Version)
+		}
+		if parsed.Info.Title != "Threavia Core" {
+			t.Errorf("%s info.title = %q, want the document to be otherwise untouched",
+				name, parsed.Info.Title)
+		}
+	}
+}
+
+// TestTheServedDocumentIsStillTheOneWritten pins that filling the version in
+// does not quietly rewrite the rest. The document is read by people as well as
+// by generators, so its comments and its shape are part of it.
+func TestTheServedDocumentIsStillTheOneWritten(t *testing.T) {
+	t.Parallel()
+
+	rendered, err := newSpecDocument("0.4.2").yaml()
+	if err != nil {
+		t.Fatalf("rendering the document: %v", err)
+	}
+
+	// The whole document, compared as data: one field differs and nothing else
+	// does. Comparing the bytes instead would pin the encoder's spacing, which
+	// is not a promise this makes.
+	var source, served map[string]any
+	if err := yaml.Unmarshal(contract.OpenAPI, &source); err != nil {
+		t.Fatalf("the source document does not parse: %v", err)
+	}
+	if err := yaml.Unmarshal(rendered, &served); err != nil {
+		t.Fatalf("the served document does not parse: %v", err)
+	}
+	source["info"].(map[string]any)["version"] = "0.4.2"
+	if !reflect.DeepEqual(source, served) {
+		t.Error("the served document differs from the one in the repository by more than its version")
+	}
+
+	// And it is still the document as written: a comment only survives a
+	// round trip through the node tree, and the comments are half of why this
+	// file is readable.
+	if !strings.Contains(string(rendered), "Current state, never a count of unread events") {
+		t.Error("the served document lost the comments the source carries")
 	}
 }

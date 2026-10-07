@@ -9,7 +9,11 @@ openapi: 3.1.0
 
 info:
   title: Threavia Core
-  version: "1.0.0"
+  # Filled in by the server with the version of the running build, which the
+  # linker wrote into the binary. A release number kept in this file would be a
+  # line someone has to remember to change, and the one that drifts from what is
+  # actually serving.
+  version: "0.0.0"
   description: |
     HTTP/JSON for commands, queries, snapshots and history; SSE for realtime
     events. No GraphQL and no WebSocket in V1.
