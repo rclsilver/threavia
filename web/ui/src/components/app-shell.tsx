@@ -101,12 +101,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <header className={cn('flex items-center gap-2', collapsed && 'flex-col')}>
           {collapsed ? (
             <span title="Threavia" className="py-1">
-              <Logo className="size-6" />
+              <Logo className="w-7" />
             </span>
           ) : (
             <>
               <span className="flex items-center gap-2 text-base font-semibold">
-                <Logo className="size-6" />
+                <Logo className="h-5 w-auto" />
                 Threavia
               </span>
               <Badge tone={connected ? 'ok' : 'neutral'} title="Realtime stream" className="ml-auto">
