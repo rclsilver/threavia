@@ -1,12 +1,21 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { AlertTriangle, CheckCircle2, FileDiff } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FileDiff, Square } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Markdown } from '@/components/markdown';
 import { ToolCallEntry, type ToolCall } from '@/components/tool-call';
-import { payloadOf, type Event } from '@/api/types';
-import { cn, cost, duration, tokens } from '@/lib/utils';
+import { payloadOf, type Event, type JobStatus } from '@/api/types';
+import { cn, cost, duration, humanise, tokens } from '@/lib/utils';
+
+/**
+ * The Jobs that have not finished, by id.
+ *
+ * A message whose Job is in here is still going somewhere, so it is the one
+ * place a stop control belongs: next to the sentence it would stop.
+ */
+export type Pending = Record<string, JobStatus>;
 
 /** The events worth a line. The rest is machinery a user never asked to see. */
 const RENDERED = new Set([
@@ -115,7 +124,15 @@ function rowsOf(events: Event[]): Row[] {
  * thousands of events, and rendering them all is what turns a conversation into
  * a frozen tab. Only what fits on screen is in the DOM.
  */
-export function Timeline({ events }: { events: Event[] }) {
+export function Timeline({
+  events,
+  pending,
+  onStop,
+}: {
+  events: Event[];
+  pending: Pending;
+  onStop: (jobId: string) => void;
+}) {
   const parentRef = useRef<HTMLDivElement>(null);
   const rows = useMemo(() => rowsOf(events), [events]);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
@@ -140,11 +157,16 @@ export function Timeline({ events }: { events: Event[] }) {
     return () => element.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Following the last row means following its height too: a row is measured
+  // after it is rendered, and one that grows afterwards — a message that gains
+  // a stop control, a tool call being unfolded — would otherwise end up half
+  // hidden under the composer.
+  const height = virtualizer.getTotalSize();
   useEffect(() => {
     if (atBottom.current && rows.length > 0) {
       virtualizer.scrollToIndex(rows.length - 1, { align: 'end' });
     }
-  }, [rows.length, virtualizer]);
+  }, [rows.length, height, virtualizer]);
 
   const toggle = (id: string) =>
     setExpanded((current) => {
@@ -159,7 +181,7 @@ export function Timeline({ events }: { events: Event[] }) {
 
   return (
     <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto px-1">
-      <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+      <div className="relative w-full" style={{ height }}>
         {virtualizer.getVirtualItems().map((item) => {
           const row = rows[item.index];
           return (
@@ -177,7 +199,12 @@ export function Timeline({ events }: { events: Event[] }) {
                   onToggle={() => toggle(row.call.id)}
                 />
               ) : (
-                <Entry event={row.event} startedAt={row.startedAt} />
+                <Entry
+                  event={row.event}
+                  startedAt={row.startedAt}
+                  pending={pending}
+                  onStop={onStop}
+                />
               )}
             </div>
           );
@@ -187,14 +214,27 @@ export function Timeline({ events }: { events: Event[] }) {
   );
 }
 
-function Entry({ event, startedAt }: { event: Event; startedAt?: string }) {
+function Entry({
+  event,
+  startedAt,
+  pending,
+  onStop,
+}: {
+  event: Event;
+  startedAt?: string;
+  pending: Pending;
+  onStop: (jobId: string) => void;
+}) {
   const user = payloadOf(event, 'user.message');
   if (user) {
+    const jobId = event.jobId;
+    const status = jobId ? pending[jobId] : undefined;
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-1">
         <div className="bg-accent text-accent-text max-w-[80%] rounded-[--radius-card] px-3 py-2 text-sm whitespace-pre-wrap">
           {user.text}
         </div>
+        {jobId && status && <Stop status={status} onStop={() => onStop(jobId)} />}
       </div>
     );
   }
@@ -217,6 +257,43 @@ function Entry({ event, startedAt }: { event: Event; startedAt?: string }) {
     <div className="text-muted flex flex-wrap items-center gap-x-3 gap-y-1 px-2 text-[0.8125rem]">
       <span className="break-all">{describe(event)}</span>
       <JobCost event={event} startedAt={startedAt} />
+    </div>
+  );
+}
+
+/**
+ * The control that stops one message.
+ *
+ * It belongs under the sentence it would stop: the only question asked here is
+ * "stop that one", and a button in the header cannot answer it, since it never
+ * says which message is running nor that another is queued behind it. The
+ * status beside it is what makes the button honest, because stopping a message
+ * that has not started yet is not the same act as interrupting one.
+ */
+function Stop({ status, onStop }: { status: JobStatus; onStop: () => void }) {
+  // Core moves a Job to CANCELLED only once the backend confirms the stop, so
+  // the wait is real and worth showing rather than hiding the control.
+  if (status === 'CANCELLING') {
+    return <span className="text-muted px-2 text-xs">Stopping…</span>;
+  }
+
+  return (
+    <div className="text-muted flex items-center gap-1.5 text-xs">
+      <span className="first-letter:uppercase">{humanise(status)}</span>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-6 gap-1.5 px-2 text-xs [&_svg]:size-3"
+        title={
+          status === 'QUEUED'
+            ? 'Drop this message before it runs'
+            : 'Stop what this message started'
+        }
+        onClick={onStop}
+      >
+        <Square className="fill-current" />
+        Stop
+      </Button>
     </div>
   );
 }

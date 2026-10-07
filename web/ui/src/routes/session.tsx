@@ -8,10 +8,9 @@ import {
   usePostMessage,
   useSnapshot,
 } from '@/api/queries';
-import type { Job } from '@/api/types';
 import { AttentionPanel } from '@/components/attention';
 import { PolicyPanel } from '@/components/policy-panel';
-import { Timeline } from '@/components/timeline';
+import { Timeline, type Pending } from '@/components/timeline';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -31,6 +30,7 @@ export function SessionView() {
   const { sessionId } = useParams({ from: '/sessions/$sessionId' });
   const { seen, activity } = useStream();
   const snapshot = useSnapshot(sessionId);
+  const cancel = useCancelJob(sessionId);
   const [showPolicy, setShowPolicy] = useState(false);
 
   // The snapshot is a point the stream has already passed, so a reconnection
@@ -49,6 +49,15 @@ export function SessionView() {
   const data = snapshot.data;
   const active = data.jobs.find((job) => !FINISHED.has(job.status));
   const working = activity(sessionId);
+
+  // Every Job still going somewhere, so the timeline can offer a stop on the
+  // message that started it. A Session has one active Job and may have several
+  // queued, and a person wants to drop one of those as much as to interrupt the
+  // one running.
+  const pending: Pending = {};
+  for (const job of data.jobs) {
+    if (!FINISHED.has(job.status)) pending[job.id] = job.status;
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-5">
@@ -73,7 +82,6 @@ export function SessionView() {
           <Button variant="link" onClick={() => setShowPolicy((shown) => !shown)}>
             Execution policy
           </Button>
-          <CancelButton sessionId={sessionId} job={active} />
         </div>
       </header>
 
@@ -84,21 +92,10 @@ export function SessionView() {
         userInputs={data.attention.userInputs ?? []}
       />
 
-      <Timeline events={data.events} />
+      <Timeline events={data.events} pending={pending} onStop={(jobId) => cancel.mutate(jobId)} />
 
       <Composer sessionId={sessionId} />
     </div>
-  );
-}
-
-function CancelButton({ sessionId, job }: { sessionId: string; job: Job | undefined }) {
-  const cancel = useCancelJob(sessionId);
-  if (!job || job.status === 'CANCELLING') return null;
-
-  return (
-    <Button variant="danger" size="sm" disabled={cancel.isPending} onClick={() => cancel.mutate(job.id)}>
-      Cancel
-    </Button>
   );
 }
 
