@@ -194,3 +194,35 @@ func TestAJobTheBackendAlreadyEndedIsSettled(t *testing.T) {
 		t.Fatalf("next job = %s, want the queued one %s", next.GetJobId(), second.ID)
 	}
 }
+
+// TestDeletingASessionIsRefusedWhileItRuns covers the one thing deleting a
+// Session must not do: leave a Job going on a machine with nowhere to report.
+func TestDeletingASessionIsRefusedWhileItRuns(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	session := c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
+	start := receive(t, "the dispatched job", backend.starts)
+
+	c.mustDo(http.MethodDelete, "/api/v1/sessions/"+session, nil, nil, http.StatusConflict)
+
+	ctx := context.Background()
+	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
+		return backend.events.JobCompleted(ctx, start.GetRunId(), start.GetJobId(), "fait", nil)
+	}))
+	waitUntil(t, "the job to end", func() bool {
+		return c.jobStatus(session, start.GetJobId()) == "COMPLETED"
+	})
+
+	// Nothing is running now, so it goes, and with it the timeline that only
+	// existed inside it.
+	c.mustDo(http.MethodDelete, "/api/v1/sessions/"+session, nil, nil, http.StatusNoContent)
+	c.mustDo(http.MethodGet, "/api/v1/sessions/"+session, nil, nil, http.StatusNotFound)
+
+	var listed struct {
+		Items []idOnly `json:"items"`
+	}
+	c.mustDo(http.MethodGet, "/api/v1/projects/"+projectID+"/sessions?includeArchived=true",
+		nil, &listed, http.StatusOK)
+	if len(listed.Items) != 0 {
+		t.Fatalf("%d sessions left, want none", len(listed.Items))
+	}
+}

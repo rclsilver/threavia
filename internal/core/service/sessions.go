@@ -252,6 +252,38 @@ func (s *Service) SetSessionStatus(ctx context.Context, identity auth.Identity, 
 	return session, nil
 }
 
+// DeleteSession removes a Session and everything that only existed inside it.
+//
+// A Session with work still running is refused rather than torn out from under
+// a backend that is in the middle of it: the Job would keep going on a machine
+// somewhere, reporting to a Session that no longer exists. Stopping it first is
+// an act someone has to take deliberately, and the message says so.
+//
+// The event goes out before the rows are gone, because afterwards there is no
+// Session left to attribute it to.
+func (s *Service) DeleteSession(ctx context.Context, identity auth.Identity, sessionID domain.SessionID) error {
+	session, err := s.store.GetSession(ctx, identity.UserID, sessionID)
+	if err != nil {
+		return translate(err)
+	}
+
+	jobs, err := s.store.ListJobs(ctx, sessionID)
+	if err != nil {
+		return translate(err)
+	}
+	for _, job := range jobs {
+		if !job.Status.Terminal() {
+			return fmt.Errorf("%w: this session has a job that is still %s; stop it first",
+				ErrConflict, strings.ToLower(job.Status.String()))
+		}
+	}
+
+	s.emit(ctx, identity.UserID, events.TypeSessionDeleted,
+		domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID}, nil)
+
+	return translate(s.store.DeleteSession(ctx, identity.UserID, sessionID))
+}
+
 // SetSessionWorkingDirectory changes the initial cwd of a Session. The change is
 // explicit: a temporary cd by the agent never mutates it.
 func (s *Service) SetSessionWorkingDirectory(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, dirID *domain.KnownDirectoryID) (domain.Session, error) {

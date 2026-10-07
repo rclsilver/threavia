@@ -1070,7 +1070,33 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a Session
+         * @description Takes the Session and everything that only existed inside it — its Runs, Jobs, timeline and pending requests. Artifacts stay: a file the work produced belongs to the Project. A Session with a Job still running is refused, because deleting it would leave that Job going on a machine with nowhere to report. Archiving is the reversible move.
+         *
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: components["parameters"]["SessionID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+            };
+        };
         options?: never;
         head?: never;
         /**

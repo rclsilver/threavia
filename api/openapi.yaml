@@ -610,6 +610,22 @@ paths:
                   - $ref: "#/components/schemas/Handoff"
         "409":
           $ref: "#/components/responses/Error"
+    delete:
+      tags: [sessions]
+      summary: Delete a Session
+      description: >
+        Takes the Session and everything that only existed inside it — its Runs,
+        Jobs, timeline and pending requests. Artifacts stay: a file the work
+        produced belongs to the Project. A Session with a Job still running is
+        refused, because deleting it would leave that Job going on a machine
+        with nowhere to report. Archiving is the reversible move.
+      responses:
+        "204":
+          description: Deleted
+        "409":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
 
   /api/v1/sessions/{sessionId}/events:
     parameters:

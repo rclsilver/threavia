@@ -29,6 +29,25 @@ func (s *Store) GetSession(ctx context.Context, ownerID domain.UserID, id domain
 		WHERE s.id = $1 AND p.owner_id = $2`, id, ownerID))
 }
 
+// DeleteSession removes a Session for good.
+//
+// Its Runs, Jobs, events and pending requests go with it, by the cascade the
+// schema declares. Artifacts do not: a file the work produced belongs to the
+// Project and outlives the conversation that made it.
+func (s *Store) DeleteSession(ctx context.Context, ownerID domain.UserID, id domain.SessionID) error {
+	tag, err := s.q.Exec(ctx, `
+		DELETE FROM sessions s
+		USING projects p
+		WHERE s.id = $1 AND s.project_id = p.id AND p.owner_id = $2`, id, ownerID)
+	if err != nil {
+		return classify(err, "delete a session")
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // ListSessions returns the Sessions of a Project, most recently active first.
 func (s *Store) ListSessions(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID, includeArchived bool) ([]domain.Session, error) {
 	rows, err := s.q.Query(ctx, `

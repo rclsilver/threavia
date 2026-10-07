@@ -12,6 +12,7 @@ func (h *handler) registerSessions(mux *http.ServeMux) {
 	h.handle(mux, "POST /api/v1/sessions/start", h.startSession)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}", h.getSession)
 	h.handle(mux, "PATCH /api/v1/sessions/{sessionId}", h.patchSession)
+	h.handle(mux, "DELETE /api/v1/sessions/{sessionId}", h.deleteSession)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/events", h.sessionHistory)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/messages", h.postMessage)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/archive", h.archiveSession)
@@ -162,6 +163,14 @@ func (h *handler) setSessionStatus(w http.ResponseWriter, r *http.Request, ident
 
 // sessionHistory pages backwards through the timeline. Older history is loaded
 // by scrolling; a client never replays the whole log.
+func (h *handler) deleteSession(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	if err := h.svc.DeleteSession(r.Context(), identity, domain.SessionID(r.PathValue("sessionId"))); err != nil {
+		h.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *handler) sessionHistory(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
 	history, err := h.svc.SessionHistory(r.Context(), identity,
 		domain.SessionID(r.PathValue("sessionId")),

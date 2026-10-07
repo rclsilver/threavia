@@ -1,4 +1,4 @@
-import { useParams } from '@tanstack/react-router';
+import { useNavigate, useParams } from '@tanstack/react-router';
 import { ArrowUp, Settings2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
@@ -6,6 +6,7 @@ import {
   useArchiveSession,
   useBackends,
   useCancelJob,
+  useDeleteSession,
   useMoveSession,
   usePostMessage,
   useRenameSession,
@@ -262,6 +263,9 @@ function Composer({ sessionId }: { sessionId: string }) {
  */
 function SessionSettings({ sessionId, archived }: { sessionId: string; archived: boolean }) {
   const archive = useArchiveSession();
+  const remove = useDeleteSession();
+  const navigate = useNavigate();
+  const [asking, setAsking] = useState(false);
 
   return (
     <Dialog>
@@ -302,6 +306,41 @@ function SessionSettings({ sessionId, archived }: { sessionId: string; archived:
             {archived ? 'Restore this session' : 'Archive this session'}
           </Button>
           {archive.error && <p className="text-danger text-sm">{archive.error.message}</p>}
+        </section>
+
+        <section className="border-border space-y-2 border-t pt-4">
+          <h3 className="text-sm font-medium">Delete</h3>
+          <DialogDescription>
+            The timeline, what it cost and what was asked go with it. Files the work produced stay
+            with the Project. Archiving is the move that keeps all of it.
+          </DialogDescription>
+          {asking ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-muted text-sm">Delete this session for good?</span>
+              <Button variant="ghost" size="sm" onClick={() => setAsking(false)}>
+                No
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={remove.isPending}
+                onClick={() =>
+                  remove.mutate(sessionId, {
+                    // Nothing is left to look at, so the view goes with it. The
+                    // navigation returns a promise the handler has no use for.
+                    onSuccess: () => void navigate({ to: '/' }),
+                  })
+                }
+              >
+                Delete
+              </Button>
+            </div>
+          ) : (
+            <Button variant="secondary" size="sm" onClick={() => setAsking(true)}>
+              Delete this session
+            </Button>
+          )}
+          {remove.error && <p className="text-danger text-sm">{remove.error.message}</p>}
         </section>
       </DialogContent>
     </Dialog>

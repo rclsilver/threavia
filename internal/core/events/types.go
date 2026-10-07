@@ -16,6 +16,7 @@ const (
 	TypeSessionRenamed  Type = "session.renamed"
 	TypeSessionArchived Type = "session.archived"
 	TypeSessionRestored Type = "session.restored"
+	TypeSessionDeleted  Type = "session.deleted"
 
 	TypeRunCreated Type = "run.created"
 
@@ -58,6 +59,7 @@ var persistentTypes = map[Type]bool{
 	TypeSessionRenamed:          true,
 	TypeSessionArchived:         true,
 	TypeSessionRestored:         true,
+	TypeSessionDeleted:          true,
 	TypeRunCreated:              true,
 	TypeJobCreated:              true,
 	TypeJobStarted:              true,

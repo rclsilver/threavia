@@ -254,6 +254,20 @@ export function useRenameSession(sessionId: string) {
   });
 }
 
+/**
+ * Deleting a Session.
+ *
+ * Core refuses while a Job is still running, so the error is worth showing
+ * rather than swallowing: it names what has to be stopped first.
+ */
+export function useDeleteSession() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: string) => api.delete(`/api/v1/sessions/${sessionId}`),
+    onSuccess: () => queries.invalidateQueries({ queryKey: ['sessions'] }),
+  });
+}
+
 export function useMoveSession(sessionId: string) {
   const queries = useQueryClient();
   return useMutation({
