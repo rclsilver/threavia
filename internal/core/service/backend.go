@@ -100,6 +100,33 @@ func (s *Service) StatusUpdate(ctx context.Context, instanceID domain.BackendIns
 		s.logger.Error("cannot record a backend status",
 			slog.String("backendInstanceId", string(instanceID)), slog.String("error", err.Error()))
 	}
+
+	// Why it is in that state. Without this, the only place the answer existed
+	// was a line in the Core log, where the person who has to fix it never
+	// looks.
+	if err := s.store.ReplaceBackendConditions(ctx, instanceID, conditionsFromProto(update.GetConditions())); err != nil {
+		s.logger.Error("cannot record the backend conditions",
+			slog.String("backendInstanceId", string(instanceID)), slog.String("error", err.Error()))
+	}
+}
+
+// conditionsFromProto translates what a backend reported. Core stores the
+// vocabulary the backend chose without interpreting it: a new provider must be
+// able to explain itself without a Core release.
+func conditionsFromProto(reported []*backendv1.Condition) []domain.Condition {
+	out := make([]domain.Condition, 0, len(reported))
+	for _, condition := range reported {
+		if condition.GetType() == "" {
+			continue
+		}
+		out = append(out, domain.Condition{
+			Type:    condition.GetType(),
+			Status:  condition.GetStatus(),
+			Reason:  condition.GetReason(),
+			Message: condition.GetMessage(),
+		})
+	}
+	return out
 }
 
 // ReconcileState converges Core desired state with what the backend reports

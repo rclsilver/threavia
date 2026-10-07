@@ -198,3 +198,59 @@ func scanBackendInstance(row scanner) (domain.BackendInstance, error) {
 	}
 	return instance, nil
 }
+
+// ReplaceBackendConditions records why a backend is in the state it reports.
+//
+// The report is complete, so a condition the backend no longer sends is gone:
+// a resolved problem must stop being shown, which is the whole reason this is
+// current state rather than a log.
+func (s *Store) ReplaceBackendConditions(ctx context.Context, id domain.BackendInstanceID, conditions []domain.Condition) error {
+	return s.WithTx(ctx, func(tx *Store) error {
+		if _, err := tx.q.Exec(ctx,
+			`DELETE FROM backend_conditions WHERE backend_instance_id = $1`, id); err != nil {
+			return classify(err, "replace backend conditions")
+		}
+		for _, condition := range conditions {
+			if _, err := tx.q.Exec(ctx, `
+				INSERT INTO backend_conditions (backend_instance_id, type, status, reason, message)
+				VALUES ($1, $2, $3, $4, $5)
+				ON CONFLICT (backend_instance_id, type) DO UPDATE SET
+					status = EXCLUDED.status, reason = EXCLUDED.reason,
+					message = EXCLUDED.message, observed_at = now()`,
+				id, condition.Type, condition.Status, condition.Reason, condition.Message); err != nil {
+				return classify(err, "replace backend conditions")
+			}
+		}
+		return nil
+	})
+}
+
+// BackendConditions returns the conditions of several BackendInstances at once,
+// so a listing costs one query rather than one per row.
+func (s *Store) BackendConditions(ctx context.Context, ids []domain.BackendInstanceID) (map[domain.BackendInstanceID][]domain.Condition, error) {
+	out := make(map[domain.BackendInstanceID][]domain.Condition, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+
+	rows, err := s.q.Query(ctx, `
+		SELECT backend_instance_id, type, status, reason, message, observed_at
+		FROM backend_conditions
+		WHERE backend_instance_id = ANY($1)
+		ORDER BY type`, ids)
+	if err != nil {
+		return nil, classify(err, "read backend conditions")
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id domain.BackendInstanceID
+		var condition domain.Condition
+		if err := rows.Scan(&id, &condition.Type, &condition.Status,
+			&condition.Reason, &condition.Message, &condition.At); err != nil {
+			return nil, classify(err, "read backend conditions")
+		}
+		out[id] = append(out[id], condition)
+	}
+	return out, classify(rows.Err(), "read backend conditions")
+}

@@ -85,7 +85,10 @@ type BackendInstance struct {
 	ProviderAuthState ProviderAuthState        `json:"providerAuthState"`
 	Capabilities      []Capability             `json:"capabilities"`
 	Capacity          Capacity                 `json:"capacity"`
-	ProtocolVersion   int                      `json:"protocolVersion"`
+	// Conditions explain the operational status: why a backend is DEGRADED, in
+	// the vocabulary the backend chose (spec section 7).
+	Conditions      []Condition `json:"conditions,omitempty"`
+	ProtocolVersion int         `json:"protocolVersion"`
 	// ConnectionID is the lease of the currently active control stream
 	// (spec section 9). It is nil when no connection is active.
 	ConnectionID    *string    `json:"-"`

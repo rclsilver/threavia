@@ -255,3 +255,65 @@ func TestTheAuditTrailNamesTheClient(t *testing.T) {
 		t.Fatal("the entry must carry a readable timestamp")
 	}
 }
+
+// TestABackendExplainsItsState pins specification section 7: the operational
+// status says a backend is degraded, and a condition says which thing is wrong.
+// Before this, the only place that answer existed was a line in the Core log.
+func TestABackendExplainsItsState(t *testing.T) {
+	t.Parallel()
+
+	c := newCore(t)
+	backendID, credential := c.registerBackend("laptop")
+	backend := c.connectBackend(credential)
+
+	if err := backend.sdk.SendStatus(context.Background(),
+		backendv1.BackendOperationalStatus_BACKEND_OPERATIONAL_STATUS_DEGRADED,
+		backendv1.ProviderAuthState_PROVIDER_AUTH_STATE_AUTHENTICATION_REQUIRED,
+		&backendv1.Condition{
+			Type:    "ProviderAvailable",
+			Status:  "False",
+			Reason:  "ExecutableNotFound",
+			Message: `"claude" not found`,
+		}); err != nil {
+		t.Fatalf("reporting the status: %v", err)
+	}
+
+	var instance struct {
+		OperationalStatus string `json:"operationalStatus"`
+		Conditions        []struct {
+			Type    string `json:"type"`
+			Status  string `json:"status"`
+			Reason  string `json:"reason"`
+			Message string `json:"message"`
+		} `json:"conditions"`
+	}
+	waitUntil(t, "the condition to be recorded", func() bool {
+		c.mustDo(http.MethodGet, "/api/v1/backends/"+backendID, nil, &instance, http.StatusOK)
+		return len(instance.Conditions) == 1
+	})
+
+	if instance.OperationalStatus != "DEGRADED" {
+		t.Fatalf("status = %q, want DEGRADED", instance.OperationalStatus)
+	}
+	if instance.Conditions[0].Reason != "ExecutableNotFound" {
+		t.Fatalf("condition = %+v, want the reported reason", instance.Conditions[0])
+	}
+
+	// A resolved problem stops being shown: this is current state, not a log.
+	if err := backend.sdk.SendStatus(context.Background(),
+		backendv1.BackendOperationalStatus_BACKEND_OPERATIONAL_STATUS_READY,
+		backendv1.ProviderAuthState_PROVIDER_AUTH_STATE_AUTHENTICATED); err != nil {
+		t.Fatalf("reporting the recovery: %v", err)
+	}
+	waitUntil(t, "the condition to clear", func() bool {
+		// A fresh value each time: an absent JSON field leaves the previous one
+		// in place, which would make this poll never see the change.
+		var recovered struct {
+			Conditions []struct {
+				Type string `json:"type"`
+			} `json:"conditions"`
+		}
+		c.mustDo(http.MethodGet, "/api/v1/backends/"+backendID, nil, &recovered, http.StatusOK)
+		return len(recovered.Conditions) == 0
+	})
+}

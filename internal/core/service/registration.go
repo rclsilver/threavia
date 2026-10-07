@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -211,13 +212,44 @@ func (s *Service) ListBackendInstances(ctx context.Context, identity auth.Identi
 			instances[i].OperationalStatus = domain.BackendOffline
 		}
 	}
+	s.attachConditions(ctx, instances)
 	return instances, nil
+}
+
+// attachConditions fills in why each backend is in the state it reports.
+//
+// Read in one query for the whole listing: the reason a backend is degraded is
+// what someone opens the list to find out, and it should not cost a round trip
+// per row.
+func (s *Service) attachConditions(ctx context.Context, instances []domain.BackendInstance) {
+	ids := make([]domain.BackendInstanceID, 0, len(instances))
+	for _, instance := range instances {
+		ids = append(ids, instance.ID)
+	}
+
+	conditions, err := s.store.BackendConditions(ctx, ids)
+	if err != nil {
+		// A missing explanation must not cost the caller the list itself.
+		s.logger.Error("cannot read the backend conditions", slog.String("error", err.Error()))
+		return
+	}
+	for i := range instances {
+		instances[i].Conditions = conditions[instances[i].ID]
+	}
 }
 
 // GetBackendInstance returns one BackendInstance of the caller.
 func (s *Service) GetBackendInstance(ctx context.Context, identity auth.Identity, id domain.BackendInstanceID) (domain.BackendInstance, error) {
 	instance, err := s.store.GetBackendInstance(ctx, identity.UserID, id)
-	return instance, translate(err)
+	if err != nil {
+		return domain.BackendInstance{}, translate(err)
+	}
+
+	// attachConditions writes through the slice, so the result is read back from
+	// it rather than from the local copy.
+	found := []domain.BackendInstance{instance}
+	s.attachConditions(ctx, found)
+	return found[0], nil
 }
 
 // RevokeBackendInstance invalidates the persistent credential. The record stays

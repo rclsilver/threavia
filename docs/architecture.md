@@ -335,6 +335,28 @@ about. It records who decided what, through which client, over which canonical
 payload hash — and every change to an execution policy, because loosening what
 an agent may do is exactly the kind of act such a trail exists for.
 
+
+### What the schema does differently from section 23
+
+Three tables the specification lists are not tables here, and one it does not
+list is.
+
+`users` is absent because Core never stores a user: the identity comes from the
+authenticator, and `ownerId` is whatever that mode produces — a configured
+development id, a basic username, or an OIDC claim. A table would only duplicate
+the issuer.
+
+`project_instructions` is a column on `projects`, because it holds exactly one
+value per project and a table of one-row-per-project is a join for nothing.
+
+`project_skills` is absent because `skills` carries `project_id` directly: a
+Skill is installed on a Project, and V1 has no sharing of Skills between
+Projects for the join table to express.
+
+`backend_registration_tokens` is the addition. One-shot registration tokens have
+to be single-use and expiring (section 8), which is state, and state belongs in
+a table rather than in a process.
+
 ### Skills, and what Core refuses to do with them
 
 Core acquires a Skill, inspects it, repacks it deterministically and stores the

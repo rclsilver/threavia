@@ -1,5 +1,7 @@
 package domain
 
+import "time"
+
 // BackendOperationalStatus is the operational state of a BackendInstance
 // (spec section 7).
 //
@@ -188,4 +190,19 @@ func (c Capacity) Draining() bool { return c.MaxConcurrentRuns <= 0 }
 // HasFreeSlot reports whether the backend can accept one more Run.
 func (c Capacity) HasFreeSlot() bool {
 	return !c.Draining() && c.ActiveRuns < c.MaxConcurrentRuns
+}
+
+// Condition is why a BackendInstance is in the state it reports
+// (spec section 7).
+//
+// The operational status says a backend is DEGRADED; a condition says which
+// thing is wrong, in the vocabulary the backend chose. Core stores and shows it
+// without interpreting it: a new provider must be able to explain itself
+// without a Core release.
+type Condition struct {
+	Type    string    `json:"type"`
+	Status  string    `json:"status"`
+	Reason  string    `json:"reason,omitempty"`
+	Message string    `json:"message,omitempty"`
+	At      time.Time `json:"observedAt"`
 }

@@ -125,6 +125,16 @@ async function loadBackends() {
     status.className = `pill ${backendPill(backend.operationalStatus)}`;
     status.textContent = backend.operationalStatus.toLowerCase();
     item.append(name, status);
+
+    // Why it is in that state. A status alone sends someone to the logs; the
+    // condition says which thing is wrong (specification section 7).
+    for (const condition of backend.conditions ?? []) {
+      const why = document.createElement('span');
+      why.className = 'condition';
+      why.textContent = condition.message || condition.reason || condition.type;
+      why.title = `${condition.type}=${condition.status}`;
+      item.append(why);
+    }
     list.append(item);
   }
 }
