@@ -454,3 +454,51 @@ func TestStartSessionIsIdempotent(t *testing.T) {
 	receive(t, "the single dispatch", backend.starts)
 	expectNothing(t, "a second dispatch for a retried request", backend.starts)
 }
+
+// TestAJobThatEndsWhileWaitingStillEnds is a regression test.
+//
+// An agent may give up on a question nobody answered and finish its turn
+// anyway. Core refused that ending, because its state machine let a waiting Job
+// fail but not succeed: the Job stayed parked, and every later message on the
+// Session queued behind it for good.
+func TestAJobThatEndsWhileWaitingStillEnds(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	session := c.startSession(projectID, c.backendID, dirID, "Modifie la configuration")
+	first := receive(t, "the dispatched job", backend.starts)
+
+	ctx := context.Background()
+	payload, err := structpb.NewStruct(map[string]any{"tool": "Write", "path": "roles/foo/tasks/main.yml"})
+	if err != nil {
+		t.Fatalf("building the payload: %v", err)
+	}
+	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
+		return backend.events.ValidationRequested(ctx, first.GetRunId(), first.GetJobId(),
+			&backendv1.ValidationRequested{
+				RequestId:      "req-1",
+				Title:          "Write roles/foo/tasks/main.yml",
+				RequestPayload: payload,
+			})
+	}))
+	waitUntil(t, "the job to wait for validation", func() bool {
+		return c.jobStatus(session, first.GetJobId()) == "WAITING_VALIDATION"
+	})
+
+	// The user says nothing and sends more work instead.
+	var second idOnly
+	c.mustDo(http.MethodPost, "/api/v1/sessions/"+session+"/messages",
+		map[string]any{"message": "deuxieme"}, &second, http.StatusCreated)
+
+	// The agent stops waiting and ends its turn.
+	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
+		return backend.events.JobCompleted(ctx, first.GetRunId(), first.GetJobId(), "tant pis", nil)
+	}))
+
+	waitUntil(t, "the job to end", func() bool {
+		return c.jobStatus(session, first.GetJobId()) == "COMPLETED"
+	})
+
+	next := receive(t, "the queued message to be dispatched", backend.starts)
+	if next.GetJobId() != second.ID {
+		t.Fatalf("next job = %s, want the queued one %s", next.GetJobId(), second.ID)
+	}
+}

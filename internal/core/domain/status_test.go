@@ -73,9 +73,9 @@ func TestJobStatusTransitionMatrix(t *testing.T) {
 	allowed := map[JobStatus][]JobStatus{
 		JobQueued:            {JobRunning, JobWaitingBackend, JobCancelled, JobFailed},
 		JobRunning:           {JobWaitingInput, JobWaitingValidation, JobWaitingBackend, JobCancelling, JobCompleted, JobFailed},
-		JobWaitingInput:      {JobRunning, JobWaitingBackend, JobCancelling, JobFailed},
-		JobWaitingValidation: {JobRunning, JobWaitingBackend, JobCancelling, JobFailed},
-		JobWaitingBackend:    {JobRunning, JobWaitingInput, JobWaitingValidation, JobCancelling, JobCompleted, JobFailed},
+		JobWaitingInput:      {JobRunning, JobWaitingBackend, JobCancelling, JobCompleted, JobFailed, JobCancelled},
+		JobWaitingValidation: {JobRunning, JobWaitingBackend, JobCancelling, JobCompleted, JobFailed, JobCancelled},
+		JobWaitingBackend:    {JobRunning, JobWaitingInput, JobWaitingValidation, JobCancelling, JobCompleted, JobFailed, JobCancelled},
 		JobCancelling:        {JobCancelled, JobCompleted, JobFailed},
 		JobCompleted:         nil,
 		JobFailed:            nil,
@@ -236,5 +236,24 @@ func TestAttentionResolutionIsOneWay(t *testing.T) {
 	}
 	if _, err := AttentionResolved.Transition(AttentionPending); !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("reopening a resolved attention item: got %v, want ErrInvalidTransition", err)
+	}
+}
+
+// TestAJobCanEndWhileWaiting is a regression test.
+//
+// The state machine let a waiting Job fail but not succeed, so an agent that
+// gave up on an unanswered question and finished its turn produced a
+// job.completed Core refused to apply. The Job stayed parked, and every later
+// message on that Session queued behind it for good.
+func TestAJobCanEndWhileWaiting(t *testing.T) {
+	t.Parallel()
+
+	for _, waiting := range []JobStatus{JobWaitingInput, JobWaitingValidation} {
+		for _, ending := range []JobStatus{JobCompleted, JobFailed, JobCancelled} {
+			if !waiting.CanTransition(ending) {
+				t.Errorf("%s cannot end as %s, although the backend may report exactly that",
+					waiting, ending)
+			}
+		}
 	}
 }

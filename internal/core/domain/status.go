@@ -190,17 +190,26 @@ var jobTransitions = map[JobStatus]map[JobStatus]bool{
 		JobCompleted:         true,
 		JobFailed:            true,
 	},
+	// A Job can end while it is still waiting on someone. The agent may give up
+	// on an unanswered question and finish its turn, or carry on after a refusal
+	// and finish normally. Refusing the terminal event would leave Core waiting
+	// on a Job the backend has already ended, which is the one disagreement the
+	// backend always wins (spec section 9).
 	JobWaitingInput: {
 		JobRunning:        true,
 		JobWaitingBackend: true,
 		JobCancelling:     true,
+		JobCompleted:      true,
 		JobFailed:         true,
+		JobCancelled:      true,
 	},
 	JobWaitingValidation: {
 		JobRunning:        true,
 		JobWaitingBackend: true,
 		JobCancelling:     true,
+		JobCompleted:      true,
 		JobFailed:         true,
+		JobCancelled:      true,
 	},
 	JobWaitingBackend: {
 		JobRunning:           true,
@@ -209,6 +218,7 @@ var jobTransitions = map[JobStatus]map[JobStatus]bool{
 		JobCancelling:        true,
 		JobCompleted:         true,
 		JobFailed:            true,
+		JobCancelled:         true,
 	},
 	JobCancelling: {
 		JobCancelled: true,
