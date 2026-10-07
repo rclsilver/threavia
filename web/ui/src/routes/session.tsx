@@ -1,5 +1,5 @@
 import { useParams } from '@tanstack/react-router';
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, Settings2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import {
@@ -15,10 +15,10 @@ import { Timeline, type Pending } from '@/components/timeline';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useStream } from '@/use-stream';
@@ -31,7 +31,6 @@ export function SessionView() {
   const { seen, activity } = useStream();
   const snapshot = useSnapshot(sessionId);
   const cancel = useCancelJob(sessionId);
-  const [showPolicy, setShowPolicy] = useState(false);
 
   // The snapshot is a point the stream has already passed, so a reconnection
   // resumes from here rather than replaying what is on screen.
@@ -78,19 +77,8 @@ export function SessionView() {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-1">
-          <MoveSessionButton sessionId={sessionId} />
-          <Button variant="ghost" size="sm" onClick={() => setShowPolicy((shown) => !shown)}>
-            Execution policy
-          </Button>
-        </div>
+        <SessionSettings sessionId={sessionId} />
       </header>
-
-      {showPolicy && (
-        <div className="mx-auto w-full max-w-reading px-6 pt-4">
-          <PolicyPanel sessionId={sessionId} />
-        </div>
-      )}
 
       {(data.attention.validations?.length || data.attention.userInputs?.length) && (
         <div className="mx-auto w-full max-w-reading px-6 pt-4">
@@ -182,16 +170,52 @@ function Composer({ sessionId }: { sessionId: string }) {
 }
 
 /**
+ * Everything about this Session that is not the conversation.
+ *
+ * These are settings: read once, changed rarely, and of no use while reading an
+ * answer. Spelled out in the header they took the room a title needs and said
+ * nothing about what they would do; behind one control they are where a person
+ * already looks for them.
+ */
+function SessionSettings({ sessionId }: { sessionId: string }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" title="Session settings">
+          <Settings2 />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="w-[min(36rem,calc(100vw-2rem))]">
+        <DialogTitle>Session settings</DialogTitle>
+
+        <section className="space-y-2">
+          <h3 className="text-sm font-medium">Execution policy</h3>
+          <DialogDescription>
+            What the agent may do here. Enforced by Core and by the backend, never by the prompt
+            alone.
+          </DialogDescription>
+          <PolicyPanel sessionId={sessionId} />
+        </section>
+
+        <section className="border-border space-y-2 border-t pt-4">
+          <h3 className="text-sm font-medium">Backend</h3>
+          <MoveSession sessionId={sessionId} />
+        </section>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
  * Moving a Session to another backend, and saying what it costs.
  *
  * The move is explicit and the timeline stays continuous, but the native
  * provider session does not travel: it belongs to the machine holding it
  * (spec section 34).
  */
-function MoveSessionButton({ sessionId }: { sessionId: string }) {
+function MoveSession({ sessionId }: { sessionId: string }) {
   const backends = useBackends();
   const move = useMoveSession(sessionId);
-  const [open, setOpen] = useState(false);
   const [target, setTarget] = useState('');
 
   const usable = (backends.data ?? []).filter(
@@ -199,57 +223,42 @@ function MoveSessionButton({ sessionId }: { sessionId: string }) {
   );
 
   return (
-    <>
-      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
-        Change backend
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogTitle>Change backend</DialogTitle>
-          <DialogDescription>
-            The timeline stays continuous. The provider session does not travel, so the next message
-            starts a fresh one there.
-          </DialogDescription>
+    <div className="space-y-3">
+      <DialogDescription>
+        The timeline stays continuous. The provider session does not travel, so the next message
+        starts a fresh one there.
+      </DialogDescription>
 
-          <Select value={target} onValueChange={setTarget}>
-            <SelectTrigger>
-              <SelectValue placeholder="Choose a backend" />
-            </SelectTrigger>
-            <SelectContent>
-              {usable.map((backend) => (
-                <SelectItem key={backend.id} value={backend.id}>
-                  {backend.name} ({humanise(backend.operationalStatus)})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="flex gap-2">
+        <Select value={target} onValueChange={setTarget}>
+          <SelectTrigger className="flex-1">
+            <SelectValue placeholder="Choose a backend" />
+          </SelectTrigger>
+          <SelectContent>
+            {usable.map((backend) => (
+              <SelectItem key={backend.id} value={backend.id}>
+                {backend.name} ({humanise(backend.operationalStatus)})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="secondary"
+          disabled={!target || move.isPending}
+          onClick={() => move.mutate(target)}
+        >
+          Move
+        </Button>
+      </div>
 
-          {move.error && <p className="text-danger text-sm">{(move.error).message}</p>}
+      {move.error && <p className="text-danger text-sm">{(move.error).message}</p>}
 
-          {move.data?.missingSkills?.length ? (
-            <p className="text-warn text-sm">
-              Moved. These local skills are not on the new backend:{' '}
-              {move.data.missingSkills.join(', ')}.
-            </p>
-          ) : null}
-
-          <div className="flex justify-end gap-2">
-            <DialogClose asChild>
-              <Button variant="ghost" size="sm">
-                Close
-              </Button>
-            </DialogClose>
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={!target || move.isPending}
-              onClick={() => move.mutate(target)}
-            >
-              Move
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+      {move.data?.missingSkills?.length ? (
+        <p className="text-warn text-sm">
+          Moved. These local skills are not on the new backend:{' '}
+          {move.data.missingSkills.join(', ')}.
+        </p>
+      ) : null}
+    </div>
   );
 }

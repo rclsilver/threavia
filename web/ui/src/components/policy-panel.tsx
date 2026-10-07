@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { usePolicy, useSetPolicy } from '@/api/queries';
 import type { ExecutionMode, ExecutionPolicy } from '@/api/types';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { CheckboxField } from '@/components/ui/checkbox';
 import { Input, Label } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -34,7 +33,7 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
   const set = (patch: Partial<ExecutionPolicy>) => setDraft({ ...draft, ...patch });
 
   return (
-    <Card className="space-y-3">
+    <div className="space-y-3">
       <div className="flex items-center gap-3">
         <Label htmlFor="policy-mode">Mode</Label>
         <Select value={draft.mode} onValueChange={(mode) => set({ mode: mode as ExecutionMode })}>
@@ -111,6 +110,6 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
       <Button variant="primary" size="sm" disabled={save.isPending} onClick={() => save.mutate(draft)}>
         Apply
       </Button>
-    </Card>
+    </div>
   );
 }
