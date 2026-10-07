@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	"time"
 
-	"google.golang.org/protobuf/types/known/structpb"
-
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/core/backendconn"
 	"github.com/rclsilver/threavia/internal/core/domain"
@@ -391,12 +389,6 @@ func (s *Service) CommandResult(ctx context.Context, instanceID domain.BackendIn
 	}
 	s.emit(ctx, jc.OwnerID, events.TypeJobFailed, scope, JobEndedPayload{Error: message})
 	s.dispatchNext(ctx, jc.Run.ID)
-}
-
-// CoreToolRequest is not available yet: the Tasks, Decisions and KnownDirectory
-// tools of specification section 12 land after the first vertical slice.
-func (s *Service) CoreToolRequest(context.Context, domain.BackendInstanceID, *backendv1.CoreToolRequest) (*structpb.Struct, error) {
-	return nil, backendconn.ErrCoreToolUnavailable
 }
 
 // releaseQueuedWork dispatches everything waiting on a backend that just came

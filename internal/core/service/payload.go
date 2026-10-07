@@ -136,3 +136,19 @@ type WorkingDirectoryChangedPayload struct {
 // jsonUnmarshal is a thin wrapper keeping the encoding/json dependency in one
 // place.
 func jsonUnmarshal(data []byte, target any) error { return json.Unmarshal(data, target) }
+
+// TaskPayload is the body of the task.* events.
+type TaskPayload struct {
+	TaskID string `json:"taskId"`
+	Title  string `json:"title"`
+	Status string `json:"status"`
+}
+
+// DecisionPayload is the body of the decision.* events.
+type DecisionPayload struct {
+	DecisionID string `json:"decisionId"`
+	Title      string `json:"title"`
+	Importance string `json:"importance"`
+	// SupersededBy is set on decision.superseded.
+	SupersededBy string `json:"supersededBy,omitempty"`
+}

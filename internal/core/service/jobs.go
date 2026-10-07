@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
@@ -13,6 +15,15 @@ import (
 	"github.com/rclsilver/threavia/internal/core/domain"
 	"github.com/rclsilver/threavia/internal/core/events"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
+	"github.com/rclsilver/threavia/internal/core/tools"
+)
+
+// How much of the project knowledge a Run context carries. Section 12 asks for a
+// compact structured context, so these are deliberately small: everything else
+// is searchable on demand through the Core Tools.
+const (
+	contextDecisionLimit = 20
+	contextTaskLimit     = 20
 )
 
 // DispatchJob sends a queued Job to its backend, if that backend is connected
@@ -69,7 +80,7 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 				JobId:           string(jobID),
 				NativeSessionId: derefString(jc.NativeSessionID),
 				Prompt:          prompt,
-				ProjectContext:  s.projectContext(jc),
+				ProjectContext:  s.projectContext(ctx, jc),
 				ExecutionPolicy: &backendv1.ExecutionPolicy{
 					// The breadth of specification section 17 is deferred; the
 					// first slice runs interactively, which is what makes the
@@ -101,11 +112,12 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 // projectContext builds the compact structured context of specification
 // section 12. It never carries the project history: everything else is
 // searchable on demand.
-func (s *Service) projectContext(jc postgres.JobContext) *backendv1.ProjectContext {
+func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) *backendv1.ProjectContext {
 	pc := &backendv1.ProjectContext{
 		ProjectId:          string(jc.ProjectID),
 		ProjectName:        jc.ProjectName,
 		ProjectDescription: jc.ProjectDesc,
+		Tools:              coreToolSpecs(),
 	}
 	if jc.WorkingDirectoryPath != nil {
 		pc.WorkingDirectoryPath = *jc.WorkingDirectoryPath
@@ -113,9 +125,56 @@ func (s *Service) projectContext(jc postgres.JobContext) *backendv1.ProjectConte
 	if jc.KnownDirectoryID != nil {
 		pc.KnownDirectoryId = string(*jc.KnownDirectoryID)
 	}
-	// Decisions, Tasks and Core Tools land with those services; the context
-	// shape already accommodates them.
+
+	// Active IMPORTANT decisions only. A superseded or NORMAL one is searchable
+	// on demand, and injecting either would spend context on something that is
+	// no longer true or not important enough to have been marked so.
+	decisions, err := s.store.ImportantDecisions(ctx, jc.ProjectID, contextDecisionLimit)
+	if err != nil {
+		s.logger.Error("cannot read the project decisions",
+			slog.String("projectId", string(jc.ProjectID)), slog.String("error", err.Error()))
+	}
+	for _, decision := range decisions {
+		pc.Decisions = append(pc.Decisions, &backendv1.ContextDecision{
+			Id: string(decision.ID), Title: decision.Title, Content: decision.Content,
+		})
+	}
+
+	// A compact summary of what is open and actionable, not every Task ever
+	// filed: in progress first, then what is ready to start.
+	tasks, err := s.store.OpenTasks(ctx, jc.ProjectID, contextTaskLimit)
+	if err != nil {
+		s.logger.Error("cannot read the project tasks",
+			slog.String("projectId", string(jc.ProjectID)), slog.String("error", err.Error()))
+	}
+	for _, task := range tasks {
+		pc.Tasks = append(pc.Tasks, &backendv1.ContextTask{
+			Id: string(task.ID), Title: task.Title, Status: task.Status.String(),
+		})
+	}
+
 	return pc
+}
+
+// coreToolSpecs renders the Core Tools for the wire. A backend never hardcodes
+// their names: it learns them here, at Job start.
+func coreToolSpecs() []*backendv1.CoreToolSpec {
+	specs := tools.Specs()
+	out := make([]*backendv1.CoreToolSpec, 0, len(specs))
+	for _, spec := range specs {
+		encoded := &backendv1.CoreToolSpec{
+			Name:        spec.Name.String(),
+			Description: spec.Description,
+		}
+		if len(spec.InputSchema) > 0 {
+			var schema map[string]any
+			if err := json.Unmarshal(spec.InputSchema, &schema); err == nil {
+				encoded.InputSchema, _ = structpb.NewStruct(schema)
+			}
+		}
+		out = append(out, encoded)
+	}
+	return out
 }
 
 // dispatchNext starts the oldest queued Job of a Run, once its active slot is
