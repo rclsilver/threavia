@@ -36,6 +36,8 @@ type oidcAuthenticator struct {
 	// only claim an issuer guarantees to be stable and unique, so it is the
 	// default; a deployment that prefers a readable identifier says so.
 	userClaim string
+	// public is what a client is told so it can obtain a token at all.
+	public Public
 }
 
 // claims is what Core reads from a verified token. Everything else the provider
@@ -77,10 +79,18 @@ func newOIDCAuthenticator(cfg Config) (Authenticator, error) {
 	return &oidcAuthenticator{
 		verifier:  provider.Verifier(&oidc.Config{ClientID: audience}),
 		userClaim: userClaim,
+		public: Public{
+			Mode:     ModeOIDC,
+			Issuer:   cfg.OIDCIssuer,
+			ClientID: cfg.OIDCClientID,
+			Audience: audience,
+		},
 	}, nil
 }
 
 func (*oidcAuthenticator) Mode() Mode { return ModeOIDC }
+
+func (a *oidcAuthenticator) Public() Public { return a.public }
 
 // Authenticate verifies the bearer token and returns who it names.
 func (a *oidcAuthenticator) Authenticate(r *http.Request) (Identity, error) {

@@ -1497,6 +1497,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How a caller is expected to authenticate
+         * @description Unauthenticated, and necessarily so: a client reads this to find out how
+         *     to obtain a token at all. Core runs no login flow — a client gets its
+         *     token from the provider and presents it here — and the web client is
+         *     static files served by whichever Core is running, so it cannot carry the
+         *     issuer in its own build.
+         *
+         *     Nothing here is secret: an issuer and a client id are published by
+         *     construction, and a public OIDC client holds no credential by design.
+         *
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description What to authenticate against */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AuthPublic"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -2773,6 +2820,16 @@ export interface components {
              * @description Where the live stream takes over.
              */
             cursor: number;
+        };
+        AuthPublic: {
+            /** @enum {string} */
+            mode: "none" | "basic" | "oidc";
+            /** @description The OIDC issuer to obtain a token from. */
+            issuer?: string;
+            /** @description The client id to start the flow with. Public by design. */
+            clientId?: string;
+            /** @description The audience a token must carry, when it is not the client id. */
+            audience?: string;
         };
         Me: {
             userId: string;

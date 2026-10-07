@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { dropResolvedAttention } from './attention-cache';
-import { CHANNEL } from './client';
+import { authorize, CHANNEL } from './client';
 import { keys } from './keys';
 import { payloadOf, type Event, type Job, type Snapshot } from './types';
 
@@ -33,7 +33,7 @@ export interface Activity {
  * only the fast path.
  */
 export class EventStream {
-  private source: EventSource | null = null;
+  private abort: AbortController | null = null;
   private cursor = 0;
   private readonly queries: QueryClient;
   private onActivity: ((signal: Activity) => void) | null = null;
@@ -55,41 +55,119 @@ export class EventStream {
     this.cursor = Math.max(this.cursor, sequence);
   }
 
+  /**
+   * Opens the stream and keeps it open.
+   *
+   * Read with fetch rather than EventSource, which cannot send a header: a
+   * deployment behind a provider wants the same bearer token here as on every
+   * other call, and a token in the query string would land in access logs.
+   *
+   * What EventSource gave for free was the reconnection, and resuming from
+   * Last-Event-ID. The reconnection is the loop below; the resume was never
+   * EventSource's to give here, because the client already carries its own
+   * cursor and Core replays from `after`.
+   */
   open(onStateChange: (connected: boolean) => void, onActivity?: (signal: Activity) => void) {
     this.close();
     this.onActivity = onActivity ?? null;
 
-    const source = new EventSource(`/api/v1/events?after=${this.cursor}&channel=${CHANNEL}`);
-    this.source = source;
-
-    source.onopen = () => onStateChange(true);
-    source.onerror = () => {
-      // EventSource reconnects on its own, and Core resumes from Last-Event-ID.
-      // Reporting the gap is all there is to do here.
-      onStateChange(false);
-    };
-
-    // Core names its frames, so there is no default `message` to listen on:
-    // `event` carries the persisted timeline, `ephemeral` the liveness signals
-    // that are streamed and never stored. A client listening on `message`
-    // receives nothing at all, over a connection that looks perfectly healthy.
-    source.addEventListener('event', (frame: MessageEvent<string>) => {
-      const event = JSON.parse(frame.data) as Event;
-      this.seen(event.sequence);
-      this.apply(event);
-    });
-
-    source.addEventListener('ephemeral', (frame: MessageEvent<string>) => {
-      const signal = JSON.parse(frame.data) as Event;
-      if (signal.sessionId) {
-        this.onActivity?.({ sessionId: signal.sessionId, kind: signal.type, at: Date.now() });
-      }
-    });
+    const abort = new AbortController();
+    this.abort = abort;
+    void this.run(abort, onStateChange);
   }
 
   close() {
-    this.source?.close();
-    this.source = null;
+    this.abort?.abort();
+    this.abort = null;
+  }
+
+  private async run(abort: AbortController, onStateChange: (connected: boolean) => void) {
+    // Backs off so a Core that is down is not hammered, and recovers quickly
+    // when it is a blip.
+    let backoff = 1000;
+
+    while (!abort.signal.aborted) {
+      try {
+        const response = await fetch(
+          `/api/v1/events?after=${this.cursor}&channel=${CHANNEL}`,
+          { headers: authorize(new Headers({ Accept: 'text/event-stream' })), signal: abort.signal },
+        );
+        if (!response.ok || !response.body) {
+          throw new Error(`the stream did not open (${response.status})`);
+        }
+
+        onStateChange(true);
+        backoff = 1000;
+        await this.consume(response.body, abort.signal);
+      } catch {
+        // An abort is the caller closing the stream, not a failure.
+        if (abort.signal.aborted) return;
+      }
+
+      onStateChange(false);
+      if (abort.signal.aborted) return;
+      await sleep(backoff, abort.signal);
+      backoff = Math.min(backoff * 2, 30_000);
+    }
+  }
+
+  /** Reads frames until the connection ends. */
+  private async consume(body: ReadableStream<Uint8Array>, signal: AbortSignal) {
+    const reader = body.getReader();
+    // Decoded with `stream: true` so a multi-byte character split across two
+    // chunks is held until the rest of it arrives.
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (!signal.aborted) {
+      const { done, value } = await reader.read();
+      if (done) return;
+
+      buffer += decoder.decode(value, { stream: true });
+      // A frame ends at a blank line. Anything after the last one is a frame
+      // still arriving, so it stays in the buffer.
+      let boundary = buffer.indexOf('\n\n');
+      while (boundary !== -1) {
+        this.frame(buffer.slice(0, boundary));
+        buffer = buffer.slice(boundary + 2);
+        boundary = buffer.indexOf('\n\n');
+      }
+    }
+  }
+
+  /**
+   * Routes one frame by its name.
+   *
+   * Core names them, so there is no default `message`: `event` carries the
+   * persisted timeline, `ephemeral` the liveness signals that are streamed and
+   * never stored. A client reading only unnamed frames receives nothing at all,
+   * over a connection that looks perfectly healthy.
+   */
+  private frame(raw: string) {
+    let name = 'message';
+    let data = '';
+
+    for (const line of raw.split('\n')) {
+      if (line.startsWith(':')) continue; // A comment: Core sends these as keep-alives.
+      const colon = line.indexOf(':');
+      const field = colon === -1 ? line : line.slice(0, colon);
+      const value = colon === -1 ? '' : line.slice(colon + 1).replace(/^ /, '');
+
+      if (field === 'event') name = value;
+      // A data field may be repeated; the spec joins them with a newline.
+      if (field === 'data') data = data ? `${data}\n${value}` : value;
+    }
+    if (!data) return;
+
+    const payload = JSON.parse(data) as Event;
+    if (name === 'event') {
+      this.seen(payload.sequence);
+      this.apply(payload);
+      return;
+    }
+    if (name === 'ephemeral' && payload.sessionId) {
+      this.onActivity?.({ sessionId: payload.sessionId, kind: payload.type, at: Date.now() });
+    }
   }
 
   /** Routes one event onto the cache. */
@@ -253,4 +331,15 @@ function jobStatusFor(type: string): Job['status'] | null {
       // accepted, and the mutation refetches the snapshot to show it.
       return null;
   }
+}
+
+/** A delay that gives up when the stream is closed under it. */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener('abort', () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
+  });
 }

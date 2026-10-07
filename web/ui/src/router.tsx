@@ -1,4 +1,5 @@
 import {
+  Navigate,
   createRootRoute,
   createRoute,
   createRouter,
@@ -6,6 +7,8 @@ import {
   redirect,
 } from '@tanstack/react-router';
 
+import { CALLBACK_PATH } from '@/auth/oidc';
+import { landingPath } from '@/auth/landing';
 import { AppShell } from '@/components/app-shell';
 import { DraftView } from '@/routes/draft';
 import {
@@ -101,8 +104,21 @@ const auditRoute = createRoute({
   component: AuditView,
 });
 
+/**
+ * Where the provider sends the browser back.
+ *
+ * The exchange has already happened by the time this renders — the session
+ * provider does it before anything else mounts — so all that is left is to put
+ * the person back where they were.
+ */
+const callbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: CALLBACK_PATH,
+  component: () => <Navigate to={landingPath()} replace />,
+});
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  callbackRoute,
   draftRoute,
   sessionRoute,
   tasksRoute,

@@ -61,6 +61,24 @@ type Authenticator interface {
 	// Authenticate returns the caller identity, or an error wrapping
 	// ErrUnauthenticated.
 	Authenticate(r *http.Request) (Identity, error)
+	// Public describes how a caller is expected to authenticate.
+	Public() Public
+}
+
+// Public is what a client may be told about the authentication of a deployment,
+// before it has authenticated.
+//
+// Core runs no login flow: a client obtains a token from the provider and
+// presents it. Something has to tell it which provider and under which client
+// id, and that something cannot be the client's own build — the web client is
+// static files served by whichever Core is running. None of this is secret: an
+// issuer and a client id are published by construction, and a public OIDC client
+// holds no credential by design.
+type Public struct {
+	Mode     Mode   `json:"mode"`
+	Issuer   string `json:"issuer,omitempty"`
+	ClientID string `json:"clientId,omitempty"`
+	Audience string `json:"audience,omitempty"`
 }
 
 // Config holds the authentication settings loaded from the environment.
@@ -129,6 +147,8 @@ type noneAuthenticator struct {
 
 func (noneAuthenticator) Mode() Mode { return ModeNone }
 
+func (noneAuthenticator) Public() Public { return Public{Mode: ModeNone} }
+
 func (a noneAuthenticator) Authenticate(*http.Request) (Identity, error) {
 	return Identity{UserID: a.userID, Subject: string(a.userID), Name: string(a.userID)}, nil
 }
@@ -139,6 +159,8 @@ type basicAuthenticator struct {
 }
 
 func (basicAuthenticator) Mode() Mode { return ModeBasic }
+
+func (basicAuthenticator) Public() Public { return Public{Mode: ModeBasic} }
 
 func (a basicAuthenticator) Authenticate(r *http.Request) (Identity, error) {
 	username, password, ok := r.BasicAuth()

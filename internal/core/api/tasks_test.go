@@ -141,3 +141,26 @@ func TestDeletingATaskTakesItsEdgesWithIt(t *testing.T) {
 	// about a task, and there is none.
 	c.mustDo(http.MethodDelete, "/api/v1/tasks/"+foundation.ID, nil, nil, http.StatusNotFound)
 }
+
+// TestHowToAuthenticateIsPublic covers the one route that cannot require a
+// credential: it is what a client reads to find out how to obtain one.
+func TestHowToAuthenticateIsPublic(t *testing.T) {
+	c := newCore(t)
+
+	var public struct {
+		Mode     string `json:"mode"`
+		Issuer   string `json:"issuer"`
+		ClientID string `json:"clientId"`
+	}
+	c.mustDo(http.MethodGet, "/api/v1/auth", nil, &public, http.StatusOK)
+
+	// The harness runs without authentication, so there is nothing to point a
+	// client at — and saying so is the answer.
+	if public.Mode != "none" {
+		t.Fatalf("mode = %q, want none", public.Mode)
+	}
+	if public.Issuer != "" || public.ClientID != "" {
+		t.Fatalf("a deployment that asks for nothing named an issuer (%q) or a client (%q)",
+			public.Issuer, public.ClientID)
+	}
+}

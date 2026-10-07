@@ -49,6 +49,10 @@ web-deps: $(WEB_DEPS) ## Install the web client dependencies from the lockfile
 .PHONY: web
 web: $(WEB_DEPS) ## Build the web client into web/ui/dist, which the Go binary embeds
 	cd web/ui && npm run build
+	# Vite empties the output directory, which takes the placeholder with it.
+	# That file is what lets a fresh clone compile the Go package embedding this
+	# directory before anything has been built, so put it back.
+	touch web/ui/dist/.gitkeep
 
 .PHONY: web-dev
 web-dev: $(WEB_DEPS) ## Run the web client dev server on the host, without Docker

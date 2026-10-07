@@ -8,6 +8,13 @@ import (
 )
 
 func (h *handler) registerAttention(mux *http.ServeMux) {
+	// Unauthenticated, and necessarily so: it is what a client reads to find
+	// out how to authenticate. It carries an issuer and a client id, both
+	// published by construction.
+	h.open(mux, "GET /api/v1/auth", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, h.auth.Public())
+	})
+
 	h.handle(mux, "GET /api/v1/me", h.me)
 	h.handle(mux, "GET /api/v1/me/attention", h.attention)
 	h.handle(mux, "POST /api/v1/validations/{validationId}/resolve", h.resolveValidation)

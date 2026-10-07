@@ -784,6 +784,27 @@ paths:
         "409":
           $ref: "#/components/responses/Error"
 
+  /api/v1/auth:
+    get:
+      tags: [attention]
+      summary: How a caller is expected to authenticate
+      description: |
+        Unauthenticated, and necessarily so: a client reads this to find out how
+        to obtain a token at all. Core runs no login flow — a client gets its
+        token from the provider and presents it here — and the web client is
+        static files served by whichever Core is running, so it cannot carry the
+        issuer in its own build.
+
+        Nothing here is secret: an issuer and a client id are published by
+        construction, and a public OIDC client holds no credential by design.
+      security: []
+      responses:
+        "200":
+          description: What to authenticate against
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthPublic" }
+
   /api/v1/me:
     get:
       tags: [attention]
@@ -1681,6 +1702,23 @@ components:
           type: integer
           format: int64
           description: Where the live stream takes over.
+
+    AuthPublic:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [none, basic, oidc]
+        issuer:
+          type: string
+          description: The OIDC issuer to obtain a token from.
+        clientId:
+          type: string
+          description: The client id to start the flow with. Public by design.
+        audience:
+          type: string
+          description: The audience a token must carry, when it is not the client id.
 
     Me:
       type: object

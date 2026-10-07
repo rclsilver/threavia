@@ -39,9 +39,28 @@ interface ErrorBody {
   error?: { code?: string; message?: string };
 }
 
-async function request<T>(method: string, path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
+/**
+ * The token every request carries, when the deployment asks for one.
+ *
+ * Held here rather than passed through every call site: the token belongs to
+ * the client, not to the question being asked, and a call that forgot it would
+ * come back 401 for a reason nobody could see at the call site.
+ */
+let bearer: string | null = null;
+
+export function setBearer(token: string | null) {
+  bearer = token;
+}
+
+/** Adds the credential, when there is one, to a request going to Core. */
+export function authorize(headers: Headers): Headers {
   headers.set('X-Threavia-Channel', CHANNEL);
+  if (bearer) headers.set('Authorization', `Bearer ${bearer}`);
+  return headers;
+}
+
+async function request<T>(method: string, path: string, init: RequestInit = {}): Promise<T> {
+  const headers = authorize(new Headers(init.headers));
 
   const response = await fetch(path, { ...init, method, headers });
 
