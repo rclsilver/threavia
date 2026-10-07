@@ -102,7 +102,15 @@ export function DraftView() {
             rows={5}
             value={message}
             onChange={(event) => setMessage(event.target.value)}
-            placeholder="Analyse ce projet"
+            onKeyDown={(event) => {
+              // The same reflex as the Session composer: Enter sends, Shift
+              // keeps writing.
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                submit();
+              }
+            }}
+            placeholder="Analyse ce projet (Shift+Enter for a newline)"
           />
         </div>
 

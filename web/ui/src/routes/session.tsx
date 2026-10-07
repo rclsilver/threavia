@@ -123,9 +123,15 @@ function Composer({ sessionId }: { sessionId: string }) {
         value={message}
         onChange={(event) => setMessage(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) submit();
+          // Enter sends, as in every chat. A newline is still reachable with
+          // Shift, which is where a person already looks for it. An Enter that
+          // closes an input method is composing text, not sending it.
+          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            submit();
+          }
         }}
-        placeholder="Send a message…"
+        placeholder="Send a message… (Shift+Enter for a newline)"
       />
       <Button type="submit" variant="primary" disabled={send.isPending}>
         Send
