@@ -1094,6 +1094,25 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Decision" }
 
+  /api/v1/decisions/{decisionId}:
+    parameters:
+      - name: decisionId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    delete:
+      tags: [knowledge]
+      summary: Delete a Decision
+      description: >
+        For a Decision that should never have been recorded. Superseding is the
+        move when one was changed. Whatever this Decision had superseded becomes
+        current again, since nothing replaces it any more.
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/Error"
+
   /api/v1/projects/{projectId}/search:
     parameters:
       - $ref: "#/components/parameters/ProjectID"

@@ -30,6 +30,33 @@ func (s *Store) SupersedeDecision(ctx context.Context, id domain.DecisionID) (do
 		RETURNING `+decisionColumns, id))
 }
 
+// ReviveDecision makes a superseded Decision current again. It is what happens
+// when the Decision that replaced it is deleted: nothing replaces it any more.
+func (s *Store) ReviveDecision(ctx context.Context, id domain.DecisionID) error {
+	_, err := s.q.Exec(ctx, `
+		UPDATE decisions SET status = 'ACTIVE', updated_at = now()
+		WHERE id = $1 AND status = 'SUPERSEDED'`, id)
+	return classify(err, "revive a decision")
+}
+
+// DeleteDecision removes a Decision for good.
+//
+// A Decision that superseded it keeps its own record and simply stops pointing
+// anywhere, by the ON DELETE SET NULL the schema declares.
+func (s *Store) DeleteDecision(ctx context.Context, ownerID domain.UserID, id domain.DecisionID) error {
+	tag, err := s.q.Exec(ctx, `
+		DELETE FROM decisions d
+		USING projects p
+		WHERE d.id = $1 AND d.project_id = p.id AND p.owner_id = $2`, id, ownerID)
+	if err != nil {
+		return classify(err, "delete a decision")
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // GetDecision returns a Decision the user can access through its Project.
 func (s *Store) GetDecision(ctx context.Context, ownerID domain.UserID, id domain.DecisionID) (domain.Decision, error) {
 	return scanDecision(s.q.QueryRow(ctx, `

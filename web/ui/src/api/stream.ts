@@ -150,6 +150,7 @@ export class EventStream {
 
       case 'decision.created':
       case 'decision.superseded':
+      case 'decision.deleted':
         void this.queries.invalidateQueries({ queryKey: ['decisions'] });
         break;
 

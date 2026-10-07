@@ -422,6 +422,20 @@ export function useRemoveTaskDependency() {
   });
 }
 
+/**
+ * Deleting a Decision.
+ *
+ * For one that should never have been recorded. Superseding is the move when a
+ * decision was changed, and Core restores whatever this one had replaced.
+ */
+export function useDeleteDecision() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (decisionId: string) => api.delete(`/api/v1/decisions/${decisionId}`),
+    onSuccess: () => queries.invalidateQueries({ queryKey: ['decisions'] }),
+  });
+}
+
 export function useDecisions(projectId: string | undefined) {
   return useQuery({
     queryKey: keys.decisions(projectId ?? ''),

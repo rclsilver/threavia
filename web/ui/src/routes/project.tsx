@@ -8,6 +8,7 @@ import {
   useCreateDecision,
   useDecisions,
   useDeleteArtifact,
+  useDeleteDecision,
   useInstallSkill,
   useProject,
   useSkills,
@@ -15,7 +16,7 @@ import {
   useUninstallSkill,
   useUpdateProject,
 } from '@/api/queries';
-import type { SkillSourceType } from '@/api/types';
+import type { Decision, SkillSourceType } from '@/api/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, EmptyState } from '@/components/ui/card';
@@ -170,6 +171,7 @@ function DecisionsPane({ projectId }: { projectId: string }) {
               <span className="font-medium">{decision.title}</span>
               {decision.importance === 'IMPORTANT' && <Badge tone="warn">important</Badge>}
               {decision.status === 'SUPERSEDED' && <Badge>superseded</Badge>}
+              <DeleteDecision decision={decision} />
             </div>
             {decision.content && <p className="mt-1.5 text-sm whitespace-pre-wrap">{decision.content}</p>}
             <p className="text-muted mt-1.5 font-mono text-xs">{when(decision.createdAt)}</p>
@@ -177,6 +179,49 @@ function DecisionsPane({ projectId }: { projectId: string }) {
         )}
       />
     </div>
+  );
+}
+
+/**
+ * Taking a Decision out of the Project memory.
+ *
+ * It asks first, in place: this is for a decision that should never have been
+ * recorded, and the one that was changed is superseded instead, which keeps the
+ * history. Core makes whatever this one replaced current again.
+ */
+function DeleteDecision({ decision }: { decision: Decision }) {
+  const remove = useDeleteDecision();
+  const [asking, setAsking] = useState(false);
+
+  if (asking) {
+    return (
+      <span className="text-muted ml-auto flex items-center gap-2 text-xs">
+        Delete?
+        <Button variant="ghost" size="sm" onClick={() => setAsking(false)}>
+          No
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
+          disabled={remove.isPending}
+          onClick={() => remove.mutate(decision.id)}
+        >
+          Delete
+        </Button>
+      </span>
+    );
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="ml-auto size-7 [&_svg]:size-3.5"
+      title="Delete this decision"
+      onClick={() => setAsking(true)}
+    >
+      <Trash2 />
+    </Button>
   );
 }
 

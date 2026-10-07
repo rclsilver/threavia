@@ -265,6 +265,39 @@ func (s *Service) CreateDecision(ctx context.Context, identity auth.Identity, pr
 }
 
 // ListDecisions returns the Decisions of a Project.
+// DeleteDecision removes a Decision from the Project memory.
+//
+// Whatever it had superseded becomes current again: a Decision is marked
+// superseded because something replaced it, and if that something is gone the
+// Project would otherwise be left with a record it no longer reads and nothing
+// in its place. Superseding remains the honest move when a decision was
+// changed; deleting is for one that should never have been recorded.
+func (s *Service) DeleteDecision(ctx context.Context, identity auth.Identity, id domain.DecisionID) error {
+	decision, err := s.store.GetDecision(ctx, identity.UserID, id)
+	if err != nil {
+		return translate(err)
+	}
+
+	err = s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		if decision.Supersedes != nil {
+			if err := tx.ReviveDecision(ctx, *decision.Supersedes); err != nil {
+				return err
+			}
+		}
+		return tx.DeleteDecision(ctx, identity.UserID, id)
+	})
+	if err != nil {
+		return translate(err)
+	}
+
+	s.emit(ctx, identity.UserID, events.TypeDecisionDeleted,
+		domain.Scope{ProjectID: decision.ProjectID}, DecisionPayload{
+			DecisionID: string(decision.ID), Title: decision.Title,
+			Importance: decision.Importance.String(),
+		})
+	return nil
+}
+
 func (s *Service) ListDecisions(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, includeSuperseded bool) ([]domain.Decision, error) {
 	decisions, err := s.store.ListDecisions(ctx, identity.UserID, projectID, includeSuperseded)
 	return decisions, translate(err)
