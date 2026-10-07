@@ -139,3 +139,85 @@ part of the wire protocol contract: a backend written in another language stores
 its state however it likes, as long as it honours the same guarantees — a
 monotonic per-Job sequence that survives a restart, and events kept until Core
 acknowledges them.
+
+## The MVP slice
+
+### Job dispatch
+
+A Job is created QUEUED and dispatched separately, so enqueueing never depends on
+backend availability: a message sent to an offline backend waits in the queue
+rather than failing.
+
+Dispatch reserves the single active slot of the Run by transitioning the Job to
+RUNNING *before* sending the command. That is what keeps a second Job of the same
+Run from being dispatched concurrently, and the partial unique index in the
+schema makes the reservation atomic. If the send then fails, the Job is parked
+in WAITING_BACKEND rather than lost.
+
+Core emits no event for its own optimistic transition: the backend's
+`job.started` is the one that reaches the timeline, because it carries the
+backend identity and sequence that make it deduplicable.
+
+### Reconnection, and the rule that prevents running work twice
+
+Core parks every live Job as WAITING_BACKEND when a control stream drops,
+including during its own clean shutdown. The tempting next step — releasing those
+Jobs when the backend comes back — is wrong, and a real run through a Core
+restart proved it: a backend that had finished the work during the outage ran it
+a second time.
+
+Section 9 settles it. Core owns the desired logical state, the backend owns what
+actually happened locally. So:
+
+- connecting releases only Jobs that were never dispatched anywhere;
+- a Job the backend reports, in any state, converges through its replayed
+  events, never by being dispatched again;
+- only a Job the backend has no memory of is sent out a second time, because
+  then nothing is running anywhere.
+
+### Attention objects
+
+A ValidationRequest and a UserInputRequest are rows, not messages in flight. They
+are created in the same transaction that persists the event announcing them, they
+have no timeout, and resolving one is a single conditional UPDATE so the first
+valid response wins and a second client is told it is already resolved. A Job
+that ends with requests still pending has them resolved as abandoned, so no ghost
+prompt survives it.
+
+The canonical technical payload is hashed with SHA-256 over a deterministic JSON
+encoding — a Go map through `encoding/json`, which sorts object keys — so the
+receipt of section 16 references a stable byte sequence.
+
+### Claude Code integration
+
+Claude Code runs in print mode with `stream-json` output, which the runner
+normalises into the Threavia vocabulary. Three decisions are worth recording:
+
+- **The backend mints the provider session id** with `--session-id` instead of
+  discovering it, so a Run is resumable from its very first message; a second Job
+  passes `--resume`.
+- **Permission prompts travel over MCP.** The backend hosts a loopback MCP server
+  and points Claude Code at it with `--permission-prompt-tool`, so a prompt that
+  would block a terminal becomes a ValidationRequest and waits in Core. The same
+  server exposes an `ask_user` tool for questions. Each Job gets its own
+  unguessable endpoint path, and a request that cannot be answered is denied, not
+  approved.
+- **The provider runs in its own process group**, so cancelling stops the
+  children it spawned, and a cancelled Job reports CANCELLED rather than whatever
+  the dying process said on its way out.
+
+### Web client
+
+Section 25 leaves the frontend technology open. The client is a single page of
+plain HTML, CSS and JavaScript embedded in the Core binary: no build step, no
+bundler, no framework, and therefore no second toolchain to install or keep
+current. It holds no state of its own — a snapshot plus the global event stream
+is the whole model — which is exactly what the specification asks a client to
+be, and it keeps Core deployable as one binary.
+
+### Backend capabilities
+
+Capabilities are declared at registration, not only in the Hello frame, and every
+Hello refreshes them. Without that, Core could not queue work for a backend that
+is currently offline, since a backend that never connected would advertise
+nothing.

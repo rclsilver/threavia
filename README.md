@@ -15,37 +15,44 @@ follows that document.
 
 ## Status
 
-This is the repository skeleton of specification section 35. It compiles, it is
-tested, and the two binaries start, connect to each other and shut down cleanly.
-It deliberately does **not** implement the Core services yet.
+The MVP vertical slice of specification section 30 works end to end: from the
+web client, pick a Project, a BackendInstance and a KnownDirectory, send a
+message, watch Claude Code work, answer its permission requests and questions,
+and continue the conversation in the same provider session.
 
-What works today:
+Every acceptance criterion of section 32 is covered:
 
-- `threavia-core` serves the client HTTP API (liveness, readiness, version) and
-  the backend gRPC control service, and applies its database migrations.
-- `threavia-backend-claude` connects outbound to Core, completes the
-  Hello/Welcome handshake, reports its status and heartbeats, and reconnects on
-  its own when Core restarts.
-- The PostgreSQL schema holds Projects, BackendInstances, Sessions, Runs, Jobs
-  and Events, with the one-active-Job-per-Run and backend event deduplication
-  invariants enforced by the database.
-- The backend SDK buffers events durably until Core acknowledges them, and
-  replays them after a reconnection.
+| # | Criterion | Covered by |
+| --- | --- | --- |
+| 1 | Core starts with PostgreSQL and migrations | live run |
+| 2 | Claude backend registers, connects outbound, becomes READY | live run |
+| 3 | Clients see the backend, the Project and the KnownDirectory | API verified live; the web client is served from Core |
+| 4 | First message atomically creates Session + Run + Job | live run + `TestFirstSendCreatesEverythingAtomically` |
+| 5 | Backend starts Claude in the resolved cwd | live run |
+| 6 | Agent output streams Backend → Core → PostgreSQL → SSE | live run + `TestStreamDeliversLiveEvents` |
+| 7 | A replayed backend event does not duplicate history | `TestBackendEventDeduplication` |
+| 8 | A validation waits indefinitely and is answered from a client | live run + `TestValidationWaitsAndResolves` |
+| 9 | A reloading client gets a snapshot and continues live | `TestStreamResumesFromItsCursor` |
+| 10 | A Core restart loses no history; unacknowledged events replay | live run + `TestJobFinishedDuringAnOutageIsNotRerun` |
+| 11 | A Job is cancelled with CANCELLING semantics | live run + `TestCancellationNeedsBackendConfirmation` |
+| 12 | A second message resumes the same native Claude session | live run + `TestSecondMessageResumesTheNativeSession` |
 
-What is not implemented yet, in the order of specification section 31:
+The live runs drove the real Claude Code CLI: it created a file after its Write
+permission was approved through Core, answered a follow-up question from memory
+of the first turn without rereading the file, survived a Core restart mid-job,
+and stopped on cancellation.
 
-- the Core services: Projects, KnownDirectories, `StartSession`, messages, event
-  persistence and the global sequence, SSE, validation and user input requests,
-  cancellation, reconciliation;
-- driving Claude Code itself (`internal/backends/claude/runner` returns
-  `ErrNotImplemented`);
-- backend registration and claim flows, so a development-only static token
-  mapping stands in for real backend credentials;
-- the SQLite durable state of the backend SDK, replaced for now by an in-memory
-  store;
-- the S3 client, the web client, Skills, Tasks, Decisions and Core Tools.
+What is deliberately not implemented, matching the deferrals of section 30 and
+the non-goals of section 33:
 
-Every one of these has its interface in place; none of them is faked.
+- Core Tools, Tasks and Decisions: the contracts exist, the services do not;
+- S3 Artifact flows, Skills, Android, Voice and cross-backend handoff;
+- OIDC authentication, which is accepted by the contract and refused at startup
+  rather than silently degrading;
+- the directory discovery and clone fallbacks of section 11: an unbound
+  directory is reported to the user instead of being guessed at;
+- the breadth of ExecutionPolicy: the first slice runs interactively, which is
+  what makes the validation flow observable.
 
 ## Requirements
 
@@ -71,40 +78,36 @@ nix-shell --run make   # or run a single target
 make dev-up        # start PostgreSQL and MinIO
 make migrate       # apply the database migrations
 make test          # run the test suite
+make test-db       # add the database integration and end-to-end tests
 make build         # build both binaries into bin/
 ```
 
-Run Core and a backend in two terminals:
+Run the whole thing: Core in one terminal, a backend in another, the client in a
+browser.
 
 ```bash
 # terminal 1
 export THREAVIA_POSTGRES_PASSWORD=threavia
-export THREAVIA_BACKEND_DEV_TOKENS='dev-token=00000000-0000-0000-0000-000000000001'
 make run-core
+```
 
+Create a registration token for the backend, then start it. It registers once,
+stores its identity locally and never needs the token again.
+
+```bash
 # terminal 2
+TOKEN=$(curl -s -X POST localhost:8080/api/v1/backend-tokens \
+  -H 'Content-Type: application/json' -d '{"label":"laptop"}' | jq -r .token)
+
 export THREAVIA_BACKEND_CORE_ADDRESS=localhost:9090
-export THREAVIA_BACKEND_TOKEN=dev-token
-export THREAVIA_BACKEND_TLS_ENABLED=false
+export THREAVIA_BACKEND_CORE_API=http://localhost:8080
+export THREAVIA_BACKEND_REGISTRATION_TOKEN="$TOKEN"
+export THREAVIA_BACKEND_TLS_ENABLED=false    # local Core only; remote access needs TLS
 make run-backend
 ```
 
-The backend only connects once its id exists in `backend_instances`, because
-registration is not implemented yet:
-
-```bash
-docker compose exec postgres psql -U threavia -d threavia -c \
-  "INSERT INTO backend_instances (id, owner_id, name, ownership_status, operational_status)
-   VALUES ('00000000-0000-0000-0000-000000000001', 'dev', 'laptop', 'CLAIMED', 'OFFLINE');"
-```
-
-Check Core:
-
-```bash
-curl localhost:8080/healthz
-curl localhost:8080/readyz
-curl localhost:8080/version
-```
+Then open <http://localhost:8080>, create a project, add a known directory and
+bind it to a real path on that backend, and send a first message.
 
 `.env.example` lists every environment variable with its default.
 
@@ -137,7 +140,7 @@ internal/core/service/           Core application services
 internal/core/storage/postgres/  connection pool and migrations
 internal/core/storage/s3/        S3-compatible object storage
 internal/core/tools/             Core Tools exposed to agents
-internal/backends/claude/        Claude adapter and runner
+internal/backends/claude/        Claude adapter, runner and MCP bridge
 internal/envutil/                environment parsing helpers
 internal/logging/                shared structured logger
 pkg/backend-sdk/                 reusable Go SDK for BackendInstances
@@ -145,7 +148,7 @@ migrations/                      embedded PostgreSQL migrations
 deploy/helm/threavia/            Helm chart
 examples/backend-example/        smallest possible BackendInstance
 docs/                            architecture, protocol and API notes
-web/                             frontend, technology still to be selected
+web/                             web client, served from the Core binary
 shell.nix                        NixOS development shell
 ```
 
