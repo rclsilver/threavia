@@ -1,0 +1,18 @@
+{{/* A headless Service only to give the StatefulSet its stable network
+     identity. Nothing connects to a backend: it opens the outbound control
+     stream to Core, which is what lets it run on a laptop or behind a NAT
+     exactly as it does here (specification section 9). */}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "backend.fullname" . }}
+  labels:
+    {{- include "backend.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "backend.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: placeholder
+      port: 1
+      targetPort: 1

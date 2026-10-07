@@ -1,0 +1,9 @@
+apiVersion: v2
+name: threavia-backend-claude
+description: A Threavia BackendInstance running Claude Code in Kubernetes
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/rclsilver/threavia
+sources:
+  - https://github.com/rclsilver/threavia

@@ -62,6 +62,13 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// The default working directory must exist before a Job lands in it: on a
+	// Kubernetes backend it sits on a fresh volume, and a missing directory
+	// would fail every unscoped Run rather than the deployment.
+	if err := os.MkdirAll(cfg.Claude.DefaultWorkingDirectory, 0o755); err != nil {
+		return fmt.Errorf("prepare the default working directory: %w", err)
+	}
+
 	// Durable local execution state: it is what lets this backend keep working
 	// through a Core outage and replay afterwards.
 	store, err := state.OpenSQLite(cfg.StatePath)

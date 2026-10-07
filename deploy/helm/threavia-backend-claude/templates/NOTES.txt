@@ -1,0 +1,31 @@
+{{ include "backend.fullname" . }} is installed.
+
+The backend opens an outbound connection to Core at {{ .Values.core.address }}.
+Nothing connects to it, so it needs no Ingress and no inbound firewall rule.
+
+{{- if not .Values.persistence.enabled }}
+
+  WARNING: persistence is disabled. The backend credential, its local execution
+  state and the native provider sessions live in the pod filesystem, so a
+  restart registers a second instance and loses every resumable session.
+{{- end }}
+
+{{- if and (not .Values.core.token) (not .Values.core.registrationToken) (not .Values.core.sharedKey) (not .Values.core.existingSecret) }}
+
+  No credential is configured. The backend will start and fail to connect until
+  one is provided:
+
+    helm upgrade {{ .Release.Name }} ... --set core.registrationToken=<token>
+
+  Create the token with:
+
+    curl -X POST $CORE/api/v1/backend-tokens -d '{"label":"k8s"}'
+{{- end }}
+
+Follow what it does with:
+
+  kubectl logs -f statefulset/{{ include "backend.fullname" . }}
+
+Then check that Core sees it:
+
+  curl $CORE/api/v1/backends

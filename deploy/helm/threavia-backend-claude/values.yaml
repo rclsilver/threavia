@@ -1,0 +1,119 @@
+# A Threavia BackendInstance running Claude Code.
+#
+# A backend is not part of Core: it is a separate deployment that opens an
+# outbound connection to Core and owns the provider credentials, the native
+# sessions and the filesystem the agent works on (specification sections 7
+# and 29). Core never connects to it.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/rclsilver/threavia-backend-claude
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+log:
+  level: info
+  format: json
+
+core:
+  # gRPC address of the Core control plane.
+  address: "threavia:9090"
+  # HTTP base url, used once, to register.
+  api: "http://threavia:8080"
+
+  tls:
+    enabled: true
+    # A CA bundle for a private certificate authority, as a ConfigMap or Secret
+    # key mounted at this path. Empty uses the system roots.
+    caFile: ""
+    serverName: ""
+    # Never true outside a throwaway environment: it disables the verification
+    # that keeps a credential from reaching the wrong Core.
+    insecureSkipVerify: false
+
+  # Exactly one of these identifies the backend to Core.
+  #
+  # token is the persistent credential of an already-registered instance;
+  # registrationToken is a one-shot user token, which claims the instance for
+  # that user immediately; sharedKey registers an UNCLAIMED instance the user
+  # then claims with a one-time code. Whichever is used, the backend stores its
+  # credential on the persistent volume and never needs it again.
+  token: ""
+  registrationToken: ""
+  sharedKey: ""
+
+  # Read the values above from an existing Secret instead of creating one.
+  existingSecret: ""
+  existingSecretTokenKey: token
+  existingSecretRegistrationTokenKey: registrationToken
+  existingSecretSharedKeyKey: sharedKey
+
+backend:
+  # Defaults to the pod name, which is stable because this is a StatefulSet.
+  instanceName: ""
+  maxConcurrentRuns: 2
+  heartbeatInterval: 15s
+
+  # Where a Session with no working directory runs.
+  defaultWorkingDirectory: /home/threavia/work
+  # Directories that automatic discovery and search may look at. Not a sandbox:
+  # filesystem access is the real OS permissions of this container
+  # (specification sections 11 and 28).
+  discoveryRoots: []
+
+  # Skills that exist only on this backend. Core learns their names and never
+  # their content (specification section 18).
+  localSkillRoots: []
+  # Private rules appended to the project instructions, for what is specific to
+  # this machine or this provider.
+  localInstructions: ""
+
+provider:
+  # ANTHROPIC_API_KEY for Claude Code. Leave empty when the provider session is
+  # already authenticated on the persistent volume.
+  apiKey: ""
+  existingSecret: ""
+  existingSecretKey: apiKey
+
+# The durable local state of specification section 10, plus the native provider
+# data: the whole home directory, so a restart resumes rather than re-registers.
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+
+# Extra environment for the provider or for a corporate network: proxies,
+# certificates, git configuration.
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+podAnnotations: {}
+podSecurityContext:
+  fsGroup: 65532
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 65532
+  capabilities:
+    drop:
+      - ALL
