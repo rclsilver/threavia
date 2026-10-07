@@ -405,7 +405,12 @@ jobs:
           Binaries for linux and darwin, amd64 and arm64, are attached with their
           checksums.
           EOF
-          gh release create "${version}" dist/* \
+          # Named rather than globbed: every artifact of the run lands in dist/,
+          # and the built web client brings an assets/ directory with it. A bare
+          # dist/* hands that directory to the uploader, which fails on it after
+          # the release has already been created.
+          gh release create "${version}" \
+            dist/*.tar.gz dist/*.tgz dist/SHA256SUMS \
             --title "${version}" \
             --notes-file notes.md \
             --verify-tag
