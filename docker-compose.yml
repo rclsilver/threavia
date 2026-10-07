@@ -1,8 +1,8 @@
 # Local development dependencies for Threavia Core.
 #
 # Core requires PostgreSQL and S3-compatible object storage
-# (THREAVIA_SPEC_V1.md section 19). MinIO is used here because it is convenient
-# locally; nothing in Core or in the Helm chart assumes it.
+# (THREAVIA_SPEC_V1.md section 19). Garage is used here because it is small and
+# convenient locally; nothing in Core or in the Helm chart assumes it.
 services:
   postgres:
     image: postgres:17-alpine
@@ -20,23 +20,26 @@ services:
       timeout: 5s
       retries: 10
 
+  # Object storage is a V1 infrastructure requirement but the first vertical
+  # slice runs without it, so it sits behind a profile: `make dev-up` starts only
+  # what Core actually needs. Run `make dev-up-storage` to add it.
   objectstore:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: threavia
-      MINIO_ROOT_PASSWORD: threavia-dev-secret
+    profiles: ["objectstore"]
+    image: dxflrs/garage:v2.1.0
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "3900:3900"   # S3 API
+      - "3903:3903"   # admin API
     volumes:
-      - objectstore-data:/data
+      - ./deploy/dev/garage.toml:/etc/garage.toml:ro
+      - objectstore-meta:/var/lib/garage/meta
+      - objectstore-data:/var/lib/garage/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "/garage", "status"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
 volumes:
   postgres-data:
+  objectstore-meta:
   objectstore-data:

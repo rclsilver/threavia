@@ -221,3 +221,14 @@ Capabilities are declared at registration, not only in the Hello frame, and ever
 Hello refreshes them. Without that, Core could not queue work for a backend that
 is currently offline, since a backend that never connected would advertise
 nothing.
+
+### Local object storage
+
+`make dev-up` starts only PostgreSQL, because the first vertical slice runs
+without object storage. `make dev-up-storage` adds Garage behind a compose
+profile and configures it: a Garage node ships unconfigured and stores nothing
+until a cluster layout is applied, so the init script assigns the layout, creates
+the bucket and the key, and prints the credentials. It is idempotent.
+
+Garage is a local convenience, not a dependency: Core talks to a generic
+S3-compatible endpoint, and the Helm chart deploys no storage at all.

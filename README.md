@@ -75,10 +75,11 @@ nix-shell --run make   # or run a single target
 ## Local development
 
 ```bash
-make dev-up        # start PostgreSQL and MinIO
+make dev-up        # start PostgreSQL
 make migrate       # apply the database migrations
 make test          # run the test suite
 make test-db       # add the database integration and end-to-end tests
+make dev-up-storage # add S3-compatible object storage (Garage), configured
 make build         # build both binaries into bin/
 ```
 

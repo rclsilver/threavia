@@ -92,8 +92,8 @@ postgres:
   # Apply pending migrations at startup.
   autoMigrate: true
 
-# S3-compatible object storage. Any implementation works: nothing here assumes
-# MinIO.
+# S3-compatible object storage. Any implementation works: nothing here assumes a
+# particular one.
 s3:
   enabled: false
   endpoint: ""

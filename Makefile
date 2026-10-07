@@ -60,8 +60,13 @@ tidy: ## Tidy the Go module
 	go mod tidy
 
 .PHONY: dev-up
-dev-up: ## Start PostgreSQL and the S3-compatible storage for local development
+dev-up: ## Start the local development dependencies (PostgreSQL)
 	docker compose up -d
+
+.PHONY: dev-up-storage
+dev-up-storage: ## Also start and configure the S3-compatible object storage
+	docker compose --profile objectstore up -d
+	./deploy/dev/garage-init.sh
 
 .PHONY: dev-down
 dev-down: ## Stop the local development dependencies

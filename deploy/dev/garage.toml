@@ -1,0 +1,24 @@
+# Garage configuration for local development only.
+#
+# Threavia talks to a generic S3-compatible endpoint: Garage here, something
+# else in production. Nothing in Core or in the Helm chart assumes either.
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir     = "/var/lib/garage/data"
+db_engine    = "sqlite"
+
+replication_factor = 1
+
+# Single-node development cluster, so this secret never leaves the container.
+rpc_bind_addr   = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret      = "0000000000000000000000000000000000000000000000000000000000000001"
+
+[s3_api]
+s3_region   = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.garage.localhost"
+
+[admin]
+api_bind_addr = "[::]:3903"
+admin_token   = "threavia-dev-admin"
