@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-router';
 
 import { AppShell } from '@/components/app-shell';
+import { DashboardView } from '@/routes/dashboard';
 import { DraftView } from '@/routes/draft';
 import { ProjectView } from '@/routes/project';
 import { SessionView } from '@/routes/session';
@@ -21,11 +22,7 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: () => (
-    <div className="text-muted flex flex-1 items-center justify-center p-6 text-sm">
-      Select a session, or start a new one.
-    </div>
-  ),
+  component: DashboardView,
 });
 
 const draftRoute = createRoute({

@@ -1,5 +1,5 @@
 import { Link, useParams } from '@tanstack/react-router';
-import { PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react';
+import { ListChecks, PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import {
@@ -11,8 +11,10 @@ import {
   useProjects,
   useRevokeBackend,
   useSessions,
+  useTasks,
 } from '@/api/queries';
 import type { BackendInstance, Session } from '@/api/types';
+import { SelectedProject } from '@/use-project';
 import { useStream } from '@/use-stream';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -94,10 +96,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {collapsed ? (
-          // The rail keeps the two things that are not a list: the way back,
-          // and the person using it. A session title cut to three characters
-          // would be worse than not showing one.
-          <UserMenu backends={backends.data ?? []} collapsed />
+          // The rail keeps what is not a list: the way back, the work still
+          // owed, and the person using it. A session title cut to three
+          // characters would be worse than not showing one.
+          <>
+            {projectId && <OpenTasks projectId={projectId} collapsed />}
+            <UserMenu backends={backends.data ?? []} collapsed />
+          </>
         ) : (
           <>
         <section className="space-y-2">
@@ -118,13 +123,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <NewProjectButton onCreated={setProjectId} />
           </div>
           {projectId && (
-            <Link
-              to="/projects/$projectId"
-              params={{ projectId }}
-              className="text-accent block text-sm hover:underline"
-            >
-              Tasks, decisions, skills…
-            </Link>
+            <div className="space-y-0.5">
+              <OpenTasks projectId={projectId} />
+              <Link
+                to="/projects/$projectId"
+                params={{ projectId }}
+                className="text-muted hover:bg-surface-2 hover:text-text block rounded-lg px-2 py-1.5 text-sm"
+              >
+                Decisions, artifacts, skills…
+              </Link>
+            </div>
           )}
         </section>
 
@@ -175,7 +183,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
       </aside>
 
-      <main className="flex min-h-0 flex-col overflow-hidden">{children}</main>
+      <main className="flex min-h-0 flex-col overflow-hidden">
+        {/* Which Project the sidebar is pointing at, for the views that have no
+            Project in their own URL. */}
+        <SelectedProject.Provider value={projectId}>{children}</SelectedProject.Provider>
+      </main>
     </div>
   );
 }
@@ -204,6 +216,49 @@ function groupSessions(sessions: Session[]): { label: string; sessions: Session[
     bucket.sessions.push(session);
   }
   return buckets.filter((bucket) => bucket.sessions.length > 0);
+}
+
+/**
+ * The work still owed on this Project, as a count that is always on screen.
+ *
+ * Tasks are what an agent and a person agree is left to do, and they were a tab
+ * behind a link: something you had to already know about to go and look at. The
+ * count belongs where the eye passes anyway, folded sidebar included, because a
+ * number nobody sees cannot remind anyone of anything.
+ */
+function OpenTasks({ projectId, collapsed = false }: { projectId: string; collapsed?: boolean }) {
+  const tasks = useTasks(projectId, false);
+  const open = tasks.data?.length ?? 0;
+  const title = `${open} open task${open === 1 ? '' : 's'}`;
+
+  if (collapsed) {
+    return (
+      <Button asChild variant="ghost" size="icon" title={title} className="relative self-center">
+        <Link to="/projects/$projectId" params={{ projectId }}>
+          <ListChecks />
+          {open > 0 && (
+            <span className="bg-accent text-accent-text ring-surface absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[0.625rem] font-medium ring-2">
+              {open > 99 ? '99+' : open}
+            </span>
+          )}
+        </Link>
+      </Button>
+    );
+  }
+
+  return (
+    <Link
+      to="/projects/$projectId"
+      params={{ projectId }}
+      title={title}
+      className="hover:bg-surface-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm"
+    >
+      <ListChecks className="text-muted size-4" />
+      <span className="flex-1">Tasks</span>
+      {/* Nothing left is worth saying too: an empty badge reads as a bug. */}
+      <Badge tone={open > 0 ? 'accent' : 'neutral'}>{open}</Badge>
+    </Link>
+  );
 }
 
 const COLLAPSED_KEY = 'threavia.sidebar.collapsed';

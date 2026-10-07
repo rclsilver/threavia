@@ -14,6 +14,7 @@ export const keys = {
   directories: (projectId: string) => ['directories', projectId] as const,
   bindings: (directoryId: string) => ['bindings', directoryId] as const,
   tasks: (projectId: string, includeDone: boolean) => ['tasks', projectId, { includeDone }] as const,
+  readyTasks: (projectId: string) => ['tasks', projectId, 'ready'] as const,
   decisions: (projectId: string) => ['decisions', projectId] as const,
   artifacts: (projectId: string) => ['artifacts', projectId] as const,
   skills: (projectId: string) => ['skills', projectId] as const,

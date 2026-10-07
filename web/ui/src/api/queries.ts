@@ -309,6 +309,22 @@ export function useTasks(projectId: string | undefined, includeDone: boolean) {
   });
 }
 
+/**
+ * The Tasks that can be started now: TODO with every dependency done.
+ *
+ * Core derives this from the graph and never stores it, so asking is the only
+ * way to know; computing it in the client would be a second opinion on the same
+ * question.
+ */
+export function useReadyTasks(projectId: string | undefined) {
+  return useQuery({
+    queryKey: keys.readyTasks(projectId ?? ''),
+    queryFn: () =>
+      api.get<List<Task>>(`/api/v1/projects/${projectId}/tasks/ready`).then(items),
+    enabled: Boolean(projectId),
+  });
+}
+
 export function useCreateTask(projectId: string) {
   const queries = useQueryClient();
   return useMutation({
