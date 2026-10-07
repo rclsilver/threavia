@@ -174,3 +174,46 @@ func (s *Store) JobPrompt(ctx context.Context, jobID domain.JobID) (string, erro
 		LIMIT 1`, jobID).Scan(&prompt)
 	return prompt, classify(err, "read job prompt")
 }
+
+// HistoryHit is one result of a project history search.
+type HistoryHit struct {
+	Envelope events.Envelope `json:"event"`
+	// Excerpt is the matching text, already bounded.
+	Excerpt string `json:"excerpt"`
+}
+
+// SearchHistory runs a full-text search over the episodic layer of project
+// memory: the messages and summaries in the event timeline (spec section 15).
+//
+// It is PostgreSQL full-text search, not embeddings: V1 deliberately requires no
+// vector database.
+func (s *Store) SearchHistory(ctx context.Context, projectID domain.ProjectID, query string, limit int) ([]HistoryHit, error) {
+	rows, err := s.q.Query(ctx, `
+		SELECT `+eventColumns+`,
+		       ts_headline('simple',
+		           coalesce(e.payload->>'text', coalesce(e.payload->>'summary', '')),
+		           websearch_to_tsquery('simple', $2),
+		           'MaxFragments=1,MaxWords=40,MinWords=10')
+		FROM events e
+		WHERE e.project_id = $1 AND e.search @@ websearch_to_tsquery('simple', $2)
+		ORDER BY ts_rank(e.search, websearch_to_tsquery('simple', $2)) DESC,
+		         e.global_sequence DESC
+		LIMIT $3`, projectID, query, limit)
+	if err != nil {
+		return nil, classify(err, "search project history")
+	}
+	defer rows.Close()
+
+	var out []HistoryHit
+	for rows.Next() {
+		var hit HistoryHit
+		if err := rows.Scan(&hit.Envelope.ID, &hit.Envelope.Sequence, &hit.Envelope.Type,
+			&hit.Envelope.ProjectID, &hit.Envelope.SessionID, &hit.Envelope.RunID,
+			&hit.Envelope.JobID, &hit.Envelope.Payload, &hit.Envelope.Timestamp,
+			&hit.Excerpt); err != nil {
+			return nil, classify(err, "read a history hit")
+		}
+		out = append(out, hit)
+	}
+	return out, classify(rows.Err(), "search project history")
+}

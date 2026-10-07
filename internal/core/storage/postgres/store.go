@@ -90,3 +90,24 @@ func classify(err error, context string) error {
 	}
 	return fmt.Errorf("%s: %w", context, err)
 }
+
+// rows is the subset of pgx.Rows the collectors need.
+type rowSet interface {
+	Next() bool
+	Err() error
+	Scan(dest ...any) error
+}
+
+// collect drains a result set with a scanner, which every list query in this
+// package would otherwise repeat verbatim.
+func collect[T any](rows rowSet, scan func(scanner) (T, error), context string) ([]T, error) {
+	var out []T
+	for rows.Next() {
+		value, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, value)
+	}
+	return out, classify(rows.Err(), context)
+}

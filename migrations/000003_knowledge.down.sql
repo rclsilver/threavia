@@ -1,0 +1,7 @@
+DROP INDEX IF EXISTS events_search_idx;
+ALTER TABLE events DROP COLUMN IF EXISTS search;
+
+DROP TABLE IF EXISTS job_tasks;
+DROP TABLE IF EXISTS task_dependencies;
+DROP TABLE IF EXISTS tasks;
+DROP TABLE IF EXISTS decisions;
