@@ -263,3 +263,17 @@ func queryBool(r *http.Request, name string) bool {
 	value, err := strconv.ParseBool(r.URL.Query().Get(name))
 	return err == nil && value
 }
+
+// channel reports which kind of client sent the request (spec section 6).
+//
+// A header rather than a body field, so every route carries it the same way,
+// including the ones with no body at all. An absent header is not an error: it
+// becomes the generic API channel, and the request works exactly as before.
+func channel(r *http.Request) domain.Channel {
+	if header := r.Header.Get("X-Threavia-Channel"); header != "" {
+		return domain.NormaliseChannel(header)
+	}
+	// A browser EventSource cannot set a header, so the stream also accepts it
+	// as a query parameter.
+	return domain.NormaliseChannel(r.URL.Query().Get("channel"))
+}

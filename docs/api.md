@@ -97,6 +97,21 @@ Selected by `THREAVIA_AUTH_MODE`:
   claim that identifies the user, `sub` by default because it is the only claim
   an issuer guarantees to be stable and unique.
 
+
+## Notification relevance
+
+Every command may declare which kind of client sent it, with the
+`X-Threavia-Channel` header (`web`, `android`, `vscode`, `voice`, …). The SSE
+stream accepts the same value as a `channel` query parameter, because a browser
+`EventSource` cannot set a header. An absent or malformed value becomes `api`
+and changes nothing else.
+
+Core records that channel on the Job it creates, and each pending attention item
+carries it back as `originChannel` together with a `notify` hint. `notify` is
+false when the client that started the work still holds a live stream: it is
+already showing the event, so an OS notification would only repeat it
+(section 6). Core itself pushes nothing; it says what is worth pushing.
+
 ## Invariants to preserve
 
 Two properties shape every endpoint above:

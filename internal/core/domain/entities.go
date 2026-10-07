@@ -60,12 +60,16 @@ type Job struct {
 	Status JobStatus `json:"status"`
 	// IdempotencyKey carries the client request id used to make enqueueing
 	// retry-safe (spec section 27).
-	IdempotencyKey *string    `json:"-"`
-	Error          *string    `json:"error,omitempty"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	UpdatedAt      time.Time  `json:"updatedAt"`
-	StartedAt      *time.Time `json:"startedAt,omitempty"`
-	EndedAt        *time.Time `json:"endedAt,omitempty"`
+	IdempotencyKey *string `json:"-"`
+	// OriginChannel is the kind of client that started this work. Core records
+	// it so a device that is already watching the work is not also made to ring
+	// (spec section 6).
+	OriginChannel Channel    `json:"originChannel,omitempty"`
+	Error         *string    `json:"error,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	StartedAt     *time.Time `json:"startedAt,omitempty"`
+	EndedAt       *time.Time `json:"endedAt,omitempty"`
 }
 
 // BackendInstance is an autonomous remote execution participant. It belongs to a

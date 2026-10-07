@@ -79,11 +79,15 @@ func (s *Store) PendingValidations(ctx context.Context, ownerID domain.UserID, s
 }
 
 // CreateUserInputRequest inserts a pending request for an answer or a choice.
+//
+// The choices are coalesced because a free-text question legitimately has none,
+// and an absent list must not be the difference between a question reaching the
+// user and an event the backend replays forever.
 func (s *Store) CreateUserInputRequest(ctx context.Context, u *domain.UserInputRequest) error {
 	err := s.q.QueryRow(ctx, `
 		INSERT INTO user_input_requests (id, project_id, session_id, run_id, job_id,
 		                                 backend_request_id, status, prompt, choices, free_text)
-		VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', $7, $8, $9)
+		VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', $7, COALESCE($8::text[], '{}'), $9)
 		ON CONFLICT (job_id, backend_request_id) DO UPDATE SET id = user_input_requests.id
 		RETURNING id, created_at`,
 		u.ID, u.Scope.ProjectID, u.Scope.SessionID, u.Scope.RunID, u.Scope.JobID,

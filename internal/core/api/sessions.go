@@ -47,6 +47,7 @@ func (h *handler) startSession(w http.ResponseWriter, r *http.Request, identity 
 		BackendInstanceID: domain.BackendInstanceID(body.BackendInstanceID),
 		Message:           body.Message,
 		IdempotencyKey:    r.Header.Get("Idempotency-Key"),
+		Channel:           channel(r),
 	}
 	if body.WorkingDirectoryID != nil && *body.WorkingDirectoryID != "" {
 		dirID := domain.KnownDirectoryID(*body.WorkingDirectoryID)
@@ -167,7 +168,8 @@ func (h *handler) postMessage(w http.ResponseWriter, r *http.Request, identity a
 	}
 
 	job, err := h.svc.PostMessage(r.Context(), identity,
-		domain.SessionID(r.PathValue("sessionId")), body.Message, r.Header.Get("Idempotency-Key"))
+		domain.SessionID(r.PathValue("sessionId")), body.Message,
+		r.Header.Get("Idempotency-Key"), channel(r))
 	if err != nil {
 		h.fail(w, err)
 		return

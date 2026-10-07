@@ -4,11 +4,19 @@
 // from a snapshot plus the global event stream, and closing it never stops agent
 // execution. There is no build step and no framework on purpose.
 
+// CHANNEL tells Core which kind of client this is, so work followed here does
+// not also make an unrelated device ring (specification section 6).
+const CHANNEL = 'web';
+
 const api = {
   async call(method, path, body, headers = {}) {
     const response = await fetch(path, {
       method,
-      headers: body ? { 'Content-Type': 'application/json', ...headers } : headers,
+      headers: {
+        'X-Threavia-Channel': CHANNEL,
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+        ...headers,
+      },
       body: body ? JSON.stringify(body) : undefined,
     });
     if (response.status === 204) return null;
@@ -281,7 +289,7 @@ function validationCard(request) {
   const resolve = async (approved) => {
     approve.disabled = deny.disabled = true;
     try {
-      await api.post(`/api/v1/validations/${request.id}/resolve`, { approved, channel: 'web' });
+      await api.post(`/api/v1/validations/${request.id}/resolve`, { approved, channel: CHANNEL });
       card.remove();
     } catch (error) {
       toast(error.message);
@@ -309,7 +317,7 @@ function inputCard(request) {
   const resolve = async (value) => {
     if (!value) return;
     try {
-      await api.post(`/api/v1/user-input/${request.id}/resolve`, { value, channel: 'web' });
+      await api.post(`/api/v1/user-input/${request.id}/resolve`, { value, channel: CHANNEL });
       card.remove();
     } catch (error) {
       toast(error.message);
@@ -453,7 +461,7 @@ function describe(event) {
 function openStream() {
   state.stream?.close();
 
-  const stream = new EventSource(`/api/v1/events?after=${state.cursor}`);
+  const stream = new EventSource(`/api/v1/events?after=${state.cursor}&channel=${CHANNEL}`);
   state.stream = stream;
 
   stream.addEventListener('open', () => setConnection('live', 'pill-ok'));

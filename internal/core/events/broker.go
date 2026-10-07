@@ -31,7 +31,10 @@ func NewBroker() *Broker {
 
 // Subscription is one client stream.
 type Subscription struct {
-	id      int64
+	id int64
+	// channel is the kind of client holding this stream. It is what lets Core
+	// tell a watching device from an absent one (spec section 6).
+	channel domain.Channel
 	ownerID domain.UserID
 	ch      chan Envelope
 	lagged  atomic.Bool
@@ -47,12 +50,16 @@ func (s *Subscription) Lagged() bool { return s.lagged.Load() }
 // ClearLagged acknowledges that the subscriber has caught up.
 func (s *Subscription) ClearLagged() { s.lagged.Store(false) }
 
-// Subscribe registers a client stream for one user. The returned function
+// Subscribe registers a client stream for one user, declaring which kind of
+// client holds it. The returned function
 // cancels it and must always be called.
-func (b *Broker) Subscribe(ownerID domain.UserID) (*Subscription, func()) {
+func (b *Broker) Subscribe(ownerID domain.UserID, channel domain.Channel) (*Subscription, func()) {
 	b.mu.Lock()
 	b.next++
-	sub := &Subscription{id: b.next, ownerID: ownerID, ch: make(chan Envelope, subscriberBuffer)}
+	sub := &Subscription{
+		id: b.next, ownerID: ownerID, channel: channel,
+		ch: make(chan Envelope, subscriberBuffer),
+	}
 	b.subs[sub.id] = sub
 	b.mu.Unlock()
 
@@ -86,4 +93,25 @@ func (b *Broker) Subscribers() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return len(b.subs)
+}
+
+// Watching reports whether the user currently holds a live stream on a channel.
+//
+// It answers the question of specification section 6: a client that is already
+// receiving live events does not also need an OS notification, while a device
+// that initiated the work and is now away does.
+func (b *Broker) Watching(ownerID domain.UserID, channel domain.Channel) bool {
+	if channel == "" {
+		return false
+	}
+
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	for _, sub := range b.subs {
+		if sub.ownerID == ownerID && sub.channel == channel {
+			return true
+		}
+	}
+	return false
 }

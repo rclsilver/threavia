@@ -39,7 +39,7 @@ func (h *handler) resolveValidation(w http.ResponseWriter, r *http.Request, iden
 
 	resolved, err := h.svc.ResolveValidation(r.Context(), identity,
 		domain.ValidationRequestID(r.PathValue("validationId")),
-		body.Approved, channelOr(body.Channel), body.Note)
+		body.Approved, resolvedChannel(r, body.Channel), body.Note)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -58,7 +58,7 @@ func (h *handler) resolveUserInput(w http.ResponseWriter, r *http.Request, ident
 	}
 
 	resolved, err := h.svc.ResolveUserInput(r.Context(), identity,
-		domain.UserInputRequestID(r.PathValue("requestId")), body.Value, channelOr(body.Channel))
+		domain.UserInputRequestID(r.PathValue("requestId")), body.Value, resolvedChannel(r, body.Channel))
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -66,10 +66,12 @@ func (h *handler) resolveUserInput(w http.ResponseWriter, r *http.Request, ident
 	writeJSON(w, http.StatusOK, resolved)
 }
 
-// channelOr records which client answered, for the audit receipt.
-func channelOr(channel string) string {
-	if channel == "" {
-		return "api"
+// resolvedChannel records which client answered, for the audit receipt. The
+// body wins over the header, so a client that answers on behalf of another can
+// say so.
+func resolvedChannel(r *http.Request, declared string) string {
+	if declared != "" {
+		return domain.NormaliseChannel(declared).String()
 	}
-	return channel
+	return channel(r).String()
 }

@@ -47,6 +47,12 @@ type ValidationRequest struct {
 	// Humanized is an optional presentation kept for audit convenience only.
 	Humanized string `json:"humanized,omitempty"`
 
+	// OriginChannel and Notify are the notification relevance of specification
+	// section 6: which client started this work, and whether a push is worth
+	// sending. They are derived at read time, never stored on the request.
+	OriginChannel Channel `json:"originChannel,omitempty"`
+	Notify        bool    `json:"notify"`
+
 	Approved         *bool      `json:"approved,omitempty"`
 	ResolvedByUserID *UserID    `json:"resolvedByUserId,omitempty"`
 	ResolvedChannel  *string    `json:"resolvedChannel,omitempty"`
@@ -65,6 +71,11 @@ type UserInputRequest struct {
 	Prompt           string             `json:"prompt"`
 	Choices          []string           `json:"choices,omitempty"`
 	FreeText         bool               `json:"freeText"`
+
+	// OriginChannel and Notify carry the notification relevance of section 6.
+	// They are derived at read time, never stored on the request.
+	OriginChannel Channel `json:"originChannel,omitempty"`
+	Notify        bool    `json:"notify"`
 
 	Value            *string    `json:"value,omitempty"`
 	ResolvedByUserID *UserID    `json:"resolvedByUserId,omitempty"`

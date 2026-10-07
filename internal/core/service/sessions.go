@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"unicode"
 
@@ -27,6 +28,8 @@ type StartSessionInput struct {
 	// IdempotencyKey makes a retried first send return the same Session rather
 	// than creating a second one.
 	IdempotencyKey string
+	// Channel is the kind of client that started this work (spec section 6).
+	Channel domain.Channel
 }
 
 // StartSessionResult is what the first send created.
@@ -87,6 +90,7 @@ func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in S
 		RunID:          result.Run.ID,
 		Status:         domain.JobQueued,
 		IdempotencyKey: optionalString(in.IdempotencyKey),
+		OriginChannel:  in.Channel,
 	}
 
 	scope := domain.Scope{
@@ -149,7 +153,7 @@ func (s *Service) replayStartSession(ctx context.Context, identity auth.Identity
 // PostMessage appends a message to an existing Session. It becomes a new Job on
 // the current Run, which is how a second message resumes the same provider
 // native session.
-func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string) (domain.Job, error) {
+func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string, originChannel domain.Channel) (domain.Job, error) {
 	message = strings.TrimSpace(message)
 	if message == "" {
 		return domain.Job{}, fmt.Errorf("%w: the message cannot be empty", ErrInvalid)
@@ -183,6 +187,7 @@ func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessi
 		RunID:          run.ID,
 		Status:         domain.JobQueued,
 		IdempotencyKey: optionalString(idempotencyKey),
+		OriginChannel:  originChannel,
 	}
 	scope := domain.Scope{ProjectID: session.ProjectID, SessionID: sessionID, RunID: run.ID, JobID: job.ID}
 	b := &batch{ownerID: identity.UserID}
@@ -347,7 +352,63 @@ func (s *Service) Attention(ctx context.Context, identity auth.Identity, session
 	if err != nil {
 		return domain.Attention{}, translate(err)
 	}
-	return domain.Attention{Validations: validations, UserInputs: inputs}, nil
+
+	attention := domain.Attention{Validations: validations, UserInputs: inputs}
+	s.markRelevance(ctx, identity.UserID, &attention)
+	return attention, nil
+}
+
+// markRelevance fills in the notification relevance of specification section 6.
+//
+// Core does not push anything itself, and V1 has no device registry. What it can
+// say is which client started the work and whether that client is still
+// watching, which is exactly what a notifier needs to avoid making an unrelated
+// device ring for work someone is following on their screen.
+func (s *Service) markRelevance(ctx context.Context, ownerID domain.UserID, attention *domain.Attention) {
+	ids := make([]domain.JobID, 0, len(attention.Validations)+len(attention.UserInputs))
+	for _, item := range attention.Validations {
+		ids = append(ids, item.Scope.JobID)
+	}
+	for _, item := range attention.UserInputs {
+		ids = append(ids, item.Scope.JobID)
+	}
+
+	origins, err := s.store.JobOriginChannels(ctx, ids)
+	if err != nil {
+		// Relevance is a hint. Losing it must not cost the user the list of what
+		// is actually waiting for them.
+		s.logger.Error("cannot read the origin channels of pending work",
+			slog.String("error", err.Error()))
+		return
+	}
+
+	// Looked up once per channel: a user holds a handful of streams, and the
+	// answer is the same for every item that came from the same client.
+	watching := make(map[domain.Channel]bool, 4)
+	notify := func(origin domain.Channel) bool {
+		if origin == "" {
+			return true
+		}
+		live, known := watching[origin]
+		if !known {
+			live = s.broker.Watching(ownerID, origin)
+			watching[origin] = live
+		}
+		// The client that started the work is receiving the live events, so a
+		// notification would only repeat what it already shows.
+		return !live
+	}
+
+	for i := range attention.Validations {
+		origin := origins[attention.Validations[i].Scope.JobID]
+		attention.Validations[i].OriginChannel = origin
+		attention.Validations[i].Notify = notify(origin)
+	}
+	for i := range attention.UserInputs {
+		origin := origins[attention.UserInputs[i].Scope.JobID]
+		attention.UserInputs[i].OriginChannel = origin
+		attention.UserInputs[i].Notify = notify(origin)
+	}
 }
 
 // checkBackendUsable rejects a backend that cannot run CODE work.

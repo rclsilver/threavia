@@ -13,17 +13,17 @@ import (
 // invariant of specification section 3.4.
 var ErrJobSlotTaken = errors.New("the run already has an active job")
 
-const jobColumns = `j.id, j.run_id, j.status, j.idempotency_key, j.error,
+const jobColumns = `j.id, j.run_id, j.status, j.idempotency_key, j.error, j.origin_channel,
 	j.created_at, j.updated_at, j.started_at, j.ended_at`
 
 // CreateJob inserts a Job. A Job is created QUEUED and is dispatched
 // separately, so that enqueueing never depends on backend availability.
 func (s *Store) CreateJob(ctx context.Context, job *domain.Job) error {
 	err := s.q.QueryRow(ctx, `
-		INSERT INTO jobs (id, run_id, status, idempotency_key)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO jobs (id, run_id, status, idempotency_key, origin_channel)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING created_at, updated_at`,
-		job.ID, job.RunID, job.Status, job.IdempotencyKey,
+		job.ID, job.RunID, job.Status, job.IdempotencyKey, job.OriginChannel,
 	).Scan(&job.CreatedAt, &job.UpdatedAt)
 	return classify(err, "create job")
 }
@@ -165,7 +165,7 @@ type JobContext struct {
 func (s *Store) LoadJobContext(ctx context.Context, id domain.JobID) (JobContext, error) {
 	var jc JobContext
 	err := s.q.QueryRow(ctx, `
-		SELECT j.id, j.run_id, j.status, j.idempotency_key, j.error,
+		SELECT j.id, j.run_id, j.status, j.idempotency_key, j.error, j.origin_channel,
 		       j.created_at, j.updated_at, j.started_at, j.ended_at,
 		       r.id, r.session_id, r.backend_instance_id, r.native_session_id,
 		       r.resume_status, r.resume_reason, r.created_at, r.updated_at,
@@ -180,6 +180,7 @@ func (s *Store) LoadJobContext(ctx context.Context, id domain.JobID) (JobContext
 		      AND b.backend_instance_id = r.backend_instance_id
 		WHERE j.id = $1`, id).Scan(
 		&jc.Job.ID, &jc.Job.RunID, &jc.Job.Status, &jc.Job.IdempotencyKey, &jc.Job.Error,
+		&jc.Job.OriginChannel,
 		&jc.Job.CreatedAt, &jc.Job.UpdatedAt, &jc.Job.StartedAt, &jc.Job.EndedAt,
 		&jc.Run.ID, &jc.Run.SessionID, &jc.Run.BackendInstanceID, &jc.Run.NativeSessionID,
 		&jc.Run.ResumeStatus, &jc.Run.ResumeReason, &jc.Run.CreatedAt, &jc.Run.UpdatedAt,
@@ -250,7 +251,35 @@ func (s *Store) ActiveJobsForBackend(ctx context.Context, instanceID domain.Back
 
 func scanJob(row scanner) (domain.Job, error) {
 	var job domain.Job
-	err := row.Scan(&job.ID, &job.RunID, &job.Status, &job.IdempotencyKey, &job.Error,
+	err := row.Scan(&job.ID, &job.RunID, &job.Status, &job.IdempotencyKey, &job.Error, &job.OriginChannel,
 		&job.CreatedAt, &job.UpdatedAt, &job.StartedAt, &job.EndedAt)
 	return job, classify(err, "read job")
+}
+
+// JobOriginChannels returns which kind of client started each of the given
+// Jobs. It is read separately from the attention queries because it is a
+// presentation concern of specification section 6, not part of what makes an
+// item pending.
+func (s *Store) JobOriginChannels(ctx context.Context, ids []domain.JobID) (map[domain.JobID]domain.Channel, error) {
+	out := make(map[domain.JobID]domain.Channel, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+
+	rows, err := s.q.Query(ctx,
+		`SELECT id, origin_channel FROM jobs WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return nil, classify(err, "read job origin channels")
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id domain.JobID
+		var origin domain.Channel
+		if err := rows.Scan(&id, &origin); err != nil {
+			return nil, classify(err, "read job origin channels")
+		}
+		out[id] = origin
+	}
+	return out, classify(rows.Err(), "read job origin channels")
 }

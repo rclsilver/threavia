@@ -11,9 +11,9 @@ func TestBrokerDeliversToTheOwnerOnly(t *testing.T) {
 	t.Parallel()
 
 	broker := NewBroker()
-	mine, cancelMine := broker.Subscribe("thomas")
+	mine, cancelMine := broker.Subscribe("thomas", domain.ChannelWeb)
 	defer cancelMine()
-	theirs, cancelTheirs := broker.Subscribe("someone-else")
+	theirs, cancelTheirs := broker.Subscribe("someone-else", domain.ChannelWeb)
 	defer cancelTheirs()
 
 	broker.Publish("thomas", Envelope{Sequence: 1, Type: TypeAgentMessage})
@@ -40,7 +40,7 @@ func TestBrokerNeverBlocksOnASlowClient(t *testing.T) {
 	t.Parallel()
 
 	broker := NewBroker()
-	sub, cancel := broker.Subscribe("thomas")
+	sub, cancel := broker.Subscribe("thomas", domain.ChannelWeb)
 	defer cancel()
 
 	for i := range subscriberBuffer + 10 {
@@ -60,7 +60,7 @@ func TestBrokerUnsubscribe(t *testing.T) {
 	t.Parallel()
 
 	broker := NewBroker()
-	_, cancel := broker.Subscribe("thomas")
+	_, cancel := broker.Subscribe("thomas", domain.ChannelWeb)
 	if broker.Subscribers() != 1 {
 		t.Fatalf("subscribers = %d, want 1", broker.Subscribers())
 	}
@@ -70,4 +70,32 @@ func TestBrokerUnsubscribe(t *testing.T) {
 	}
 	// Publishing to nobody must not panic on the closed channel.
 	broker.Publish("thomas", Envelope{Sequence: 1})
+}
+
+// TestWatchingReportsLiveChannels pins the notification relevance of
+// specification section 6: a client that is already receiving live events must
+// not also be told to ring.
+func TestWatchingReportsLiveChannels(t *testing.T) {
+	t.Parallel()
+
+	broker := NewBroker()
+	_, cancel := broker.Subscribe("thomas", domain.ChannelWeb)
+
+	if !broker.Watching("thomas", domain.ChannelWeb) {
+		t.Fatal("a connected channel must be reported as watching")
+	}
+	if broker.Watching("thomas", domain.ChannelAndroid) {
+		t.Fatal("a channel with no stream must not be reported as watching")
+	}
+	if broker.Watching("someone-else", domain.ChannelWeb) {
+		t.Fatal("another user's stream must not count")
+	}
+	if broker.Watching("thomas", "") {
+		t.Fatal("an unknown origin is never watching")
+	}
+
+	cancel()
+	if broker.Watching("thomas", domain.ChannelWeb) {
+		t.Fatal("a closed stream must stop counting")
+	}
 }
