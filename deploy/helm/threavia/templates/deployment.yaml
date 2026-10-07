@@ -92,8 +92,10 @@ spec:
               value: {{ .Values.s3.useTLS | quote }}
             - name: THREAVIA_S3_FORCE_PATH_STYLE
               value: {{ .Values.s3.forcePathStyle | quote }}
+            # int64 first: Helm reads every YAML number as a float, and a float
+            # that large prints as 1.048576e+08, which Core refuses to parse.
             - name: THREAVIA_S3_MAX_UPLOAD_BYTES
-              value: {{ .Values.s3.maxUploadBytes | quote }}
+              value: {{ int64 .Values.s3.maxUploadBytes | quote }}
             - name: THREAVIA_S3_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
@@ -109,7 +111,7 @@ spec:
 
             # --- Core-managed Project Skills (spec section 18) ---
             - name: THREAVIA_SKILLS_MAX_BUNDLE_BYTES
-              value: {{ .Values.skills.maxBundleBytes | quote }}
+              value: {{ int64 .Values.skills.maxBundleBytes | quote }}
             - name: THREAVIA_SKILLS_MAX_FILES
               value: {{ .Values.skills.maxFiles | quote }}
             - name: THREAVIA_SKILLS_FETCH_TIMEOUT

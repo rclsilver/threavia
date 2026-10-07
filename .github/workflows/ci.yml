@@ -335,6 +335,17 @@ jobs:
         run: |
           for chart in threavia threavia-backend-claude; do
             helm lint "deploy/helm/${chart}"
+
+            # Helm reads every YAML number as a float, and a float big enough
+            # renders as 1.048576e+08 — which the binary rejects at startup,
+            # four minutes into a deployment. lint says nothing about it, so
+            # the rendered output is what gets checked.
+            if helm template check "deploy/helm/${chart}" --set s3.enabled=true |
+                 grep -nE 'value: "[0-9.]+e\+[0-9]+"'; then
+              echo "::error::${chart} renders a number in scientific notation, wrap it in int64"
+              exit 1
+            fi
+
             helm package "deploy/helm/${chart}" \
               --version "${version}" --app-version "${version}" --destination dist
           done
