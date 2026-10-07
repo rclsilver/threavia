@@ -3,6 +3,7 @@ import { ArrowUp, Settings2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import {
+  useArchiveSession,
   useBackends,
   useCancelJob,
   useMoveSession,
@@ -91,7 +92,7 @@ export function SessionView() {
             )}
           </div>
         </div>
-        <SessionSettings sessionId={sessionId} />
+        <SessionSettings sessionId={sessionId} archived={data.session.status === 'ARCHIVED'} />
       </header>
 
       {(data.attention.validations?.length || data.attention.userInputs?.length) && (
@@ -259,7 +260,9 @@ function Composer({ sessionId }: { sessionId: string }) {
  * nothing about what they would do; behind one control they are where a person
  * already looks for them.
  */
-function SessionSettings({ sessionId }: { sessionId: string }) {
+function SessionSettings({ sessionId, archived }: { sessionId: string; archived: boolean }) {
+  const archive = useArchiveSession();
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -282,6 +285,23 @@ function SessionSettings({ sessionId }: { sessionId: string }) {
         <section className="border-border space-y-2 border-t pt-4">
           <h3 className="text-sm font-medium">Backend</h3>
           <MoveSession sessionId={sessionId} />
+        </section>
+
+        <section className="border-border space-y-2 border-t pt-4">
+          <h3 className="text-sm font-medium">{archived ? 'Archived' : 'Archive'}</h3>
+          <DialogDescription>
+            Archiving keeps everything — the timeline, what it cost, what was decided — and only
+            takes the Session out of the list of what is being worked on.
+          </DialogDescription>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={archive.isPending}
+            onClick={() => archive.mutate({ sessionId, archived: !archived })}
+          >
+            {archived ? 'Restore this session' : 'Archive this session'}
+          </Button>
+          {archive.error && <p className="text-danger text-sm">{archive.error.message}</p>}
         </section>
       </DialogContent>
     </Dialog>

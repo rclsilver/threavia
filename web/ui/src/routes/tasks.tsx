@@ -1,10 +1,11 @@
 import { Navigate, useParams } from '@tanstack/react-router';
-import { CircleDot, Lock, Plus, X } from 'lucide-react';
+import { CircleDot, Lock, Plus, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
 import {
   useAddTaskDependency,
   useCreateTask,
+  useDeleteTask,
   useReadyTasks,
   useRemoveTaskDependency,
   useTasks,
@@ -178,7 +179,7 @@ function Group({
                   </p>
                 )}
               </div>
-              <span className="flex shrink-0 gap-3">
+              <span className="flex shrink-0 items-center gap-3">
                 {nextStatuses(task.status).map((status) => (
                   <Button
                     key={status}
@@ -188,6 +189,7 @@ function Group({
                     {humanise(status)}
                   </Button>
                 ))}
+                <DeleteTask task={task} />
               </span>
             </div>
             <div className="pl-7">
@@ -197,6 +199,49 @@ function Group({
         ))}
       </ul>
     </section>
+  );
+}
+
+/**
+ * Taking a Task out of the Project.
+ *
+ * It asks first, in place: deleting is not undoable, and the row it would take
+ * away is right there to be read again. What was done about the Task stays in
+ * the timeline either way.
+ */
+function DeleteTask({ task }: { task: Task }) {
+  const remove = useDeleteTask();
+  const [asking, setAsking] = useState(false);
+
+  if (asking) {
+    return (
+      <span className="text-muted flex items-center gap-2 text-xs">
+        Delete?
+        <Button variant="ghost" size="sm" onClick={() => setAsking(false)}>
+          No
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
+          disabled={remove.isPending}
+          onClick={() => remove.mutate(task.id)}
+        >
+          Delete
+        </Button>
+      </span>
+    );
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-7 [&_svg]:size-3.5"
+      title="Delete this task"
+      onClick={() => setAsking(true)}
+    >
+      <Trash2 />
+    </Button>
   );
 }
 

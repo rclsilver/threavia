@@ -1,5 +1,7 @@
 import { Link, useParams } from '@tanstack/react-router';
 import {
+  Archive,
+  ArchiveRestore,
   BookText,
   FileText,
   History,
@@ -68,7 +70,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (!projectId && projects.data?.length) setProjectId(projects.data[0].id);
   }, [projectId, projects.data]);
 
-  const sessions = useSessions(projectId);
+  const [showArchived, setShowArchived] = useState(false);
+  // Archived Sessions are read from the same list, because asking for them
+  // separately would mean a second shape of answer for the same question.
+  const sessions = useSessions(projectId, showArchived);
+  const shown = (sessions.data ?? []).filter((session) =>
+    showArchived ? session.status === 'ARCHIVED' : session.status !== 'ARCHIVED',
+  );
   const [collapsed, setCollapsed] = useCollapsed();
 
   // Collapsed, the sidebar keeps a rail rather than disappearing: the control
@@ -148,14 +156,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <section className="flex min-h-0 flex-1 flex-col gap-2">
           <div className="flex items-center justify-between">
-            <Label>Sessions</Label>
-            {projectId && (
-              <Button asChild variant="ghost" size="icon" title="New session">
-                <Link to="/sessions/new" search={{ projectId }}>
-                  <Plus />
-                </Link>
+            <Label>{showArchived ? 'Archived sessions' : 'Sessions'}</Label>
+            <div className="flex items-center">
+              <Button
+                variant="ghost"
+                size="icon"
+                title={showArchived ? 'Back to active sessions' : 'Show archived sessions'}
+                onClick={() => setShowArchived((shown) => !shown)}
+              >
+                {showArchived ? <ArchiveRestore /> : <Archive />}
               </Button>
-            )}
+              {projectId && !showArchived && (
+                <Button asChild variant="ghost" size="icon" title="New session">
+                  <Link to="/sessions/new" search={{ projectId }}>
+                    <Plus />
+                  </Link>
+                </Button>
+              )}
+            </div>
           </div>
           {/*
            * Grouped by when they were last touched, and titled by nothing else:
@@ -163,7 +181,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
            * answer a question nobody asks per session, only per group.
            */}
           <div className="-mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
-            {groupSessions(sessions.data ?? []).map((group) => (
+            {shown.length === 0 && (
+              <p className="text-muted px-2 text-sm">
+                {showArchived ? 'Nothing archived.' : 'No sessions yet.'}
+              </p>
+            )}
+            {groupSessions(shown).map((group) => (
               <div key={group.label} className="space-y-0.5">
                 <p className="text-muted/80 px-2 pb-1 text-xs">{group.label}</p>
                 <ul>

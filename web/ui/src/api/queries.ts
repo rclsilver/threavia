@@ -166,11 +166,35 @@ export function useBackendSkills(backendId: string | undefined) {
 
 // ------------------------------------------------------------------ sessions
 
-export function useSessions(projectId: string | undefined) {
+export function useSessions(projectId: string | undefined, includeArchived = false) {
   return useQuery({
-    queryKey: keys.sessions(projectId ?? ''),
-    queryFn: () => api.get<List<Session>>(`/api/v1/projects/${projectId}/sessions`).then(items),
+    queryKey: keys.sessions(projectId ?? '', includeArchived),
+    queryFn: () =>
+      api
+        .get<List<Session>>(
+          `/api/v1/projects/${projectId}/sessions?includeArchived=${includeArchived}`,
+        )
+        .then(items),
     enabled: Boolean(projectId),
+  });
+}
+
+/**
+ * Archiving a Session, and bringing it back.
+ *
+ * Archiving is not deleting: the timeline, the costs and the decisions that
+ * came out of it stay. It only takes the Session out of the list of what is
+ * being worked on, which is the list a person reads twenty times a day.
+ */
+export function useArchiveSession() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sessionId, archived }: { sessionId: string; archived: boolean }) =>
+      api.post<Session>(`/api/v1/sessions/${sessionId}/${archived ? 'archive' : 'restore'}`, {}),
+    onSuccess: (_session, { sessionId }) => {
+      void queries.invalidateQueries({ queryKey: ['sessions'] });
+      void queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
+    },
   });
 }
 
@@ -356,6 +380,20 @@ export function useUpdateTask() {
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: TaskStatus }) =>
       api.patch<Task>(`/api/v1/tasks/${id}`, { status }),
+    onSuccess: () => queries.invalidateQueries({ queryKey: ['tasks'] }),
+  });
+}
+
+/**
+ * Deleting a Task.
+ *
+ * An agent files tasks freely, so taking one back has to be as cheap as filing
+ * it, or the list of what is left to do fills with work nobody meant to do.
+ */
+export function useDeleteTask() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (taskId: string) => api.delete(`/api/v1/tasks/${taskId}`),
     onSuccess: () => queries.invalidateQueries({ queryKey: ['tasks'] }),
   });
 }
