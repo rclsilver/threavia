@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
@@ -410,5 +411,73 @@ func TestUndeclaredToolsAreRefused(t *testing.T) {
 	}
 	if asker.toolName != "" {
 		t.Fatalf("an undeclared tool reached Core as %q", asker.toolName)
+	}
+}
+
+// TestThreaviaToolsNeedNoPermission is a regression test.
+//
+// Claude Code asks the permission prompt about every tool it is not already
+// allowed, Threavia's own included. A Core Tool reads or writes the project
+// memory through Core — no filesystem, no network, no git — so the prompt said
+// nothing a user could act on, and the agent sat waiting for an answer until
+// its call timed out.
+func TestThreaviaToolsNeedNoPermission(t *testing.T) {
+	t.Parallel()
+
+	asker := &stubAsker{}
+	_, endpoint := newServer(t, asker,
+		mcp.CoreTool{Name: "project_history_search", Description: "Search the project history."})
+
+	for _, tool := range []string{
+		"mcp__threavia__project_history_search",
+		"project_history_search",
+		"mcp__threavia__ask_user",
+	} {
+		result, rpcErr := rpc(t, endpoint, "tools/call", map[string]any{
+			"name": mcp.ToolApprovalPrompt,
+			"arguments": map[string]any{
+				"tool_name": tool,
+				"input":     map[string]any{"query": "helm"},
+			},
+		})
+		if rpcErr != nil {
+			t.Fatalf("the approval prompt failed for %s: %v", tool, rpcErr)
+		}
+		if got := toolText(t, result); !strings.Contains(got, `"behavior":"allow"`) {
+			t.Errorf("%s was not allowed outright: %s", tool, got)
+		}
+	}
+
+	// Nothing reached the user, which is the point: no card to click, and no
+	// agent waiting on one.
+	if asker.toolName != "" {
+		t.Fatalf("a threavia tool reached the user as %q", asker.toolName)
+	}
+}
+
+// TestProviderToolsStillNeedPermission pins the other side: the gate is still
+// there for what actually touches the machine.
+func TestProviderToolsStillNeedPermission(t *testing.T) {
+	t.Parallel()
+
+	asker := &stubAsker{decision: mcp.Decision{Approved: false, Reason: "no"}}
+	_, endpoint := newServer(t, asker,
+		mcp.CoreTool{Name: "project_history_search", Description: "Search the project history."})
+
+	result, rpcErr := rpc(t, endpoint, "tools/call", map[string]any{
+		"name": mcp.ToolApprovalPrompt,
+		"arguments": map[string]any{
+			"tool_name": "Bash",
+			"input":     map[string]any{"command": "rm -rf /"},
+		},
+	})
+	if rpcErr != nil {
+		t.Fatalf("the approval prompt failed: %v", rpcErr)
+	}
+	if asker.toolName != "Bash" {
+		t.Fatalf("the provider tool did not reach the user, got %q", asker.toolName)
+	}
+	if got := toolText(t, result); !strings.Contains(got, `"behavior":"deny"`) {
+		t.Fatalf("the refusal did not reach the provider: %s", got)
 	}
 }

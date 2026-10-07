@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -135,6 +136,24 @@ type session struct {
 	coreTools []CoreTool
 }
 
+// provides reports whether a tool is one this endpoint serves, under either the
+// bare name or the mcp__<server>__<name> form the provider qualifies it with.
+//
+// It is what tells a Threavia tool apart from the provider's own Bash or Write:
+// one needs a decision from the user, the other is Core answering Core.
+func (s *session) provides(toolName string) bool {
+	name := strings.TrimPrefix(toolName, "mcp__"+ServerName+"__")
+	if name == ToolApprovalPrompt || name == ToolAskUser {
+		return true
+	}
+	for _, tool := range s.coreTools {
+		if tool.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // Register gives a Job its own endpoint and returns the URL to configure Claude
 // Code with. The token is the only thing standing between a local process and
 // another Job's prompts and project knowledge, so it must be unguessable.
@@ -245,7 +264,7 @@ func (s *Server) call(ctx context.Context, sess *session, raw json.RawMessage) (
 
 	switch params.Name {
 	case ToolApprovalPrompt:
-		return s.approvalPrompt(ctx, sess.jobID, params.Arguments)
+		return s.approvalPrompt(ctx, sess, params.Arguments)
 	case ToolAskUser:
 		return s.askUser(ctx, sess.jobID, params.Arguments)
 	}
@@ -263,11 +282,20 @@ func (s *Server) call(ctx context.Context, sess *session, raw json.RawMessage) (
 
 // approvalPrompt turns a Claude Code permission prompt into a Threavia
 // ValidationRequest and answers in the shape Claude Code expects.
-func (s *Server) approvalPrompt(ctx context.Context, jobID string, args map[string]any) (any, *rpcError) {
+func (s *Server) approvalPrompt(ctx context.Context, sess *session, args map[string]any) (any, *rpcError) {
+	jobID := sess.jobID
 	toolName, _ := args["tool_name"].(string)
 	input, _ := args["input"].(map[string]any)
 	if input == nil {
 		input = map[string]any{}
+	}
+
+	// A tool this endpoint provides needs no permission: it is Threavia asking
+	// Threavia. A Core Tool reads or writes the project's own memory through
+	// Core — no filesystem, no network, no git — so a prompt would say nothing
+	// a user could act on, and would stall the agent until someone answered it.
+	if sess.provides(toolName) {
+		return toolText(map[string]any{"behavior": "allow", "updatedInput": input})
 	}
 
 	s.logger.Info("permission requested",
