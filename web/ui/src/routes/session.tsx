@@ -63,7 +63,10 @@ export function SessionView() {
     <div className="flex min-h-0 flex-1 flex-col">
       {/* The frame keeps the window; only what is read is held to a column. */}
       <header className="border-border/70 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b px-5 py-3">
-        <div className="min-w-0">
+        {/* The title takes the width the header has: an input sized by its own
+            content is about twenty characters wide, which is narrower than
+            most of the titles it is there to edit. */}
+        <div className="min-w-0 flex-1">
           <SessionTitle sessionId={sessionId} title={data.session.title ?? ''} />
           <p className="text-muted text-xs">
             {active ? `Job ${humanise(active.status)}` : 'Idle'}
