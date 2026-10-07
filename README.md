@@ -15,10 +15,13 @@ follows that document.
 
 ## Status
 
-The MVP vertical slice of specification section 30 works end to end: from the
-web client, pick a Project, a BackendInstance and a KnownDirectory, send a
-message, watch Claude Code work, answer its permission requests and questions,
-and continue the conversation in the same provider session.
+The V1 surface of the specification is implemented. From the web client: pick a
+Project, a BackendInstance and a KnownDirectory, send a message, watch Claude
+Code work, answer its permission requests and questions, and continue in the
+same provider session. Beyond that first slice, a Project carries tasks,
+decisions, searchable history, artifacts, skills and instructions; an
+ExecutionPolicy bounds what an agent may do; a Session can move to another
+backend; and Core authenticates with none, basic or an OIDC issuer.
 
 Every acceptance criterion of section 32 is covered:
 
@@ -37,22 +40,23 @@ Every acceptance criterion of section 32 is covered:
 | 11 | A Job is cancelled with CANCELLING semantics | live run + `TestCancellationNeedsBackendConfirmation` |
 | 12 | A second message resumes the same native Claude session | live run + `TestSecondMessageResumesTheNativeSession` |
 
-The live runs drove the real Claude Code CLI: it created a file after its Write
-permission was approved through Core, answered a follow-up question from memory
-of the first turn without rereading the file, survived a Core restart mid-job,
-and stopped on cancellation.
+The live runs drove the real Claude Code CLI against real PostgreSQL and real
+S3-compatible storage: it created a file after its Write permission was approved
+through Core, answered a follow-up from memory of the first turn, survived a
+Core restart mid-job, stopped on cancellation, read back the project Skills it
+had been handed and the project instructions it had been given, and worked in a
+directory the backend located and bound on its own.
 
-What is deliberately not implemented, matching the deferrals of section 30 and
-the non-goals of section 33:
+What is deliberately not implemented, matching the non-goals of section 33:
 
-- Core Tools, Tasks and Decisions: the contracts exist, the services do not;
-- S3 Artifact flows, Skills, Android, Voice and cross-backend handoff;
-- OIDC authentication, which is accepted by the contract and refused at startup
-  rather than silently degrading;
-- the directory discovery and clone fallbacks of section 11: an unbound
-  directory is reported to the user instead of being guessed at;
-- the breadth of ExecutionPolicy: the first slice runs interactively, which is
-  what makes the validation flow observable.
+- the Android, Voice and VS Code clients: Core is client-agnostic and the web
+  client is the one written here;
+- automatic backend scheduling, scoring, failover and transparent migration: a
+  backend change is explicit;
+- the REVIEW capability, Crit/ChangeSet integration and vector memory search;
+- project sharing, roles and team models: V1 isolates per user;
+- external notification delivery: Core says what is worth pushing and pushes
+  nothing itself.
 
 ## Requirements
 
@@ -107,8 +111,15 @@ export THREAVIA_BACKEND_TLS_ENABLED=false    # local Core only; remote access ne
 make run-backend
 ```
 
-Then open <http://localhost:8080>, create a project, add a known directory and
-bind it to a real path on that backend, and send a first message.
+Then open <http://localhost:8080>, create a project and send a first message.
+
+A known directory is optional. Give it a name such as `puppet` and the backend
+locates it under its configured discovery roots when the Job starts, asking you
+where it is only if it cannot (section 11):
+
+```bash
+export THREAVIA_BACKEND_DISCOVERY_ROOTS=$HOME/git,$HOME/dev
+```
 
 `.env.example` lists every environment variable with its default.
 
@@ -125,7 +136,7 @@ make dev-reset     # stop the dependencies and delete their data
 ## Releasing
 
 CI runs on every push and pull request: lint, then tests, then a build of every
-target. Container images and the Helm chart are built on every run too, so a
+target. Container images and the Helm charts are built on every run too, so a
 broken Dockerfile surfaces long before release day, but they are published only
 from a tag.
 
@@ -134,7 +145,8 @@ Tagging `vX.Y.Z` publishes:
 - `ghcr.io/rclsilver/threavia-core:X.Y.Z` and
   `ghcr.io/rclsilver/threavia-backend-claude:X.Y.Z`, both linux/amd64 and
   linux/arm64;
-- the Helm chart as an OCI artifact at `oci://ghcr.io/rclsilver/charts/threavia`;
+- the Helm charts as OCI artifacts at `oci://ghcr.io/rclsilver/charts/threavia`
+  and `oci://ghcr.io/rclsilver/charts/threavia-backend-claude`;
 - a GitHub release with binary archives for linux and darwin, amd64 and arm64,
   and their SHA-256 checksums.
 
@@ -170,6 +182,7 @@ internal/core/events/            persistent event model and envelope
 internal/core/service/           Core application services
 internal/core/storage/postgres/  connection pool and migrations
 internal/core/storage/s3/        S3-compatible object storage
+internal/core/skills/            acquisition and packing of project skills
 internal/core/tools/             Core Tools exposed to agents
 internal/backends/claude/        Claude adapter, runner and MCP bridge
 internal/envutil/                environment parsing helpers
@@ -178,6 +191,7 @@ pkg/backend-sdk/                 reusable Go SDK for BackendInstances
 migrations/                      embedded PostgreSQL migrations
 deploy/docker/                   container images for Core and the Claude backend
 deploy/helm/threavia/            Helm chart for Core
+deploy/helm/threavia-backend-claude/  Helm chart for a Kubernetes backend
 examples/backend-example/        smallest possible BackendInstance
 docs/                            architecture, protocol and API notes
 web/                             web client, served from the Core binary

@@ -6,10 +6,10 @@ specification deliberately left open. The architecture itself is defined in
 
 ## The rule that shaped the code
 
-The repository started as the compilable skeleton of specification section 35
-and grew into the MVP vertical slice of section 30. One rule held throughout,
-and still does: **the structure is real, the behaviour is either implemented or
-explicitly absent, never faked**.
+The repository started as the compilable skeleton of specification section 35,
+became the MVP vertical slice of section 30 and now covers the V1 surface. One
+rule held throughout, and still does: **the structure is real, the behaviour is
+either implemented or explicitly absent, never faked**.
 
 What that looks like in practice:
 
@@ -146,7 +146,7 @@ its state however it likes, as long as it honours the same guarantees — a
 monotonic per-Job sequence that survives a restart, and events kept until Core
 acknowledges them.
 
-## The MVP slice
+## How the pieces work
 
 ### Job dispatch
 
@@ -334,3 +334,69 @@ keys, so the record of a decision survives the deletion of what was decided
 about. It records who decided what, through which client, over which canonical
 payload hash — and every change to an execution policy, because loosening what
 an agent may do is exactly the kind of act such a trail exists for.
+
+### Skills, and what Core refuses to do with them
+
+Core acquires a Skill, inspects it, repacks it deterministically and stores the
+bundle. It never runs anything the source contains — no installer, no build
+step — because the only thing that should ever execute a Skill is an agent, on a
+backend, under that backend's own permissions. Section 18 says as much; what it
+costs is that a Skill needing a build step has to be built before it is handed
+to Threavia.
+
+The pack is deterministic — sorted entries, fixed timestamps — so the same
+content always yields the same checksum. That is what lets a backend tell a
+cached copy from a stale one without asking, and what makes re-acquiring an
+unchanged Skill visibly a no-op.
+
+A bundle travels to a backend over the control stream rather than through a
+presigned URL, because a backend holds a gRPC credential and nothing else: it
+has no user identity with which to call the HTTP API, and giving it one would
+make a machine a user. The fetch therefore happens on the goroutine that runs
+the Job, never the one reading the stream, or the reply it waits for could not
+arrive.
+
+On the backend, the effective Skills of a Run — the Core-managed ones plus the
+backend's own — are assembled into a per-Job plugin directory of symlinks and
+handed to Claude Code with `--plugin-dir`. It is the one mechanism that adds
+Skills for a single run without writing into the user's repository or into
+their own Claude Code configuration, and a Run that leaves provider
+configuration behind would be a Run that changed the machine.
+
+Instructions take the same route. Section 18 says the adapter maps them to
+provider mechanisms such as `CLAUDE.md`; this adapter maps them to the system
+prompt instead. Writing a `CLAUDE.md` into someone else's repository is a
+filesystem change nobody asked for, and the system prompt reaches the agent
+without one.
+
+### What the channel of a request is for
+
+Section 6 asks that work someone is following not also make an unrelated device
+ring. Core cannot push anything — external notification delivery is a non-goal
+of section 33 — so what it can do is say what is worth pushing.
+
+Every command may declare its client with an `X-Threavia-Channel` header, which
+the HTTP layer stamps onto the request context. The channel is recorded on the
+Job it creates, and every pending attention item carries it back with a `notify`
+hint, false while that client still holds a live stream. It is also what the
+audit trail records as "from where".
+
+A context value rather than a parameter on every operation: it is request-scoped
+metadata about who is calling, which the audit trail and the relevance hint both
+want and which no business operation reasons about.
+
+### Moving a Session between backends
+
+A Run is the binding between a Session and one BackendInstance, which is exactly
+what a backend change needs: a new Run, the same Session, the same timeline.
+
+The native provider session does not travel, because it belongs to the machine
+holding it. The move is refused while a Job is still running rather than leaving
+work behind on a backend nobody is watching, and the answer names the
+backend-local Skills the new machine does not have. Core never held the content
+of those Skills — that is the point of the split in section 18 — and can still
+say that moving the work loses them.
+
+Automatic migration and backend scoring stay out: section 33 defers them, and a
+backend change the user did not ask for is the opposite of the explicit
+transition section 34 wants.
