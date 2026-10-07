@@ -113,8 +113,12 @@ The flake is not published anywhere, because there is nothing to publish: a
 flake is fetched from the repository, so the tag is the release.
 
 ```nix
-inputs.threavia.url = "github:rclsilver/threavia/v1.0.0";
+inputs.threavia.url = "github:rclsilver/threavia";          # follows master
+inputs.threavia.url = "github:rclsilver/threavia/vX.Y.Z";   # pinned to a release
 ```
+
+Either way `flake.lock` records the exact revision, so following master is a
+decision about when you update, not about reproducing a build.
 
 CI builds it on every run and evaluates the NixOS module against the package it
 just built. That is what the flake needs from CI: the `vendorHash` pins the Go

@@ -73,9 +73,10 @@ What is deliberately not implemented, matching the non-goals of section 33:
 
 On NixOS, [`shell.nix`](shell.nix) provides Go, Node, gcc and helm:
 
-
+```bash
 nix-shell              # enter the shell
 nix-shell --run make   # or run a single target
+nix develop            # the same, through the flake
 ```
 
 ## Local development
@@ -191,9 +192,14 @@ Tagging `vX.Y.Z` publishes:
 - a GitHub release with binary archives for linux and darwin, amd64 and arm64,
   and their SHA-256 checksums.
 
+The flake needs no publishing: it is fetched from the repository, so the tag is
+the release. A NixOS machine installs a backend from it with
+`inputs.threavia.url = "github:rclsilver/threavia/vX.Y.Z"`, which is
+[`docs/nix.md`](docs/nix.md).
+
 ```bash
-git tag -a v0.1.0 -m "v0.1.0"
-git push origin v0.1.0
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push origin vX.Y.Z
 ```
 
 `make verify` runs locally exactly what the lint job runs: formatting, module
