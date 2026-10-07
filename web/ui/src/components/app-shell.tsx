@@ -94,9 +94,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {collapsed ? (
-          // Nothing else fits legibly in a rail, and half a session title is
-          // worse than none: the rail is a way back, not a smaller sidebar.
-          <span className="sr-only">Sidebar hidden</span>
+          // The rail keeps the two things that are not a list: the way back,
+          // and the person using it. A session title cut to three characters
+          // would be worse than not showing one.
+          <UserMenu backends={backends.data ?? []} collapsed />
         ) : (
           <>
         <section className="space-y-2">
@@ -246,7 +247,13 @@ function useCollapsed(): [boolean, (collapsed: boolean) => void] {
  * cannot wait for anyone to open anything: a backend that is not ready is why
  * nothing is answering.
  */
-function UserMenu({ backends }: { backends: BackendInstance[] }) {
+function UserMenu({
+  backends,
+  collapsed = false,
+}: {
+  backends: BackendInstance[];
+  collapsed?: boolean;
+}) {
   const me = useMe();
 
   // Authenticated or not is not a detail to smooth over: in ModeNone nobody was
@@ -255,25 +262,41 @@ function UserMenu({ backends }: { backends: BackendInstance[] }) {
   const name = anonymous ? 'anonymous' : me.data.name || me.data.email || me.data.userId;
   const unwell = backends.filter((backend) => backend.operationalStatus !== 'READY');
 
+  const warning = unwell.length > 0 ? `, ${unwell.length} backend(s) not ready` : '';
+  const title = `${name} — account and backends${warning}`;
+
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <button
-          type="button"
-          title="Your account and backends"
-          className="hover:bg-surface-2 border-border flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-sm"
-        >
-          <span className="bg-surface-2 text-muted flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium uppercase">
-            {name.slice(0, 1)}
-          </span>
-          <span className="min-w-0 flex-1 truncate">{name}</span>
-          {unwell.length > 0 && (
-            <span
-              className="bg-warn size-1.5 shrink-0 rounded-full"
-              title={`${unwell.length} backend(s) not ready`}
-            />
-          )}
-        </button>
+        {collapsed ? (
+          // In the rail the avatar is the whole control, pushed to the foot
+          // where it sits when the sidebar is open, so folding the sidebar
+          // moves nothing a hand has already learned.
+          <button
+            type="button"
+            title={title}
+            className="hover:bg-surface-2 relative mt-auto self-center rounded-full p-1"
+          >
+            <span className="bg-surface-2 text-muted flex size-7 items-center justify-center rounded-full text-xs font-medium uppercase">
+              {name.slice(0, 1)}
+            </span>
+            {unwell.length > 0 && (
+              <span className="bg-warn ring-surface absolute top-0.5 right-0.5 size-2 rounded-full ring-2" />
+            )}
+          </button>
+        ) : (
+          <button
+            type="button"
+            title={title}
+            className="hover:bg-surface-2 border-border flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-sm"
+          >
+            <span className="bg-surface-2 text-muted flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium uppercase">
+              {name.slice(0, 1)}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{name}</span>
+            {unwell.length > 0 && <span className="bg-warn size-1.5 shrink-0 rounded-full" />}
+          </button>
+        )}
       </DialogTrigger>
 
       <DialogContent className="w-[min(40rem,calc(100vw-2rem))]">
