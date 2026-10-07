@@ -968,6 +968,61 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
 
+  /api/v1/tasks/{taskId}/dependencies:
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    post:
+      tags: [knowledge]
+      summary: Make a Task wait on another
+      description: >
+        Both Tasks must belong to the same Project, and the edge must not close
+        a loop: nothing on a cycle is ever ready.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dependsOn]
+              properties:
+                dependsOn: { $ref: "#/components/schemas/UUID" }
+      responses:
+        "200":
+          description: The Task, with its dependencies
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/tasks/{taskId}/dependencies/{dependsOnId}:
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+      - name: dependsOnId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    delete:
+      tags: [knowledge]
+      summary: Stop a Task from waiting on another
+      description: Removing an edge that is not there succeeds, so a retry is safe.
+      responses:
+        "200":
+          description: The Task, with its dependencies
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "404":
+          $ref: "#/components/responses/Error"
+
   /api/v1/projects/{projectId}/decisions:
     parameters:
       - $ref: "#/components/parameters/ProjectID"

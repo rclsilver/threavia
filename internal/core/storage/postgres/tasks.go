@@ -194,6 +194,17 @@ func (s *Store) AddTaskDependency(ctx context.Context, taskID, dependsOn domain.
 	return classify(err, "add a task dependency")
 }
 
+// RemoveTaskDependency drops one edge of the graph.
+//
+// Removing what is not there succeeds: the caller asked for a Task that no
+// longer waits on another, and that is the state it gets.
+func (s *Store) RemoveTaskDependency(ctx context.Context, taskID, dependsOn domain.TaskID) error {
+	_, err := s.q.Exec(ctx, `
+		DELETE FROM task_dependencies
+		WHERE task_id = $1 AND depends_on_task_id = $2`, taskID, dependsOn)
+	return classify(err, "remove a task dependency")
+}
+
 // LinkJobToTask records that a Job worked on a Task.
 func (s *Store) LinkJobToTask(ctx context.Context, jobID domain.JobID, taskID domain.TaskID) error {
 	_, err := s.q.Exec(ctx, `

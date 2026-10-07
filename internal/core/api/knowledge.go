@@ -12,6 +12,8 @@ func (h *handler) registerKnowledge(mux *http.ServeMux) {
 	h.handle(mux, "POST /api/v1/projects/{projectId}/tasks", h.createTask)
 	h.handle(mux, "GET /api/v1/projects/{projectId}/tasks/ready", h.readyTasks)
 	h.handle(mux, "PATCH /api/v1/tasks/{taskId}", h.updateTask)
+	h.handle(mux, "POST /api/v1/tasks/{taskId}/dependencies", h.addTaskDependency)
+	h.handle(mux, "DELETE /api/v1/tasks/{taskId}/dependencies/{dependsOnId}", h.removeTaskDependency)
 
 	h.handle(mux, "GET /api/v1/projects/{projectId}/decisions", h.listDecisions)
 	h.handle(mux, "POST /api/v1/projects/{projectId}/decisions", h.createDecision)
@@ -77,6 +79,33 @@ func (h *handler) updateTask(w http.ResponseWriter, r *http.Request, identity au
 
 	task, err := h.svc.UpdateTask(r.Context(), identity, domain.TaskID(r.PathValue("taskId")),
 		body.Title, body.Description, domain.TaskStatus(body.Status))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, task)
+}
+
+func (h *handler) addTaskDependency(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	body, ok := decode[struct {
+		DependsOn string `json:"dependsOn"`
+	}](w, r)
+	if !ok {
+		return
+	}
+
+	task, err := h.svc.AddTaskDependency(r.Context(), identity,
+		domain.TaskID(r.PathValue("taskId")), domain.TaskID(body.DependsOn))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, task)
+}
+
+func (h *handler) removeTaskDependency(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	task, err := h.svc.RemoveTaskDependency(r.Context(), identity,
+		domain.TaskID(r.PathValue("taskId")), domain.TaskID(r.PathValue("dependsOnId")))
 	if err != nil {
 		h.fail(w, err)
 		return

@@ -279,6 +279,30 @@ export function useUpdateTask() {
   });
 }
 
+/**
+ * Making a Task wait on another, or stopping it.
+ *
+ * The graph decides what is ready, so an edge is a change to the whole list and
+ * not only to the Task that was edited.
+ */
+export function useAddTaskDependency() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dependsOn }: { id: string; dependsOn: string }) =>
+      api.post<Task>(`/api/v1/tasks/${id}/dependencies`, { dependsOn }),
+    onSuccess: () => queries.invalidateQueries({ queryKey: ['tasks'] }),
+  });
+}
+
+export function useRemoveTaskDependency() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dependsOn }: { id: string; dependsOn: string }) =>
+      api.delete<Task>(`/api/v1/tasks/${id}/dependencies/${dependsOn}`),
+    onSuccess: () => queries.invalidateQueries({ queryKey: ['tasks'] }),
+  });
+}
+
 export function useDecisions(projectId: string | undefined) {
   return useQuery({
     queryKey: keys.decisions(projectId ?? ''),

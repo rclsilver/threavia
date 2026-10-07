@@ -438,3 +438,13 @@ func (c *core) download(path string) (string, http.Header) {
 	}
 	return string(payload), resp.Header
 }
+
+// readyTasks lists what a Project can start now.
+func (c *core) readyTasks(projectID string) []task {
+	c.t.Helper()
+	var ready struct {
+		Items []task `json:"items"`
+	}
+	c.mustDo(http.MethodGet, "/api/v1/projects/"+projectID+"/tasks/ready", nil, &ready, http.StatusOK)
+	return ready.Items
+}

@@ -97,6 +97,53 @@ func (s *Service) UpdateTask(ctx context.Context, identity auth.Identity, id dom
 	return task, nil
 }
 
+// AddTaskDependency records that a Task waits on another.
+//
+// The two must belong to the same Project, and the edge must not close a loop:
+// nothing on a cycle is ever ready, so every Task on it would wait for good.
+func (s *Service) AddTaskDependency(ctx context.Context, identity auth.Identity, id, dependsOn domain.TaskID) (domain.Task, error) {
+	task, err := s.store.GetTask(ctx, identity.UserID, id)
+	if err != nil {
+		return domain.Task{}, translate(err)
+	}
+	blocker, err := s.store.GetTask(ctx, identity.UserID, dependsOn)
+	if err != nil {
+		return domain.Task{}, fmt.Errorf("%w: unknown dependency %s", ErrInvalid, dependsOn)
+	}
+	if blocker.ProjectID != task.ProjectID {
+		return domain.Task{}, fmt.Errorf("%w: dependency %s belongs to another project", ErrInvalid, dependsOn)
+	}
+	if err := s.store.AddTaskDependency(ctx, id, dependsOn); err != nil {
+		return domain.Task{}, translateKnowledge(err)
+	}
+	return s.taskChanged(ctx, identity, id)
+}
+
+// RemoveTaskDependency stops a Task from waiting on another.
+func (s *Service) RemoveTaskDependency(ctx context.Context, identity auth.Identity, id, dependsOn domain.TaskID) (domain.Task, error) {
+	if _, err := s.store.GetTask(ctx, identity.UserID, id); err != nil {
+		return domain.Task{}, translate(err)
+	}
+	if err := s.store.RemoveTaskDependency(ctx, id, dependsOn); err != nil {
+		return domain.Task{}, translate(err)
+	}
+	return s.taskChanged(ctx, identity, id)
+}
+
+// taskChanged re-reads a Task and announces it. The graph decides what is ready,
+// so an edge changing is a change to the Task itself.
+func (s *Service) taskChanged(ctx context.Context, identity auth.Identity, id domain.TaskID) (domain.Task, error) {
+	task, err := s.store.GetTask(ctx, identity.UserID, id)
+	if err != nil {
+		return domain.Task{}, translate(err)
+	}
+	s.emit(ctx, identity.UserID, events.TypeTaskUpdated,
+		domain.Scope{ProjectID: task.ProjectID}, TaskPayload{
+			TaskID: string(task.ID), Title: task.Title, Status: task.Status.String(),
+		})
+	return task, nil
+}
+
 // ListTasks returns the Tasks of a Project.
 func (s *Service) ListTasks(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, includeDone bool) ([]domain.Task, error) {
 	tasks, err := s.store.ListTasks(ctx, identity.UserID, projectID, includeDone)
