@@ -117,10 +117,11 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 // searchable on demand.
 func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) *backendv1.ProjectContext {
 	pc := &backendv1.ProjectContext{
-		ProjectId:          string(jc.ProjectID),
-		ProjectName:        jc.ProjectName,
-		ProjectDescription: jc.ProjectDesc,
-		Tools:              coreToolSpecs(),
+		ProjectId:           string(jc.ProjectID),
+		ProjectName:         jc.ProjectName,
+		ProjectDescription:  jc.ProjectDesc,
+		ProjectInstructions: jc.ProjectInstructions,
+		Tools:               coreToolSpecs(),
 	}
 	if jc.WorkingDirectoryPath != nil {
 		pc.WorkingDirectoryPath = *jc.WorkingDirectoryPath
@@ -153,6 +154,23 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) *b
 	for _, task := range tasks {
 		pc.Tasks = append(pc.Tasks, &backendv1.ContextTask{
 			Id: string(task.ID), Title: task.Title, Status: task.Status.String(),
+		})
+	}
+
+	// Core-managed Skills: identity only. The backend fetches and caches the
+	// bundles it does not already have, so a Job never carries their content.
+	installed, err := s.store.ListSkills(ctx, jc.ProjectID)
+	if err != nil {
+		s.logger.Error("cannot read the project skills",
+			slog.String("projectId", string(jc.ProjectID)), slog.String("error", err.Error()))
+	}
+	for _, skill := range installed {
+		pc.Skills = append(pc.Skills, &backendv1.ProjectSkill{
+			SkillId:           string(skill.ID),
+			Name:              skill.Name,
+			Description:       skill.Description,
+			InstalledRevision: skill.InstalledRevision,
+			BundleSha256:      skill.BundleSHA256,
 		})
 	}
 

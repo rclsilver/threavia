@@ -13,6 +13,7 @@ import (
 	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
 	"github.com/rclsilver/threavia/internal/backends/claude/policy"
 	"github.com/rclsilver/threavia/internal/backends/claude/runner"
+	"github.com/rclsilver/threavia/internal/backends/claude/skills"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/client"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/state"
 )
@@ -28,7 +29,12 @@ type Adapter struct {
 	cfg    Config
 	runner runner.Runner
 	store  state.Store
-	logger *slog.Logger
+
+	// skillCache holds the Core-managed bundles this backend has unpacked;
+	// localSkills are the ones that exist only here (spec section 18).
+	skillCache  *skills.Cache
+	localSkills []skills.Local
+	logger      *slog.Logger
 
 	mu      sync.Mutex
 	client  *client.Client
@@ -60,12 +66,14 @@ type waiter struct {
 // New builds the Claude adapter.
 func New(cfg Config, claudeRunner runner.Runner, store state.Store, logger *slog.Logger) *Adapter {
 	return &Adapter{
-		cfg:     cfg,
-		runner:  claudeRunner,
-		store:   store,
-		logger:  logger,
-		jobs:    make(map[string]*jobState),
-		waiters: make(map[string]*waiter),
+		cfg:         cfg,
+		runner:      claudeRunner,
+		store:       store,
+		logger:      logger,
+		skillCache:  skills.NewCache(cfg.Claude.SkillCachePath),
+		localSkills: skills.Discover(cfg.Claude.LocalSkillRoots),
+		jobs:        make(map[string]*jobState),
+		waiters:     make(map[string]*waiter),
 	}
 }
 
@@ -110,6 +118,10 @@ func (a *Adapter) OnConnected(ctx context.Context, welcome *backendv1.Welcome) e
 		})
 	}
 
+	// Reported on every connection: Core keeps the metadata of what only exists
+	// here, so a handoff can say another backend cannot run a given Skill.
+	a.reportSkills(ctx)
+
 	a.logger.Info("reporting backend status",
 		slog.String("connectionId", welcome.GetConnectionId()),
 		slog.String("status", status.String()))
@@ -141,15 +153,17 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 	}
 
 	params := runner.StartParams{
-		RunID:              cmd.GetRunId(),
-		JobID:              cmd.GetJobId(),
-		NativeSessionID:    cmd.GetNativeSessionId(),
-		WorkingDirectory:   workingDirectory,
-		Prompt:             cmd.GetPrompt(),
-		ProjectName:        cmd.GetProjectContext().GetProjectName(),
-		ProjectDescription: cmd.GetProjectContext().GetProjectDescription(),
-		CoreTools:          coreTools(cmd.GetProjectContext()),
-		Policy:             policy.From(cmd.GetExecutionPolicy()),
+		RunID:               cmd.GetRunId(),
+		JobID:               cmd.GetJobId(),
+		NativeSessionID:     cmd.GetNativeSessionId(),
+		WorkingDirectory:    workingDirectory,
+		Prompt:              cmd.GetPrompt(),
+		ProjectName:         cmd.GetProjectContext().GetProjectName(),
+		ProjectDescription:  cmd.GetProjectContext().GetProjectDescription(),
+		CoreTools:           coreTools(cmd.GetProjectContext()),
+		Policy:              policy.From(cmd.GetExecutionPolicy()),
+		ProjectInstructions: cmd.GetProjectContext().GetProjectInstructions(),
+		LocalInstructions:   a.cfg.Claude.LocalInstructions,
 	}
 	if params.RunID == "" || params.JobID == "" {
 		return fmt.Errorf("a run id and a job id are required")
@@ -177,6 +191,10 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 	}
 	a.updateActiveRuns()
 
+	// Skills are prepared before the process starts: a bundle this backend does
+	// not have is fetched over the control stream and unpacked once.
+	params.SkillDirectory = a.prepareSkills(ctx, params.JobID, cmd.GetProjectContext().GetSkills())
+
 	// Detached from the command context: the Job outlives the message that
 	// started it.
 	go a.execute(context.WithoutCancel(ctx), params)
@@ -187,6 +205,7 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 func (a *Adapter) execute(ctx context.Context, params runner.StartParams) {
 	defer func() {
 		a.releaseJob(params.JobID, ErrJobAbandoned)
+		a.releaseSkills(params.JobID)
 		a.updateActiveRuns()
 	}()
 

@@ -105,6 +105,20 @@ An agent tool call travels as `CoreToolRequest` and is answered by
 described in the `ProjectContext` of `StartJob`, so a backend never hardcodes a
 tool name.
 
+## Skills
+
+`ProjectContext` names the Core-managed Project Skills of a Run — identity,
+revision and bundle checksum, never content. A backend that has a revision
+cached uses it; otherwise it sends `SkillFetchRequest` and Core answers with a
+stream of `SkillBundle` chunks carrying the same `request_id`. The backend
+verifies the checksum before unpacking, so a Skill cannot change identity in
+transit.
+
+`SkillInventory` travels the other way: the Skills that exist only on that
+backend, as metadata. Core never fetches their content, which is what lets a
+backend expose a Skill that only exists behind a corporate network, and what
+lets a handoff report that another backend cannot run it (section 18).
+
 ## Compatibility
 
 `ProtocolVersion` is declared in `common.proto` and is the single source of truth

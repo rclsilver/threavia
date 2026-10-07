@@ -5,14 +5,17 @@ import "time"
 // Project is a logical body of work. It belongs to one user in V1 and groups
 // Sessions (spec section 3.1).
 type Project struct {
-	ID          ProjectID     `json:"id"`
-	OwnerID     UserID        `json:"ownerId"`
-	Name        string        `json:"name"`
-	Description string        `json:"description,omitempty"`
-	Status      ProjectStatus `json:"status"`
-	CreatedAt   time.Time     `json:"createdAt"`
-	UpdatedAt   time.Time     `json:"updatedAt"`
-	ArchivedAt  *time.Time    `json:"archivedAt,omitempty"`
+	ID          ProjectID `json:"id"`
+	OwnerID     UserID    `json:"ownerId"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	// Instructions are the provider-independent project rules of specification
+	// section 18. The backend maps them to whatever its provider reads.
+	Instructions string        `json:"instructions,omitempty"`
+	Status       ProjectStatus `json:"status"`
+	CreatedAt    time.Time     `json:"createdAt"`
+	UpdatedAt    time.Time     `json:"updatedAt"`
+	ArchivedAt   *time.Time    `json:"archivedAt,omitempty"`
 }
 
 // Session is the long-lived user-visible work context. It is provider and

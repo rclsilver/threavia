@@ -7,7 +7,8 @@ import (
 	"github.com/rclsilver/threavia/internal/core/domain"
 )
 
-const projectColumns = `id, owner_id, name, description, status, created_at, updated_at, archived_at`
+const projectColumns = `id, owner_id, name, description, instructions, status,
+	created_at, updated_at, archived_at`
 
 // CreateProject inserts a Project.
 func (s *Store) CreateProject(ctx context.Context, p *domain.Project) error {
@@ -88,7 +89,16 @@ type scanner interface{ Scan(dest ...any) error }
 
 func scanProject(row scanner) (domain.Project, error) {
 	var p domain.Project
-	err := row.Scan(&p.ID, &p.OwnerID, &p.Name, &p.Description, &p.Status,
+	err := row.Scan(&p.ID, &p.OwnerID, &p.Name, &p.Description, &p.Instructions, &p.Status,
 		&p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt)
 	return p, classify(err, "read project")
+}
+
+// UpdateProject changes the editable fields of a Project.
+func (s *Store) UpdateProject(ctx context.Context, ownerID domain.UserID, id domain.ProjectID, name, description, instructions string) (domain.Project, error) {
+	return scanProject(s.q.QueryRow(ctx, `
+		UPDATE projects
+		SET name = $3, description = $4, instructions = $5, updated_at = now()
+		WHERE id = $1 AND owner_id = $2
+		RETURNING `+projectColumns, id, ownerID, name, description, instructions))
 }

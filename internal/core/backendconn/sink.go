@@ -2,6 +2,7 @@ package backendconn
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"google.golang.org/protobuf/types/known/structpb"
@@ -40,6 +41,13 @@ type Sink interface {
 
 	// CoreToolRequest executes a Core Tool on behalf of an agent.
 	CoreToolRequest(ctx context.Context, instanceID domain.BackendInstanceID, request *backendv1.CoreToolRequest) (*structpb.Struct, error)
+
+	// SkillInventory records the Skills a backend has locally. Core keeps the
+	// metadata only; the content never leaves the backend (spec section 18).
+	SkillInventory(ctx context.Context, instanceID domain.BackendInstanceID, inventory *backendv1.SkillInventory)
+	// SkillBundle opens the packed bundle of a Core-managed Skill, so Core can
+	// distribute it to a backend that does not have it cached.
+	SkillBundle(ctx context.Context, instanceID domain.BackendInstanceID, skillID string) (io.ReadCloser, error)
 }
 
 // NopSink accepts everything and does nothing. It keeps the control service
@@ -79,4 +87,12 @@ func (NopSink) CommandResult(context.Context, domain.BackendInstanceID, *backend
 // CoreToolRequest implements Sink.
 func (NopSink) CoreToolRequest(context.Context, domain.BackendInstanceID, *backendv1.CoreToolRequest) (*structpb.Struct, error) {
 	return nil, ErrCoreToolUnavailable
+}
+
+// SkillInventory implements Sink.
+func (NopSink) SkillInventory(context.Context, domain.BackendInstanceID, *backendv1.SkillInventory) {}
+
+// SkillBundle implements Sink.
+func (NopSink) SkillBundle(context.Context, domain.BackendInstanceID, string) (io.ReadCloser, error) {
+	return nil, ErrSkillUnavailable
 }

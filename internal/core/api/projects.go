@@ -13,6 +13,7 @@ func (h *handler) registerProjects(mux *http.ServeMux) {
 	h.handle(mux, "GET /api/v1/projects/{projectId}", h.getProject)
 	h.handle(mux, "POST /api/v1/projects/{projectId}/archive", h.archiveProject)
 	h.handle(mux, "POST /api/v1/projects/{projectId}/restore", h.restoreProject)
+	h.handle(mux, "PATCH /api/v1/projects/{projectId}", h.updateProject)
 	h.handle(mux, "DELETE /api/v1/projects/{projectId}", h.deleteProject)
 
 	h.handle(mux, "GET /api/v1/projects/{projectId}/sessions", h.listSessions)
@@ -141,4 +142,25 @@ func (h *handler) bindDirectory(w http.ResponseWriter, r *http.Request, identity
 		return
 	}
 	writeJSON(w, http.StatusOK, binding)
+}
+
+// updateProject edits a Project. Instructions are the provider-independent
+// project rules of specification section 18.
+func (h *handler) updateProject(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	body, ok := decode[struct {
+		Name         string `json:"name"`
+		Description  string `json:"description"`
+		Instructions string `json:"instructions"`
+	}](w, r)
+	if !ok {
+		return
+	}
+
+	project, err := h.svc.UpdateProject(r.Context(), identity, domain.ProjectID(r.PathValue("projectId")),
+		body.Name, body.Description, body.Instructions)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, project)
 }

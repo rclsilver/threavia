@@ -108,6 +108,17 @@ s3:
   existingSecretAccessKeyIdKey: accessKeyId
   existingSecretSecretAccessKeyKey: secretAccessKey
 
+
+# Core-managed Project Skills (spec section 18). Core fetches, inspects and
+# repacks a Skill; it never runs anything the source contains.
+skills:
+  maxBundleBytes: 33554432
+  maxFiles: 2000
+  fetchTimeout: 2m
+  # file:// git remotes. Off by default: a Skill source names a third party, and
+  # a local path would reach the filesystem Core itself runs on.
+  allowLocalSources: false
+
 auth:
   # none | basic | oidc
   mode: none

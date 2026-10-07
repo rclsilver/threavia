@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
+	"github.com/rclsilver/threavia/internal/core/skills"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 	"github.com/rclsilver/threavia/internal/core/storage/s3"
 	"github.com/rclsilver/threavia/internal/envutil"
@@ -27,6 +28,7 @@ type Config struct {
 	GRPC     GRPCConfig
 	Postgres postgres.Config
 	S3       s3.Config
+	Skills   skills.Limits
 	Auth     auth.Config
 	Backend  BackendConfig
 }
@@ -98,6 +100,7 @@ func Default() Config {
 		},
 		Postgres: postgres.DefaultConfig(),
 		S3:       s3.DefaultConfig(),
+		Skills:   skills.DefaultLimits(),
 		Auth: auth.Config{
 			Mode:      auth.ModeNone,
 			DevUserID: "dev",
@@ -153,6 +156,11 @@ func Load() (Config, error) {
 	cfg.S3.ForcePathStyle = l.Bool("S3_FORCE_PATH_STYLE", cfg.S3.ForcePathStyle)
 	cfg.S3.MaxUploadBytes = l.Int64("S3_MAX_UPLOAD_BYTES", cfg.S3.MaxUploadBytes)
 	cfg.S3.OperationTimeout = l.Duration("S3_OPERATION_TIMEOUT", cfg.S3.OperationTimeout)
+
+	cfg.Skills.MaxBundleBytes = l.Int64("SKILLS_MAX_BUNDLE_BYTES", cfg.Skills.MaxBundleBytes)
+	cfg.Skills.MaxFiles = l.Int("SKILLS_MAX_FILES", cfg.Skills.MaxFiles)
+	cfg.Skills.FetchTimeout = l.Duration("SKILLS_FETCH_TIMEOUT", cfg.Skills.FetchTimeout)
+	cfg.Skills.AllowLocalSources = l.Bool("SKILLS_ALLOW_LOCAL_SOURCES", cfg.Skills.AllowLocalSources)
 
 	cfg.Auth.Mode = auth.Mode(l.String("AUTH_MODE", cfg.Auth.Mode.String()))
 	cfg.Auth.DevUserID = l.String("AUTH_DEV_USER_ID", cfg.Auth.DevUserID)

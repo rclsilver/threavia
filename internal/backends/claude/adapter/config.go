@@ -38,6 +38,15 @@ type ClaudeConfig struct {
 	// the backend process happens to have been started from, which is accidental
 	// rather than chosen.
 	DefaultWorkingDirectory string
+	// SkillCachePath is where Core-managed Skill bundles are unpacked and where
+	// the per-Job plugin directories are assembled (spec section 18).
+	SkillCachePath string
+	// LocalSkillRoots are directories holding Skills that exist only on this
+	// backend. Core learns their names and never their content.
+	LocalSkillRoots []string
+	// LocalInstructions are backend-private rules appended to the project ones.
+	// They are machine or provider specific and never travel to Core.
+	LocalInstructions string
 }
 
 // RegistrationConfig is how a backend obtains its credential the first time
@@ -79,6 +88,7 @@ func Default() Config {
 		Claude: ClaudeConfig{
 			Binary:                  "claude",
 			DefaultWorkingDirectory: defaultWorkingDirectory(),
+			SkillCachePath:          defaultSkillCachePath(),
 		},
 		Registration: RegistrationConfig{CoreAPI: "http://localhost:8080"},
 		StatePath:    defaultStatePath(),
@@ -113,6 +123,9 @@ func Load() (Config, error) {
 	cfg.Claude.Binary = l.String("CLAUDE_BINARY", cfg.Claude.Binary)
 	cfg.Claude.DiscoveryRoots = l.StringSlice("DISCOVERY_ROOTS", cfg.Claude.DiscoveryRoots)
 	cfg.Claude.DefaultWorkingDirectory = l.String("DEFAULT_WORKING_DIRECTORY", cfg.Claude.DefaultWorkingDirectory)
+	cfg.Claude.SkillCachePath = l.String("SKILL_CACHE_PATH", cfg.Claude.SkillCachePath)
+	cfg.Claude.LocalSkillRoots = l.StringSlice("LOCAL_SKILL_ROOTS", cfg.Claude.LocalSkillRoots)
+	cfg.Claude.LocalInstructions = l.String("LOCAL_INSTRUCTIONS", cfg.Claude.LocalInstructions)
 
 	cfg.Registration.CoreAPI = l.String("CORE_API", cfg.Registration.CoreAPI)
 	cfg.Registration.Token = l.String("REGISTRATION_TOKEN", cfg.Registration.Token)
@@ -146,6 +159,9 @@ func (c Config) Validate() error {
 	}
 	if c.Claude.Binary == "" {
 		return errors.New(EnvPrefix + "CLAUDE_BINARY: an executable is required")
+	}
+	if c.Claude.SkillCachePath == "" {
+		return errors.New(EnvPrefix + "SKILL_CACHE_PATH: a directory is required to cache skill bundles")
 	}
 	if c.Claude.DefaultWorkingDirectory == "" {
 		return errors.New(EnvPrefix + "DEFAULT_WORKING_DIRECTORY: a directory is required for sessions without one")
@@ -191,4 +207,14 @@ func defaultWorkingDirectory() string {
 		return os.TempDir()
 	}
 	return home
+}
+
+// defaultSkillCachePath sits beside the durable state: both are backend-local
+// data that survives a restart and belongs to this machine.
+func defaultSkillCachePath() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return filepath.Join(os.TempDir(), "threavia", "skills")
+	}
+	return filepath.Join(home, ".threavia", "skills")
 }

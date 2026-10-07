@@ -123,3 +123,31 @@ func (s *Service) ListBindings(ctx context.Context, identity auth.Identity, dirI
 	bindings, err := s.store.ListBindings(ctx, identity.UserID, dirID)
 	return bindings, translate(err)
 }
+
+// UpdateProject changes the name, description and instructions of a Project.
+//
+// Instructions are the provider-independent project rules of specification
+// section 18: what every agent working on this Project must follow, whatever
+// provider runs it.
+func (s *Service) UpdateProject(ctx context.Context, identity auth.Identity, id domain.ProjectID, name, description, instructions string) (domain.Project, error) {
+	current, err := s.store.GetProject(ctx, identity.UserID, id)
+	if err != nil {
+		return domain.Project{}, translate(err)
+	}
+
+	// Absent fields keep their value: a client editing the instructions must not
+	// have to resend the name.
+	if name = strings.TrimSpace(name); name == "" {
+		name = current.Name
+	}
+	if description == "" {
+		description = current.Description
+	}
+	if instructions == "" {
+		instructions = current.Instructions
+	}
+
+	project, err := s.store.UpdateProject(ctx, identity.UserID, id,
+		name, strings.TrimSpace(description), strings.TrimSpace(instructions))
+	return project, translate(err)
+}

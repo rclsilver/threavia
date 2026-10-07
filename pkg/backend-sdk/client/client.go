@@ -59,6 +59,9 @@ type Client struct {
 
 	activeRuns atomic.Int32
 
+	skillMu      sync.Mutex
+	skillFetches map[string]*skillFetch
+
 	mu      sync.RWMutex
 	current *session
 }
@@ -300,6 +303,10 @@ func (c *Client) dispatch(ctx context.Context, msg *backendv1.CoreToBackend) {
 				slog.String("jobId", ack.GetJobId()),
 				slog.String("error", ackErr.Error()))
 		}
+		return
+
+	case *backendv1.CoreToBackend_SkillBundle:
+		c.onSkillBundle(body.SkillBundle)
 		return
 
 	case *backendv1.CoreToBackend_CoreToolResponse:

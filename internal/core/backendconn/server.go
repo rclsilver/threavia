@@ -21,6 +21,9 @@ import (
 // ErrCoreToolUnavailable is returned when no Core Tool implementation is wired.
 var ErrCoreToolUnavailable = errors.New("core tools are not available")
 
+// ErrSkillUnavailable is returned when no Skill distribution is wired.
+var ErrSkillUnavailable = errors.New("skills are not available")
+
 // Options configures the control server.
 type Options struct {
 	// HeartbeatInterval is advertised to backends in the Welcome message, and is
@@ -312,6 +315,18 @@ func (s *Server) handle(ctx context.Context, instanceID domain.BackendInstanceID
 		})
 		return nil
 
+	case *backendv1.BackendToCore_SkillInventory:
+		logger.Info("backend skill inventory",
+			slog.Int("local", len(body.SkillInventory.GetLocal())))
+		s.sink.SkillInventory(ctx, instanceID, body.SkillInventory)
+		return nil
+
+	case *backendv1.BackendToCore_SkillFetchRequest:
+		// Served from its own goroutine: a bundle is megabytes, and the control
+		// stream must keep carrying Job traffic while it is sent.
+		go s.sendSkillBundle(context.WithoutCancel(ctx), instanceID, conn, body.SkillFetchRequest, logger)
+		return nil
+
 	default:
 		logger.Warn("unknown control message ignored")
 		return nil
@@ -379,4 +394,80 @@ func capabilityNames(capabilities []backendv1.Capability) []string {
 // Backends treat it as a normal disconnection and reconnect.
 func (s *Server) Shutdown() {
 	s.registry.CloseAll(ReasonShutdown)
+}
+
+// skillChunkBytes is how much of a bundle travels in one message. gRPC bounds a
+// message, and a Skill can carry references and assets.
+const skillChunkBytes = 256 << 10
+
+// sendSkillBundle streams a Skill bundle to the backend that asked for it.
+//
+// A failure is reported in-band rather than dropped: a backend waiting for a
+// bundle must learn it is not coming, or the Job that needs the Skill hangs.
+func (s *Server) sendSkillBundle(ctx context.Context, instanceID domain.BackendInstanceID, conn *Connection, request *backendv1.SkillFetchRequest, logger *slog.Logger) {
+	refuse := func(err error) {
+		conn.Send(&backendv1.CoreToBackend{
+			Message: &backendv1.CoreToBackend_SkillBundle{
+				SkillBundle: &backendv1.SkillBundle{
+					RequestId: request.GetRequestId(),
+					SkillId:   request.GetSkillId(),
+					Last:      true,
+					Error: &backendv1.Error{
+						Code:    codes.NotFound.String(),
+						Message: fmt.Sprintf("skill %q: %v", request.GetSkillId(), err),
+					},
+				},
+			},
+		})
+	}
+
+	body, err := s.sink.SkillBundle(ctx, instanceID, request.GetSkillId())
+	if err != nil {
+		logger.Warn("cannot serve a skill bundle",
+			slog.String("skillId", request.GetSkillId()), slog.String("error", err.Error()))
+		refuse(err)
+		return
+	}
+	defer func() { _ = body.Close() }()
+
+	buffer := make([]byte, skillChunkBytes)
+	var index uint32
+	for {
+		n, readErr := body.Read(buffer)
+		if n > 0 {
+			chunk := make([]byte, n)
+			copy(chunk, buffer[:n])
+			conn.Send(&backendv1.CoreToBackend{
+				Message: &backendv1.CoreToBackend_SkillBundle{
+					SkillBundle: &backendv1.SkillBundle{
+						RequestId:  request.GetRequestId(),
+						SkillId:    request.GetSkillId(),
+						Chunk:      chunk,
+						ChunkIndex: index,
+					},
+				},
+			})
+			index++
+		}
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil {
+			logger.Error("cannot read a skill bundle",
+				slog.String("skillId", request.GetSkillId()), slog.String("error", readErr.Error()))
+			refuse(readErr)
+			return
+		}
+	}
+
+	conn.Send(&backendv1.CoreToBackend{
+		Message: &backendv1.CoreToBackend_SkillBundle{
+			SkillBundle: &backendv1.SkillBundle{
+				RequestId:  request.GetRequestId(),
+				SkillId:    request.GetSkillId(),
+				ChunkIndex: index,
+				Last:       true,
+			},
+		},
+	})
 }

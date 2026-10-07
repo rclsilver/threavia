@@ -106,6 +106,17 @@ spec:
                   key: {{ if .Values.s3.existingSecret }}{{ .Values.s3.existingSecretSecretAccessKeyKey }}{{ else }}s3SecretAccessKey{{ end }}
             {{- end }}
 
+
+            # --- Core-managed Project Skills (spec section 18) ---
+            - name: THREAVIA_SKILLS_MAX_BUNDLE_BYTES
+              value: {{ .Values.skills.maxBundleBytes | quote }}
+            - name: THREAVIA_SKILLS_MAX_FILES
+              value: {{ .Values.skills.maxFiles | quote }}
+            - name: THREAVIA_SKILLS_FETCH_TIMEOUT
+              value: {{ .Values.skills.fetchTimeout | quote }}
+            - name: THREAVIA_SKILLS_ALLOW_LOCAL_SOURCES
+              value: {{ .Values.skills.allowLocalSources | quote }}
+
             # --- Authentication ---
             - name: THREAVIA_AUTH_MODE
               value: {{ .Values.auth.mode | quote }}

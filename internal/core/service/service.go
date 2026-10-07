@@ -18,6 +18,7 @@ import (
 	"github.com/rclsilver/threavia/internal/core/backendconn"
 	"github.com/rclsilver/threavia/internal/core/domain"
 	"github.com/rclsilver/threavia/internal/core/events"
+	"github.com/rclsilver/threavia/internal/core/skills"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 	"github.com/rclsilver/threavia/internal/core/storage/s3"
 )
@@ -50,6 +51,10 @@ type Service struct {
 	// and every Artifact operation then refuses rather than pretending.
 	objects          s3.ObjectStore
 	maxArtifactBytes int64
+
+	// skills acquires Core-managed Project Skills. It is nil when Skill
+	// acquisition is not configured.
+	skills *skills.Acquirer
 
 	// dispatched correlates an in-flight command with the Job it carries.
 	dispatched sync.Map

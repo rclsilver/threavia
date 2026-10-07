@@ -88,6 +88,8 @@ message BackendToCore {
     EphemeralJobEvent ephemeral_job_event = 6;
     CommandResult command_result = 7;
     CoreToolRequest core_tool_request = 8;
+    SkillInventory skill_inventory = 9;
+    SkillFetchRequest skill_fetch_request = 10;
   }
 }
 
@@ -106,5 +108,29 @@ message CoreToBackend {
     ReconcileInstruction reconcile_instruction = 9;
     EventAck event_ack = 10;
     CoreToolResponse core_tool_response = 11;
+    SkillBundle skill_bundle = 12;
   }
+}
+
+// Skills the backend has locally, reported on connection and whenever they
+// change (spec section 18). Core knows the metadata and never the content: a
+// local Skill may only exist behind a corporate network, and a handoff can then
+// report that another backend cannot run it.
+message LocalSkill {
+  string name = 1;
+  string description = 2;
+  bool available = 3;
+}
+
+message SkillInventory {
+  repeated LocalSkill local = 1;
+}
+
+// Asks Core for the bundle of a Core-managed Project Skill the backend does not
+// have cached. The reply is a stream of SkillBundle chunks carrying the same
+// request id.
+message SkillFetchRequest {
+  string request_id = 1;
+  string skill_id = 2;
+  string installed_revision = 3;
 }

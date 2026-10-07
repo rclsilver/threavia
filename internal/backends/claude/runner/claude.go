@@ -233,6 +233,12 @@ func (c *Claude) command(ctx context.Context, params StartParams, nativeSessionI
 		"--strict-mcp-config",
 		"--append-system-prompt", systemPrompt(params),
 	}
+	if params.SkillDirectory != "" {
+		// A session-scoped plugin is the one mechanism that adds Skills for a
+		// single run without writing into the user repository or into their own
+		// Claude Code configuration.
+		args = append(args, "--plugin-dir", params.SkillDirectory)
+	}
 	if resuming {
 		args = append(args, "--resume", nativeSessionID)
 	} else {
@@ -288,7 +294,36 @@ func systemPrompt(params StartParams) string {
 		}
 		b.WriteString("\n")
 	}
+	// Instructions reach the provider through its system prompt rather than
+	// through a file: Threavia never writes CLAUDE.md or AGENTS.md into someone
+	// else's repository, and a Run must not leave provider configuration behind
+	// (spec section 18).
+	if instructions := effectiveInstructions(params); instructions != "" {
+		b.WriteString("\nProject instructions, which take precedence over your defaults:\n")
+		b.WriteString(instructions)
+		b.WriteString("\n")
+	}
+
+	if params.SkillDirectory != "" {
+		b.WriteString("\nThis project has Skills available to you. Use them when they apply ")
+		b.WriteString("rather than improvising the same work from scratch.\n")
+	}
+
 	return b.String()
+}
+
+// effectiveInstructions is the provider-independent project rules followed by
+// the private rules of this machine, which is the split of specification
+// section 18. The local ones come last so a machine can qualify a project rule.
+func effectiveInstructions(params StartParams) string {
+	parts := make([]string, 0, 2)
+	if project := strings.TrimSpace(params.ProjectInstructions); project != "" {
+		parts = append(parts, project)
+	}
+	if local := strings.TrimSpace(params.LocalInstructions); local != "" {
+		parts = append(parts, local)
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 // drainStderr keeps the pipe moving and remembers the tail for diagnostics.

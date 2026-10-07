@@ -17,6 +17,7 @@ for commands, queries, snapshots and history, and SSE for realtime events
 | `GET` | `/api/v1/projects/{id}` | yes | One Project |
 | `POST` | `/api/v1/projects/{id}/archive` | yes | Archive |
 | `POST` | `/api/v1/projects/{id}/restore` | yes | Restore |
+| `PATCH` | `/api/v1/projects/{id}` | yes | Rename, redescribe, set ProjectInstructions |
 | `DELETE` | `/api/v1/projects/{id}` | yes | Permanent deletion |
 | `GET` | `/api/v1/projects/{id}/sessions` | yes | Sessions of a Project |
 | `GET` | `/api/v1/projects/{id}/directories` | yes | KnownDirectories |
@@ -40,6 +41,25 @@ for commands, queries, snapshots and history, and SSE for realtime events
 | `GET` | `/api/v1/me/attention` | yes | Everything waiting for the user |
 | `POST` | `/api/v1/validations/{id}/resolve` | yes | Approve or deny |
 | `POST` | `/api/v1/user-input/{id}/resolve` | yes | Answer a question |
+| `GET` | `/api/v1/projects/{id}/tasks` | yes | Tasks of a Project |
+| `POST` | `/api/v1/projects/{id}/tasks` | yes | Create a Task |
+| `GET` | `/api/v1/projects/{id}/tasks/ready` | yes | Tasks whose dependencies are done |
+| `PATCH` | `/api/v1/tasks/{id}` | yes | Retitle, or change the status |
+| `GET` | `/api/v1/projects/{id}/decisions` | yes | Decisions of a Project |
+| `POST` | `/api/v1/projects/{id}/decisions` | yes | Record a Decision |
+| `GET` | `/api/v1/projects/{id}/search` | yes | Search the project history |
+| `GET` | `/api/v1/projects/{id}/artifacts` | yes | Artifacts of a Project |
+| `POST` | `/api/v1/projects/{id}/artifacts` | yes | Upload an Artifact |
+| `GET` | `/api/v1/artifacts/{id}` | yes | Artifact metadata |
+| `GET` | `/api/v1/artifacts/{id}/content` | yes | Artifact bytes, always as an attachment |
+| `DELETE` | `/api/v1/artifacts/{id}` | yes | Remove an Artifact and its bytes |
+| `GET` | `/api/v1/projects/{id}/skills` | yes | Core-managed Project Skills |
+| `POST` | `/api/v1/projects/{id}/skills` | yes | Install a Skill from git, an archive URL or an upload |
+| `DELETE` | `/api/v1/skills/{id}` | yes | Uninstall a Skill |
+| `GET` | `/api/v1/backends/{id}/skills` | yes | Skills that exist only on that backend |
+| `GET` | `/api/v1/sessions/{id}/policy` | yes | Effective ExecutionPolicy |
+| `PUT` | `/api/v1/sessions/{id}/policy` | yes | Set the Session ExecutionPolicy |
+| `GET` | `/api/v1/me/audit` | yes | Audit trail of policy changes and decisions |
 | `GET` | `/api/v1/events` | yes | SSE, the global event stream |
 
 Any other `/api/v1` route answers `501 Not Implemented` rather than an empty

@@ -30,6 +30,7 @@ import (
 	"github.com/rclsilver/threavia/internal/core/config"
 	"github.com/rclsilver/threavia/internal/core/events"
 	"github.com/rclsilver/threavia/internal/core/service"
+	"github.com/rclsilver/threavia/internal/core/skills"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 	"github.com/rclsilver/threavia/internal/core/storage/s3"
 	"github.com/rclsilver/threavia/internal/logging"
@@ -118,6 +119,9 @@ func run() error {
 			return fmt.Errorf("object storage: %w", err)
 		}
 		svc.SetObjectStore(objects, cfg.S3.MaxUploadBytes)
+		// Skills live in object storage too: an immutable bundle with a checksum
+		// is what an Artifact already is.
+		svc.SetSkillAcquirer(skills.NewAcquirer(cfg.Skills))
 		logger.Info("artifact storage ready",
 			slog.String("endpoint", cfg.S3.Endpoint), slog.String("bucket", cfg.S3.Bucket))
 	} else {

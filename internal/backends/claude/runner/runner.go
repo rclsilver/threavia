@@ -45,6 +45,15 @@ type StartParams struct {
 	// The runner forwards them to the local tool endpoint and never interprets
 	// them: a backend hardcodes no tool name.
 	CoreTools []mcp.CoreTool
+	// ProjectInstructions are the provider-independent project rules Core sent,
+	// and LocalInstructions the private ones of this machine (spec section 18).
+	// The adapter maps both onto the provider mechanism; Core models no provider
+	// file.
+	ProjectInstructions string
+	LocalInstructions   string
+	// SkillDirectory is the assembled per-Job plugin directory exposing the
+	// effective Skills, or empty when the Run has none.
+	SkillDirectory string
 	// Policy bounds the Run. The permission gate enforces what the agent may do;
 	// the runner enforces how long and how much, which no gate can see.
 	Policy policy.Policy

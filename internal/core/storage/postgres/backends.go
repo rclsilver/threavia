@@ -38,6 +38,13 @@ func (s *Store) BackendInstanceByCredential(ctx context.Context, credentialSHA25
 		WHERE b.credential_sha256 = $1 AND b.ownership_status <> 'REVOKED'`, credentialSHA256))
 }
 
+// BackendInstanceByID returns a BackendInstance without an ownership check. It
+// serves the control stream, where the caller is the instance itself.
+func (s *Store) BackendInstanceByID(ctx context.Context, id domain.BackendInstanceID) (domain.BackendInstance, error) {
+	return scanBackendInstance(s.q.QueryRow(ctx,
+		`SELECT `+backendColumns+` FROM backend_instances b WHERE b.id = $1`, id))
+}
+
 // GetBackendInstance returns a BackendInstance owned by ownerID.
 func (s *Store) GetBackendInstance(ctx context.Context, ownerID domain.UserID, id domain.BackendInstanceID) (domain.BackendInstance, error) {
 	return scanBackendInstance(s.q.QueryRow(ctx, `

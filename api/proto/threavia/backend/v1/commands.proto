@@ -50,6 +50,21 @@ message ContextTask {
   string status = 3;
 }
 
+
+// A Core-managed Project Skill the Run may use (spec section 18). The bundle is
+// fetched separately and cached by the backend: a Job carries the identity of a
+// Skill, never its content.
+message ProjectSkill {
+  string skill_id = 1;
+  string name = 2;
+  string description = 3;
+  // Immutable identity of the installed version: a commit, or a content hash.
+  string installed_revision = 4;
+  // Checksum of the packed bundle, so a backend can tell a cached copy from a
+  // stale one without fetching anything.
+  string bundle_sha256 = 5;
+}
+
 // Description of one Core Tool exposed to the agent. The backend adapter maps it
 // to the provider-specific tool mechanism; tool names are not hardcoded in the
 // backend (spec section 12).
@@ -76,6 +91,8 @@ message ProjectContext {
   repeated CoreToolSpec tools = 8;
   // Provider-independent project instructions (spec section 18).
   string project_instructions = 9;
+  // Core-managed Skills installed on the Project (spec section 18).
+  repeated ProjectSkill skills = 10;
 }
 
 message StartJob {
@@ -161,4 +178,21 @@ message CoreToolResponse {
   string request_id = 1;
   google.protobuf.Struct result = 2;
   Error error = 3;
+}
+
+// One chunk of a Skill bundle, sent in response to a SkillFetchRequest
+// (spec section 18). Core distributes immutable artefacts over the protocol and
+// the backend caches them locally; the bytes never travel on a Job.
+message SkillBundle {
+  string request_id = 1;
+  string skill_id = 2;
+  string installed_revision = 3;
+  // Checksum of the whole bundle, verified by the backend once reassembled.
+  string sha256 = 4;
+  // A gzipped tar of the Agent Skills directory, split across messages.
+  bytes chunk = 5;
+  uint32 chunk_index = 6;
+  bool last = 7;
+  // Set instead of the chunks when the bundle cannot be served.
+  Error error = 8;
 }
