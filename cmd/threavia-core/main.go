@@ -31,6 +31,7 @@ import (
 	"github.com/rclsilver/threavia/internal/core/events"
 	"github.com/rclsilver/threavia/internal/core/service"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
+	"github.com/rclsilver/threavia/internal/core/storage/s3"
 	"github.com/rclsilver/threavia/internal/logging"
 	"github.com/rclsilver/threavia/web"
 )
@@ -106,6 +107,22 @@ func run() error {
 	if cfg.Backend.SharedRegistrationKey == "" {
 		logger.Info("shared key registration is disabled, backends register with one-shot user tokens",
 			slog.String("configure", config.EnvPrefix+"BACKEND_SHARED_REGISTRATION_KEY"))
+	}
+
+	// Object storage is optional at startup: without it Core runs and every
+	// Artifact route refuses, which is better than refusing to start a control
+	// plane because a blob store is missing.
+	if cfg.S3.Enabled {
+		objects, err := s3.New(ctx, cfg.S3)
+		if err != nil {
+			return fmt.Errorf("object storage: %w", err)
+		}
+		svc.SetObjectStore(objects, cfg.S3.MaxUploadBytes)
+		logger.Info("artifact storage ready",
+			slog.String("endpoint", cfg.S3.Endpoint), slog.String("bucket", cfg.S3.Bucket))
+	} else {
+		logger.Info("artifact storage is disabled, artifact endpoints will refuse",
+			slog.String("configure", config.EnvPrefix+"S3_ENABLED"))
 	}
 
 	// The service resolves the credential a backend presents on Connect.

@@ -14,6 +14,9 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
+
+	"github.com/google/uuid"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
@@ -68,6 +71,7 @@ func NewRouter(opts Options) http.Handler {
 	h.registerAttention(mux)
 	h.registerKnowledge(mux)
 	h.registerPolicy(mux)
+	h.registerArtifacts(mux)
 	h.registerStream(mux)
 
 	// Anything else under the versioned prefix is a route that does not exist
@@ -124,8 +128,39 @@ func (h *handler) secured(fn func(http.ResponseWriter, *http.Request, auth.Ident
 }
 
 // handle registers a secured route.
+//
+// Every path wildcard in the Core API names an entity by UUID, so a value that
+// is not one cannot name anything. Rejecting it here answers "not found", which
+// is what an unknown identifier deserves, instead of letting PostgreSQL refuse
+// the cast and turning a typo into a 500.
 func (h *handler) handle(mux *http.ServeMux, pattern string, fn func(http.ResponseWriter, *http.Request, auth.Identity)) {
-	mux.Handle(pattern, h.secured(fn))
+	wildcards := pathWildcards(pattern)
+	mux.Handle(pattern, h.secured(func(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+		for _, name := range wildcards {
+			if _, err := uuid.Parse(r.PathValue(name)); err != nil {
+				writeError(w, http.StatusNotFound, "not_found", "not found")
+				return
+			}
+		}
+		fn(w, r, identity)
+	}))
+}
+
+// pathWildcards returns the {name} segments of a routing pattern.
+func pathWildcards(pattern string) []string {
+	var names []string
+	for {
+		start := strings.Index(pattern, "{")
+		end := strings.Index(pattern, "}")
+		if start < 0 || end < start {
+			return names
+		}
+		name := strings.TrimSuffix(pattern[start+1:end], "...")
+		if name != "" {
+			names = append(names, name)
+		}
+		pattern = pattern[end+1:]
+	}
 }
 
 // errorBody is the single error shape returned by the Core client API.
@@ -161,6 +196,8 @@ func (h *handler) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "conflict", err.Error())
 	case errors.Is(err, service.ErrRegistrationRejected):
 		writeError(w, http.StatusForbidden, "registration_rejected", err.Error())
+	case errors.Is(err, service.ErrStorageUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "storage_unavailable", err.Error())
 	case errors.Is(err, service.ErrBackendUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "backend_unavailable", err.Error())
 	default:

@@ -54,3 +54,13 @@ MESSAGE
 garage key info "$KEY_NAME" --show-secret |
 	sed -n 's/^Key ID: *\(.*\)/  export THREAVIA_S3_ACCESS_KEY_ID=\1/p;s/^Secret key: *\(.*\)/  export THREAVIA_S3_SECRET_ACCESS_KEY=\1/p'
 echo
+
+cat <<MESSAGE
+To run the object storage integration tests against this cluster:
+
+  export THREAVIA_TEST_S3_ENDPOINT=http://localhost:3900
+  export THREAVIA_TEST_S3_BUCKET=$BUCKET
+  export THREAVIA_TEST_S3_ACCESS_KEY_ID=\$THREAVIA_S3_ACCESS_KEY_ID
+  export THREAVIA_TEST_S3_SECRET_ACCESS_KEY=\$THREAVIA_S3_SECRET_ACCESS_KEY
+
+MESSAGE

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -381,4 +382,59 @@ func (b *fakeBackend) callCoreToolExpectingFailure(t *testing.T, ctx context.Con
 		t.Fatalf("core tool %s was expected to fail", name)
 	}
 	return err
+}
+
+// createProject creates a Project through the public API and returns its id.
+func (c *core) createProject(name string) string {
+	c.t.Helper()
+
+	var project struct {
+		ID string `json:"id"`
+	}
+	c.mustDo(http.MethodPost, "/api/v1/projects", map[string]any{"name": name}, &project, http.StatusCreated)
+	return project.ID
+}
+
+// doRaw performs a call whose body is not JSON, which is what an upload is.
+func (c *core) doRaw(method, path, contentType, body string, target any) int {
+	c.t.Helper()
+
+	req, err := http.NewRequest(method, c.http.URL+path, strings.NewReader(body))
+	if err != nil {
+		c.t.Fatalf("building the request: %v", err)
+	}
+	req.Header.Set("Content-Type", contentType)
+
+	resp, err := c.http.Client().Do(req)
+	if err != nil {
+		c.t.Fatalf("%s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	payload, _ := io.ReadAll(resp.Body)
+	c.lastBody = string(payload)
+	if target != nil && resp.StatusCode < 300 {
+		if err := json.Unmarshal(payload, target); err != nil {
+			c.t.Fatalf("decoding the response of %s %s: %v", method, path, err)
+		}
+	}
+	return resp.StatusCode
+}
+
+// download returns the raw body and the headers of a GET, for the routes that
+// do not answer JSON.
+func (c *core) download(path string) (string, http.Header) {
+	c.t.Helper()
+
+	resp, err := c.http.Client().Get(c.http.URL + path)
+	if err != nil {
+		c.t.Fatalf("GET %s: %v", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	payload, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		c.t.Fatalf("GET %s = %d: %s", path, resp.StatusCode, payload)
+	}
+	return string(payload), resp.Header
 }

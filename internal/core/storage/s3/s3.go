@@ -21,10 +21,6 @@ import (
 // or bucket is configured.
 var ErrNotConfigured = errors.New("object storage is not configured")
 
-// ErrNotImplemented is returned by New until the S3 client lands. The
-// ObjectStore contract is already fixed so callers can be written against it.
-var ErrNotImplemented = errors.New("object storage client not implemented yet")
-
 // ErrObjectNotFound is returned when the requested object key does not exist.
 var ErrObjectNotFound = errors.New("object not found")
 
@@ -102,14 +98,14 @@ type ObjectStore interface {
 }
 
 // New builds the ObjectStore for cfg.
-func New(_ context.Context, cfg Config) (ObjectStore, error) {
+func New(ctx context.Context, cfg Config) (ObjectStore, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 	if !cfg.Enabled {
 		return nil, ErrNotConfigured
 	}
-	return nil, ErrNotImplemented
+	return newClient(ctx, cfg)
 }
 
 // ObjectKey builds the immutable, opaque storage key of an Artifact. The

@@ -19,6 +19,7 @@ import (
 	"github.com/rclsilver/threavia/internal/core/domain"
 	"github.com/rclsilver/threavia/internal/core/events"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
+	"github.com/rclsilver/threavia/internal/core/storage/s3"
 )
 
 // Errors the HTTP edge maps onto status codes.
@@ -44,6 +45,11 @@ type Service struct {
 	now      func() time.Time
 
 	registration RegistrationConfig
+
+	// objects backs Artifacts. It is nil when object storage is not configured,
+	// and every Artifact operation then refuses rather than pretending.
+	objects          s3.ObjectStore
+	maxArtifactBytes int64
 
 	// dispatched correlates an in-flight command with the Job it carries.
 	dispatched sync.Map
