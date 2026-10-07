@@ -112,7 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           // owed, and the person using it. A session title cut to three
           // characters would be worse than not showing one.
           <>
-            {projectId && <OpenTasks projectId={projectId} collapsed />}
+            {projectId && <ProjectNav projectId={projectId} collapsed />}
             <UserMenu backends={backends.data ?? []} collapsed />
           </>
         ) : (
@@ -134,33 +134,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Select>
             <NewProjectButton onCreated={setProjectId} />
           </div>
-          {/* One entry per part of the Project, each asked for by name: a list
-              of what is in there beats a link that only says there is more. */}
-          {projectId && (
-            <nav className="space-y-0.5">
-              <OpenTasks projectId={projectId} />
-              <Link to="/projects/$projectId/memory" params={{ projectId }} {...nav}>
-                <BookText className="text-muted size-4" />
-                Memory
-              </Link>
-              <Link to="/projects/$projectId/artifacts" params={{ projectId }} {...nav}>
-                <Package className="text-muted size-4" />
-                Artifacts
-              </Link>
-              <Link to="/projects/$projectId/skills" params={{ projectId }} {...nav}>
-                <Sparkles className="text-muted size-4" />
-                Skills
-              </Link>
-              <Link to="/projects/$projectId/instructions" params={{ projectId }} {...nav}>
-                <FileText className="text-muted size-4" />
-                Instructions
-              </Link>
-              <Link to="/projects/$projectId/audit" params={{ projectId }} {...nav}>
-                <History className="text-muted size-4" />
-                Audit
-              </Link>
-            </nav>
-          )}
+          {projectId && <ProjectNav projectId={projectId} />}
         </section>
 
         <section className="flex min-h-0 flex-1 flex-col gap-2">
@@ -253,6 +227,59 @@ const nav = {
   className: 'hover:bg-surface-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm',
   activeProps: { className: 'bg-surface-2 font-medium' },
 };
+
+const rail = {
+  className: 'hover:bg-surface-2 text-muted hover:text-text flex size-8 items-center justify-center rounded-lg [&_svg]:size-4',
+  activeProps: { className: 'bg-surface-2 text-text' },
+};
+
+/**
+ * The parts of a Project, in the order they are usually wanted.
+ *
+ * Tasks are not in here: they carry a count, so they have a component of their
+ * own rather than a row that pretends to be like the others.
+ */
+const SECTIONS = [
+  { to: '/projects/$projectId/memory', label: 'Memory', Icon: BookText },
+  { to: '/projects/$projectId/artifacts', label: 'Artifacts', Icon: Package },
+  { to: '/projects/$projectId/skills', label: 'Skills', Icon: Sparkles },
+  { to: '/projects/$projectId/instructions', label: 'Instructions', Icon: FileText },
+  { to: '/projects/$projectId/audit', label: 'Audit', Icon: History },
+] as const;
+
+/**
+ * Where everything a Project holds is reached from.
+ *
+ * Folded, it keeps every entry rather than only the tasks: a rail that drops
+ * four of its five destinations is not folded, it is emptied, and the way back
+ * to them would be unfolding the sidebar first.
+ */
+function ProjectNav({ projectId, collapsed = false }: { projectId: string; collapsed?: boolean }) {
+  if (collapsed) {
+    return (
+      <nav className="flex flex-col items-center gap-1">
+        <OpenTasks projectId={projectId} collapsed />
+        {SECTIONS.map(({ to, label, Icon }) => (
+          <Link key={to} to={to} params={{ projectId }} title={label} {...rail}>
+            <Icon />
+          </Link>
+        ))}
+      </nav>
+    );
+  }
+
+  return (
+    <nav className="space-y-0.5">
+      <OpenTasks projectId={projectId} />
+      {SECTIONS.map(({ to, label, Icon }) => (
+        <Link key={to} to={to} params={{ projectId }} {...nav}>
+          <Icon className="text-muted size-4" />
+          {label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
 
 /**
  * The work still owed on this Project, as a count that is always on screen.
