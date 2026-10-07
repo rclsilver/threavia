@@ -213,6 +213,23 @@ export function usePostMessage(sessionId: string) {
   });
 }
 
+/**
+ * Renaming a Session.
+ *
+ * The title is how a Session is found again in a list of fifty, and the one the
+ * agent wrote is a guess made from the first message.
+ */
+export function useRenameSession(sessionId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (title: string) => api.patch<Session>(`/api/v1/sessions/${sessionId}`, { title }),
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
+      void queries.invalidateQueries({ queryKey: ['sessions'] });
+    },
+  });
+}
+
 export function useMoveSession(sessionId: string) {
   const queries = useQueryClient();
   return useMutation({

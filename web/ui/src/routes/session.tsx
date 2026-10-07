@@ -7,6 +7,7 @@ import {
   useCancelJob,
   useMoveSession,
   usePostMessage,
+  useRenameSession,
   useSnapshot,
 } from '@/api/queries';
 import { AttentionPanel } from '@/components/attention';
@@ -63,9 +64,7 @@ export function SessionView() {
       {/* The frame keeps the window; only what is read is held to a column. */}
       <header className="border-border/70 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b px-5 py-3">
         <div className="min-w-0">
-          <h2 className="truncate text-[0.9375rem] font-semibold">
-            {data.session.title || 'Untitled session'}
-          </h2>
+          <SessionTitle sessionId={sessionId} title={data.session.title ?? ''} />
           <p className="text-muted text-xs">
             {active ? `Job ${humanise(active.status)}` : 'Idle'}
             {active && working && (
@@ -93,6 +92,71 @@ export function SessionView() {
 
       <Composer sessionId={sessionId} />
     </div>
+  );
+}
+
+/**
+ * The Session title, renamed in place.
+ *
+ * The title a Session starts with is a guess the agent made from the first
+ * message, and it is how the Session is found again in a list of fifty. Editing
+ * it where it is read costs one click and no dialog.
+ */
+function SessionTitle({ sessionId, title }: { sessionId: string; title: string }) {
+  const rename = useRenameSession(sessionId);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+
+  // The title changes under the reader: the agent titles a Session that had
+  // none, or another client renames it. Only an open editor is left alone.
+  useEffect(() => {
+    if (!editing) setDraft(title);
+  }, [title, editing]);
+
+  const save = () => {
+    setEditing(false);
+    const next = draft.trim();
+    // An empty title is not a rename, and neither is the same one again.
+    if (!next || next === title) {
+      setDraft(title);
+      return;
+    }
+    rename.mutate(next, { onError: () => setDraft(title) });
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={save}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            save();
+          }
+          if (event.key === 'Escape') {
+            setDraft(title);
+            setEditing(false);
+          }
+        }}
+        className="border-border w-full rounded-md border bg-transparent px-1.5 py-0.5 text-[0.9375rem] font-semibold outline-none"
+      />
+    );
+  }
+
+  return (
+    <h2 className="truncate text-[0.9375rem] font-semibold">
+      <button
+        type="button"
+        title="Rename this session"
+        onClick={() => setEditing(true)}
+        className="hover:bg-surface-2 max-w-full truncate rounded-md px-1.5 py-0.5 text-left"
+      >
+        {title || 'Untitled session'}
+      </button>
+    </h2>
   );
 }
 

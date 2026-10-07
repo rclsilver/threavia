@@ -123,6 +123,10 @@ export class EventStream {
       case 'session.archived':
       case 'session.restored':
         void this.queries.invalidateQueries({ queryKey: ['sessions'] });
+        // The snapshot carries the title too, so a Session open on another
+        // screen follows the rename rather than keeping the old one until a
+        // reload.
+        void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
         break;
 
       // A new Run means the Session moved to another backend, which the cached
