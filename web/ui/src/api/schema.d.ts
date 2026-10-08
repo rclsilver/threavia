@@ -1163,12 +1163,21 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Paged history of a Session */
+        /**
+         * Paged history of a Session
+         * @description Walks backwards from a cursor, for a client reaching past the window its
+         *     snapshot opened with; what happens next arrives on the stream. Each page
+         *     is in reading order, oldest first. A page shorter than the limit is the
+         *     beginning of the Session.
+         *
+         */
         get: {
             parameters: {
                 query?: {
-                    /** @description Return events with a sequence strictly greater than this. */
-                    after?: number;
+                    /** @description Return the events with a sequence strictly lower than this, the
+                     *     latest of them first to be picked. Absent or 0 is the end of history.
+                     *      */
+                    before?: number;
                     limit?: number;
                 };
                 header?: never;

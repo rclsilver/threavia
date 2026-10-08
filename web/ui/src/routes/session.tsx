@@ -10,6 +10,7 @@ import {
   useMoveSession,
   usePostMessage,
   useRenameSession,
+  useEarlierEvents,
   useSnapshot,
 } from '@/api/queries';
 import { AttentionPanel } from '@/components/attention';
@@ -35,6 +36,7 @@ export function SessionView() {
   const { seen, activity } = useStream();
   const snapshot = useSnapshot(sessionId);
   const cancel = useCancelJob(sessionId);
+  const earlier = useEarlierEvents(sessionId);
 
   // The snapshot is a point the stream has already passed, so a reconnection
   // resumes from here rather than replaying what is on screen.
@@ -117,7 +119,12 @@ export function SessionView() {
         <SessionSettings sessionId={sessionId} archived={data.session.status === 'ARCHIVED'} />
       </header>
 
-      <Timeline events={data.events} pending={pending} onStop={(jobId) => cancel.mutate(jobId)} />
+      <Timeline
+        events={data.events}
+        pending={pending}
+        onStop={(jobId) => cancel.mutate(jobId)}
+        earlier={earlier}
+      />
 
       {/* What is waiting for the user sits between the last thing the agent
           wrote and the field they answer in: that is where the eye already is

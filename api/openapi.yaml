@@ -646,14 +646,21 @@ paths:
     get:
       tags: [sessions]
       summary: Paged history of a Session
+      description: |
+        Walks backwards from a cursor, for a client reaching past the window its
+        snapshot opened with; what happens next arrives on the stream. Each page
+        is in reading order, oldest first. A page shorter than the limit is the
+        beginning of the Session.
       parameters:
-        - name: after
+        - name: before
           in: query
           schema: { type: integer, format: int64 }
-          description: Return events with a sequence strictly greater than this.
+          description: |
+            Return the events with a sequence strictly lower than this, the
+            latest of them first to be picked. Absent or 0 is the end of history.
         - name: limit
           in: query
-          schema: { type: integer, default: 200 }
+          schema: { type: integer, default: 100, minimum: 1, maximum: 500 }
       responses:
         "200":
           description: The events

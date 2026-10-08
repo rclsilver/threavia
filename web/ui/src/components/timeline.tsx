@@ -184,10 +184,13 @@ export function Timeline({
   events,
   pending,
   onStop,
+  earlier,
 }: {
   events: Event[];
   pending: Pending;
   onStop: (jobId: string) => void;
+  /** History before the window the snapshot opened with, read on demand. */
+  earlier?: { more: boolean; loading: boolean; load: () => void };
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
   const rows = useMemo(() => rowsOf(events), [events]);
@@ -203,15 +206,41 @@ export function Timeline({
 
   // Follow the conversation as it arrives, which is what a chat does.
   const atBottom = useRef(true);
+  // Reaching the top asks for what came before. Read through a ref so the
+  // listener is attached once and still sees the current state.
+  const reachTop = useRef<() => void>(() => {});
+  reachTop.current = () => {
+    if (earlier?.more && !earlier.loading) earlier.load();
+  };
   useLayoutEffect(() => {
     const element = parentRef.current;
     if (!element) return;
     const onScroll = () => {
       atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+      if (element.scrollTop < 400) reachTop.current();
     };
     element.addEventListener('scroll', onScroll, { passive: true });
     return () => element.removeEventListener('scroll', onScroll);
   }, []);
+
+  // A page of history lands above what is being read. Without this the reader
+  // would be thrown to the top of it; with it, the line they were on stays
+  // where it was and the older rows grow above, out of sight until scrolled to.
+  // Rows already measured keep their size by key, so the difference in total
+  // height is exactly what was added. Recorded on every render rather than on
+  // a change of rows, because a row measured late changes the total too, and
+  // that growth was not added above anyone.
+  const firstKey = rows[0]?.key;
+  const previous = useRef<{ firstKey?: number; total: number }>({ total: 0 });
+  useLayoutEffect(() => {
+    const element = parentRef.current;
+    const total = virtualizer.getTotalSize();
+    const before = previous.current;
+    previous.current = { firstKey, total };
+    if (!element || before.firstKey === undefined || before.firstKey === firstKey) return;
+    if (!rows.some((row) => row.key === before.firstKey)) return;
+    element.scrollTop += total - before.total;
+  });
 
   // Following the last row means following its height too: a row is measured
   // after it is rendered, and one that grows afterwards — a message that gains
@@ -240,6 +269,15 @@ export function Timeline({
     // conversation stays readable on a wide screen without the page looking
     // cropped.
     <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto pb-6">
+      {/* No height of its own, so the rows below keep the offsets the
+          virtualiser computed for them. */}
+      {earlier?.loading && (
+        <div className="sticky top-0 z-10 h-0">
+          <p className="text-muted bg-surface border-border mx-auto mt-2 w-fit rounded-full border px-3 py-1 text-xs">
+            Loading earlier messages…
+          </p>
+        </div>
+      )}
       <div className="relative mx-auto w-full max-w-reading" style={{ height }}>
         {virtualizer.getVirtualItems().map((item) => {
           const row = rows[item.index];

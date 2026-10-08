@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useState } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 
 import { api, idempotencyKey } from './client';
@@ -200,15 +201,75 @@ export function useArchiveSession() {
 }
 
 export function useSnapshot(sessionId: string | undefined) {
+  const queries = useQueryClient();
   return useQuery({
     queryKey: keys.snapshot(sessionId ?? ''),
-    queryFn: () => api.get<Snapshot>(`/api/v1/sessions/${sessionId}`),
+    queryFn: async () => {
+      const fresh = await api.get<Snapshot>(`/api/v1/sessions/${sessionId}`);
+      // A snapshot is re-read when an event says something it cannot patch,
+      // and it comes back as the recent window only. History the reader
+      // already reached past that window stays, or it would vanish from under
+      // them in the middle of reading it.
+      const cached = queries.getQueryData<Snapshot>(keys.snapshot(sessionId ?? ''));
+      const start = fresh.events[0]?.sequence;
+      if (!cached || start === undefined) return fresh;
+      const older = cached.events.filter((event) => event.sequence < start);
+      return older.length ? { ...fresh, events: [...older, ...fresh.events] } : fresh;
+    },
     enabled: Boolean(sessionId),
     // The stream keeps it current from here on: refetching on every focus would
     // only reorder what is already correct.
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
+}
+
+const EARLIER_PAGE = 200;
+
+/**
+ * Reaches past the window a snapshot opened with, one page at a time.
+ *
+ * Pages are folded into the cached snapshot rather than kept apart, so the
+ * timeline has one list to read and the stream keeps appending to the same one.
+ * A page shorter than asked for is the beginning of the Session.
+ */
+export function useEarlierEvents(sessionId: string) {
+  const queries = useQueryClient();
+  const [exhausted, setExhausted] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setExhausted(false);
+  }, [sessionId]);
+
+  const snapshot = queries.getQueryData<Snapshot>(keys.snapshot(sessionId));
+  const first = snapshot?.events[0];
+  // The Session's own first event is the start of its history.
+  const more = !exhausted && Boolean(first) && first?.type !== 'session.created';
+
+  const load = useCallback(async () => {
+    const oldest = queries.getQueryData<Snapshot>(keys.snapshot(sessionId))?.events[0];
+    if (!oldest || loading || exhausted) return;
+    setLoading(true);
+    try {
+      const page = items(
+        await api.get<List<Event>>(
+          `/api/v1/sessions/${sessionId}/events?before=${oldest.sequence}&limit=${EARLIER_PAGE}`,
+        ),
+      );
+      if (page.length < EARLIER_PAGE) setExhausted(true);
+      queries.setQueryData<Snapshot>(keys.snapshot(sessionId), (current) => {
+        if (!current) return current;
+        const known = new Set(current.events.map((event) => event.sequence));
+        const earlier = page.filter((event) => !known.has(event.sequence));
+        return { ...current, events: [...earlier, ...current.events] };
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [queries, sessionId, loading, exhausted]);
+
+  return { more, loading, load };
 }
 
 interface StartSession {
