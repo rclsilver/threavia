@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowUp, Settings2 } from 'lucide-react';
+import { ArrowUp, Settings2, Square } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import {
@@ -107,7 +107,11 @@ export function SessionView() {
 
       <Timeline events={data.events} pending={pending} onStop={(jobId) => cancel.mutate(jobId)} />
 
-      <Composer sessionId={sessionId} />
+      <Composer
+        sessionId={sessionId}
+        active={active}
+        onStop={() => active && cancel.mutate(active.id)}
+      />
     </div>
   );
 }
@@ -185,7 +189,15 @@ function SessionTitle({ sessionId, title }: { sessionId: string; title: string }
  * grows with what is being written instead of hiding the top of a long message
  * behind a fixed three rows.
  */
-function Composer({ sessionId }: { sessionId: string }) {
+function Composer({
+  sessionId,
+  active,
+  onStop,
+}: {
+  sessionId: string;
+  active?: { id: string; status: string };
+  onStop: () => void;
+}) {
   const send = usePostMessage(sessionId);
   const [message, setMessage] = useState('');
   const field = useRef<HTMLTextAreaElement>(null);
@@ -206,6 +218,34 @@ function Composer({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="mx-auto w-full max-w-reading px-6 pb-4">
+      {/* The stop for whatever is holding the Session, where the hands already
+          are. Each message carries its own stop, which is the honest place for
+          it — but the message that started the work scrolls away, and the one
+          time a person urgently wants to stop something is the one time they
+          would have to go looking for it. This stops the oldest Job still
+          going, which is the one everything else is queued behind. */}
+      {active && (
+        <div className="text-muted mb-2 flex items-center justify-center gap-2 text-xs">
+          {active.status === 'CANCELLING' ? (
+            <span>Stopping…</span>
+          ) : (
+            <>
+              <span className="first-letter:uppercase">{humanise(active.status)}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 gap-1.5 px-1.5 text-xs [&_svg]:size-3"
+                title="Stop what is running now"
+                onClick={onStop}
+              >
+                <Square className="fill-current" />
+                Stop
+              </Button>
+            </>
+          )}
+        </div>
+      )}
       <form
         onSubmit={(event) => {
           event.preventDefault();
