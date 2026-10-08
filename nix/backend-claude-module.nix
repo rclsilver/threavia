@@ -84,6 +84,18 @@ in
       '';
     };
 
+    extraPackages = lib.mkOption {
+      type = lib.types.listOf lib.types.package;
+      default = [ ];
+      example = lib.literalExpression "[ pkgs.go pkgs.nodejs pkgs.kubectl ]";
+      description = ''
+        More tools on the service PATH, for the languages and the tooling the
+        work actually needs. The default below is a text toolbox and nothing
+        more: it is what the agent reads a repository with, not what it builds
+        one with.
+      '';
+    };
+
     claudePackage = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
       default = null;
@@ -192,14 +204,35 @@ in
       // cfg.settings;
 
       # Everything the agent runs it runs through this PATH, so a bare `git` in
-      # a command has to resolve. It is deliberately short: the agent is working
-      # in someone's checkout, not in a general-purpose shell.
+      # a command has to resolve. It is deliberately short — the agent is
+      # working in someone's checkout, not in a general-purpose shell — but it
+      # is no longer minimal, and that was a mistake worth naming.
+      #
+      # With only git, ssh, coreutils and bash here, the agent could not run
+      # `sed`, `rg` or `jq`, so it prefixed every single command with
+      # `export PATH=/run/current-system/sw/bin:$PATH && …` to reach them. That
+      # is a command writing PATH, which Claude Code prompts about whatever else
+      # the command does — so the shortest possible PATH turned every read into
+      # a permission request. A toolbox nobody has to work around is the one
+      # that gets used as given.
       path = [
         pkgs.git
         pkgs.openssh
         pkgs.coreutils
         pkgs.bash
+        pkgs.gnugrep
+        pkgs.gnused
+        pkgs.gawk
+        pkgs.findutils
+        pkgs.diffutils
+        pkgs.ripgrep
+        pkgs.jq
+        pkgs.gnutar
+        pkgs.gzip
+        pkgs.less
+        pkgs.which
       ]
+      ++ cfg.extraPackages
       ++ lib.optional (cfg.claudePackage != null) cfg.claudePackage;
 
       serviceConfig = {
