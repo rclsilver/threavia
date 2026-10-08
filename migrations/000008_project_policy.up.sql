@@ -1,0 +1,17 @@
+-- An ExecutionPolicy on the Project, which a Session inherits and may loosen.
+--
+-- Section 17 shipped a Session default with a per-Job override, and that is one
+-- level short of how people actually work: the same answer gets given to the
+-- same question in every Session of a project. The Project now carries the
+-- default, and a Session that says nothing uses it, live rather than copied —
+-- changing the Project changes the Sessions that never overrode it.
+--
+-- The switches on a Project are defaults a Session may loosen. Its DENY rules
+-- are not: they travel into every policy below and are answered first, so no
+-- Session can take one out of the set. That is the whole difference between a
+-- convenience and a limit, and it is why both live in the same object.
+--
+-- JSONB for the same reason as the Session policy beside it: section 17 calls
+-- the shape "simple and extensible", and a column per idea is a migration per
+-- idea.
+ALTER TABLE projects ADD COLUMN execution_policy JSONB;

@@ -199,14 +199,16 @@ func (h *handler) searchProject(w http.ResponseWriter, r *http.Request, identity
 }
 
 func (h *handler) registerPolicy(mux *http.ServeMux) {
+	h.handle(mux, "GET /api/v1/projects/{projectId}/policy", h.getProjectPolicy)
+	h.handle(mux, "PUT /api/v1/projects/{projectId}/policy", h.setProjectPolicy)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/policy", h.getPolicy)
 	h.handle(mux, "PUT /api/v1/sessions/{sessionId}/policy", h.setPolicy)
 	h.handle(mux, "GET /api/v1/me/audit", h.listAudit)
 }
 
-func (h *handler) getPolicy(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
-	policy, err := h.svc.SessionExecutionPolicy(r.Context(), identity,
-		domain.SessionID(r.PathValue("sessionId")))
+func (h *handler) getProjectPolicy(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	policy, err := h.svc.ProjectExecutionPolicy(r.Context(), identity,
+		domain.ProjectID(r.PathValue("projectId")))
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -214,8 +216,46 @@ func (h *handler) getPolicy(w http.ResponseWriter, r *http.Request, identity aut
 	writeJSON(w, http.StatusOK, policy)
 }
 
-// setPolicy changes what the agent may do in a Session. An empty body resets it
-// to the restrained default rather than leaving the previous one in place.
+// setProjectPolicy changes the default every Session of a Project inherits. An
+// empty body resets it to the restrained default.
+func (h *handler) setProjectPolicy(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	body, ok := decode[domain.ExecutionPolicy](w, r)
+	if !ok {
+		return
+	}
+
+	var policy *domain.ExecutionPolicy
+	if body.Mode != "" {
+		policy = &body
+	}
+
+	effective, err := h.svc.SetProjectExecutionPolicy(r.Context(), identity,
+		domain.ProjectID(r.PathValue("projectId")), policy)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, effective)
+}
+
+// getPolicy answers what applies to a Session, and where it comes from.
+//
+// The panel needs all three: what is in force, whether the Session set it or is
+// following its Project, and what it would fall back to. A panel that can only
+// show the first has to present an inherited policy as if someone had chosen
+// it here, which is how a Project-wide change gets made one Session at a time.
+func (h *handler) getPolicy(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	view, err := h.svc.SessionPolicyOrigin(r.Context(), identity,
+		domain.SessionID(r.PathValue("sessionId")))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+// setPolicy changes what the agent may do in a Session. An empty body hands it
+// back to its Project rather than leaving the previous one in place.
 func (h *handler) setPolicy(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
 	body, ok := decode[domain.ExecutionPolicy](w, r)
 	if !ok {

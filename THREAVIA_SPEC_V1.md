@@ -701,7 +701,13 @@ Optional humanized presentation can be stored for audit convenience, but the can
 
 ## 17. ExecutionPolicy
 
-Simple and extensible in V1. Session default with optional Job override.
+Simple and extensible in V1. Project default, Session override, optional Job override.
+
+The Project is where an answer is given once instead of once per Session. A Session that sets nothing follows it live: changing the Project changes those Sessions. A Session that sets a policy replaces the mode, the switches and the limits for itself.
+
+Permission rules are the fine grain, and they do not work that way. They are the union of every level, outermost first, answered deny before ask before allow. A rule written on a Project with effect DENY therefore stands however a Session is configured, because nothing below can take it out of the set: the switches are defaults someone set for convenience, a refusal is a limit someone set on purpose, and the difference has to survive being inherited.
+
+A rule names a capability, never a provider's own syntax: `SHELL`, `FILE_READ`, `FILE_WRITE`, `NETWORK`, `GIT_COMMIT`, `GIT_PUSH`, `TOOL`, with an optional match where `*` stands for any text. Each backend translates that vocabulary into what its provider understands. A rule written in one provider's terms would be a rule only one backend could honour, and the policy would stop being a contract.
 
 Modes:
 
@@ -714,6 +720,8 @@ AUTONOMOUS
 Autonomous execution is constrained by explicit permissions/limits such as duration, maximum actions/jobs, filesystem writes, git commit/push, network/deployment access.
 
 Policies must be enforced by Core/backend where possible, not only by prompt. Example: `gitPush=false` rejects push rather than merely asking the model not to do it.
+
+Where the provider has a permission system of its own, the backend's job is to render the policy into it rather than to reimplement it: the provider classifies its own actions better than a list maintained here can, and it is the one that knows what its tools do. What the backend keeps for itself is the refusals, read by parsing the action rather than matching its text — a provider rule that stops `git push origin main` and not `git -C . push origin main` is not what section 17 means by enforced.
 
 ## 18. Skills and instructions
 

@@ -28,6 +28,42 @@ enum ExecutionMode {
   EXECUTION_MODE_AUTONOMOUS = 3;
 }
 
+// What a permission rule does to the action it matches.
+enum PermissionEffect {
+  PERMISSION_EFFECT_UNSPECIFIED = 0;
+  PERMISSION_EFFECT_ALLOW = 1;
+  PERMISSION_EFFECT_ASK = 2;
+  PERMISSION_EFFECT_DENY = 3;
+}
+
+// What a rule is about, named independently of any provider.
+//
+// This is the contract: Core says "never kubectl delete" once, and each backend
+// translates it into whatever its own provider understands. A rule written in a
+// provider's syntax would be a rule only one backend could honour.
+enum PermissionCapability {
+  PERMISSION_CAPABILITY_UNSPECIFIED = 0;
+  PERMISSION_CAPABILITY_SHELL = 1;
+  PERMISSION_CAPABILITY_FILE_READ = 2;
+  PERMISSION_CAPABILITY_FILE_WRITE = 3;
+  PERMISSION_CAPABILITY_NETWORK = 4;
+  PERMISSION_CAPABILITY_GIT_COMMIT = 5;
+  PERMISSION_CAPABILITY_GIT_PUSH = 6;
+  PERMISSION_CAPABILITY_TOOL = 7;
+}
+
+// One exception to the switches below.
+message PermissionRule {
+  PermissionEffect effect = 1;
+  PermissionCapability capability = 2;
+  // A command for SHELL, a host for NETWORK, a path for the file capabilities,
+  // a name for TOOL. Empty is the whole capability, and `*` stands for any
+  // text — the one wildcard every provider agrees on.
+  string match = 3;
+  // Why, carried so a backend can say it when it refuses.
+  string note = 4;
+}
+
 message ExecutionPolicy {
   ExecutionMode mode = 1;
   bool allow_filesystem_write = 2;
@@ -36,6 +72,10 @@ message ExecutionPolicy {
   bool allow_network = 5;
   uint32 max_duration_seconds = 6;
   uint32 max_actions = 7;
+  // The fine grain, answered before the switches above: deny, then ask, then
+  // allow. They arrive already merged from the Project, the Session and the
+  // Job, in that order.
+  repeated PermissionRule rules = 8;
 }
 
 message ContextDecision {

@@ -79,6 +79,128 @@ func (ExecutionMode) EnumDescriptor() ([]byte, []int) {
 	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{0}
 }
 
+// What a permission rule does to the action it matches.
+type PermissionEffect int32
+
+const (
+	PermissionEffect_PERMISSION_EFFECT_UNSPECIFIED PermissionEffect = 0
+	PermissionEffect_PERMISSION_EFFECT_ALLOW       PermissionEffect = 1
+	PermissionEffect_PERMISSION_EFFECT_ASK         PermissionEffect = 2
+	PermissionEffect_PERMISSION_EFFECT_DENY        PermissionEffect = 3
+)
+
+// Enum value maps for PermissionEffect.
+var (
+	PermissionEffect_name = map[int32]string{
+		0: "PERMISSION_EFFECT_UNSPECIFIED",
+		1: "PERMISSION_EFFECT_ALLOW",
+		2: "PERMISSION_EFFECT_ASK",
+		3: "PERMISSION_EFFECT_DENY",
+	}
+	PermissionEffect_value = map[string]int32{
+		"PERMISSION_EFFECT_UNSPECIFIED": 0,
+		"PERMISSION_EFFECT_ALLOW":       1,
+		"PERMISSION_EFFECT_ASK":         2,
+		"PERMISSION_EFFECT_DENY":        3,
+	}
+)
+
+func (x PermissionEffect) Enum() *PermissionEffect {
+	p := new(PermissionEffect)
+	*p = x
+	return p
+}
+
+func (x PermissionEffect) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PermissionEffect) Descriptor() protoreflect.EnumDescriptor {
+	return file_threavia_backend_v1_commands_proto_enumTypes[1].Descriptor()
+}
+
+func (PermissionEffect) Type() protoreflect.EnumType {
+	return &file_threavia_backend_v1_commands_proto_enumTypes[1]
+}
+
+func (x PermissionEffect) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PermissionEffect.Descriptor instead.
+func (PermissionEffect) EnumDescriptor() ([]byte, []int) {
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{1}
+}
+
+// What a rule is about, named independently of any provider.
+//
+// This is the contract: Core says "never kubectl delete" once, and each backend
+// translates it into whatever its own provider understands. A rule written in a
+// provider's syntax would be a rule only one backend could honour.
+type PermissionCapability int32
+
+const (
+	PermissionCapability_PERMISSION_CAPABILITY_UNSPECIFIED PermissionCapability = 0
+	PermissionCapability_PERMISSION_CAPABILITY_SHELL       PermissionCapability = 1
+	PermissionCapability_PERMISSION_CAPABILITY_FILE_READ   PermissionCapability = 2
+	PermissionCapability_PERMISSION_CAPABILITY_FILE_WRITE  PermissionCapability = 3
+	PermissionCapability_PERMISSION_CAPABILITY_NETWORK     PermissionCapability = 4
+	PermissionCapability_PERMISSION_CAPABILITY_GIT_COMMIT  PermissionCapability = 5
+	PermissionCapability_PERMISSION_CAPABILITY_GIT_PUSH    PermissionCapability = 6
+	PermissionCapability_PERMISSION_CAPABILITY_TOOL        PermissionCapability = 7
+)
+
+// Enum value maps for PermissionCapability.
+var (
+	PermissionCapability_name = map[int32]string{
+		0: "PERMISSION_CAPABILITY_UNSPECIFIED",
+		1: "PERMISSION_CAPABILITY_SHELL",
+		2: "PERMISSION_CAPABILITY_FILE_READ",
+		3: "PERMISSION_CAPABILITY_FILE_WRITE",
+		4: "PERMISSION_CAPABILITY_NETWORK",
+		5: "PERMISSION_CAPABILITY_GIT_COMMIT",
+		6: "PERMISSION_CAPABILITY_GIT_PUSH",
+		7: "PERMISSION_CAPABILITY_TOOL",
+	}
+	PermissionCapability_value = map[string]int32{
+		"PERMISSION_CAPABILITY_UNSPECIFIED": 0,
+		"PERMISSION_CAPABILITY_SHELL":       1,
+		"PERMISSION_CAPABILITY_FILE_READ":   2,
+		"PERMISSION_CAPABILITY_FILE_WRITE":  3,
+		"PERMISSION_CAPABILITY_NETWORK":     4,
+		"PERMISSION_CAPABILITY_GIT_COMMIT":  5,
+		"PERMISSION_CAPABILITY_GIT_PUSH":    6,
+		"PERMISSION_CAPABILITY_TOOL":        7,
+	}
+)
+
+func (x PermissionCapability) Enum() *PermissionCapability {
+	p := new(PermissionCapability)
+	*p = x
+	return p
+}
+
+func (x PermissionCapability) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PermissionCapability) Descriptor() protoreflect.EnumDescriptor {
+	return file_threavia_backend_v1_commands_proto_enumTypes[2].Descriptor()
+}
+
+func (PermissionCapability) Type() protoreflect.EnumType {
+	return &file_threavia_backend_v1_commands_proto_enumTypes[2]
+}
+
+func (x PermissionCapability) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PermissionCapability.Descriptor instead.
+func (PermissionCapability) EnumDescriptor() ([]byte, []int) {
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{2}
+}
+
 type ReconcileAction int32
 
 const (
@@ -115,11 +237,11 @@ func (x ReconcileAction) String() string {
 }
 
 func (ReconcileAction) Descriptor() protoreflect.EnumDescriptor {
-	return file_threavia_backend_v1_commands_proto_enumTypes[1].Descriptor()
+	return file_threavia_backend_v1_commands_proto_enumTypes[3].Descriptor()
 }
 
 func (ReconcileAction) Type() protoreflect.EnumType {
-	return &file_threavia_backend_v1_commands_proto_enumTypes[1]
+	return &file_threavia_backend_v1_commands_proto_enumTypes[3]
 }
 
 func (x ReconcileAction) Number() protoreflect.EnumNumber {
@@ -128,7 +250,7 @@ func (x ReconcileAction) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ReconcileAction.Descriptor instead.
 func (ReconcileAction) EnumDescriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{1}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{3}
 }
 
 // Welcome carries the connection lease. Only one connection is active for a
@@ -202,6 +324,79 @@ func (x *Welcome) GetHeartbeatIntervalSeconds() uint32 {
 	return 0
 }
 
+// One exception to the switches below.
+type PermissionRule struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Effect     PermissionEffect       `protobuf:"varint,1,opt,name=effect,proto3,enum=threavia.backend.v1.PermissionEffect" json:"effect,omitempty"`
+	Capability PermissionCapability   `protobuf:"varint,2,opt,name=capability,proto3,enum=threavia.backend.v1.PermissionCapability" json:"capability,omitempty"`
+	// A command for SHELL, a host for NETWORK, a path for the file capabilities,
+	// a name for TOOL. Empty is the whole capability, and `*` stands for any
+	// text — the one wildcard every provider agrees on.
+	Match string `protobuf:"bytes,3,opt,name=match,proto3" json:"match,omitempty"`
+	// Why, carried so a backend can say it when it refuses.
+	Note          string `protobuf:"bytes,4,opt,name=note,proto3" json:"note,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PermissionRule) Reset() {
+	*x = PermissionRule{}
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PermissionRule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PermissionRule) ProtoMessage() {}
+
+func (x *PermissionRule) ProtoReflect() protoreflect.Message {
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PermissionRule.ProtoReflect.Descriptor instead.
+func (*PermissionRule) Descriptor() ([]byte, []int) {
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *PermissionRule) GetEffect() PermissionEffect {
+	if x != nil {
+		return x.Effect
+	}
+	return PermissionEffect_PERMISSION_EFFECT_UNSPECIFIED
+}
+
+func (x *PermissionRule) GetCapability() PermissionCapability {
+	if x != nil {
+		return x.Capability
+	}
+	return PermissionCapability_PERMISSION_CAPABILITY_UNSPECIFIED
+}
+
+func (x *PermissionRule) GetMatch() string {
+	if x != nil {
+		return x.Match
+	}
+	return ""
+}
+
+func (x *PermissionRule) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
 type ExecutionPolicy struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	Mode                 ExecutionMode          `protobuf:"varint,1,opt,name=mode,proto3,enum=threavia.backend.v1.ExecutionMode" json:"mode,omitempty"`
@@ -211,13 +406,17 @@ type ExecutionPolicy struct {
 	AllowNetwork         bool                   `protobuf:"varint,5,opt,name=allow_network,json=allowNetwork,proto3" json:"allow_network,omitempty"`
 	MaxDurationSeconds   uint32                 `protobuf:"varint,6,opt,name=max_duration_seconds,json=maxDurationSeconds,proto3" json:"max_duration_seconds,omitempty"`
 	MaxActions           uint32                 `protobuf:"varint,7,opt,name=max_actions,json=maxActions,proto3" json:"max_actions,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// The fine grain, answered before the switches above: deny, then ask, then
+	// allow. They arrive already merged from the Project, the Session and the
+	// Job, in that order.
+	Rules         []*PermissionRule `protobuf:"bytes,8,rep,name=rules,proto3" json:"rules,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ExecutionPolicy) Reset() {
 	*x = ExecutionPolicy{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[1]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -229,7 +428,7 @@ func (x *ExecutionPolicy) String() string {
 func (*ExecutionPolicy) ProtoMessage() {}
 
 func (x *ExecutionPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[1]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -242,7 +441,7 @@ func (x *ExecutionPolicy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionPolicy.ProtoReflect.Descriptor instead.
 func (*ExecutionPolicy) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{1}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ExecutionPolicy) GetMode() ExecutionMode {
@@ -294,6 +493,13 @@ func (x *ExecutionPolicy) GetMaxActions() uint32 {
 	return 0
 }
 
+func (x *ExecutionPolicy) GetRules() []*PermissionRule {
+	if x != nil {
+		return x.Rules
+	}
+	return nil
+}
+
 type ContextDecision struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -305,7 +511,7 @@ type ContextDecision struct {
 
 func (x *ContextDecision) Reset() {
 	*x = ContextDecision{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[2]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -317,7 +523,7 @@ func (x *ContextDecision) String() string {
 func (*ContextDecision) ProtoMessage() {}
 
 func (x *ContextDecision) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[2]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -330,7 +536,7 @@ func (x *ContextDecision) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContextDecision.ProtoReflect.Descriptor instead.
 func (*ContextDecision) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{2}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ContextDecision) GetId() string {
@@ -365,7 +571,7 @@ type ContextTask struct {
 
 func (x *ContextTask) Reset() {
 	*x = ContextTask{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[3]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -377,7 +583,7 @@ func (x *ContextTask) String() string {
 func (*ContextTask) ProtoMessage() {}
 
 func (x *ContextTask) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[3]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -390,7 +596,7 @@ func (x *ContextTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContextTask.ProtoReflect.Descriptor instead.
 func (*ContextTask) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{3}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ContextTask) GetId() string {
@@ -433,7 +639,7 @@ type ProjectSkill struct {
 
 func (x *ProjectSkill) Reset() {
 	*x = ProjectSkill{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[4]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -445,7 +651,7 @@ func (x *ProjectSkill) String() string {
 func (*ProjectSkill) ProtoMessage() {}
 
 func (x *ProjectSkill) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[4]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -458,7 +664,7 @@ func (x *ProjectSkill) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectSkill.ProtoReflect.Descriptor instead.
 func (*ProjectSkill) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{4}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ProjectSkill) GetSkillId() string {
@@ -510,7 +716,7 @@ type CoreToolSpec struct {
 
 func (x *CoreToolSpec) Reset() {
 	*x = CoreToolSpec{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[5]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -522,7 +728,7 @@ func (x *CoreToolSpec) String() string {
 func (*CoreToolSpec) ProtoMessage() {}
 
 func (x *CoreToolSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[5]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -535,7 +741,7 @@ func (x *CoreToolSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CoreToolSpec.ProtoReflect.Descriptor instead.
 func (*CoreToolSpec) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{5}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CoreToolSpec) GetName() string {
@@ -589,7 +795,7 @@ type ProjectContext struct {
 
 func (x *ProjectContext) Reset() {
 	*x = ProjectContext{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[6]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -601,7 +807,7 @@ func (x *ProjectContext) String() string {
 func (*ProjectContext) ProtoMessage() {}
 
 func (x *ProjectContext) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[6]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -614,7 +820,7 @@ func (x *ProjectContext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectContext.ProtoReflect.Descriptor instead.
 func (*ProjectContext) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{6}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ProjectContext) GetProjectId() string {
@@ -719,7 +925,7 @@ type StartJob struct {
 
 func (x *StartJob) Reset() {
 	*x = StartJob{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[7]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -731,7 +937,7 @@ func (x *StartJob) String() string {
 func (*StartJob) ProtoMessage() {}
 
 func (x *StartJob) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[7]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -744,7 +950,7 @@ func (x *StartJob) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartJob.ProtoReflect.Descriptor instead.
 func (*StartJob) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{7}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *StartJob) GetProjectId() string {
@@ -818,7 +1024,7 @@ type UpdateJobPolicy struct {
 
 func (x *UpdateJobPolicy) Reset() {
 	*x = UpdateJobPolicy{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[8]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -830,7 +1036,7 @@ func (x *UpdateJobPolicy) String() string {
 func (*UpdateJobPolicy) ProtoMessage() {}
 
 func (x *UpdateJobPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[8]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -843,7 +1049,7 @@ func (x *UpdateJobPolicy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateJobPolicy.ProtoReflect.Descriptor instead.
 func (*UpdateJobPolicy) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{8}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *UpdateJobPolicy) GetRunId() string {
@@ -878,7 +1084,7 @@ type CancelJob struct {
 
 func (x *CancelJob) Reset() {
 	*x = CancelJob{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[9]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -890,7 +1096,7 @@ func (x *CancelJob) String() string {
 func (*CancelJob) ProtoMessage() {}
 
 func (x *CancelJob) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[9]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -903,7 +1109,7 @@ func (x *CancelJob) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJob.ProtoReflect.Descriptor instead.
 func (*CancelJob) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{9}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CancelJob) GetRunId() string {
@@ -942,7 +1148,7 @@ type ValidationResolution struct {
 
 func (x *ValidationResolution) Reset() {
 	*x = ValidationResolution{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[10]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -954,7 +1160,7 @@ func (x *ValidationResolution) String() string {
 func (*ValidationResolution) ProtoMessage() {}
 
 func (x *ValidationResolution) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[10]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -967,7 +1173,7 @@ func (x *ValidationResolution) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidationResolution.ProtoReflect.Descriptor instead.
 func (*ValidationResolution) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{10}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ValidationResolution) GetRunId() string {
@@ -1033,7 +1239,7 @@ type UserInputResolution struct {
 
 func (x *UserInputResolution) Reset() {
 	*x = UserInputResolution{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[11]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1045,7 +1251,7 @@ func (x *UserInputResolution) String() string {
 func (*UserInputResolution) ProtoMessage() {}
 
 func (x *UserInputResolution) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[11]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1058,7 +1264,7 @@ func (x *UserInputResolution) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserInputResolution.ProtoReflect.Descriptor instead.
 func (*UserInputResolution) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{11}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *UserInputResolution) GetRunId() string {
@@ -1115,7 +1321,7 @@ type JobInputNow struct {
 
 func (x *JobInputNow) Reset() {
 	*x = JobInputNow{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[12]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1127,7 +1333,7 @@ func (x *JobInputNow) String() string {
 func (*JobInputNow) ProtoMessage() {}
 
 func (x *JobInputNow) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[12]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1140,7 +1346,7 @@ func (x *JobInputNow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobInputNow.ProtoReflect.Descriptor instead.
 func (*JobInputNow) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{12}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *JobInputNow) GetRunId() string {
@@ -1177,7 +1383,7 @@ type JobInputNext struct {
 
 func (x *JobInputNext) Reset() {
 	*x = JobInputNext{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[13]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1189,7 +1395,7 @@ func (x *JobInputNext) String() string {
 func (*JobInputNext) ProtoMessage() {}
 
 func (x *JobInputNext) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[13]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1202,7 +1408,7 @@ func (x *JobInputNext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobInputNext.ProtoReflect.Descriptor instead.
 func (*JobInputNext) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{13}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *JobInputNext) GetRunId() string {
@@ -1241,7 +1447,7 @@ type ReconcileInstruction struct {
 
 func (x *ReconcileInstruction) Reset() {
 	*x = ReconcileInstruction{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[14]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1253,7 +1459,7 @@ func (x *ReconcileInstruction) String() string {
 func (*ReconcileInstruction) ProtoMessage() {}
 
 func (x *ReconcileInstruction) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[14]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1266,7 +1472,7 @@ func (x *ReconcileInstruction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReconcileInstruction.ProtoReflect.Descriptor instead.
 func (*ReconcileInstruction) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{14}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ReconcileInstruction) GetRunId() string {
@@ -1311,7 +1517,7 @@ type EventAck struct {
 
 func (x *EventAck) Reset() {
 	*x = EventAck{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[15]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1323,7 +1529,7 @@ func (x *EventAck) String() string {
 func (*EventAck) ProtoMessage() {}
 
 func (x *EventAck) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[15]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1336,7 +1542,7 @@ func (x *EventAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventAck.ProtoReflect.Descriptor instead.
 func (*EventAck) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{15}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *EventAck) GetRunId() string {
@@ -1371,7 +1577,7 @@ type CoreToolResponse struct {
 
 func (x *CoreToolResponse) Reset() {
 	*x = CoreToolResponse{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[16]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1383,7 +1589,7 @@ func (x *CoreToolResponse) String() string {
 func (*CoreToolResponse) ProtoMessage() {}
 
 func (x *CoreToolResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[16]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1396,7 +1602,7 @@ func (x *CoreToolResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CoreToolResponse.ProtoReflect.Descriptor instead.
 func (*CoreToolResponse) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{16}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CoreToolResponse) GetRequestId() string {
@@ -1442,7 +1648,7 @@ type SkillBundle struct {
 
 func (x *SkillBundle) Reset() {
 	*x = SkillBundle{}
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[17]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1454,7 +1660,7 @@ func (x *SkillBundle) String() string {
 func (*SkillBundle) ProtoMessage() {}
 
 func (x *SkillBundle) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_commands_proto_msgTypes[17]
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1467,7 +1673,7 @@ func (x *SkillBundle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillBundle.ProtoReflect.Descriptor instead.
 func (*SkillBundle) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{17}
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SkillBundle) GetRequestId() string {
@@ -1536,7 +1742,14 @@ const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"\x13backend_instance_id\x18\x02 \x01(\tR\x11backendInstanceId\x12;\n" +
 	"\vserver_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"serverTime\x12<\n" +
-	"\x1aheartbeat_interval_seconds\x18\x04 \x01(\rR\x18heartbeatIntervalSeconds\"\xc7\x02\n" +
+	"\x1aheartbeat_interval_seconds\x18\x04 \x01(\rR\x18heartbeatIntervalSeconds\"\xc4\x01\n" +
+	"\x0ePermissionRule\x12=\n" +
+	"\x06effect\x18\x01 \x01(\x0e2%.threavia.backend.v1.PermissionEffectR\x06effect\x12I\n" +
+	"\n" +
+	"capability\x18\x02 \x01(\x0e2).threavia.backend.v1.PermissionCapabilityR\n" +
+	"capability\x12\x14\n" +
+	"\x05match\x18\x03 \x01(\tR\x05match\x12\x12\n" +
+	"\x04note\x18\x04 \x01(\tR\x04note\"\x82\x03\n" +
 	"\x0fExecutionPolicy\x126\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\".threavia.backend.v1.ExecutionModeR\x04mode\x124\n" +
 	"\x16allow_filesystem_write\x18\x02 \x01(\bR\x14allowFilesystemWrite\x12(\n" +
@@ -1545,7 +1758,8 @@ const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"\rallow_network\x18\x05 \x01(\bR\fallowNetwork\x120\n" +
 	"\x14max_duration_seconds\x18\x06 \x01(\rR\x12maxDurationSeconds\x12\x1f\n" +
 	"\vmax_actions\x18\a \x01(\rR\n" +
-	"maxActions\"Q\n" +
+	"maxActions\x129\n" +
+	"\x05rules\x18\b \x03(\v2#.threavia.backend.v1.PermissionRuleR\x05rules\"Q\n" +
 	"\x0fContextDecision\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x18\n" +
@@ -1654,7 +1868,21 @@ const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"\x1aEXECUTION_MODE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aEXECUTION_MODE_INTERACTIVE\x10\x01\x12\x1a\n" +
 	"\x16EXECUTION_MODE_GUARDED\x10\x02\x12\x1d\n" +
-	"\x19EXECUTION_MODE_AUTONOMOUS\x10\x03*\x9e\x01\n" +
+	"\x19EXECUTION_MODE_AUTONOMOUS\x10\x03*\x89\x01\n" +
+	"\x10PermissionEffect\x12!\n" +
+	"\x1dPERMISSION_EFFECT_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17PERMISSION_EFFECT_ALLOW\x10\x01\x12\x19\n" +
+	"\x15PERMISSION_EFFECT_ASK\x10\x02\x12\x1a\n" +
+	"\x16PERMISSION_EFFECT_DENY\x10\x03*\xb6\x02\n" +
+	"\x14PermissionCapability\x12%\n" +
+	"!PERMISSION_CAPABILITY_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bPERMISSION_CAPABILITY_SHELL\x10\x01\x12#\n" +
+	"\x1fPERMISSION_CAPABILITY_FILE_READ\x10\x02\x12$\n" +
+	" PERMISSION_CAPABILITY_FILE_WRITE\x10\x03\x12!\n" +
+	"\x1dPERMISSION_CAPABILITY_NETWORK\x10\x04\x12$\n" +
+	" PERMISSION_CAPABILITY_GIT_COMMIT\x10\x05\x12\"\n" +
+	"\x1ePERMISSION_CAPABILITY_GIT_PUSH\x10\x06\x12\x1e\n" +
+	"\x1aPERMISSION_CAPABILITY_TOOL\x10\a*\x9e\x01\n" +
 	"\x0fReconcileAction\x12 \n" +
 	"\x1cRECONCILE_ACTION_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eRECONCILE_ACTION_REPLAY_EVENTS\x10\x01\x12#\n" +
@@ -1673,55 +1901,61 @@ func file_threavia_backend_v1_commands_proto_rawDescGZIP() []byte {
 	return file_threavia_backend_v1_commands_proto_rawDescData
 }
 
-var file_threavia_backend_v1_commands_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_threavia_backend_v1_commands_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_threavia_backend_v1_commands_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_threavia_backend_v1_commands_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_threavia_backend_v1_commands_proto_goTypes = []any{
 	(ExecutionMode)(0),            // 0: threavia.backend.v1.ExecutionMode
-	(ReconcileAction)(0),          // 1: threavia.backend.v1.ReconcileAction
-	(*Welcome)(nil),               // 2: threavia.backend.v1.Welcome
-	(*ExecutionPolicy)(nil),       // 3: threavia.backend.v1.ExecutionPolicy
-	(*ContextDecision)(nil),       // 4: threavia.backend.v1.ContextDecision
-	(*ContextTask)(nil),           // 5: threavia.backend.v1.ContextTask
-	(*ProjectSkill)(nil),          // 6: threavia.backend.v1.ProjectSkill
-	(*CoreToolSpec)(nil),          // 7: threavia.backend.v1.CoreToolSpec
-	(*ProjectContext)(nil),        // 8: threavia.backend.v1.ProjectContext
-	(*StartJob)(nil),              // 9: threavia.backend.v1.StartJob
-	(*UpdateJobPolicy)(nil),       // 10: threavia.backend.v1.UpdateJobPolicy
-	(*CancelJob)(nil),             // 11: threavia.backend.v1.CancelJob
-	(*ValidationResolution)(nil),  // 12: threavia.backend.v1.ValidationResolution
-	(*UserInputResolution)(nil),   // 13: threavia.backend.v1.UserInputResolution
-	(*JobInputNow)(nil),           // 14: threavia.backend.v1.JobInputNow
-	(*JobInputNext)(nil),          // 15: threavia.backend.v1.JobInputNext
-	(*ReconcileInstruction)(nil),  // 16: threavia.backend.v1.ReconcileInstruction
-	(*EventAck)(nil),              // 17: threavia.backend.v1.EventAck
-	(*CoreToolResponse)(nil),      // 18: threavia.backend.v1.CoreToolResponse
-	(*SkillBundle)(nil),           // 19: threavia.backend.v1.SkillBundle
-	(*timestamppb.Timestamp)(nil), // 20: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),       // 21: google.protobuf.Struct
-	(*Error)(nil),                 // 22: threavia.backend.v1.Error
+	(PermissionEffect)(0),         // 1: threavia.backend.v1.PermissionEffect
+	(PermissionCapability)(0),     // 2: threavia.backend.v1.PermissionCapability
+	(ReconcileAction)(0),          // 3: threavia.backend.v1.ReconcileAction
+	(*Welcome)(nil),               // 4: threavia.backend.v1.Welcome
+	(*PermissionRule)(nil),        // 5: threavia.backend.v1.PermissionRule
+	(*ExecutionPolicy)(nil),       // 6: threavia.backend.v1.ExecutionPolicy
+	(*ContextDecision)(nil),       // 7: threavia.backend.v1.ContextDecision
+	(*ContextTask)(nil),           // 8: threavia.backend.v1.ContextTask
+	(*ProjectSkill)(nil),          // 9: threavia.backend.v1.ProjectSkill
+	(*CoreToolSpec)(nil),          // 10: threavia.backend.v1.CoreToolSpec
+	(*ProjectContext)(nil),        // 11: threavia.backend.v1.ProjectContext
+	(*StartJob)(nil),              // 12: threavia.backend.v1.StartJob
+	(*UpdateJobPolicy)(nil),       // 13: threavia.backend.v1.UpdateJobPolicy
+	(*CancelJob)(nil),             // 14: threavia.backend.v1.CancelJob
+	(*ValidationResolution)(nil),  // 15: threavia.backend.v1.ValidationResolution
+	(*UserInputResolution)(nil),   // 16: threavia.backend.v1.UserInputResolution
+	(*JobInputNow)(nil),           // 17: threavia.backend.v1.JobInputNow
+	(*JobInputNext)(nil),          // 18: threavia.backend.v1.JobInputNext
+	(*ReconcileInstruction)(nil),  // 19: threavia.backend.v1.ReconcileInstruction
+	(*EventAck)(nil),              // 20: threavia.backend.v1.EventAck
+	(*CoreToolResponse)(nil),      // 21: threavia.backend.v1.CoreToolResponse
+	(*SkillBundle)(nil),           // 22: threavia.backend.v1.SkillBundle
+	(*timestamppb.Timestamp)(nil), // 23: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),       // 24: google.protobuf.Struct
+	(*Error)(nil),                 // 25: threavia.backend.v1.Error
 }
 var file_threavia_backend_v1_commands_proto_depIdxs = []int32{
-	20, // 0: threavia.backend.v1.Welcome.server_time:type_name -> google.protobuf.Timestamp
-	0,  // 1: threavia.backend.v1.ExecutionPolicy.mode:type_name -> threavia.backend.v1.ExecutionMode
-	21, // 2: threavia.backend.v1.CoreToolSpec.input_schema:type_name -> google.protobuf.Struct
-	4,  // 3: threavia.backend.v1.ProjectContext.decisions:type_name -> threavia.backend.v1.ContextDecision
-	5,  // 4: threavia.backend.v1.ProjectContext.tasks:type_name -> threavia.backend.v1.ContextTask
-	7,  // 5: threavia.backend.v1.ProjectContext.tools:type_name -> threavia.backend.v1.CoreToolSpec
-	6,  // 6: threavia.backend.v1.ProjectContext.skills:type_name -> threavia.backend.v1.ProjectSkill
-	8,  // 7: threavia.backend.v1.StartJob.project_context:type_name -> threavia.backend.v1.ProjectContext
-	3,  // 8: threavia.backend.v1.StartJob.execution_policy:type_name -> threavia.backend.v1.ExecutionPolicy
-	3,  // 9: threavia.backend.v1.UpdateJobPolicy.execution_policy:type_name -> threavia.backend.v1.ExecutionPolicy
-	20, // 10: threavia.backend.v1.ValidationResolution.resolved_at:type_name -> google.protobuf.Timestamp
-	20, // 11: threavia.backend.v1.UserInputResolution.resolved_at:type_name -> google.protobuf.Timestamp
-	1,  // 12: threavia.backend.v1.ReconcileInstruction.action:type_name -> threavia.backend.v1.ReconcileAction
-	21, // 13: threavia.backend.v1.CoreToolResponse.result:type_name -> google.protobuf.Struct
-	22, // 14: threavia.backend.v1.CoreToolResponse.error:type_name -> threavia.backend.v1.Error
-	22, // 15: threavia.backend.v1.SkillBundle.error:type_name -> threavia.backend.v1.Error
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	23, // 0: threavia.backend.v1.Welcome.server_time:type_name -> google.protobuf.Timestamp
+	1,  // 1: threavia.backend.v1.PermissionRule.effect:type_name -> threavia.backend.v1.PermissionEffect
+	2,  // 2: threavia.backend.v1.PermissionRule.capability:type_name -> threavia.backend.v1.PermissionCapability
+	0,  // 3: threavia.backend.v1.ExecutionPolicy.mode:type_name -> threavia.backend.v1.ExecutionMode
+	5,  // 4: threavia.backend.v1.ExecutionPolicy.rules:type_name -> threavia.backend.v1.PermissionRule
+	24, // 5: threavia.backend.v1.CoreToolSpec.input_schema:type_name -> google.protobuf.Struct
+	7,  // 6: threavia.backend.v1.ProjectContext.decisions:type_name -> threavia.backend.v1.ContextDecision
+	8,  // 7: threavia.backend.v1.ProjectContext.tasks:type_name -> threavia.backend.v1.ContextTask
+	10, // 8: threavia.backend.v1.ProjectContext.tools:type_name -> threavia.backend.v1.CoreToolSpec
+	9,  // 9: threavia.backend.v1.ProjectContext.skills:type_name -> threavia.backend.v1.ProjectSkill
+	11, // 10: threavia.backend.v1.StartJob.project_context:type_name -> threavia.backend.v1.ProjectContext
+	6,  // 11: threavia.backend.v1.StartJob.execution_policy:type_name -> threavia.backend.v1.ExecutionPolicy
+	6,  // 12: threavia.backend.v1.UpdateJobPolicy.execution_policy:type_name -> threavia.backend.v1.ExecutionPolicy
+	23, // 13: threavia.backend.v1.ValidationResolution.resolved_at:type_name -> google.protobuf.Timestamp
+	23, // 14: threavia.backend.v1.UserInputResolution.resolved_at:type_name -> google.protobuf.Timestamp
+	3,  // 15: threavia.backend.v1.ReconcileInstruction.action:type_name -> threavia.backend.v1.ReconcileAction
+	24, // 16: threavia.backend.v1.CoreToolResponse.result:type_name -> google.protobuf.Struct
+	25, // 17: threavia.backend.v1.CoreToolResponse.error:type_name -> threavia.backend.v1.Error
+	25, // 18: threavia.backend.v1.SkillBundle.error:type_name -> threavia.backend.v1.Error
+	19, // [19:19] is the sub-list for method output_type
+	19, // [19:19] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_threavia_backend_v1_commands_proto_init() }
@@ -1735,8 +1969,8 @@ func file_threavia_backend_v1_commands_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_threavia_backend_v1_commands_proto_rawDesc), len(file_threavia_backend_v1_commands_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   18,
+			NumEnums:      4,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

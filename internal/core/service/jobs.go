@@ -440,5 +440,48 @@ func policyToProto(policy domain.ExecutionPolicy) *backendv1.ExecutionPolicy {
 		AllowNetwork:         policy.AllowNetwork,
 		MaxDurationSeconds:   uint32(policy.MaxDurationSeconds),
 		MaxActions:           uint32(policy.MaxActions),
+		Rules:                rulesToProto(policy.Rules),
 	}
+}
+
+var effectToProto = map[domain.PermissionEffect]backendv1.PermissionEffect{
+	domain.PermissionAllow: backendv1.PermissionEffect_PERMISSION_EFFECT_ALLOW,
+	domain.PermissionAsk:   backendv1.PermissionEffect_PERMISSION_EFFECT_ASK,
+	domain.PermissionDeny:  backendv1.PermissionEffect_PERMISSION_EFFECT_DENY,
+}
+
+var capabilityToProto = map[domain.PermissionCapability]backendv1.PermissionCapability{
+	domain.CapabilityShell:     backendv1.PermissionCapability_PERMISSION_CAPABILITY_SHELL,
+	domain.CapabilityFileRead:  backendv1.PermissionCapability_PERMISSION_CAPABILITY_FILE_READ,
+	domain.CapabilityFileWrite: backendv1.PermissionCapability_PERMISSION_CAPABILITY_FILE_WRITE,
+	domain.CapabilityNetwork:   backendv1.PermissionCapability_PERMISSION_CAPABILITY_NETWORK,
+	domain.CapabilityGitCommit: backendv1.PermissionCapability_PERMISSION_CAPABILITY_GIT_COMMIT,
+	domain.CapabilityGitPush:   backendv1.PermissionCapability_PERMISSION_CAPABILITY_GIT_PUSH,
+	domain.CapabilityTool:      backendv1.PermissionCapability_PERMISSION_CAPABILITY_TOOL,
+}
+
+// rulesToProto renders the permission rules for the wire.
+//
+// A rule whose effect or capability this Core does not know is dropped rather
+// than sent as UNSPECIFIED: a backend reading an unspecified capability has no
+// honest way to apply it, and a rule it cannot apply must not look applied.
+func rulesToProto(rules []domain.PermissionRule) []*backendv1.PermissionRule {
+	if len(rules) == 0 {
+		return nil
+	}
+	out := make([]*backendv1.PermissionRule, 0, len(rules))
+	for _, rule := range rules {
+		effect, known := effectToProto[rule.Effect]
+		capability, classified := capabilityToProto[rule.Capability]
+		if !known || !classified {
+			continue
+		}
+		out = append(out, &backendv1.PermissionRule{
+			Effect:     effect,
+			Capability: capability,
+			Match:      rule.Match,
+			Note:       rule.Note,
+		})
+	}
+	return out
 }
