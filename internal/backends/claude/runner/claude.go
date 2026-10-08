@@ -298,6 +298,16 @@ func systemPrompt(params StartParams) string {
 	b.WriteString("call the mcp__" + mcp.ServerName + "__" + mcp.ToolAskUser + " tool and wait for the answer. ")
 	b.WriteString("Never guess, and never stop and ask in plain text: a plain-text question reaches nobody.\n")
 
+	// Said here because the agent cannot see it, and because the habit it
+	// otherwise forms is expensive: a command that assigns PATH needs the
+	// user's approval whatever else it does, so one prefix turns every reading
+	// command into a question for someone who may be asleep.
+	b.WriteString("\nYour PATH already carries the tools for this work. ")
+	b.WriteString("Never prefix a command with an assignment to PATH or to another special shell ")
+	b.WriteString("variable: it costs an approval the command would not otherwise need, ")
+	b.WriteString("however harmless the rest of it is. ")
+	b.WriteString("If something you need is genuinely missing, say so rather than working around it.\n")
+
 	if len(params.CoreTools) > 0 {
 		// The tool descriptions say when to use each one; this says why they
 		// exist at all, which is the part an agent cannot infer from a schema.
