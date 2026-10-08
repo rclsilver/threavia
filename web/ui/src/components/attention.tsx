@@ -4,8 +4,10 @@ import { useResolveUserInput, useResolveValidation } from '@/api/queries';
 import type { UserInputRequest, ValidationRequest } from '@/api/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { FileChangeView } from '@/components/file-change';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { fileChangeOf } from '@/lib/file-change';
 
 /**
  * What is waiting for the user, right where the work is.
@@ -37,6 +39,11 @@ export function AttentionPanel({
 
 function ValidationCard({ request }: { request: ValidationRequest }) {
   const resolve = useResolveValidation();
+  const payload = request.requestPayload as { tool?: unknown; input?: unknown };
+  const change =
+    typeof payload.tool === 'string' && payload.input && typeof payload.input === 'object'
+      ? fileChangeOf(payload.tool, payload.input as Record<string, unknown>)
+      : null;
 
   return (
     <Card className="border-warn/40 bg-warn/5">
@@ -46,9 +53,14 @@ function ValidationCard({ request }: { request: ValidationRequest }) {
       </div>
       {request.summary && <p className="text-muted mt-1 text-sm">{request.summary}</p>}
 
-      <pre className="bg-surface-2 text-muted mt-2 max-h-40 overflow-auto rounded p-2 font-mono text-xs">
-        {JSON.stringify(request.requestPayload, null, 2)}
-      </pre>
+      {/* A change to a file is approved by reading the change, not its JSON. */}
+      {change ? (
+        <FileChangeView change={change} className="mt-2" />
+      ) : (
+        <pre className="bg-surface-2 text-muted mt-2 max-h-40 overflow-auto rounded p-2 font-mono text-xs">
+          {JSON.stringify(request.requestPayload, null, 2)}
+        </pre>
+      )}
 
       <div className="mt-3 flex gap-2">
         <Button

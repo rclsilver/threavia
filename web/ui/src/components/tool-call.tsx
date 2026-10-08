@@ -1,5 +1,7 @@
 import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Terminal } from 'lucide-react';
 
+import { FileChangeView } from '@/components/file-change';
+import { changeCounts, fileChangeOf } from '@/lib/file-change';
 import { clock, cn } from '@/lib/utils';
 
 /** One tool call, with whatever is known about how it ended. */
@@ -55,6 +57,8 @@ export function ToolCallEntry({
 }) {
   const summary = summarise(call.input);
   const failed = Boolean(call.error);
+  const change = fileChangeOf(call.name, call.input);
+  const counts = change && changeCounts(change);
 
   return (
     <div
@@ -96,11 +100,21 @@ export function ToolCallEntry({
         {summary && (
           <span className="text-muted truncate font-mono">{summary.replace(/\s+/g, ' ')}</span>
         )}
+        {counts && (
+          <span className="ml-auto shrink-0 font-mono">
+            {counts.added > 0 && <span className="text-ok">+{counts.added}</span>}
+            {counts.removed > 0 && <span className="text-danger ml-1">−{counts.removed}</span>}
+          </span>
+        )}
       </button>
 
       {expanded && (
         <div className="space-y-2 px-3 pt-1 pb-3">
-          <Block title="Input">{format(call.input)}</Block>
+          {change ? (
+            <FileChangeView change={change} />
+          ) : (
+            <Block title="Input">{format(call.input)}</Block>
+          )}
           {call.error !== undefined && (
             <Block title="Error" tone="danger">
               {call.error}
