@@ -421,7 +421,8 @@ func TestDisconnectionIsScopedToItsConnection(t *testing.T) {
 	connect := func(connectionID string) {
 		t.Helper()
 		if err := store.MarkBackendConnected(ctx, f.backend.ID, connectionID, 1,
-			[]domain.Capability{domain.CapabilityCode}, 1, "go", "test", "claude", "test"); err != nil {
+			[]domain.Capability{domain.CapabilityCode}, 1, "go", "test", "claude", "test",
+			[]domain.Feature{domain.FeatureJobInputNext}); err != nil {
 			t.Fatalf("marking the backend connected: %v", err)
 		}
 	}

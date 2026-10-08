@@ -1220,7 +1220,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Append a message, creating a Job */
+        /** Append a message, creating a Job or reaching the running one */
         post: {
             parameters: {
                 query?: never;
@@ -1242,10 +1242,33 @@ export interface paths {
                 content: {
                     "application/json": {
                         message: string;
+                        /**
+                         * @description How the message reaches a Session that is already working
+                         *     (spec section 3.5). QUEUE makes it a Job of its own, started
+                         *     once the running one ends. NEXT hands it to the running Job
+                         *     at its next step; NOW interrupts that Job and reorients it.
+                         *     Both join the running Job's timeline, need the backend to
+                         *     announce the matching feature, and are refused with 409
+                         *     rather than queued when nothing is running to receive them.
+                         *     The Idempotency-Key only applies to QUEUE.
+                         *
+                         * @default QUEUE
+                         * @enum {string}
+                         */
+                        delivery?: "QUEUE" | "NOW" | "NEXT";
                     };
                 };
             };
             responses: {
+                /** @description The running Job the message joined (NOW, NEXT) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Job"];
+                    };
+                };
                 /** @description The created Job */
                 201: {
                     headers: {
@@ -2906,7 +2929,9 @@ export interface components {
             /** @description The shape depends on `type`, and a backend may add one without a
              *     Core release, so it is open. The ones a client renders:
              *
-             *     - `user.message`, `agent.message`: `{ text }`
+             *     - `user.message`: `{ text, delivery? }`, delivery NOW or NEXT for a
+             *       message that joined a Job already running
+             *     - `agent.message`: `{ text }`
              *     - `tool.started`: `{ toolCallId, name, input }`
              *     - `tool.completed`: `{ toolCallId, name, output }`, the output a
              *       bounded excerpt marked with an ellipsis when it was cut
@@ -3146,6 +3171,11 @@ export interface components {
             operationalStatus: components["schemas"]["BackendOperationalStatus"];
             providerAuthState: components["schemas"]["ProviderAuthState"];
             capabilities: components["schemas"]["Capability"][];
+            /** @description The optional CODE features announced on the last connection (spec
+             *     sections 3.5 and 7): whether a message can reach a Job while it
+             *     runs, after interrupting it or at its next step.
+             *      */
+            features?: ("JOB_INPUT_NOW" | "JOB_INPUT_NEXT")[];
             capacity: components["schemas"]["Capacity"];
             conditions?: components["schemas"]["Condition"][];
             protocolVersion: number;

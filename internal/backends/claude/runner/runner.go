@@ -67,6 +67,9 @@ type Runner interface {
 	// Cancel stops a running Job. The Job only reaches CANCELLED once this has
 	// actually stopped the work.
 	Cancel(jobID string) error
+	// Inject hands a message to a running Job: read at its next step, or after
+	// interrupting the turn under way.
+	Inject(jobID, text string, interrupt bool) error
 	// Available reports whether the provider can run at all.
 	Available() error
 }

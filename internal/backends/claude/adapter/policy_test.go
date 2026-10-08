@@ -26,8 +26,9 @@ func (r busyRunner) Run(context.Context, runner.StartParams, runner.Sink) error 
 	<-r.release
 	return nil
 }
-func (busyRunner) Cancel(string) error { return nil }
-func (busyRunner) Available() error    { return nil }
+func (busyRunner) Cancel(string) error               { return nil }
+func (busyRunner) Inject(string, string, bool) error { return nil }
+func (busyRunner) Available() error                  { return nil }
 
 // TestAPolicyChangeReachesTheRunningJob is a regression test: the policy used
 // to be fixed when a Job started, so switching a Session to a looser mode kept

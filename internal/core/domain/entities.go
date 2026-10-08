@@ -88,7 +88,10 @@ type BackendInstance struct {
 	OperationalStatus BackendOperationalStatus `json:"operationalStatus"`
 	ProviderAuthState ProviderAuthState        `json:"providerAuthState"`
 	Capabilities      []Capability             `json:"capabilities"`
-	Capacity          Capacity                 `json:"capacity"`
+	// Features are the optional CODE features the backend announced on its
+	// last connection.
+	Features []Feature `json:"features"`
+	Capacity Capacity  `json:"capacity"`
 	// Conditions explain the operational status: why a backend is DEGRADED, in
 	// the vocabulary the backend chose (spec section 7).
 	Conditions      []Condition `json:"conditions,omitempty"`

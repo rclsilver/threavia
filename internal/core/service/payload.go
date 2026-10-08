@@ -29,6 +29,9 @@ func encodePayload(payload any) (json.RawMessage, error) {
 // there is no separate message history.
 type UserMessagePayload struct {
 	Text string `json:"text"`
+	// Delivery says how a message sent while a Job ran reached it: NOW or
+	// NEXT. Absent for a message that started a Job of its own.
+	Delivery Delivery `json:"delivery,omitempty"`
 }
 
 // AgentMessagePayload is the body of an agent.message event.

@@ -269,6 +269,50 @@ func (a *Adapter) OnUpdateJobPolicy(_ context.Context, cmd *backendv1.UpdateJobP
 	return nil
 }
 
+// OnJobInputNext hands a message to the running Job, read at its next step.
+func (a *Adapter) OnJobInputNext(_ context.Context, cmd *backendv1.JobInputNext) error {
+	a.logger.Info("message for the running job", slog.String("jobId", cmd.GetJobId()))
+	return a.runner.Inject(cmd.GetJobId(), cmd.GetText(), false)
+}
+
+// OnJobInputNow interrupts the running Job and hands it a message.
+//
+// A question the Job was waiting on goes first: the turn that asked it is the
+// one being interrupted, and the tool call blocked on the answer would
+// otherwise hold the interruption until someone answered a question nobody
+// needs any more.
+func (a *Adapter) OnJobInputNow(_ context.Context, cmd *backendv1.JobInputNow) error {
+	a.logger.Info("interrupting the running job", slog.String("jobId", cmd.GetJobId()))
+	if err := a.runner.Inject(cmd.GetJobId(), cmd.GetText(), true); err != nil {
+		return err
+	}
+	a.releaseWaiters(cmd.GetJobId(), ErrInterrupted)
+	return nil
+}
+
+// ErrInterrupted answers a request whose turn was interrupted by a new message.
+var ErrInterrupted = errors.New("the user interrupted this turn with a new message")
+
+// releaseWaiters fails what a Job is waiting on, and keeps the Job.
+func (a *Adapter) releaseWaiters(jobID string, cause error) {
+	a.mu.Lock()
+	var orphaned []*waiter
+	if job, ok := a.jobs[jobID]; ok {
+		for requestID := range job.requests {
+			if w, exists := a.waiters[requestID]; exists {
+				orphaned = append(orphaned, w)
+				delete(a.waiters, requestID)
+			}
+			delete(job.requests, requestID)
+		}
+	}
+	a.mu.Unlock()
+
+	for _, w := range orphaned {
+		w.failed <- cause
+	}
+}
+
 // endedLocally reports whether this backend already recorded an outcome for a
 // Job. It tells a cancel that arrives after the work finished apart from one
 // aimed at a Job nothing is running.

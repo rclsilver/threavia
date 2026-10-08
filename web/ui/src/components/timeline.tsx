@@ -420,6 +420,13 @@ function Entry({
     const status = jobId ? pending[jobId] : undefined;
     return (
       <div className="border-accent bg-surface-2/60 space-y-1 rounded-r-md border-l-2 py-2 pr-3 pl-3">
+        {/* Sent while the agent worked: it changed the course of a Job
+            rather than starting one, and the reader of the log should know. */}
+        {user.delivery && (
+          <p className={cn('text-xs', user.delivery === 'NOW' ? 'text-warn' : 'text-muted')}>
+            {user.delivery === 'NOW' ? 'Interrupted the job with' : 'Added to the running job'}
+          </p>
+        )}
         <p className="text-sm whitespace-pre-wrap">{user.text}</p>
         {jobId && status && <Stop status={status} onStop={() => onStop(jobId)} />}
       </div>

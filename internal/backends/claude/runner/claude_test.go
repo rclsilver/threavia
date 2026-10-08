@@ -133,7 +133,9 @@ func fakeClaude(t *testing.T, script string) (binary, argsFile string) {
 	argsFile = filepath.Join(dir, "args")
 	binary = filepath.Join(dir, "claude")
 
-	content := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + argsFile + "\ncat > /dev/null\n" + script
+	// The first message only: stdin stays open while the Job runs, and reading
+	// to its end would wait for a result this script has not printed yet.
+	content := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + argsFile + "\nIFS= read -r first\n" + script
 	if err := os.WriteFile(binary, []byte(content), 0o700); err != nil {
 		t.Fatalf("writing the fake provider: %v", err)
 	}
@@ -524,5 +526,129 @@ func TestAJobWithoutAccountingReportsNone(t *testing.T) {
 	}
 	if sink.usage != nil {
 		t.Fatalf("usage = %v, want none reported", sink.usage)
+	}
+}
+
+// TestAMessageReachesTheTurnUnderWay pins the "next" delivery: a message sent
+// while the Job runs is written to the same process, the Job ends with the
+// turn that read it, and the process is then told to finish.
+func TestAMessageReachesTheTurnUnderWay(t *testing.T) {
+	t.Parallel()
+
+	received := filepath.Join(t.TempDir(), "received")
+	script := `
+echo '{"type":"user","isReplay":true,"message":{"role":"user","content":"first"}}'
+echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"working"}]}}'
+IFS= read -r second
+printf '%s\n' "$second" > ` + received + `
+echo '{"type":"user","isReplay":true,"message":{"role":"user","content":"second"}}'
+echo '{"type":"result","subtype":"success","is_error":false,"result":"both read"}'
+# The runner closes stdin once every message was read: anything else here
+# would hang the test rather than pass it.
+if IFS= read -r more; then echo '{"type":"result","subtype":"success","is_error":false,"result":"stdin left open"}'; fi
+`
+	binary, argsFile := fakeClaude(t, script)
+	sink := &recordingSink{}
+	claude := newRunner(t, binary)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- claude.Run(context.Background(), runner.StartParams{
+			RunID: "run-1", JobID: "job-1", Prompt: "first", WorkingDirectory: t.TempDir(),
+		}, sink)
+	}()
+	waitFor(t, "the agent to speak", func() bool { return contains(sink.timeline(), "agent.message") })
+
+	if err := claude.Inject("job-1", "also this", false); err != nil {
+		t.Fatalf("injecting a message: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("running the job: %v", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the job did not finish once its last message was answered")
+	}
+
+	if sink.summary != "both read" {
+		t.Errorf("summary = %q, want the turn that read the second message", sink.summary)
+	}
+	line, err := os.ReadFile(received)
+	if err != nil {
+		t.Fatalf("reading what the provider received: %v", err)
+	}
+	if !strings.Contains(string(line), `"type":"user"`) || !strings.Contains(string(line), "also this") {
+		t.Errorf("the provider received %s, want a user message", line)
+	}
+	args := readArgs(t, argsFile)
+	if !hasFlag(args, "--input-format", "stream-json") || !contains(args, "--replay-user-messages") {
+		t.Errorf("args %v must keep stdin open as stream-json and echo what was read", args)
+	}
+
+	if err := claude.Inject("job-1", "too late", false); err != runner.ErrUnknownJob {
+		t.Errorf("injecting into a finished job: got %v, want ErrUnknownJob", err)
+	}
+}
+
+// TestAMessageCanInterruptTheTurn pins the "now" delivery: the turn under way
+// is interrupted, the message starts the next one in the same process, and
+// the Job is judged on that last turn rather than on the interruption.
+func TestAMessageCanInterruptTheTurn(t *testing.T) {
+	t.Parallel()
+
+	received := filepath.Join(t.TempDir(), "received")
+	script := `
+echo '{"type":"user","isReplay":true,"message":{"role":"user","content":"first"}}'
+echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"working"}]}}'
+IFS= read -r control
+IFS= read -r message
+printf '%s\n%s\n' "$control" "$message" > ` + received + `
+echo '{"type":"result","subtype":"error_during_execution","is_error":true,"total_cost_usd":0.01,"usage":{"input_tokens":10,"output_tokens":5}}'
+echo '{"type":"user","isReplay":true,"message":{"role":"user","content":"instead"}}'
+echo '{"type":"result","subtype":"success","is_error":false,"result":"redirected","total_cost_usd":0.03,"usage":{"input_tokens":4,"output_tokens":2}}'
+if IFS= read -r more; then echo '{"type":"result","subtype":"success","is_error":false,"result":"stdin left open"}'; fi
+`
+	binary, _ := fakeClaude(t, script)
+	sink := &recordingSink{}
+	claude := newRunner(t, binary)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- claude.Run(context.Background(), runner.StartParams{
+			RunID: "run-1", JobID: "job-1", Prompt: "first", WorkingDirectory: t.TempDir(),
+		}, sink)
+	}()
+	waitFor(t, "the agent to speak", func() bool { return contains(sink.timeline(), "agent.message") })
+
+	if err := claude.Inject("job-1", "do this instead", true); err != nil {
+		t.Fatalf("interrupting with a message: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("running the job: %v", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the job did not finish once its last message was answered")
+	}
+
+	lines, err := os.ReadFile(received)
+	if err != nil {
+		t.Fatalf("reading what the provider received: %v", err)
+	}
+	sent := strings.Split(strings.TrimSpace(string(lines)), "\n")
+	if len(sent) != 2 || !strings.Contains(sent[0], `"subtype":"interrupt"`) || !strings.Contains(sent[1], "do this instead") {
+		t.Fatalf("the provider received %q, want an interrupt then the message", sent)
+	}
+
+	if !contains(sink.timeline(), "job.completed") || sink.summary != "redirected" {
+		t.Errorf("timeline = %v, summary = %q: an interrupted turn followed by an answer is a completed job",
+			sink.timeline(), sink.summary)
+	}
+	if sink.usage == nil || sink.usage.InputTokens != 14 || sink.usage.CostUsd != 0.03 {
+		t.Errorf("usage = %v, want the tokens of both turns and the process cost so far", sink.usage)
 	}
 }

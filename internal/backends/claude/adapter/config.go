@@ -94,6 +94,10 @@ func Default() Config {
 	clientCfg.BackendName = "claude"
 	clientCfg.CoreAddress = "localhost:9090"
 	clientCfg.InstanceName = defaultInstanceName()
+	// Claude Code reads its messages from stdin as stream-json, so a message
+	// can reach a turn under way, after an interrupt or not.
+	clientCfg.FeatureJobInputNow = true
+	clientCfg.FeatureJobInputNext = true
 
 	return Config{
 		Log:    LogConfig{Level: logging.LevelInfo, Format: logging.FormatText},

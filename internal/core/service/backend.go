@@ -36,11 +36,19 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 		capabilities = append(capabilities, capabilityFromProto(capability))
 	}
 
+	var features []domain.Feature
+	if hello.GetFeatures().GetJobInputNow() {
+		features = append(features, domain.FeatureJobInputNow)
+	}
+	if hello.GetFeatures().GetJobInputNext() {
+		features = append(features, domain.FeatureJobInputNext)
+	}
+
 	if err := s.store.MarkBackendConnected(ctx, instanceID, connectionID,
 		int(hello.GetProtocol().GetVersion()), capabilities,
 		int(hello.GetCapacity().GetMaxConcurrentRuns()),
 		hello.GetSdk().GetName(), hello.GetSdk().GetVersion(),
-		hello.GetBackend().GetName(), hello.GetBackend().GetVersion()); err != nil {
+		hello.GetBackend().GetName(), hello.GetBackend().GetVersion(), features); err != nil {
 		return err
 	}
 

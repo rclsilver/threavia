@@ -8,6 +8,8 @@ import (
 	"strings"
 	"unicode"
 
+	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
+
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
 	"github.com/rclsilver/threavia/internal/core/events"
@@ -159,10 +161,17 @@ func (s *Service) replayStartSession(ctx context.Context, identity auth.Identity
 // PostMessage appends a message to an existing Session. It becomes a new Job on
 // the current Run, which is how a second message resumes the same provider
 // native session.
-func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string) (domain.Job, error) {
+func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string, delivery Delivery) (domain.Job, error) {
 	message = strings.TrimSpace(message)
 	if message == "" {
 		return domain.Job{}, fmt.Errorf("%w: the message cannot be empty", ErrInvalid)
+	}
+	switch delivery {
+	case "", DeliveryQueue:
+	case DeliveryNow, DeliveryNext:
+		return s.deliverToRunningJob(ctx, identity, sessionID, message, delivery)
+	default:
+		return domain.Job{}, fmt.Errorf("%w: unknown delivery %q", ErrInvalid, delivery)
 	}
 
 	if idempotencyKey != "" {
@@ -217,6 +226,111 @@ func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessi
 	s.flush(b)
 	s.DispatchJob(ctx, job.ID)
 	return job, nil
+}
+
+// Delivery is how a message reaches a Session that is already working (spec
+// section 3.5).
+type Delivery string
+
+const (
+	// DeliveryQueue makes the message a Job of its own, started once the
+	// running one ends. The default, and the only one every backend supports.
+	DeliveryQueue Delivery = "QUEUE"
+	// DeliveryNow interrupts the running Job and reorients it at once.
+	DeliveryNow Delivery = "NOW"
+	// DeliveryNext reaches the running Job at its next step.
+	DeliveryNext Delivery = "NEXT"
+)
+
+// deliverToRunningJob hands a message to the Job already running in a
+// Session, rather than queueing a new one behind it.
+//
+// The message joins that Job's timeline: it is part of the work under way,
+// and the answer to it comes in the same turn or the one the interruption
+// starts. Refused, rather than quietly queued, when nothing is running or the
+// backend cannot do it: the person chose to reach the work now, and turning
+// that into "later" without saying so would answer a question they did not
+// ask.
+func (s *Service) deliverToRunningJob(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message string, delivery Delivery) (domain.Job, error) {
+	session, err := s.store.GetSession(ctx, identity.UserID, sessionID)
+	if err != nil {
+		return domain.Job{}, translate(err)
+	}
+	if session.Status != domain.SessionActive {
+		return domain.Job{}, fmt.Errorf("%w: the session is archived", ErrConflict)
+	}
+	run, err := s.store.LatestRun(ctx, sessionID)
+	if err != nil {
+		return domain.Job{}, translate(err)
+	}
+	job, err := s.store.ActiveJob(ctx, run.ID)
+	if errors.Is(err, postgres.ErrNotFound) {
+		return domain.Job{}, fmt.Errorf("%w: no job is running to receive it; send it as a new message", ErrConflict)
+	}
+	if err != nil {
+		return domain.Job{}, translate(err)
+	}
+	switch job.Status {
+	case domain.JobCancelling, domain.JobWaitingBackend:
+		return domain.Job{}, fmt.Errorf("%w: the running job cannot take a message while it is %s",
+			ErrConflict, strings.ToLower(string(job.Status)))
+	}
+
+	feature := domain.FeatureJobInputNext
+	if delivery == DeliveryNow {
+		feature = domain.FeatureJobInputNow
+	}
+	instance, err := s.store.BackendInstanceByID(ctx, run.BackendInstanceID)
+	if err != nil {
+		return domain.Job{}, translate(err)
+	}
+	if !instance.HasFeature(feature) {
+		return domain.Job{}, fmt.Errorf("%w: the backend of this session cannot take a message while it works", ErrConflict)
+	}
+	conn, ok := s.backends.Lookup(run.BackendInstanceID)
+	if !ok {
+		return domain.Job{}, fmt.Errorf("%w: the backend of this session is offline", ErrConflict)
+	}
+
+	scope := domain.Scope{ProjectID: session.ProjectID, SessionID: sessionID, RunID: run.ID, JobID: job.ID}
+	b := &batch{ownerID: identity.UserID}
+	err = s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		if err := tx.TouchSession(ctx, sessionID); err != nil {
+			return err
+		}
+		if delivery == DeliveryNow {
+			// The turn that asked is the one being interrupted: what it was
+			// waiting on no longer needs an answer.
+			if err := tx.AbandonJobAttention(ctx, job.ID, "interrupted by a new message"); err != nil {
+				return err
+			}
+			if err := transitionTo(ctx, tx, job.ID, domain.JobRunning, nil); err != nil {
+				return err
+			}
+		}
+		return s.appendAll(ctx, tx, b,
+			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, Delivery: delivery}},
+		)
+	})
+	if err != nil {
+		return domain.Job{}, translate(err)
+	}
+	s.flush(b)
+
+	command := &backendv1.CoreToBackend{CommandId: domain.NewUUID()}
+	if delivery == DeliveryNow {
+		command.Message = &backendv1.CoreToBackend_JobInputNow{JobInputNow: &backendv1.JobInputNow{
+			RunId: string(run.ID), JobId: string(job.ID), Text: message,
+		}}
+	} else {
+		command.Message = &backendv1.CoreToBackend_JobInputNext{JobInputNext: &backendv1.JobInputNext{
+			RunId: string(run.ID), JobId: string(job.ID), Text: message,
+		}}
+	}
+	conn.Send(command)
+
+	job, err = s.store.JobByID(ctx, job.ID)
+	return job, translate(err)
 }
 
 // RenameSession sets a user-chosen title.

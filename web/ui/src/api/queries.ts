@@ -293,10 +293,26 @@ export function useStartSession() {
   });
 }
 
+/** How a message reaches a Session already working (spec section 3.5). */
+export type Delivery = 'QUEUE' | 'NEXT' | 'NOW';
+
 export function usePostMessage(sessionId: string) {
+  const queries = useQueryClient();
   return useMutation({
-    mutationFn: (message: string) =>
-      api.post<Job>(`/api/v1/sessions/${sessionId}/messages`, { message }, idempotencyKey()),
+    mutationFn: ({ message, delivery = 'QUEUE' }: { message: string; delivery?: Delivery }) =>
+      api.post<Job>(
+        `/api/v1/sessions/${sessionId}/messages`,
+        delivery === 'QUEUE' ? { message } : { message, delivery },
+        delivery === 'QUEUE' ? idempotencyKey() : undefined,
+      ),
+    onSuccess: (_job, { delivery }) => {
+      // An interruption drops what the interrupted turn was waiting on, which
+      // Core resolves without an event of its own.
+      if (delivery === 'NOW') {
+        void queries.invalidateQueries({ queryKey: keys.attention() });
+        void queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
+      }
+    },
   });
 }
 

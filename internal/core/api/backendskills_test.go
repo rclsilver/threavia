@@ -48,12 +48,24 @@ func (r *idleRunner) Run(ctx context.Context, params runner.StartParams, _ runne
 	return nil
 }
 
-func (r *idleRunner) Cancel(string) error { return runner.ErrUnknownJob }
-func (r *idleRunner) Available() error    { return nil }
+func (r *idleRunner) Cancel(string) error               { return runner.ErrUnknownJob }
+func (r *idleRunner) Inject(string, string, bool) error { return runner.ErrUnknownJob }
+func (r *idleRunner) Available() error                  { return nil }
 
 // connectClaudeBackend runs the real Claude adapter against this Core, over the
 // real control stream.
 func (c *core) connectClaudeBackend(credential, skillCache string, discoveryRoots ...string) *idleRunner {
+	c.t.Helper()
+
+	local := newIdleRunner()
+	c.t.Cleanup(func() { close(local.release) })
+	c.connectBackendWith(local, credential, skillCache, discoveryRoots...)
+	return local
+}
+
+// connectBackendWith runs the real Claude adapter over the given stand-in for
+// the provider.
+func (c *core) connectBackendWith(local runner.Runner, credential, skillCache string, discoveryRoots ...string) {
 	c.t.Helper()
 
 	cfg := adapter.Default()
@@ -61,12 +73,10 @@ func (c *core) connectClaudeBackend(credential, skillCache string, discoveryRoot
 	cfg.Claude.DefaultWorkingDirectory = c.t.TempDir()
 	cfg.Claude.DiscoveryRoots = discoveryRoots
 
-	local := newIdleRunner()
-	c.t.Cleanup(func() { close(local.release) })
 	handler := adapter.New(cfg, local, sdkstate.NewMemoryStore(),
 		slog.New(slog.NewTextHandler(discard{}, nil)))
 
-	clientCfg := sdkclient.DefaultConfig()
+	clientCfg := cfg.Client
 	clientCfg.CoreAddress = "passthrough:///bufnet"
 	clientCfg.Token = credential
 	clientCfg.InstanceName = "claude-test"
@@ -88,7 +98,6 @@ func (c *core) connectClaudeBackend(credential, skillCache string, discoveryRoot
 	go func() { _ = sdk.Run(ctx) }()
 
 	waitUntil(c.t, "the claude backend to connect", func() bool { return sdk.Connected() })
-	return local
 }
 
 type discard struct{}

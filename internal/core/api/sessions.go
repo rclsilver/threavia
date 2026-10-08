@@ -190,7 +190,8 @@ func (h *handler) sessionHistory(w http.ResponseWriter, r *http.Request, identit
 // therefore resumes the same provider native session.
 func (h *handler) postMessage(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
 	body, ok := decode[struct {
-		Message string `json:"message"`
+		Message  string           `json:"message"`
+		Delivery service.Delivery `json:"delivery"`
 	}](w, r)
 	if !ok {
 		return
@@ -198,10 +199,16 @@ func (h *handler) postMessage(w http.ResponseWriter, r *http.Request, identity a
 
 	job, err := h.svc.PostMessage(r.Context(), identity,
 		domain.SessionID(r.PathValue("sessionId")), body.Message,
-		r.Header.Get("Idempotency-Key"))
+		r.Header.Get("Idempotency-Key"), body.Delivery)
 	if err != nil {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, job)
+	// A message delivered to the running Job created nothing: it answers with
+	// the Job it joined.
+	status := http.StatusCreated
+	if body.Delivery == service.DeliveryNow || body.Delivery == service.DeliveryNext {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, job)
 }

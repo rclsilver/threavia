@@ -55,7 +55,7 @@ export interface List<T> {
  */
 export interface EventPayloads {
   'session.created': { title: string };
-  'user.message': { text: string };
+  'user.message': { text: string; delivery?: 'NOW' | 'NEXT' };
   'agent.message': { text: string };
   'tool.started': { toolCallId: string; name: string; input?: Record<string, unknown> };
   // The backend keeps a bounded excerpt of the output and marks it with an

@@ -88,10 +88,24 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 0, 64<<10), maxLine)
+	echoes := 0
 
 	for scanner.Scan() {
 		raw := strings.TrimSpace(scanner.Text())
 		if raw == "" {
+			continue
+		}
+
+		// A message the provider read, echoed back. Its content is a plain
+		// string rather than blocks, and it is not news: Core already put it
+		// in the timeline when it was sent.
+		var head struct {
+			Type     string `json:"type"`
+			IsReplay bool   `json:"isReplay"`
+		}
+		if err := json.Unmarshal([]byte(raw), &head); err == nil && head.Type == "user" && head.IsReplay {
+			c.consumedInput(params.JobID, echoes == 0)
+			echoes++
 			continue
 		}
 
@@ -118,13 +132,17 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 			c.emitToolResults(ctx, params, line, toolNames, sink)
 
 		case "result":
+			// A Job can span several turns of one process, when a message
+			// reached it while it ran. The last turn says how it ended; the
+			// accounting covers all of them.
 			result.completed = true
 			result.failed = line.IsError
 			result.summary = line.Result
 			if result.summary == "" && line.IsError {
 				result.summary = "claude code reported an error (" + line.Subtype + ")"
 			}
-			result.usage = normaliseUsage(line)
+			result.usage = addUsage(result.usage, normaliseUsage(line))
+			c.turnEnded(params.JobID)
 
 		default:
 			// Rate limit notices and other provider bookkeeping are liveness at
@@ -247,6 +265,25 @@ func truncate(value string, limit int) string {
 		return value
 	}
 	return string(runes[:limit]) + "…"
+}
+
+// addUsage folds the accounting of one more turn into a Job's. Tokens are
+// reported per turn and add up; the cost is the process total so far, so the
+// latest one is the whole of it.
+func addUsage(total, turn *backendv1.Usage) *backendv1.Usage {
+	if total == nil {
+		return turn
+	}
+	if turn == nil {
+		return total
+	}
+	return &backendv1.Usage{
+		InputTokens:      total.InputTokens + turn.InputTokens,
+		OutputTokens:     total.OutputTokens + turn.OutputTokens,
+		CacheReadTokens:  total.CacheReadTokens + turn.CacheReadTokens,
+		CacheWriteTokens: total.CacheWriteTokens + turn.CacheWriteTokens,
+		CostUsd:          turn.CostUsd,
+	}
 }
 
 // normaliseUsage turns what the provider reported into the protocol shape.

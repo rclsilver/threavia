@@ -150,6 +150,29 @@ func (s ProviderAuthState) Valid() bool {
 	}
 }
 
+// Feature is an optional CODE feature a backend announces (spec sections 3.5
+// and 7). The rest of the CODE contract is mandatory and has no flag.
+type Feature string
+
+const (
+	// FeatureJobInputNow: a message can interrupt the running Job and reorient
+	// it at once.
+	FeatureJobInputNow Feature = "JOB_INPUT_NOW"
+	// FeatureJobInputNext: a message can reach the running Job at its next
+	// step, without interrupting it.
+	FeatureJobInputNext Feature = "JOB_INPUT_NEXT"
+)
+
+// HasFeature reports whether the instance announced f.
+func (b BackendInstance) HasFeature(f Feature) bool {
+	for _, have := range b.Features {
+		if have == f {
+			return true
+		}
+	}
+	return false
+}
+
 // Capability is an extensible BackendInstance capability (spec section 7).
 type Capability string
 

@@ -19,6 +19,7 @@ type idleRunner struct{}
 
 func (idleRunner) Run(context.Context, runner.StartParams, runner.Sink) error { return nil }
 func (idleRunner) Cancel(string) error                                        { return runner.ErrUnknownJob }
+func (idleRunner) Inject(string, string, bool) error                          { return runner.ErrUnknownJob }
 func (idleRunner) Available() error                                           { return nil }
 
 // boundAdapter returns an adapter wired to an unreachable Core, so the events it

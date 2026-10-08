@@ -12,6 +12,7 @@ import {
   useRenameSession,
   useEarlierEvents,
   useSnapshot,
+  type Delivery,
 } from '@/api/queries';
 import { AttentionPanel } from '@/components/attention';
 import { Badge } from '@/components/ui/badge';
@@ -27,7 +28,7 @@ import {
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useStream } from '@/use-stream';
-import { humanise } from '@/lib/utils';
+import { cn, humanise } from '@/lib/utils';
 
 const FINISHED = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
 
@@ -37,6 +38,7 @@ export function SessionView() {
   const snapshot = useSnapshot(sessionId);
   const cancel = useCancelJob(sessionId);
   const earlier = useEarlierEvents(sessionId);
+  const backends = useBackends();
 
   // The snapshot is a point the stream has already passed, so a reconnection
   // resumes from here rather than replaying what is on screen.
@@ -75,6 +77,15 @@ export function SessionView() {
   const data = snapshot.data;
   const active = data.jobs.find((job) => !FINISHED.has(job.status));
   const working = activity(sessionId);
+
+  // A message can reach the running work only if something is running to
+  // receive it, and only the way the backend holding the Session announced.
+  const run = [...data.runs].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
+  const features = backends.data?.find((backend) => backend.id === run?.backendInstanceId)?.features ?? [];
+  const receiving = active && !['QUEUED', 'CANCELLING', 'WAITING_BACKEND'].includes(active.status);
+  const deliveries = receiving
+    ? (['NEXT', 'NOW'] as const).filter((delivery) => features.includes(`JOB_INPUT_${delivery}`))
+    : [];
 
   // Every Job still going somewhere, so the timeline can offer a stop on the
   // message that started it. A Session has one active Job and may have several
@@ -143,6 +154,7 @@ export function SessionView() {
       <Composer
         sessionId={sessionId}
         active={active}
+        deliveries={deliveries}
         onStop={() => active && cancel.mutate(active.id)}
       />
     </div>
@@ -222,13 +234,63 @@ function SessionTitle({ sessionId, title }: { sessionId: string; title: string }
  * grows with what is being written instead of hiding the top of a long message
  * behind a fixed three rows.
  */
+const PLACEHOLDERS: Record<Delivery | 'IDLE', string> = {
+  IDLE: 'Send a message…',
+  QUEUE: 'Queue a message for when this is done…',
+  NEXT: 'Add something it reads at its next step…',
+  NOW: 'Interrupt it and say what to do instead…',
+};
+
+const DELIVERY_LABELS: Record<Delivery, { label: string; title: string }> = {
+  QUEUE: { label: 'Queue', title: 'Start a new job once this one is done' },
+  NEXT: { label: 'Next step', title: 'Let the running job read it after what it is doing now' },
+  NOW: { label: 'Interrupt', title: 'Stop what it is doing and redirect it with this message' },
+};
+
+/** Where a message sent while the agent works goes. */
+function DeliveryChoice({
+  value,
+  offered,
+  onChange,
+}: {
+  value: Delivery;
+  offered: ('NEXT' | 'NOW')[];
+  onChange: (delivery: Delivery) => void;
+}) {
+  const options: Delivery[] = ['QUEUE', ...(['NEXT', 'NOW'] as const).filter((d) => offered.includes(d))];
+  return (
+    <div role="radiogroup" aria-label="How to send" className="border-border ml-1 flex rounded-full border p-0.5">
+      {options.map((option) => (
+        <button
+          key={option}
+          type="button"
+          role="radio"
+          aria-checked={value === option}
+          title={DELIVERY_LABELS[option].title}
+          onClick={() => onChange(option)}
+          className={cn(
+            'rounded-full px-2 py-0.5 transition-colors',
+            value === option ? 'bg-surface-2 text-text' : 'hover:text-text',
+            value === option && option === 'NOW' && 'text-warn',
+          )}
+        >
+          {DELIVERY_LABELS[option].label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Composer({
   sessionId,
   active,
+  deliveries,
   onStop,
 }: {
   sessionId: string;
   active?: { id: string; status: string };
+  /** What the running work can take besides a queued message. */
+  deliveries: ('NEXT' | 'NOW')[];
   onStop: () => void;
 }) {
   const send = usePostMessage(sessionId);
@@ -242,11 +304,25 @@ function Composer({
     element.style.height = `${Math.min(element.scrollHeight, 240)}px`;
   }, [message]);
 
+  // How a message reaches the work already running. Queued by default, as
+  // decided; the other two only when the backend holding the Session can do
+  // them, and only while there is something running to receive them.
+  const [delivery, setDelivery] = useState<Delivery>('QUEUE');
+  const chosen = deliveries.includes(delivery as 'NEXT' | 'NOW') ? delivery : 'QUEUE';
+
   const submit = () => {
     const text = message.trim();
     if (!text) return;
     setMessage('');
-    send.mutate(text, { onError: () => setMessage(text) });
+    send.mutate(
+      { message: text, delivery: chosen },
+      {
+        onError: () => setMessage(text),
+        // One message at a time reaches the running work; the next one is
+        // queued again unless chosen otherwise.
+        onSuccess: () => setDelivery('QUEUE'),
+      },
+    );
   };
 
   return (
@@ -275,6 +351,9 @@ function Composer({
                 <Square className="fill-current" />
                 Stop
               </Button>
+              {deliveries.length > 0 && (
+                <DeliveryChoice value={chosen} offered={deliveries} onChange={setDelivery} />
+              )}
             </>
           )}
         </div>
@@ -301,7 +380,7 @@ function Composer({
                 submit();
               }
             }}
-            placeholder="Send a message…"
+            placeholder={PLACEHOLDERS[active ? chosen : 'IDLE']}
             className="placeholder:text-muted/80 max-h-60 flex-1 resize-none bg-transparent py-2 text-sm outline-none"
           />
           <Button

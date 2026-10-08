@@ -9,7 +9,7 @@ import (
 
 const backendColumns = `b.id, b.owner_id, b.name, b.ownership_status, b.operational_status,
 	b.provider_auth_state, b.capabilities, b.max_concurrent_runs, b.active_runs,
-	b.protocol_version, b.connection_id, b.last_heartbeat_at,
+	b.protocol_version, b.connection_id, b.last_heartbeat_at, b.features,
 	b.created_at, b.updated_at, b.revoked_at`
 
 // CreateBackendInstance inserts a BackendInstance, with the SHA-256 of the
@@ -77,16 +77,16 @@ func (s *Store) ListBackendInstances(ctx context.Context, ownerID domain.UserID)
 
 // MarkBackendConnected records the connection lease and what the backend
 // advertised in its Hello.
-func (s *Store) MarkBackendConnected(ctx context.Context, id domain.BackendInstanceID, connectionID string, protocolVersion int, capabilities []domain.Capability, maxConcurrentRuns int, sdk, sdkVersion, backendName, backendVersion string) error {
+func (s *Store) MarkBackendConnected(ctx context.Context, id domain.BackendInstanceID, connectionID string, protocolVersion int, capabilities []domain.Capability, maxConcurrentRuns int, sdk, sdkVersion, backendName, backendVersion string, features []domain.Feature) error {
 	_, err := s.q.Exec(ctx, `
 		UPDATE backend_instances
 		SET connection_id = $2, connected_at = now(), last_heartbeat_at = now(),
 		    operational_status = 'STARTING', protocol_version = $3, capabilities = $4,
 		    max_concurrent_runs = $5, sdk_name = $6, sdk_version = $7,
-		    backend_name = $8, backend_version = $9, updated_at = now()
+		    backend_name = $8, backend_version = $9, features = $10, updated_at = now()
 		WHERE id = $1`,
 		id, connectionID, protocolVersion, capabilityStrings(capabilities),
-		maxConcurrentRuns, sdk, sdkVersion, backendName, backendVersion)
+		maxConcurrentRuns, sdk, sdkVersion, backendName, backendVersion, featureStrings(features))
 	return classify(err, "mark backend connected")
 }
 
@@ -183,11 +183,12 @@ func scanBackendInstance(row scanner) (domain.BackendInstance, error) {
 	var (
 		instance     domain.BackendInstance
 		capabilities []string
+		features     []string
 	)
 	err := row.Scan(&instance.ID, &instance.OwnerID, &instance.Name, &instance.OwnershipStatus,
 		&instance.OperationalStatus, &instance.ProviderAuthState, &capabilities,
 		&instance.Capacity.MaxConcurrentRuns, &instance.Capacity.ActiveRuns,
-		&instance.ProtocolVersion, &instance.ConnectionID, &instance.LastHeartbeatAt,
+		&instance.ProtocolVersion, &instance.ConnectionID, &instance.LastHeartbeatAt, &features,
 		&instance.CreatedAt, &instance.UpdatedAt, &instance.RevokedAt)
 	if err != nil {
 		return instance, classify(err, "read backend instance")
@@ -196,7 +197,19 @@ func scanBackendInstance(row scanner) (domain.BackendInstance, error) {
 	for _, c := range capabilities {
 		instance.Capabilities = append(instance.Capabilities, domain.Capability(c))
 	}
+	instance.Features = make([]domain.Feature, 0, len(features))
+	for _, f := range features {
+		instance.Features = append(instance.Features, domain.Feature(f))
+	}
 	return instance, nil
+}
+
+func featureStrings(features []domain.Feature) []string {
+	out := make([]string, 0, len(features))
+	for _, f := range features {
+		out = append(out, string(f))
+	}
+	return out
 }
 
 // ReplaceBackendConditions records why a backend is in the state it reports.

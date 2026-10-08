@@ -3,6 +3,7 @@ package runner
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 
 	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
+	"github.com/rclsilver/threavia/internal/backends/claude/policy"
 	"github.com/rclsilver/threavia/internal/backends/claude/workspace"
 )
 
@@ -52,6 +54,113 @@ type Claude struct {
 type execution struct {
 	stop      context.CancelFunc
 	cancelled bool
+
+	// The provider reads its messages from stdin as stream-json, which is what
+	// lets a message reach a turn already under way. Guarded by the runner
+	// mutex, like the fields above.
+	stdin io.WriteCloser
+	// injected counts the messages written after the first, and consumed how
+	// many of them the provider has echoed back as read. The process is told
+	// to finish only once a turn ends with nothing written left unread.
+	injected int
+	consumed int
+	// closed is set once stdin is closed: the process is finishing its last
+	// turn and nothing more can reach it.
+	closed bool
+	// interrupts numbers the control requests, which the provider answers by
+	// id.
+	interrupts int
+	// policy is the one the Job started with, whose supervision statement goes
+	// in front of every message the Job receives.
+	policy policy.Policy
+}
+
+// ErrJobFinishing is returned when a message arrives after the provider was
+// told the Job is over: it can no longer reach that process.
+var ErrJobFinishing = errors.New("the job is finishing and takes no more input")
+
+// Inject hands a message to a Job that is running.
+//
+// Without interrupt, the provider reads it at its next step and the current
+// turn carries on with it in mind: the "next" delivery of the spec. With
+// interrupt, the current turn is stopped first and the message starts a new
+// one in the same process and the same provider session: "now".
+func (c *Claude) Inject(jobID, text string, interrupt bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	live, ok := c.running[jobID]
+	if !ok {
+		return ErrUnknownJob
+	}
+	if live.closed || live.stdin == nil {
+		return ErrJobFinishing
+	}
+	if interrupt {
+		live.interrupts++
+		request, err := json.Marshal(map[string]any{
+			"type":       "control_request",
+			"request_id": fmt.Sprintf("interrupt-%d", live.interrupts),
+			"request":    map[string]any{"subtype": "interrupt"},
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := live.stdin.Write(append(request, '\n')); err != nil {
+			return fmt.Errorf("interrupt the provider: %w", err)
+		}
+	}
+	if err := writeUserMessage(live.stdin, supervised(live.policy, text)); err != nil {
+		return err
+	}
+	live.injected++
+	return nil
+}
+
+// writeUserMessage writes one user message in the provider's stream-json input
+// format.
+func writeUserMessage(stdin io.Writer, text string) error {
+	line, err := json.Marshal(map[string]any{
+		"type":    "user",
+		"message": map[string]any{"role": "user", "content": text},
+	})
+	if err != nil {
+		return err
+	}
+	if _, err := stdin.Write(append(line, '\n')); err != nil {
+		return fmt.Errorf("write to the provider: %w", err)
+	}
+	return nil
+}
+
+// consumedInput records that the provider read a message it was sent. The
+// first echo is the message that started the Job, which is not counted.
+func (c *Claude) consumedInput(jobID string, first bool) {
+	if first {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if live, ok := c.running[jobID]; ok {
+		live.consumed++
+	}
+}
+
+// turnEnded closes stdin when a turn ends with every message read, which tells
+// the provider to exit once it is done. A message written but not read yet
+// keeps the process open: it starts the next turn, or it is the one an
+// interrupt made room for.
+func (c *Claude) turnEnded(jobID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	live, ok := c.running[jobID]
+	if !ok || live.closed || live.consumed < live.injected {
+		return
+	}
+	live.closed = true
+	if live.stdin != nil {
+		_ = live.stdin.Close()
+	}
 }
 
 // NewClaude builds the runner. The MCP server is where permission prompts and
@@ -263,7 +372,13 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	if err != nil {
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "INTERNAL", err.Error(), nil)
 	}
-	cmd.Stdin = strings.NewReader(withSupervision(params))
+	// Kept open while the Job runs: a message sent to it travels the same way
+	// as the first one, and the process exits once stdin is closed.
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return sink.JobFailed(ctx, params.RunID, params.JobID, "INTERNAL", err.Error(), nil)
+	}
+	defer func() { _ = stdin.Close() }()
 
 	c.logger.Info("starting claude code",
 		slog.String("jobId", params.JobID),
@@ -274,6 +389,13 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	if err := cmd.Start(); err != nil {
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "SPAWN_FAILED", err.Error(), nil)
 	}
+	if err := writeUserMessage(stdin, supervised(params.Policy, params.Prompt)); err != nil {
+		c.logger.Error("cannot hand the message to the provider", slog.String("error", err.Error()))
+	}
+	c.mu.Lock()
+	live.stdin = stdin
+	live.policy = params.Policy
+	c.mu.Unlock()
 
 	if err := sink.JobStarted(ctx, params.RunID, params.JobID); err != nil {
 		c.logger.Error("cannot report the job start", slog.String("error", err.Error()))
@@ -293,6 +415,11 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	}()
 
 	outcome := c.consume(ctx, stdout, params, sink)
+	if outcome.stoppedBy != "" {
+		// Stopped mid-stream: nothing reads the output any more, and a process
+		// left waiting on its next message would never exit.
+		stop()
+	}
 	wg.Wait()
 	waitErr := cmd.Wait()
 
@@ -361,6 +488,11 @@ func (c *Claude) command(ctx context.Context, params StartParams, nativeSessionI
 	args := []string{
 		"--print",
 		"--output-format", "stream-json",
+		// Messages arrive on stdin as stream-json, so one can reach a turn
+		// under way; each is echoed back once read, which is how the runner
+		// knows when the last one has been answered.
+		"--input-format", "stream-json",
+		"--replay-user-messages",
 		"--verbose",
 		// Permission prompts travel to Threavia instead of blocking a terminal.
 		"--permission-prompt-tool", mcp.PermissionTool,
@@ -539,10 +671,16 @@ func (c *Claude) drainStderr(stderr io.Reader, into *strings.Builder) {
 // it there would be saying something to nobody while spending the agent's
 // context on it.
 func withSupervision(params StartParams) string {
-	statement := strings.TrimSpace(params.Policy.Supervision)
-	if statement == "" || params.Policy.Mode != backendv1.ExecutionMode_EXECUTION_MODE_SUPERVISED {
-		return params.Prompt
+	return supervised(params.Policy, params.Prompt)
+}
+
+// supervised is withSupervision for any message of the Job, including one
+// sent while it runs: that one is read by the reviewer like the first.
+func supervised(p policy.Policy, text string) string {
+	statement := strings.TrimSpace(p.Supervision)
+	if statement == "" || p.Mode != backendv1.ExecutionMode_EXECUTION_MODE_SUPERVISED {
+		return text
 	}
 	return "Standing instructions for this project, which apply to everything below:\n" +
-		statement + "\n\n" + params.Prompt
+		statement + "\n\n" + text
 }
