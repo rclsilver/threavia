@@ -135,6 +135,30 @@ func (p Policy) Evaluate(tool string, input map[string]any) Decision {
 		return denial
 	}
 
+	// A prefix that buys nothing and costs a person.
+	//
+	// `export PATH=/run/current-system/sw/bin:$PATH && grep -n foo src` cannot
+	// be approved by any rule: the provider refuses to decide a command whose
+	// value it cannot resolve before running it — "a variable in this command
+	// can't be checked before it runs" — and that verdict stands over an
+	// explicit allow. So one habitual prefix turns every reading command into a
+	// question for someone who may be asleep, which is precisely what GUARDED
+	// exists to avoid.
+	//
+	// Refusing it is the only answer that reaches the agent in time. It is told
+	// why and what to do instead, and it retries in seconds; asking the user
+	// would cost a round trip to a human for a command that was never in doubt.
+	// Last, so that a genuine refusal above keeps its own reason.
+	if tool == "Bash" && p.Mode != backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS {
+		if assigned := specialAssignment(command(input)); assigned != "" {
+			return Decision{Deny, "This command assigns " + assigned + ", which makes it impossible to " +
+				"approve without asking a person: the value cannot be checked before it runs. " +
+				"Your PATH already carries git, ssh, coreutils, bash, grep, sed, awk, find, " +
+				"ripgrep, jq, tar, gzip, less and which. Run the command again without the " +
+				"assignment. If something you need is genuinely missing, say so."}
+		}
+	}
+
 	// AUTONOMOUS is the mode that does not ask. It is not permission to do
 	// anything: the refusals above still stand, and the limits in the policy
 	// are what make the mode safe to offer at all.
@@ -246,6 +270,34 @@ func (r Rule) covers(tool string, input map[string]any) bool {
 		// working directory, which is where that question belongs.
 		return false
 	}
+}
+
+// Shell variables whose assignment the provider will not approve, because
+// their value decides what the rest of the command resolves to.
+var specialVariables = map[string]bool{
+	"PATH": true, "IFS": true, "ENV": true, "BASH_ENV": true,
+	"LD_PRELOAD": true, "LD_LIBRARY_PATH": true,
+}
+
+// specialAssignment returns the special variable a command assigns, if any.
+func specialAssignment(cmd string) string {
+	for _, part := range splitCommand(cmd) {
+		fields := strings.Fields(part)
+		if len(fields) > 0 && fields[0] == "export" {
+			fields = fields[1:]
+		}
+		for _, field := range fields {
+			name, _, assigns := strings.Cut(field, "=")
+			if !assigns {
+				// Past the leading assignments, the rest is the command.
+				break
+			}
+			if specialVariables[name] {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 // matches reports whether a pattern with `*` wildcards covers a string. It is

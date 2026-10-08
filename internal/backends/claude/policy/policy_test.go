@@ -381,3 +381,50 @@ func contains(values []string, want string) bool {
 	}
 	return false
 }
+
+// TestAnUnapprovableHabitIsRefusedNotAsked pins the one prefix that costs a
+// person for nothing.
+//
+// `export PATH=…:$PATH && grep foo src` cannot be approved by any rule: the
+// provider refuses to decide a command whose value it cannot resolve before
+// running it, and that verdict stands over an explicit allow — verified against
+// the CLI, which answers "a variable in this command can't be checked before it
+// runs". So the agent is told, in time to retry, instead of a human being woken
+// up for a search.
+func TestAnUnapprovableHabitIsRefusedNotAsked(t *testing.T) {
+	t.Parallel()
+
+	guarded := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
+	for _, cmd := range []string{
+		`export PATH=/run/current-system/sw/bin:$PATH && grep -n foo internal`,
+		`PATH=/usr/bin:$PATH make build`,
+		`export IFS=,; read a b`,
+		`cd /srv && export LD_PRELOAD=/tmp/x.so && ./run`,
+	} {
+		decision := guarded.Evaluate("Bash", bash(cmd))
+		if decision.Verdict != policy.Deny {
+			t.Errorf("%q = %v, want Deny", cmd, decision.Verdict)
+		}
+		if !strings.Contains(decision.Reason, "without the") {
+			t.Errorf("%q was refused without telling the agent what to do: %q", cmd, decision.Reason)
+		}
+	}
+
+	// An ordinary assignment is not one of these, and neither is a mention.
+	for _, cmd := range []string{
+		`GOFLAGS=-mod=mod go vet ./...`,
+		`grep -n "export PATH=" docs/install.md`,
+		`echo "home is $HOME"`,
+	} {
+		if d := guarded.Evaluate("Bash", bash(cmd)); d.Verdict == policy.Deny {
+			t.Errorf("%q = Deny, want it left alone", cmd)
+		}
+	}
+
+	// AUTONOMOUS never asks anyone, so the prefix costs nothing there and is
+	// not worth refusing over.
+	auto := permissive(backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS)
+	if d := auto.Evaluate("Bash", bash(`export PATH=/usr/bin:$PATH && ls`)); d.Verdict != policy.Allow {
+		t.Errorf("autonomous = %v, want Allow", d.Verdict)
+	}
+}
