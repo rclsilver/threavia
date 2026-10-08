@@ -96,16 +96,21 @@ export function SessionView() {
         <SessionSettings sessionId={sessionId} archived={data.session.status === 'ARCHIVED'} />
       </header>
 
-      {(data.attention.validations?.length || data.attention.userInputs?.length) && (
-        <div className="mx-auto w-full max-w-reading px-6 pt-4">
+      <Timeline events={data.events} pending={pending} onStop={(jobId) => cancel.mutate(jobId)} />
+
+      {/* What is waiting for the user sits between the last thing the agent
+          wrote and the field they answer in: that is where the eye already is
+          while a Job runs. Above the timeline it was a scroll away from both.
+          Held to part of the height, so a burst of requests never pushes the
+          composer off the screen. */}
+      {(data.attention.validations?.length || data.attention.userInputs?.length) ? (
+        <div className="mx-auto max-h-[45vh] w-full max-w-reading shrink-0 overflow-y-auto px-6 pt-2 pb-3">
           <AttentionPanel
             validations={data.attention.validations ?? []}
             userInputs={data.attention.userInputs ?? []}
           />
         </div>
-      )}
-
-      <Timeline events={data.events} pending={pending} onStop={(jobId) => cancel.mutate(jobId)} />
+      ) : null}
 
       <Composer
         sessionId={sessionId}
