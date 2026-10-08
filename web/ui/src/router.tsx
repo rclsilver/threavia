@@ -20,6 +20,7 @@ import {
   SkillsView,
 } from '@/routes/project';
 import { SessionView } from '@/routes/session';
+import { SessionSettingsView, type SettingsTab } from '@/routes/session-settings';
 import { TasksView } from '@/routes/tasks';
 import { HomeView, WaitingView } from '@/routes/waiting';
 
@@ -58,6 +59,31 @@ const sessionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions/$sessionId',
   component: SessionView,
+});
+
+const SETTINGS_TABS: SettingsTab[] = ['permissions', 'schedules', 'backend', 'session'];
+
+/** A Session's settings, one tab per URL; an unknown tab lands on the first. */
+const sessionSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sessions/$sessionId/settings/$tab',
+  beforeLoad: ({ params }) => {
+    if (!SETTINGS_TABS.includes(params.tab as SettingsTab)) {
+      // The router signals a redirect by throwing it.
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      throw redirect({ to: '/sessions/$sessionId/settings/$tab', params: { ...params, tab: 'permissions' } });
+    }
+  },
+  component: SessionSettingsView,
+});
+
+const sessionSettingsIndexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sessions/$sessionId/settings',
+  beforeLoad: ({ params }) => {
+    // eslint-disable-next-line @typescript-eslint/only-throw-error
+    throw redirect({ to: '/sessions/$sessionId/settings/$tab', params: { ...params, tab: 'permissions' } });
+  },
 });
 
 /**
@@ -137,6 +163,8 @@ const routeTree = rootRoute.addChildren([
   waitingRoute,
   draftRoute,
   sessionRoute,
+  sessionSettingsRoute,
+  sessionSettingsIndexRoute,
   tasksRoute,
   memoryRoute,
   artifactsRoute,

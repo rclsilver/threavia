@@ -1,13 +1,10 @@
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { Link, useParams } from '@tanstack/react-router';
 import { ArrowUp, Server, Settings2, Square } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import {
-  useArchiveSession,
   useBackends,
   useCancelJob,
-  useDeleteSession,
-  useMoveSession,
   usePostMessage,
   useRenameSession,
   useEarlierEvents,
@@ -17,18 +14,8 @@ import {
 import { AttentionPanel } from '@/components/attention';
 import { ActionError } from '@/components/ui/action-error';
 import { Badge } from '@/components/ui/badge';
-import { PolicyPanel } from '@/components/policy-panel';
-import { SchedulesPanel } from '@/components/schedules-panel';
 import { Timeline, type Pending } from '@/components/timeline';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useStream } from '@/use-stream';
 import { cn, humanise } from '@/lib/utils';
 
@@ -155,7 +142,13 @@ export function SessionView() {
             <ActionError error={cancel.error} className="text-xs" />
           </div>
         </div>
-        <SessionSettings sessionId={sessionId} archived={data.session.status === 'ARCHIVED'} />
+        {/* Everything about the Session that is not the conversation is a page
+            of its own, one step away. */}
+        <Button asChild variant="ghost" size="icon" title="Session settings">
+          <Link to="/sessions/$sessionId/settings/$tab" params={{ sessionId, tab: 'permissions' }} aria-label="Session settings">
+            <Settings2 />
+          </Link>
+        </Button>
       </header>
 
       <Timeline
@@ -454,163 +447,3 @@ function Composer({
   );
 }
 
-/**
- * Everything about this Session that is not the conversation.
- *
- * These are settings: read once, changed rarely, and of no use while reading an
- * answer. Spelled out in the header they took the room a title needs and said
- * nothing about what they would do; behind one control they are where a person
- * already looks for them.
- */
-function SessionSettings({ sessionId, archived }: { sessionId: string; archived: boolean }) {
-  const archive = useArchiveSession();
-  const remove = useDeleteSession();
-  const navigate = useNavigate();
-  const [asking, setAsking] = useState(false);
-
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" title="Session settings">
-          <Settings2 />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="w-[min(36rem,calc(100vw-2rem))]">
-        <DialogTitle>Session settings</DialogTitle>
-
-        <section className="space-y-2">
-          <h3 className="text-sm font-medium">Execution policy</h3>
-          <DialogDescription>
-            What the agent may do here. Enforced by Core and by the backend, never by the prompt
-            alone.
-          </DialogDescription>
-          <PolicyPanel sessionId={sessionId} />
-        </section>
-
-        <section className="border-border space-y-2 border-t pt-4">
-          <h3 className="text-sm font-medium">Schedules</h3>
-          <DialogDescription>
-            Messages sent to this session at set times, as if you typed them. One is skipped, and
-            the conversation says so, when the previous job is still running or the backend is
-            away: nothing is sent late or piled up.
-          </DialogDescription>
-          <SchedulesPanel sessionId={sessionId} />
-        </section>
-
-        <section className="border-border space-y-2 border-t pt-4">
-          <h3 className="text-sm font-medium">Backend</h3>
-          <MoveSession sessionId={sessionId} />
-        </section>
-
-        <section className="border-border space-y-2 border-t pt-4">
-          <h3 className="text-sm font-medium">{archived ? 'Archived' : 'Archive'}</h3>
-          <DialogDescription>
-            Archiving keeps everything — the timeline, what it cost, what was decided — and only
-            takes the Session out of the list of what is being worked on.
-          </DialogDescription>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={archive.isPending}
-            onClick={() => archive.mutate({ sessionId, archived: !archived })}
-          >
-            {archived ? 'Restore this session' : 'Archive this session'}
-          </Button>
-          {archive.error && <p className="text-danger text-sm">{archive.error.message}</p>}
-        </section>
-
-        <section className="border-border space-y-2 border-t pt-4">
-          <h3 className="text-sm font-medium">Delete</h3>
-          <DialogDescription>
-            The timeline, what it cost and what was asked go with it. Files the work produced stay
-            with the Project. Archiving is the move that keeps all of it.
-          </DialogDescription>
-          {asking ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-muted text-sm">Delete this session for good?</span>
-              <Button variant="ghost" size="sm" onClick={() => setAsking(false)}>
-                No
-              </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                disabled={remove.isPending}
-                onClick={() =>
-                  remove.mutate(sessionId, {
-                    // Nothing is left to look at, so the view goes with it. The
-                    // navigation returns a promise the handler has no use for.
-                    onSuccess: () => void navigate({ to: '/' }),
-                  })
-                }
-              >
-                Delete
-              </Button>
-            </div>
-          ) : (
-            <Button variant="secondary" size="sm" onClick={() => setAsking(true)}>
-              Delete this session
-            </Button>
-          )}
-          {remove.error && <p className="text-danger text-sm">{remove.error.message}</p>}
-        </section>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/**
- * Moving a Session to another backend, and saying what it costs.
- *
- * The move is explicit and the timeline stays continuous, but the native
- * provider session does not travel: it belongs to the machine holding it
- * (spec section 34).
- */
-function MoveSession({ sessionId }: { sessionId: string }) {
-  const backends = useBackends();
-  const move = useMoveSession(sessionId);
-  const [target, setTarget] = useState('');
-
-  const usable = (backends.data ?? []).filter(
-    (backend) => backend.ownershipStatus !== 'REVOKED',
-  );
-
-  return (
-    <div className="space-y-3">
-      <DialogDescription>
-        The timeline stays continuous. The provider session does not travel, so the next message
-        starts a fresh one there.
-      </DialogDescription>
-
-      <div className="flex gap-2">
-        <Select value={target} onValueChange={setTarget}>
-          <SelectTrigger className="flex-1">
-            <SelectValue placeholder="Choose a backend" />
-          </SelectTrigger>
-          <SelectContent>
-            {usable.map((backend) => (
-              <SelectItem key={backend.id} value={backend.id}>
-                {backend.name} ({humanise(backend.operationalStatus)})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
-          variant="secondary"
-          disabled={!target || move.isPending}
-          onClick={() => move.mutate(target)}
-        >
-          Move
-        </Button>
-      </div>
-
-      {move.error && <p className="text-danger text-sm">{(move.error).message}</p>}
-
-      {move.data?.missingSkills?.length ? (
-        <p className="text-warn-text text-sm">
-          Moved. These local skills are not on the new backend:{' '}
-          {move.data.missingSkills.join(', ')}.
-        </p>
-      ) : null}
-    </div>
-  );
-}
