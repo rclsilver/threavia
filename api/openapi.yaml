@@ -1167,6 +1167,10 @@ paths:
         - name: limit
           in: query
           schema: { type: integer, default: 100 }
+        - name: projectId
+          in: query
+          description: Only what was done in this Project. Every Project when absent.
+          schema: { $ref: "#/components/schemas/UUID" }
       responses:
         "200":
           description: The entries, most recent first

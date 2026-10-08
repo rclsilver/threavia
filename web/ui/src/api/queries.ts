@@ -715,10 +715,16 @@ export function useUninstallSkill(projectId: string) {
 
 // --------------------------------------------------------------------- audit
 
-export function useAudit() {
+/** The audit trail, of one Project or of every one. */
+export function useAudit(projectId?: string) {
   return useQuery({
-    queryKey: keys.audit(),
-    queryFn: () => api.get<List<AuditEntry>>('/api/v1/me/audit?limit=100').then(items),
+    queryKey: [...keys.audit(), projectId ?? ''],
+    queryFn: () =>
+      api
+        .get<List<AuditEntry>>(
+          `/api/v1/me/audit?limit=200${projectId ? `&projectId=${encodeURIComponent(projectId)}` : ''}`,
+        )
+        .then(items),
   });
 }
 

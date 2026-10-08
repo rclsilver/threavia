@@ -250,10 +250,10 @@ func (s *Service) audit(ctx context.Context, identity auth.Identity, entry postg
 }
 
 // Audit returns the audit trail of the caller.
-func (s *Service) Audit(ctx context.Context, identity auth.Identity, limit int) ([]postgres.AuditEntry, error) {
+func (s *Service) Audit(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, limit int) ([]postgres.AuditEntry, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	entries, err := s.store.ListAudit(ctx, identity.UserID, limit)
+	entries, err := s.store.ListAudit(ctx, identity.UserID, projectID, limit)
 	return entries, translate(err)
 }

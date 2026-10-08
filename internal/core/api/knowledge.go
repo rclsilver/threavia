@@ -296,7 +296,8 @@ func (h *handler) setPolicy(w http.ResponseWriter, r *http.Request, identity aut
 
 // listAudit returns the trail of recorded decisions and privileged actions.
 func (h *handler) listAudit(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
-	entries, err := h.svc.Audit(r.Context(), identity, queryInt(r, "limit", 0))
+	entries, err := h.svc.Audit(r.Context(), identity,
+		domain.ProjectID(r.URL.Query().Get("projectId")), queryInt(r, "limit", 0))
 	if err != nil {
 		h.fail(w, err)
 		return

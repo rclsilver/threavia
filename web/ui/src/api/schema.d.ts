@@ -2308,6 +2308,8 @@ export interface paths {
             parameters: {
                 query?: {
                     limit?: number;
+                    /** @description Only what was done in this Project. Every Project when absent. */
+                    projectId?: components["schemas"]["UUID"];
                 };
                 header?: never;
                 path?: never;

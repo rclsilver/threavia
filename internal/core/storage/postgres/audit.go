@@ -47,16 +47,19 @@ func (s *Store) RecordAudit(ctx context.Context, entry AuditEntry) error {
 }
 
 // ListAudit returns the audit trail of a user, most recent first.
-func (s *Store) ListAudit(ctx context.Context, ownerID domain.UserID, limit int) ([]AuditEntry, error) {
+//
+// An empty projectID lists every Project's; otherwise only what was done in
+// that one.
+func (s *Store) ListAudit(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID, limit int) ([]AuditEntry, error) {
 	rows, err := s.q.Query(ctx, `
 		SELECT id, owner_id, actor_id, action,
 		       coalesce(project_id,''), coalesce(session_id,''), coalesce(job_id,''),
 		       coalesce(subject_id,''), channel, payload_sha256, detail,
 		       created_at
 		FROM audit_entries
-		WHERE owner_id = $1
+		WHERE owner_id = $1 AND ($3 = '' OR project_id = $3)
 		ORDER BY created_at DESC
-		LIMIT $2`, ownerID, limit)
+		LIMIT $2`, ownerID, limit, string(projectID))
 	if err != nil {
 		return nil, classify(err, "list audit entries")
 	}
