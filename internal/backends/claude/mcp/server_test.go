@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
 )
@@ -315,8 +316,9 @@ func TestConfigPointsAtTheEndpoint(t *testing.T) {
 
 	var decoded struct {
 		MCPServers map[string]struct {
-			Type string `json:"type"`
-			URL  string `json:"url"`
+			Type    string `json:"type"`
+			URL     string `json:"url"`
+			Timeout int64  `json:"timeout"`
 		} `json:"mcpServers"`
 	}
 	if err := json.Unmarshal([]byte(encoded), &decoded); err != nil {
@@ -328,6 +330,12 @@ func TestConfigPointsAtTheEndpoint(t *testing.T) {
 	}
 	if server.Type != "http" || server.URL != "http://127.0.0.1:1234/mcp/token" {
 		t.Fatalf("server = %+v, want the loopback endpoint over http", server)
+	}
+	// Regression: without it Claude Code gives up on a permission prompt after
+	// a minute, and a user who answers later finds the tool already failed.
+	// The ceiling is the largest delay a JavaScript timer holds.
+	if server.Timeout < 24*time.Hour.Milliseconds() || server.Timeout > 1<<31-1 {
+		t.Fatalf("timeout = %dms, want days, within a JavaScript timer", server.Timeout)
 	}
 }
 

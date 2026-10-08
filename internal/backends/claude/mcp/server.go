@@ -431,11 +431,20 @@ func toolDefinitions(coreTools []CoreTool) []any {
 	return definitions
 }
 
+// callTimeout is how long Claude Code waits on one call to this server, in
+// milliseconds. Its default is a minute, after which it abandons the call: a
+// permission prompt the user had not answered within the minute failed the
+// tool with "The operation timed out", although validations are specified to
+// wait as long as it takes (spec section 16). This is the largest delay a
+// JavaScript timer holds, about 24 days, which is as close to no limit as the
+// setting allows.
+const callTimeout = 1<<31 - 1
+
 // Config renders the --mcp-config value pointing Claude Code at a Job endpoint.
 func Config(endpoint string) (string, error) {
 	encoded, err := json.Marshal(map[string]any{
 		"mcpServers": map[string]any{
-			ServerName: map[string]any{"type": "http", "url": endpoint},
+			ServerName: map[string]any{"type": "http", "url": endpoint, "timeout": callTimeout},
 		},
 	})
 	if err != nil {
