@@ -214,6 +214,16 @@ export class EventStream {
         void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
         break;
 
+      // The sidebar says which Session is working, from the list rather than
+      // from every snapshot, so the list follows each Job as it moves.
+      case 'job.created':
+      case 'job.started':
+      case 'job.completed':
+      case 'job.failed':
+      case 'job.cancelled':
+        void this.queries.invalidateQueries({ queryKey: ['sessions'] });
+        break;
+
       case 'backend.registered':
       case 'backend.revoked':
         void this.queries.invalidateQueries({ queryKey: keys.backends() });

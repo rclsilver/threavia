@@ -1674,6 +1674,14 @@ components:
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         archivedAt: { type: string, format: date-time }
+        activeJobStatus:
+          allOf: [{ $ref: "#/components/schemas/JobStatus" }]
+          description: |
+            The status of the oldest Job not yet finished, which everything else
+            in the Session is queued behind. Absent when nothing is running or
+            queued. Set on lists only, so a client can say which Session is
+            working without opening each one; what waits for the user is read
+            from the attention route.
 
     Run:
       type: object

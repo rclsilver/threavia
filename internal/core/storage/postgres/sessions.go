@@ -48,10 +48,16 @@ func (s *Store) DeleteSession(ctx context.Context, ownerID domain.UserID, id dom
 	return nil
 }
 
-// ListSessions returns the Sessions of a Project, most recently active first.
+// ListSessions returns the Sessions of a Project, most recently active first,
+// each with the status of the Job holding it: the oldest one not yet finished,
+// which is the one everything else in the Session is queued behind.
 func (s *Store) ListSessions(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID, includeArchived bool) ([]domain.Session, error) {
 	rows, err := s.q.Query(ctx, `
-		SELECT `+sessionColumns+`
+		SELECT `+sessionColumns+`,
+		       (SELECT j.status FROM jobs j JOIN runs r ON r.id = j.run_id
+		        WHERE r.session_id = s.id
+		          AND j.status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')
+		        ORDER BY j.created_at LIMIT 1)
 		FROM sessions s JOIN projects p ON p.id = s.project_id
 		WHERE s.project_id = $1 AND p.owner_id = $2 AND ($3 OR s.status = 'ACTIVE')
 		ORDER BY s.updated_at DESC`, projectID, ownerID, includeArchived)
@@ -62,9 +68,12 @@ func (s *Store) ListSessions(ctx context.Context, ownerID domain.UserID, project
 
 	var out []domain.Session
 	for rows.Next() {
-		session, err := scanSession(rows)
+		var session domain.Session
+		err := rows.Scan(&session.ID, &session.ProjectID, &session.Title, &session.Status,
+			&session.WorkingDirectoryID, &session.CreatedAt, &session.UpdatedAt, &session.ArchivedAt,
+			&session.ActiveJobStatus)
 		if err != nil {
-			return nil, err
+			return nil, classify(err, "read session")
 		}
 		out = append(out, session)
 	}

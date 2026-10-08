@@ -78,6 +78,54 @@ func TestOneActiveJobPerRun(t *testing.T) {
 	}
 }
 
+// TestListedSessionsCarryTheJobHoldingThem pins what a sidebar reads to say
+// which Session is working: the status of the oldest Job not yet finished, and
+// nothing once every Job has ended.
+func TestListedSessionsCarryTheJobHoldingThem(t *testing.T) {
+	store, ctx := newTestStore(t)
+	f := newFixture(t, store, ctx)
+
+	activeStatus := func() *domain.JobStatus {
+		t.Helper()
+		sessions, err := store.ListSessions(ctx, f.owner, f.project.ID, false)
+		if err != nil {
+			t.Fatalf("listing sessions: %v", err)
+		}
+		if len(sessions) != 1 {
+			t.Fatalf("listed %d sessions, want 1", len(sessions))
+		}
+		return sessions[0].ActiveJobStatus
+	}
+
+	if status := activeStatus(); status == nil || *status != domain.JobQueued {
+		t.Fatalf("with a queued job: active status = %v, want QUEUED", status)
+	}
+
+	queued := domain.Job{ID: domain.NewJobID(), RunID: f.run.ID, Status: domain.JobQueued}
+	if err := store.CreateJob(ctx, &queued); err != nil {
+		t.Fatalf("queueing a second job: %v", err)
+	}
+	if _, err := store.TransitionJob(ctx, f.job.ID, domain.JobQueued, domain.JobRunning, nil); err != nil {
+		t.Fatalf("starting the first job: %v", err)
+	}
+	if status := activeStatus(); status == nil || *status != domain.JobRunning {
+		t.Fatalf("with a job running and one queued: active status = %v, want RUNNING", status)
+	}
+
+	for _, id := range []domain.JobID{f.job.ID, queued.ID} {
+		from := domain.JobRunning
+		if id == queued.ID {
+			from = domain.JobQueued
+		}
+		if _, err := store.TransitionJob(ctx, id, from, domain.JobCancelled, nil); err != nil {
+			t.Fatalf("ending job %s: %v", id, err)
+		}
+	}
+	if status := activeStatus(); status != nil {
+		t.Fatalf("with every job ended: active status = %s, want none", *status)
+	}
+}
+
 // TestTransitionJobIsIdempotent pins that a replayed transition is a no-op
 // rather than a corruption: the row only moves from the expected status.
 func TestTransitionJobIsIdempotent(t *testing.T) {

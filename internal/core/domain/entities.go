@@ -35,6 +35,10 @@ type Session struct {
 	CreatedAt          time.Time  `json:"createdAt"`
 	UpdatedAt          time.Time  `json:"updatedAt"`
 	ArchivedAt         *time.Time `json:"archivedAt,omitempty"`
+	// ActiveJobStatus is the status of the oldest Job not yet finished, absent
+	// when nothing is running or queued. Filled on lists only, so a sidebar can
+	// say which Session is working without opening each one.
+	ActiveJobStatus *JobStatus `json:"activeJobStatus,omitempty"`
 }
 
 // Run binds a Session to one BackendInstance and one provider native session.

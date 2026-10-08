@@ -284,8 +284,12 @@ export function useCancelJob(sessionId: string) {
   return useMutation({
     mutationFn: (jobId: string) =>
       api.post<Job>(`/api/v1/jobs/${jobId}/cancel`, { reason: 'cancelled from the web client' }),
-    // CANCELLING has no event of its own, so the snapshot is re-read to show it.
-    onSuccess: () => queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) }),
+    // CANCELLING has no event of its own, so the snapshot and the sidebar are
+    // re-read to show it.
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: ['sessions'] });
+      return queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
+    },
   });
 }
 

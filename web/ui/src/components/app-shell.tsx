@@ -3,19 +3,24 @@ import {
   Archive,
   ArchiveRestore,
   BookText,
+  Clock,
   FileText,
   History,
   ListChecks,
+  LoaderCircle,
+  MessageCircleQuestion,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import {
+  useAttention,
   useBackends,
   useClaimBackend,
   useCreateProject,
@@ -79,6 +84,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     showArchived ? session.status === 'ARCHIVED' : session.status !== 'ARCHIVED',
   );
   const [collapsed, setCollapsed] = useCollapsed();
+
+  // What waits for the user, by Session. The attention route is already the
+  // live answer to that question, kept current by the stream.
+  const attention = useAttention();
+  const waiting = new Map<string, 'validation' | 'input'>();
+  for (const request of attention.data?.userInputs ?? []) waiting.set(request.scope.sessionId, 'input');
+  // A permission outranks a question: it is the one blocking a tool call.
+  for (const request of attention.data?.validations ?? []) waiting.set(request.scope.sessionId, 'validation');
 
   // Collapsed, the sidebar keeps a rail rather than disappearing: the control
   // that brings it back has to live somewhere a person can find without
@@ -198,11 +211,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         params={{ sessionId: session.id }}
                         title={session.title || 'Untitled session'}
                         className={cn(
-                          'hover:bg-surface-2 block truncate rounded-lg px-2 py-1.5 text-sm',
+                          'hover:bg-surface-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm',
                           params.sessionId === session.id && 'bg-surface-2 font-medium',
                         )}
                       >
-                        {session.title || 'Untitled session'}
+                        <span className="min-w-0 flex-1 truncate">
+                          {session.title || 'Untitled session'}
+                        </span>
+                        <SessionState state={sessionState(session, waiting)} />
                       </Link>
                     </li>
                   ))}
@@ -224,6 +240,52 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </main>
     </div>
   );
+}
+
+type SessionActivity = 'validation' | 'input' | 'running' | 'stopping' | 'queued' | 'idle';
+
+function sessionState(
+  session: Session,
+  waiting: Map<string, 'validation' | 'input'>,
+): SessionActivity {
+  const asked = waiting.get(session.id);
+  if (asked) return asked;
+  switch (session.activeJobStatus) {
+    case undefined:
+      return 'idle';
+    case 'QUEUED':
+      return 'queued';
+    case 'CANCELLING':
+      return 'stopping';
+    default:
+      return 'running';
+  }
+}
+
+/**
+ * Which Session is working and which one waits for the user, at a glance.
+ *
+ * The two that wait are the loud ones, in the warning colour: they are the only
+ * states a person has to act on. Working is a quiet pulse, and a Session with
+ * nothing going shows nothing at all, which is most of the list.
+ */
+function SessionState({ state }: { state: SessionActivity }) {
+  switch (state) {
+    case 'validation':
+      return <ShieldAlert className="text-warn size-4 shrink-0" aria-label="Waiting for your approval" />;
+    case 'input':
+      return (
+        <MessageCircleQuestion className="text-warn size-4 shrink-0" aria-label="Waiting for your answer" />
+      );
+    case 'running':
+      return <LoaderCircle className="text-accent size-3.5 shrink-0 animate-spin" aria-label="Working" />;
+    case 'stopping':
+      return <LoaderCircle className="text-muted size-3.5 shrink-0 animate-spin" aria-label="Stopping" />;
+    case 'queued':
+      return <Clock className="text-muted size-3.5 shrink-0" aria-label="Queued" />;
+    case 'idle':
+      return null;
+  }
 }
 
 /**

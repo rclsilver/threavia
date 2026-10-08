@@ -2839,6 +2839,13 @@ export interface components {
             updatedAt: string;
             /** Format: date-time */
             archivedAt?: string;
+            /** @description The status of the oldest Job not yet finished, which everything else
+             *     in the Session is queued behind. Absent when nothing is running or
+             *     queued. Set on lists only, so a client can say which Session is
+             *     working without opening each one; what waits for the user is read
+             *     from the attention route.
+             *      */
+            activeJobStatus?: components["schemas"]["JobStatus"];
         };
         /** @description The binding between a Session and one BackendInstance. An infrastructure detail a client shows only when the user needs to choose or debug a backend. */
         Run: {
