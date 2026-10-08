@@ -150,7 +150,7 @@ func newRunner(t *testing.T, binary string) *runner.Claude {
 	}
 	t.Cleanup(func() { _ = tools.Close(context.Background()) })
 
-	return runner.NewClaude(binary, tools, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return runner.NewClaude(binary, tools, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 func readArgs(t *testing.T, path string) []string {

@@ -69,9 +69,17 @@ in
       default = [ ];
       example = lib.literalExpression ''[ "/home/thomas/git" ]'';
       description = ''
-        Where to look for a project directory that has no binding on this
-        machine yet. It bounds discovery and search only: what the agent may
-        reach is the account's real permissions.
+        Where this machine keeps the projects a Job is about: where to look for
+        a project directory that has no binding here yet, and what a Job may
+        read without asking beyond the directory it works in.
+
+        The second part is why they are worth setting. A Job on one repository
+        routinely reads the repository beside it, and without this every such
+        read is a question put to a person who may be asleep.
+
+        It bounds discovery, search and prompting, never access: what the agent
+        may reach is the account's real permissions, and writing still follows
+        the execution policy.
       '';
     };
 

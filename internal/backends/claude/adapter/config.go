@@ -29,8 +29,13 @@ type LogConfig struct {
 type ClaudeConfig struct {
 	// Binary is the Claude Code executable.
 	Binary string
-	// DiscoveryRoots are where the backend looks for a KnownDirectory that has
-	// no binding here yet. They constrain discovery and search only: filesystem
+	// DiscoveryRoots are where this machine keeps the projects a Job is about:
+	// where the backend looks for a KnownDirectory that has no binding here
+	// yet, and what a Job may read without asking beyond the directory it works
+	// in. A Job on one repository routinely reads the one beside it, and
+	// without that second part every such read is a question put to a person.
+	//
+	// They constrain discovery, search and prompting, never access: filesystem
 	// access remains real OS behaviour (spec sections 11 and 28).
 	DiscoveryRoots []string
 	// DefaultWorkingDirectory is where a Job runs when its Session has no

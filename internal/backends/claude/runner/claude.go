@@ -31,7 +31,9 @@ const maxLine = 8 << 20
 type Claude struct {
 	binary string
 	tools  *mcp.Server
-	logger *slog.Logger
+	// readable are the directories a Job may read beyond the one it works in.
+	readable []string
+	logger   *slog.Logger
 
 	mu      sync.Mutex
 	running map[string]*execution
@@ -45,15 +47,22 @@ type execution struct {
 
 // NewClaude builds the runner. The MCP server is where permission prompts and
 // agent questions are turned into Threavia requests.
-func NewClaude(binary string, tools *mcp.Server, logger *slog.Logger) *Claude {
+// NewClaude builds the runner.
+//
+// readable names the directories the agent may read without asking, beyond the
+// one a Job works in. They are the backend's discovery roots: the trees this
+// machine keeps its projects in, which is where a Job legitimately looks when
+// the answer is in the repository next door.
+func NewClaude(binary string, tools *mcp.Server, readable []string, logger *slog.Logger) *Claude {
 	if binary == "" {
 		binary = "claude"
 	}
 	return &Claude{
-		binary:  binary,
-		tools:   tools,
-		logger:  logger,
-		running: make(map[string]*execution),
+		binary:   binary,
+		tools:    tools,
+		readable: readable,
+		logger:   logger,
+		running:  make(map[string]*execution),
 	}
 }
 
@@ -224,6 +233,8 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 // command builds the provider invocation.
 func (c *Claude) command(ctx context.Context, params StartParams, nativeSessionID string, resuming bool, mcpConfig string) *exec.Cmd {
 	native := params.Policy.Native()
+	// A FILE_READ refusal in the policy still wins: deny is answered first.
+	native.AdditionalDirectories = c.readable
 
 	args := []string{
 		"--print",

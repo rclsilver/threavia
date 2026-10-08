@@ -428,3 +428,44 @@ func TestAnUnapprovableHabitIsRefusedNotAsked(t *testing.T) {
 		t.Errorf("autonomous = %v, want Allow", d.Verdict)
 	}
 }
+
+// TestTheTreesNextDoorAreReadable pins what stops a Job asking about the
+// repository beside the one it works in.
+//
+// The provider asks about any file outside the directory a Job runs in, which
+// is right by default and wrong for a machine whose projects sit side by side:
+// half the approvals in a working session were reads of the repository next
+// door. The backend's discovery roots are exactly the trees a Job is about, so
+// they are named as readable.
+func TestTheTreesNextDoorAreReadable(t *testing.T) {
+	t.Parallel()
+
+	native := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED).Native()
+	native.AdditionalDirectories = []string{"/home/thomas/Documents/Work"}
+
+	rendered, err := native.Settings()
+	if err != nil {
+		t.Fatalf("rendering the settings: %v", err)
+	}
+
+	var document struct {
+		Permissions struct {
+			AdditionalDirectories []string `json:"additionalDirectories"`
+		} `json:"permissions"`
+	}
+	if err := json.Unmarshal([]byte(rendered), &document); err != nil {
+		t.Fatalf("the settings are not the document the provider reads: %v", err)
+	}
+	if !contains(document.Permissions.AdditionalDirectories, "/home/thomas/Documents/Work") {
+		t.Fatalf("additionalDirectories = %v", document.Permissions.AdditionalDirectories)
+	}
+
+	// A backend with no discovery roots names none, rather than an empty list
+	// the provider would have to interpret.
+	bare := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED).Native()
+	if rendered, err := bare.Settings(); err != nil {
+		t.Fatal(err)
+	} else if strings.Contains(rendered, "additionalDirectories") {
+		t.Errorf("settings = %s, want no additionalDirectories", rendered)
+	}
+}

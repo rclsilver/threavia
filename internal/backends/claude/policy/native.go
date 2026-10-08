@@ -25,6 +25,16 @@ type Native struct {
 	Allow []string `json:"allow,omitempty"`
 	Ask   []string `json:"ask,omitempty"`
 	Deny  []string `json:"deny,omitempty"`
+
+	// AdditionalDirectories are read without asking, like the working directory
+	// itself. The provider asks about a file outside the directory a Job runs
+	// in, which is right by default and wrong for the tree next door: a Job on
+	// one repository routinely needs to read the repository beside it, and
+	// every such read was a question. Set from the backend's discovery roots,
+	// which is where this machine keeps the projects a Job is about.
+	//
+	// It grants reading, not writing: an edit still follows the mode.
+	AdditionalDirectories []string `json:"additionalDirectories,omitempty"`
 }
 
 // Settings renders the JSON that --settings takes.
