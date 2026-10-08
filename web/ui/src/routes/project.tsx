@@ -469,16 +469,7 @@ function AuditPane() {
         render={(entry) => (
           <Card key={entry.id}>
             <span className="font-medium">{entry.action.replace(/[._]/g, ' ')}</span>
-            <dl className="mt-1.5 text-sm">
-              {Object.entries(entry.detail ?? {})
-                .filter(([, value]) => value !== null && value !== '' && value !== 0 && value !== false)
-                .map(([key, value]) => (
-                  <div key={key} className="flex gap-2">
-                    <dt className="text-muted">{humanise(key.replace(/([A-Z])/g, ' $1'))}:</dt>
-                    <dd>{String(value)}</dd>
-                  </div>
-                ))}
-            </dl>
+            <AuditDetail detail={entry.detail ?? {}} />
             <p className="text-muted mt-1.5 font-mono text-xs">
               {[entry.actorId, entry.channel, when(entry.createdAt)].filter(Boolean).join(' · ')}
             </p>
@@ -486,6 +477,73 @@ function AuditPane() {
         )}
       />
     </div>
+  );
+}
+
+/**
+ * What an audit entry recorded. The detail is whatever the action chose to
+ * keep — a whole policy, with its rules, for a permission change — so it is
+ * read as the nested value it is rather than flattened into `[object Object]`.
+ */
+function AuditDetail({ detail }: { detail: Record<string, unknown> }) {
+  const fields = Object.entries(detail).filter(([, value]) => !blank(value));
+  if (fields.length === 0) return null;
+  return (
+    <dl className="mt-1.5 space-y-0.5 text-sm">
+      {fields.map(([key, value]) => (
+        <div key={key} className="flex gap-2">
+          <dt className="text-muted shrink-0">{humanise(key.replace(/([A-Z])/g, ' $1'))}:</dt>
+          <dd className="min-w-0 break-words">
+            <AuditValue value={value} />
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function AuditValue({ value }: { value: unknown }) {
+  if (Array.isArray(value)) {
+    return (
+      <ul className="space-y-0.5">
+        {value.map((item, index) => (
+          <li key={index}>
+            <AuditValue value={item} />
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  if (isRule(value)) {
+    // A permission rule reads as the sentence it stands for.
+    return (
+      <span>
+        {humanise(value.effect)} {humanise(value.capability)}
+        {value.match && <code className="ml-1.5 font-mono text-xs">{value.match}</code>}
+      </span>
+    );
+  }
+  if (value !== null && typeof value === 'object') {
+    return <AuditDetail detail={value as Record<string, unknown>} />;
+  }
+  // A switch turned off is as much the policy as one turned on, so both show.
+  if (typeof value === 'boolean') return <>{value ? 'yes' : 'no'}</>;
+  if (typeof value === 'string' && /^[A-Z][A-Z_]+$/.test(value)) return <>{humanise(value)}</>;
+  return <>{String(value)}</>;
+}
+
+function blank(value: unknown): boolean {
+  if (value === null || value === undefined || value === '' || value === 0) return true;
+  if (Array.isArray(value)) return value.length === 0;
+  return false;
+}
+
+function isRule(value: unknown): value is { effect: string; capability: string; match?: string } {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    typeof (value as { effect?: unknown }).effect === 'string' &&
+    typeof (value as { capability?: unknown }).capability === 'string'
   );
 }
 
