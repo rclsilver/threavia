@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   AlertTriangle,
+  ArrowDown,
   Ban,
   CheckCircle2,
   Circle,
@@ -242,16 +243,89 @@ export function Timeline({
     element.scrollTop += total - before.total;
   });
 
+  // The window the timeline is read through changes size under it: a card
+  // waiting for an answer opens above the composer, the composer grows with a
+  // long message, a phone turns. The browser keeps the scroll offset, so the
+  // last lines slid out of view exactly when a request came in — the moment a
+  // person most needs to read them. A reader who was at the bottom stays there.
+  const [viewport, setViewport] = useState(0);
+  useLayoutEffect(() => {
+    const element = parentRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      setViewport(element.clientHeight);
+      if (atBottom.current) element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  // A message just sent goes to the top of the window, with the answer
+  // unrolling under it, rather than at the bottom edge where it is read past.
+  // The room below is made by a spacer that shrinks as the answer fills the
+  // screen; once it is gone, the timeline follows the latest line as before.
+  const lastSent = useMemo(() => {
+    for (let index = rows.length - 1; index >= 0; index--) {
+      const row = rows[index];
+      if (row.kind === 'event' && row.event.type === 'user.message') return row.key;
+    }
+    return undefined;
+  }, [rows]);
+  const seenSent = useRef(lastSent);
+  const [anchor, setAnchor] = useState<number>();
+  useEffect(() => {
+    if (lastSent === undefined || lastSent === seenSent.current) return;
+    // Only a message that arrives while reading, not the last one of a
+    // Session being opened or a page of history being loaded above.
+    const fresh = seenSent.current === undefined || lastSent > seenSent.current;
+    seenSent.current = lastSent;
+    if (fresh) setAnchor(lastSent);
+  }, [lastSent]);
+
+  const anchorIndex = anchor === undefined ? -1 : rows.findIndex((row) => row.key === anchor);
+  const anchorStart =
+    anchorIndex >= 0 ? (virtualizer.measurementsCache[anchorIndex]?.start ?? 0) : 0;
+  const content = virtualizer.getTotalSize();
+  // The bottom padding of the scroller counts as content already shown.
+  const spacer = anchorIndex >= 0 ? Math.max(0, viewport - 24 - (content - anchorStart) - 8) : 0;
+  const height = content + spacer;
+
+  useLayoutEffect(() => {
+    const element = parentRef.current;
+    if (!element || anchorIndex < 0) return;
+    element.scrollTop = Math.max(0, anchorStart - 8);
+    atBottom.current = true;
+    // Placed once per message; the reader is free to scroll away after.
+  }, [anchor]);
+
   // Following the last row means following its height too: a row is measured
   // after it is rendered, and one that grows afterwards — a message that gains
   // a stop control, a tool call being unfolded — would otherwise end up half
-  // hidden under the composer.
-  const height = virtualizer.getTotalSize();
+  // hidden under the composer. While the spacer is there, the answer still fits
+  // under the message, and following would only pull the message back down.
   useEffect(() => {
-    if (atBottom.current && rows.length > 0) {
+    if (atBottom.current && rows.length > 0 && spacer === 0) {
       virtualizer.scrollToIndex(rows.length - 1, { align: 'end' });
     }
-  }, [rows.length, height, virtualizer]);
+  }, [rows.length, height, spacer, virtualizer]);
+
+  // A way back to the latest line, for a reader who scrolled up to read and
+  // now wants to see what the agent is doing.
+  const [away, setAway] = useState(false);
+  useLayoutEffect(() => {
+    const element = parentRef.current;
+    if (!element) return;
+    const onScroll = () => setAway(!atBottom.current);
+    element.addEventListener('scroll', onScroll, { passive: true });
+    return () => element.removeEventListener('scroll', onScroll);
+  }, []);
+  const toLatest = () => {
+    const element = parentRef.current;
+    if (!element) return;
+    atBottom.current = true;
+    setAway(false);
+    element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
+  };
 
   const toggle = (id: string) =>
     setExpanded((current) => {
@@ -260,54 +334,66 @@ export function Timeline({
       return next;
     });
 
-  if (rows.length === 0) {
-    return <div className="text-muted flex-1 p-4 text-sm">Nothing yet.</div>;
-  }
-
+  // The scroller is rendered even when empty: the listeners above attach to it
+  // once, and a Session that starts empty would otherwise never get them.
   return (
     // The scrollbar belongs to the window, the prose to a column inside it: the
     // conversation stays readable on a wide screen without the page looking
     // cropped.
-    <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto pb-6">
-      {/* No height of its own, so the rows below keep the offsets the
-          virtualiser computed for them. */}
-      {earlier?.loading && (
-        <div className="sticky top-0 z-10 h-0">
-          <p className="text-muted bg-surface border-border mx-auto mt-2 w-fit rounded-full border px-3 py-1 text-xs">
-            Loading earlier messages…
-          </p>
-        </div>
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      {away && (
+        <Button
+          variant="secondary"
+          size="icon"
+          title="Go to the latest"
+          onClick={toLatest}
+          className="absolute bottom-3 left-1/2 z-10 size-8 -translate-x-1/2 rounded-full shadow-md"
+        >
+          <ArrowDown />
+        </Button>
       )}
-      <div className="relative mx-auto w-full max-w-reading" style={{ height }}>
-        {virtualizer.getVirtualItems().map((item) => {
-          const row = rows[item.index];
-          return (
-            <div
-              key={item.key}
-              ref={virtualizer.measureElement}
-              data-index={item.index}
-              className="absolute left-0 top-0 w-full px-3 py-1.5 sm:px-6"
-              style={{ transform: `translateY(${item.start}px)` }}
-            >
-              {row.kind === 'tool' ? (
-                <ToolCallEntry
-                  call={row.call}
-                  expanded={expanded.has(row.call.id)}
-                  onToggle={() => toggle(row.call.id)}
-                />
-              ) : row.kind === 'day' ? (
-                <DaySeparator label={row.label} />
-              ) : (
-                <Entry
-                  event={row.event}
-                  startedAt={row.startedAt}
-                  pending={pending}
-                  onStop={onStop}
-                />
-              )}
-            </div>
-          );
-        })}
+      <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto pb-6">
+        {rows.length === 0 && <p className="text-muted p-4 text-sm">Nothing yet.</p>}
+        {/* No height of its own, so the rows below keep the offsets the
+            virtualiser computed for them. */}
+        {earlier?.loading && (
+          <div className="sticky top-0 z-10 h-0">
+            <p className="text-muted bg-surface border-border mx-auto mt-2 w-fit rounded-full border px-3 py-1 text-xs">
+              Loading earlier messages…
+            </p>
+          </div>
+        )}
+        <div className="relative mx-auto w-full max-w-reading" style={{ height }}>
+          {virtualizer.getVirtualItems().map((item) => {
+            const row = rows[item.index];
+            return (
+              <div
+                key={item.key}
+                ref={virtualizer.measureElement}
+                data-index={item.index}
+                className="absolute left-0 top-0 w-full px-3 py-1.5 sm:px-6"
+                style={{ transform: `translateY(${item.start}px)` }}
+              >
+                {row.kind === 'tool' ? (
+                  <ToolCallEntry
+                    call={row.call}
+                    expanded={expanded.has(row.call.id)}
+                    onToggle={() => toggle(row.call.id)}
+                  />
+                ) : row.kind === 'day' ? (
+                  <DaySeparator label={row.label} />
+                ) : (
+                  <Entry
+                    event={row.event}
+                    startedAt={row.startedAt}
+                    pending={pending}
+                    onStop={onStop}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
