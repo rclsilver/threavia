@@ -1,6 +1,7 @@
 package policy_test
 
 import (
+	"strings"
 	"testing"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
@@ -154,5 +155,68 @@ func TestNetworkCommandsFollowTheNetworkFlag(t *testing.T) {
 	}
 	if d := p.Evaluate("Bash", bash("ls -la")); d.Verdict == policy.Deny {
 		t.Error("a local command is not network access")
+	}
+}
+
+// TestGuardedLetsReadingCommandsThrough pins the commands an agent runs to look
+// around. GUARDED asked for every one of them when they began with an export or
+// went through a pipe, which left the mode indistinguishable from INTERACTIVE.
+func TestGuardedLetsReadingCommandsThrough(t *testing.T) {
+	t.Parallel()
+
+	guarded := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
+	for _, cmd := range []string{
+		"export PATH=/run/current-system/sw/bin:$PATH && git grep -n foo -- internal",
+		"cd /srv/app && git log --oneline -5",
+		"GOFLAGS=-mod=mod go vet ./...",
+		"grep -rn TODO internal 2>/dev/null | sort | uniq -c | head",
+		"go test ./... 2>&1 | tail -3 && false || true; ls",
+		"git branch",
+		"git branch -a",
+		"git remote -v",
+		"env",
+		"go env GOPATH",
+		"jq .version package.json",
+	} {
+		// The go test line is not one: it builds and runs code.
+		want := policy.Allow
+		if strings.HasPrefix(cmd, "go test") {
+			want = policy.Ask
+		}
+		if d := guarded.Evaluate("Bash", bash(cmd)); d.Verdict != want {
+			t.Errorf("%q = %v, want %v", cmd, d.Verdict, want)
+		}
+	}
+}
+
+// TestReadingCommandsThatWriteAreStillAsked pins the other half: a command that
+// starts like a read but writes, or runs something else, is not one.
+func TestReadingCommandsThatWriteAreStillAsked(t *testing.T) {
+	t.Parallel()
+
+	guarded := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
+	for _, cmd := range []string{
+		"cat a > b",
+		"echo secret >> ~/.bashrc",
+		"echo $(rm -rf build)",
+		"echo `rm -rf build`",
+		"env rm -rf build",
+		"export X=1 && rm -rf build",
+		"find . -name '*.tmp' -delete",
+		"find . -exec rm {} ;",
+		"rg --pre ./run.sh foo",
+		"git branch -D feature",
+		"git remote add origin x",
+		"git -c core.pager='rm -rf build' log",
+		"git diff --output=patch",
+		"go env -w GOFLAGS=x",
+		"sort -o out.txt in.txt",
+		"export X=1",
+		"cd /tmp",
+		"$CMD status",
+	} {
+		if d := guarded.Evaluate("Bash", bash(cmd)); d.Verdict != policy.Ask {
+			t.Errorf("%q = %v, want Ask", cmd, d.Verdict)
+		}
 	}
 }

@@ -206,21 +206,143 @@ func gitSubcommand(part string) string {
 	return ""
 }
 
-var (
-	networkCommand = regexp.MustCompile(`(^|\s)(curl|wget|nc|ncat|telnet|ssh|scp|rsync|ftp)(\s|$)`)
-	// Commands that only observe. Anything not listed is treated as mutating,
-	// because guessing the other way is how a guard rail stops being one.
-	readOnly = regexp.MustCompile(`^\s*(ls|cat|head|tail|grep|rg|find|wc|file|stat|pwd|echo|which|env|date|git\s+(status|log|diff|show|branch|remote|describe|rev-parse|ls-files))(\s|$)`)
-)
+var networkCommand = regexp.MustCompile(`(^|\s)(curl|wget|nc|ncat|telnet|ssh|scp|rsync|ftp)(\s|$)`)
+
+// Commands that only observe, whatever their arguments. Anything not listed is
+// treated as mutating, because guessing the other way is how a guard rail stops
+// being one.
+var readOnlyPrograms = map[string]bool{
+	"ls": true, "cat": true, "head": true, "tail": true, "grep": true, "egrep": true,
+	"fgrep": true, "wc": true, "file": true, "stat": true, "pwd": true, "echo": true,
+	"printf": true, "which": true, "date": true, "sort": true, "uniq": true,
+	"cut": true, "tr": true, "diff": true, "tree": true, "du": true, "df": true,
+	"id": true, "whoami": true, "uname": true, "realpath": true, "readlink": true,
+	"dirname": true, "basename": true, "jq": true, "true": true, "test": true,
+}
+
+// Parts that only shape the shell the rest of the command runs in. They change
+// no file, so they neither make a command mutating nor read-only on their own.
+var shellSetup = map[string]bool{"export": true, "cd": true, "set": true}
+
+// git subcommands that only observe.
+var readOnlyGit = map[string]bool{
+	"status": true, "log": true, "diff": true, "show": true, "describe": true,
+	"rev-parse": true, "ls-files": true, "ls-tree": true, "grep": true,
+	"blame": true, "shortlog": true, "rev-list": true, "cat-file": true,
+}
+
+// git subcommands that list with no argument or only these flags, and change
+// something otherwise (`git branch -D`, `git remote add`).
+var listingGit = map[string]map[string]bool{
+	"branch": {"-a": true, "-r": true, "-v": true, "-vv": true, "--list": true, "--show-current": true, "--all": true},
+	"remote": {"-v": true},
+	"tag":    {"-l": true, "--list": true},
+}
+
+// go subcommands that only observe. `go env -w` writes, and is refused by its
+// argument.
+var readOnlyGo = map[string]bool{"vet": true, "list": true, "version": true, "doc": true, "env": true}
+
+// Arguments that turn an otherwise observing command into one that writes or
+// runs something else.
+var escapingArgs = map[string][]string{
+	"find": {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"},
+	"rg":   {"--pre"},
+	"git":  {"-c", "--config-env", "--output", "-O", "--open-files-in-pager", "--ext-diff"},
+	"go":   {"-w", "-toolexec", "-exec"},
+	"sort": {"-o", "--output"},
+	"tree": {"-o"},
+}
+
+// Redirections that write nowhere a user would care about. They are removed
+// before a command is read, so `grep x 2>/dev/null` stays a read.
+var harmlessRedirection = regexp.MustCompile(`\s*(2>&1|[12&]?>\s*/dev/null)`)
 
 // readOnlyCommand reports whether every part of a command only observes.
 func readOnlyCommand(cmd string) bool {
-	parts := splitCommand(cmd)
-	if len(parts) == 0 {
+	// Substitutions run a command of their own wherever they appear, and a
+	// redirection writes a file whatever the command in front of it is.
+	cleaned := harmlessRedirection.ReplaceAllString(cmd, "")
+	if strings.ContainsAny(cleaned, "`><") || strings.Contains(cleaned, "$(") {
 		return false
 	}
-	for _, part := range parts {
-		if !readOnly.MatchString(part) {
+
+	reads := false
+	for _, part := range splitCommand(cleaned) {
+		fields := strings.Fields(part)
+		// Leading NAME=value assignments only set the environment of the command.
+		for len(fields) > 0 && isAssignment(fields[0]) {
+			fields = fields[1:]
+		}
+		if len(fields) == 0 || shellSetup[fields[0]] {
+			continue
+		}
+		if !readOnlyPart(fields) {
+			return false
+		}
+		reads = true
+	}
+	return reads
+}
+
+// readOnlyPart reports whether one command of a pipeline or a list only
+// observes.
+func readOnlyPart(fields []string) bool {
+	program := fields[0][strings.LastIndexByte(fields[0], '/')+1:]
+	for _, arg := range fields[1:] {
+		for _, escaping := range escapingArgs[program] {
+			if arg == escaping || strings.HasPrefix(arg, escaping+"=") {
+				return false
+			}
+		}
+	}
+
+	switch program {
+	case "env":
+		// Alone it prints the environment; followed by a command it runs it.
+		return len(fields) == 1
+	case "git":
+		return readOnlyGitPart(strings.Join(fields, " "))
+	case "go":
+		return len(fields) > 1 && readOnlyGo[fields[1]]
+	default:
+		return readOnlyPrograms[program]
+	}
+}
+
+// readOnlyGitPart reports whether a git invocation only observes.
+func readOnlyGitPart(part string) bool {
+	sub := gitSubcommand(part)
+	if readOnlyGit[sub] {
+		return true
+	}
+	flags, listing := listingGit[sub]
+	if !listing {
+		return false
+	}
+	fields := strings.Fields(part)
+	for i, field := range fields {
+		if field != sub {
+			continue
+		}
+		for _, arg := range fields[i+1:] {
+			if !flags[arg] {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// isAssignment reports whether a shell word is a NAME=value assignment.
+func isAssignment(word string) bool {
+	name, _, found := strings.Cut(word, "=")
+	if !found || name == "" {
+		return false
+	}
+	for i, r := range name {
+		if r != '_' && !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') && !(i > 0 && r >= '0' && r <= '9') {
 			return false
 		}
 	}
