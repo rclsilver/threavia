@@ -2,6 +2,7 @@ package policy_test
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -515,5 +516,59 @@ func TestAPathDoesNotWalkAroundARule(t *testing.T) {
 	offline.AllowNetwork = false
 	if d := offline.Evaluate("Bash", bash(`/usr/bin/curl https://example.com`)); d.Verdict != policy.Deny {
 		t.Errorf("a curl behind a path = %v, want Deny", d.Verdict)
+	}
+}
+
+// TestWritingToTheSharedTempIsRefused pins the third habit that cost a person
+// for nothing, after the PATH prefix and the absolute path.
+//
+// The shared temporary directory is outside every working directory, so a file
+// written there costs an approval to read — the agent asking permission for
+// the file it wrote a second earlier. It is told where to write instead, and
+// being told is not what changes a habit formed over a long session.
+func TestWritingToTheSharedTempIsRefused(t *testing.T) {
+	t.Parallel()
+
+	temp := os.TempDir()
+	guarded := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
+	guarded.Scratch = "/home/someone/.threavia/claude/scratch/run-1"
+
+	for _, cmd := range []string{
+		`jq -r '.x' in.json > ` + temp + `/out.txt`,
+		`cat a b >> ` + temp + `/joined.txt`,
+		`grep -rn TODO . | tee ` + temp + `/todos.txt`,
+	} {
+		decision := guarded.Evaluate("Bash", bash(cmd))
+		if decision.Verdict != policy.Deny {
+			t.Errorf("%q = %v, want Deny", cmd, decision.Verdict)
+		}
+		if !strings.Contains(decision.Reason, guarded.Scratch) {
+			t.Errorf("%q was refused without saying where to write: %q", cmd, decision.Reason)
+		}
+	}
+
+	if d := guarded.Evaluate("Write", map[string]any{"file_path": temp + "/notes.md"}); d.Verdict != policy.Deny {
+		t.Errorf("a Write into the shared temp = %v, want Deny", d.Verdict)
+	}
+
+	// Reading what is already there is someone else's file, and a legitimate
+	// thing to want.
+	for _, cmd := range []string{
+		`cat ` + temp + `/someone-elses.log`,
+		`grep -n error ` + temp + `/build.log`,
+	} {
+		if d := guarded.Evaluate("Bash", bash(cmd)); d.Verdict == policy.Deny {
+			t.Errorf("%q = Deny, want reading left alone", cmd)
+		}
+	}
+
+	// Writing where it belongs is not refused, and neither is anything when the
+	// backend offers nowhere better.
+	if d := guarded.Evaluate("Write", map[string]any{"file_path": guarded.Scratch + "/notes.md"}); d.Verdict == policy.Deny {
+		t.Error("writing in the scratch directory was refused")
+	}
+	nowhere := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
+	if d := nowhere.Evaluate("Write", map[string]any{"file_path": temp + "/notes.md"}); d.Verdict == policy.Deny {
+		t.Error("refused the shared temp without offering anywhere else")
 	}
 }

@@ -109,6 +109,16 @@ func sweepScratch(root string, logger *slog.Logger) {
 	}
 }
 
+// ScratchDir names the directory a Run writes its intermediate files in,
+// without making it. The permission gate needs the name to say where a file
+// belongs, and saying so must not create directories as a side effect.
+func ScratchDir(root, runID string) string {
+	if root == "" || runID == "" {
+		return ""
+	}
+	return filepath.Join(root, runID)
+}
+
 // scratchFor returns the directory this Run writes its intermediate files in,
 // making it if it is not there yet.
 //
@@ -117,10 +127,10 @@ func sweepScratch(root string, logger *slog.Logger) {
 // next. A directory emptied between the two would be worse than none, since it
 // would fail only sometimes.
 func (c *Claude) scratchFor(runID string) string {
-	if c.scratch == "" || runID == "" {
+	dir := ScratchDir(c.scratch, runID)
+	if dir == "" {
 		return ""
 	}
-	dir := filepath.Join(c.scratch, runID)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		c.logger.Warn("cannot make the scratch directory, the agent will use its own",
 			slog.String("path", dir), slog.String("error", err.Error()))

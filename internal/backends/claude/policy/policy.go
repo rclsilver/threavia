@@ -26,6 +26,7 @@
 package policy
 
 import (
+	"os"
 	"regexp"
 	"strings"
 
@@ -71,6 +72,11 @@ type Policy struct {
 	MaxActions           int
 	// Rules arrive already merged from the Project, the Session and the Job.
 	Rules []Rule
+	// Scratch is where this Run writes the files it will read back. It is not
+	// part of the policy Core states — it is this machine's answer to where
+	// such a file belongs, and the gate needs it to say so when it refuses the
+	// shared directory.
+	Scratch string
 }
 
 // From converts the wire policy, falling back to the most restrained behaviour
@@ -133,6 +139,25 @@ func (p Policy) Evaluate(tool string, input map[string]any) Decision {
 
 	if denial, refused := p.refusedByRule(tool, input); refused {
 		return denial
+	}
+
+	// Writing where it will have to ask permission to read back.
+	//
+	// The shared temporary directory is outside every working directory, so a
+	// file put there costs an approval to read — the agent asking a person for
+	// the file it wrote a second earlier. It is told where to write instead,
+	// and it was told; being told is not what changes a habit formed over a
+	// long session, as the PATH prefix above already demonstrated.
+	//
+	// Only writing is refused. Reading something that is already there is
+	// someone else's file and a legitimate thing to want.
+	if p.Scratch != "" {
+		if path := writesToSharedTemp(tool, input); path != "" {
+			return Decision{Deny, "Writing to " + path + " means asking a person for permission to " +
+				"read it back, since the shared temporary directory is outside every working " +
+				"directory. Write it in " + p.Scratch + " instead: it belongs to this session, " +
+				"it is readable without asking, and it outlives the message you are answering."}
+		}
 	}
 
 	// A prefix that buys nothing and costs a person.
@@ -282,6 +307,38 @@ func (r Rule) covers(tool string, input map[string]any) bool {
 		// working directory, which is where that question belongs.
 		return false
 	}
+}
+
+// Redirections and the one command that writes a file as an argument. A
+// quoted mention is not a write, which is why this reads the scanned parts
+// rather than the raw command.
+var redirectToTemp = regexp.MustCompile(`>>?\s*["']?(` + regexp.QuoteMeta(os.TempDir()) + `/[^\s"';|&]+)`)
+var teeToTemp = regexp.MustCompile(`\btee\b[^|;&]*?["']?(` + regexp.QuoteMeta(os.TempDir()) + `/[^\s"';|&]+)`)
+
+// writesToSharedTemp returns the path a tool call would write into the shared
+// temporary directory, or an empty string when it writes nowhere near it.
+func writesToSharedTemp(tool string, input map[string]any) string {
+	temp := os.TempDir() + "/"
+
+	if writeTools[tool] {
+		path, _ := input["file_path"].(string)
+		if strings.HasPrefix(path, temp) {
+			return path
+		}
+		return ""
+	}
+	if tool != "Bash" {
+		return ""
+	}
+	for _, part := range splitCommand(command(input)) {
+		if found := redirectToTemp.FindStringSubmatch(part); found != nil {
+			return found[1]
+		}
+		if found := teeToTemp.FindStringSubmatch(part); found != nil {
+			return found[1]
+		}
+	}
+	return ""
 }
 
 // Shell variables whose assignment the provider will not approve, because

@@ -155,7 +155,7 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 		ProjectName:         cmd.GetProjectContext().GetProjectName(),
 		ProjectDescription:  cmd.GetProjectContext().GetProjectDescription(),
 		CoreTools:           coreTools(cmd.GetProjectContext()),
-		Policy:              policy.From(cmd.GetExecutionPolicy()),
+		Policy:              a.policyFor(cmd.GetRunId(), cmd.GetExecutionPolicy()),
 		ProjectInstructions: cmd.GetProjectContext().GetProjectInstructions(),
 		LocalInstructions:   a.cfg.Claude.LocalInstructions,
 	}
@@ -171,7 +171,7 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 	a.jobs[params.JobID] = &jobState{
 		runID:            params.RunID,
 		requests:         make(map[string]struct{}),
-		policy:           policy.From(cmd.GetExecutionPolicy()),
+		policy:           a.policyFor(cmd.GetRunId(), cmd.GetExecutionPolicy()),
 		knownDirectoryID: cmd.GetProjectContext().GetKnownDirectoryId(),
 	}
 	a.mu.Unlock()
@@ -263,7 +263,7 @@ func (a *Adapter) OnUpdateJobPolicy(_ context.Context, cmd *backendv1.UpdateJobP
 		// The Job already ended: the next one starts with the new policy anyway.
 		return nil
 	}
-	job.policy = policy.From(cmd.GetExecutionPolicy())
+	job.policy = a.policyFor(cmd.GetRunId(), cmd.GetExecutionPolicy())
 	a.logger.Info("execution policy updated",
 		slog.String("jobId", cmd.GetJobId()), slog.String("mode", job.policy.Mode.String()))
 	return nil
@@ -415,4 +415,12 @@ func coreTools(pc *backendv1.ProjectContext) []mcp.CoreTool {
 		out = append(out, tool)
 	}
 	return out
+}
+
+// policyFor builds the backend view of a Job's policy, with the one thing Core
+// cannot know: where this machine keeps the files a Run writes to read back.
+func (a *Adapter) policyFor(runID string, wire *backendv1.ExecutionPolicy) policy.Policy {
+	p := policy.From(wire)
+	p.Scratch = runner.ScratchDir(a.cfg.Claude.ScratchPath, runID)
+	return p
 }
