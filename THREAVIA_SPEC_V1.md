@@ -722,6 +722,8 @@ SUPERVISED puts a reviewer in the user's place rather than rules: where the prov
 
 The refusals stay refusals: SUPERVISED replaces the user, never what the policy forbids, and a backend whose provider has no such reviewer falls back to GUARDED rather than to silence. It is also the one mode that reads the machine's own configuration, because a reviewer decides what is ordinary from what that machine says its infrastructure is — which hosts are internal, which namespaces are shared — and without it treats everything as external.
 
+What the reviewer is told is a field of the policy, in the user's own words, and it is not the Project instructions of section 18. Those address the agent — how to work in this repository — and reach it through the provider's system prompt, which a reviewer does not read. This addresses the reviewer, and reaches it the only way anything does: as something the user said. A backend therefore puts it in the message rather than in the system prompt, and in front of every message rather than once, because a reviewer re-reads the conversation on each check and a long session loses its oldest messages. It is a statement, never a guarantee: a rule is what holds whatever the conversation looks like.
+
 Autonomous execution is constrained by explicit permissions/limits such as duration, maximum actions/jobs, filesystem writes, git commit/push, network/deployment access.
 
 Policies must be enforced by Core/backend where possible, not only by prompt. Example: `gitPush=false` rejects push rather than merely asking the model not to do it.

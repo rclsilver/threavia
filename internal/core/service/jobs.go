@@ -468,6 +468,7 @@ func policyToProto(policy domain.ExecutionPolicy) *backendv1.ExecutionPolicy {
 		MaxDurationSeconds:   uint32(policy.MaxDurationSeconds),
 		MaxActions:           uint32(policy.MaxActions),
 		Rules:                rulesToProto(policy.Rules),
+		Supervision:          policy.Supervision,
 	}
 }
 

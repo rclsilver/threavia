@@ -414,7 +414,11 @@ type ExecutionPolicy struct {
 	// The fine grain, answered before the switches above: deny, then ask, then
 	// allow. They arrive already merged from the Project, the Session and the
 	// Job, in that order.
-	Rules         []*PermissionRule `protobuf:"bytes,8,rep,name=rules,proto3" json:"rules,omitempty"`
+	Rules []*PermissionRule `protobuf:"bytes,8,rep,name=rules,proto3" json:"rules,omitempty"`
+	// What the reviewer of SUPERVISED is told, in the user own words. A backend
+	// repeats it at the start of every Job: the reviewer re-reads the
+	// conversation on each check, and a long session loses its oldest messages.
+	Supervision   string `protobuf:"bytes,9,opt,name=supervision,proto3" json:"supervision,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -503,6 +507,13 @@ func (x *ExecutionPolicy) GetRules() []*PermissionRule {
 		return x.Rules
 	}
 	return nil
+}
+
+func (x *ExecutionPolicy) GetSupervision() string {
+	if x != nil {
+		return x.Supervision
+	}
+	return ""
 }
 
 type ContextDecision struct {
@@ -1754,7 +1765,7 @@ const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"capability\x18\x02 \x01(\x0e2).threavia.backend.v1.PermissionCapabilityR\n" +
 	"capability\x12\x14\n" +
 	"\x05match\x18\x03 \x01(\tR\x05match\x12\x12\n" +
-	"\x04note\x18\x04 \x01(\tR\x04note\"\x82\x03\n" +
+	"\x04note\x18\x04 \x01(\tR\x04note\"\xa4\x03\n" +
 	"\x0fExecutionPolicy\x126\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\".threavia.backend.v1.ExecutionModeR\x04mode\x124\n" +
 	"\x16allow_filesystem_write\x18\x02 \x01(\bR\x14allowFilesystemWrite\x12(\n" +
@@ -1764,7 +1775,8 @@ const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"\x14max_duration_seconds\x18\x06 \x01(\rR\x12maxDurationSeconds\x12\x1f\n" +
 	"\vmax_actions\x18\a \x01(\rR\n" +
 	"maxActions\x129\n" +
-	"\x05rules\x18\b \x03(\v2#.threavia.backend.v1.PermissionRuleR\x05rules\"Q\n" +
+	"\x05rules\x18\b \x03(\v2#.threavia.backend.v1.PermissionRuleR\x05rules\x12 \n" +
+	"\vsupervision\x18\t \x01(\tR\vsupervision\"Q\n" +
 	"\x0fContextDecision\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x18\n" +

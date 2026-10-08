@@ -3008,6 +3008,22 @@ export interface components {
              *     and the Session, outermost first.
              *      */
             rules?: components["schemas"]["PermissionRule"][];
+            /** @description What the reviewer of SUPERVISED is told, in the user's own words:
+             *     what counts as ordinary work here and what it should stop.
+             *
+             *     Not the Project instructions, and it must not become them. Those
+             *     address the agent — how to work in this repository — and reach it
+             *     through the provider's system prompt, which the reviewer does not
+             *     read. This addresses the reviewer, and reaches it the only way
+             *     anything does: as something the user said. A backend repeats it at
+             *     the start of every Job, because the reviewer re-reads the
+             *     conversation on each check and a long session loses its oldest
+             *     messages.
+             *
+             *     A statement, never a guarantee: a rule is what holds whatever the
+             *     conversation looks like.
+             *      */
+            supervision?: string;
             /** @description Stops a Run that has been going too long. Zero means no limit. */
             maxDurationSeconds?: number;
             /** @description Stops a Run that has taken too many steps. Zero means no limit. */

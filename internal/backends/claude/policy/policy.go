@@ -72,6 +72,10 @@ type Policy struct {
 	MaxActions           int
 	// Rules arrive already merged from the Project, the Session and the Job.
 	Rules []Rule
+	// Supervision is what the reviewer is told, in the user own words. Repeated
+	// at the start of every Job because the reviewer re-reads the conversation on
+	// each check and a long session loses its oldest messages.
+	Supervision string
 	// Scratch is where this Run writes the files it will read back. It is not
 	// part of the policy Core states — it is this machine's answer to where
 	// such a file belongs, and the gate needs it to say so when it refuses the
@@ -94,6 +98,7 @@ func From(p *backendv1.ExecutionPolicy) Policy {
 		AllowNetwork:         p.GetAllowNetwork(),
 		MaxDurationSeconds:   int(p.GetMaxDurationSeconds()),
 		MaxActions:           int(p.GetMaxActions()),
+		Supervision:          p.GetSupervision(),
 	}
 	for _, rule := range p.GetRules() {
 		policy.Rules = append(policy.Rules, Rule{

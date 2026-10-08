@@ -18,6 +18,8 @@ import (
 
 	"github.com/google/uuid"
 
+	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
+
 	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
 	"github.com/rclsilver/threavia/internal/backends/claude/workspace"
 )
@@ -261,7 +263,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	if err != nil {
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "INTERNAL", err.Error(), nil)
 	}
-	cmd.Stdin = strings.NewReader(params.Prompt)
+	cmd.Stdin = strings.NewReader(withSupervision(params))
 
 	c.logger.Info("starting claude code",
 		slog.String("jobId", params.JobID),
@@ -518,4 +520,29 @@ func (c *Claude) drainStderr(stderr io.Reader, into *strings.Builder) {
 			into.WriteString("\n")
 		}
 	}
+}
+
+// withSupervision puts what the reviewer needs in front of the message.
+//
+// It goes in the message rather than in the system prompt because that is the
+// only place the reviewer reads: it sees the user's messages and the
+// repository's own instruction file, never the system prompt a backend
+// appends. So the statement travels as something the user said, which is what
+// it is.
+//
+// In front of every message, not once at the start. The reviewer re-reads the
+// conversation on each check, and a long session loses its oldest messages to
+// compaction: a boundary stated once would quietly stop applying, at no visible
+// moment. Repeating it costs a few lines and keeps it true.
+//
+// Only in SUPERVISED. The other modes have no reviewer to address, and putting
+// it there would be saying something to nobody while spending the agent's
+// context on it.
+func withSupervision(params StartParams) string {
+	statement := strings.TrimSpace(params.Policy.Supervision)
+	if statement == "" || params.Policy.Mode != backendv1.ExecutionMode_EXECUTION_MODE_SUPERVISED {
+		return params.Prompt
+	}
+	return "Standing instructions for this project, which apply to everything below:\n" +
+		statement + "\n\n" + params.Prompt
 }

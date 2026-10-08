@@ -169,6 +169,24 @@ type ExecutionPolicy struct {
 	// between all of the shell and none of it.
 	Rules []PermissionRule `json:"rules,omitempty"`
 
+	// Supervision is what the reviewer of SUPERVISED is told, in the user's own
+	// words: what counts as ordinary work here and what it should stop.
+	//
+	// It is not the Project instructions and must not become them. Those
+	// address the agent — how to work in this repository — and reach it through
+	// the provider's system prompt, which the reviewer does not read. This
+	// addresses the reviewer, and reaches it the only way anything reaches it:
+	// as something the user said. The two have different readers and almost
+	// nothing to say to each other.
+	//
+	// A backend repeats it at the start of every Job rather than once, because
+	// the reviewer re-reads the conversation on each check and a long session
+	// loses its oldest messages. Stated once, it would quietly stop applying.
+	//
+	// It is a statement, never a guarantee: a rule is what holds whatever the
+	// conversation looks like.
+	Supervision string `json:"supervision,omitempty"`
+
 	// MaxDurationSeconds stops a Run that has been going too long. Zero means no
 	// limit.
 	MaxDurationSeconds int `json:"maxDurationSeconds,omitempty"`
@@ -198,6 +216,9 @@ func (p ExecutionPolicy) Validate() error {
 	}
 	if p.MaxDurationSeconds < 0 || p.MaxActions < 0 {
 		return fmt.Errorf("execution limits cannot be negative")
+	}
+	if len(p.Supervision) > 4000 {
+		return fmt.Errorf("the supervision statement is too long")
 	}
 	if len(p.Rules) > 100 {
 		return fmt.Errorf("a policy carries at most 100 permission rules")

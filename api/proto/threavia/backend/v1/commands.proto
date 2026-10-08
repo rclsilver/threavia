@@ -79,6 +79,10 @@ message ExecutionPolicy {
   // allow. They arrive already merged from the Project, the Session and the
   // Job, in that order.
   repeated PermissionRule rules = 8;
+  // What the reviewer of SUPERVISED is told, in the user own words. A backend
+  // repeats it at the start of every Job: the reviewer re-reads the
+  // conversation on each check, and a long session loses its oldest messages.
+  string supervision = 9;
 }
 
 message ContextDecision {

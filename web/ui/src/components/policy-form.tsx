@@ -9,7 +9,7 @@ import type {
 } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import { CheckboxField } from '@/components/ui/checkbox';
-import { Input, Label } from '@/components/ui/input';
+import { Input, Label, Textarea } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const MODES: { value: ExecutionMode; label: string }[] = [
@@ -107,6 +107,27 @@ export function PolicyForm({
           network
         </CheckboxField>
       </div>
+
+      {/* Only under a reviewer, because only there does anyone read it. The
+          other modes answer from the rules above, and a box nobody reads is a
+          box that invites writing a policy that does nothing. */}
+      {value.mode === 'SUPERVISED' && (
+        <div className="space-y-1.5">
+          <Label htmlFor={`${idPrefix}-supervision`}>What the reviewer should know</Label>
+          <Textarea
+            id={`${idPrefix}-supervision`}
+            rows={4}
+            value={value.supervision ?? ''}
+            onChange={(event) => set({ supervision: event.target.value })}
+            placeholder="This cluster is shared and runs in production. Never deploy or migrate without asking. Reading anything is fine."
+          />
+          <p className="text-muted text-xs">
+            Said to the reviewer before every message, in your words. It is not the project
+            instructions, which speak to the agent and which the reviewer never reads. A statement,
+            not a guarantee: write a refusal above for what has to hold regardless.
+          </p>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <Label htmlFor={`${idPrefix}-duration`}>Stop after</Label>

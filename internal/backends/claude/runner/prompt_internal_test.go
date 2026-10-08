@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
+	"github.com/rclsilver/threavia/internal/backends/claude/policy"
 )
 
 // TestThePromptNamesWhatIsOnPath pins a line that pays for itself.
@@ -96,5 +99,59 @@ func TestTheRunHasSomewhereToWrite(t *testing.T) {
 	bare := NewClaude("claude", nil, Options{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if bare.scratchFor("run-1") != "" {
 		t.Error("a backend with no scratch root invented one")
+	}
+}
+
+// TestTheReviewerIsToldBeforeEveryMessage pins where a supervision statement
+// goes, and why it is not in the system prompt with everything else.
+//
+// The reviewer reads the user's messages and the repository's own instruction
+// file. It does not read the system prompt a backend appends — which is how
+// the Project instructions became invisible to it. So the statement travels in
+// the message, as something the user said, and in front of every one of them:
+// the reviewer re-reads the conversation on each check, and a long session
+// loses its oldest messages.
+func TestTheReviewerIsToldBeforeEveryMessage(t *testing.T) {
+	t.Parallel()
+
+	supervised := StartParams{
+		Prompt: "Déploie la release",
+		Policy: policy.Policy{
+			Mode:        backendv1.ExecutionMode_EXECUTION_MODE_SUPERVISED,
+			Supervision: "This cluster is shared. Never deploy without asking.",
+		},
+	}
+	sent := withSupervision(supervised)
+	if !strings.Contains(sent, "Never deploy without asking") {
+		t.Fatalf("the reviewer is never told:\n%s", sent)
+	}
+	if !strings.HasSuffix(sent, "Déploie la release") {
+		t.Fatalf("the message was not kept whole at the end:\n%s", sent)
+	}
+	// And it is not quietly also in the system prompt, where nobody would read
+	// it and where it would spend the agent's context twice.
+	if prompt := systemPrompt(supervised, nil, ""); strings.Contains(prompt, "Never deploy") {
+		t.Error("the statement is in the system prompt, which the reviewer does not read")
+	}
+
+	// The other modes have no reviewer to address, so the message is the
+	// message.
+	for _, mode := range []backendv1.ExecutionMode{
+		backendv1.ExecutionMode_EXECUTION_MODE_INTERACTIVE,
+		backendv1.ExecutionMode_EXECUTION_MODE_GUARDED,
+		backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS,
+	} {
+		params := supervised
+		params.Policy.Mode = mode
+		if sent := withSupervision(params); sent != params.Prompt {
+			t.Errorf("%v says something to a reviewer it does not have:\n%s", mode, sent)
+		}
+	}
+
+	// Nothing to say, nothing added.
+	bare := supervised
+	bare.Policy.Supervision = "   "
+	if sent := withSupervision(bare); sent != bare.Prompt {
+		t.Errorf("an empty statement still prefixed the message:\n%s", sent)
 	}
 }
