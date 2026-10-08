@@ -469,3 +469,51 @@ func TestTheTreesNextDoorAreReadable(t *testing.T) {
 		t.Errorf("settings = %s, want no additionalDirectories", rendered)
 	}
 }
+
+// TestAPathDoesNotWalkAroundARule pins the hole that made the rules decorative.
+//
+// The agent reaches for an absolute path on its own — not to evade anything,
+// but because it is unsure the program is on PATH — and the provider's own
+// documentation lists `/usr/bin/curl` among what a `Bash(curl *)` rule does not
+// stop. A refusal a prefix walks around is not a refusal.
+func TestAPathDoesNotWalkAroundARule(t *testing.T) {
+	t.Parallel()
+
+	guarded := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
+	guarded.Rules = []policy.Rule{{
+		Effect:     backendv1.PermissionEffect_PERMISSION_EFFECT_DENY,
+		Capability: backendv1.PermissionCapability_PERMISSION_CAPABILITY_SHELL,
+		Match:      "kubectl delete *",
+		Note:       "shared cluster",
+	}}
+
+	for _, cmd := range []string{
+		`kubectl delete pod x`,
+		`/run/current-system/sw/bin/kubectl delete pod x`,
+		`/usr/bin/kubectl delete pod x`,
+		`echo go && /run/current-system/sw/bin/kubectl delete pod x`,
+		`KUBECONFIG=/tmp/k /run/current-system/sw/bin/kubectl delete pod x`,
+	} {
+		if d := guarded.Evaluate("Bash", bash(cmd)); d.Verdict != policy.Deny {
+			t.Errorf("%q = %v, want Deny", cmd, d.Verdict)
+		}
+	}
+
+	// What the rule is not about stays untouched, path or no path.
+	for _, cmd := range []string{
+		`kubectl get pods`,
+		`/run/current-system/sw/bin/kubectl get pods`,
+		`grep -n "kubectl delete" runbook.md`,
+	} {
+		if d := guarded.Evaluate("Bash", bash(cmd)); d.Verdict == policy.Deny {
+			t.Errorf("%q = Deny, want it left alone", cmd)
+		}
+	}
+
+	// And the capability switches read a path the same way.
+	offline := permissive(backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS)
+	offline.AllowNetwork = false
+	if d := offline.Evaluate("Bash", bash(`/usr/bin/curl https://example.com`)); d.Verdict != policy.Deny {
+		t.Errorf("a curl behind a path = %v, want Deny", d.Verdict)
+	}
+}

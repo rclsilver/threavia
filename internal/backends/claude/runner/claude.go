@@ -92,7 +92,8 @@ func executablesOnPath() []string {
 			continue
 		}
 		for _, entry := range entries {
-			if entry.IsDir() {
+			// Wrapped internals and dotfiles are noise in a list meant to be read.
+			if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
 				continue
 			}
 			seen[entry.Name()] = struct{}{}

@@ -190,7 +190,7 @@ func (p Policy) refuse(cmd string) (Decision, bool) {
 		if !p.AllowGitCommit && (git == "commit" || git == "am") {
 			return Decision{Deny, "The execution policy of this session forbids committing."}, true
 		}
-		if !p.AllowNetwork && (networkCommand.MatchString(part) || remoteGitSubcommands[git]) {
+		if !p.AllowNetwork && (networkCommand.MatchString(byName(part)) || remoteGitSubcommands[git]) {
 			return Decision{Deny, "The execution policy of this session forbids network access."}, true
 		}
 	}
@@ -234,7 +234,7 @@ func (r Rule) covers(tool string, input map[string]any) bool {
 		// Every part of a compound command, so a refusal cannot hide behind a
 		// harmless prefix — the same reading the switches above get.
 		for _, part := range splitCommand(cmd) {
-			if matches(r.Match, part) {
+			if matches(r.Match, byName(part)) {
 				return true
 			}
 		}
@@ -264,7 +264,15 @@ func (r Rule) covers(tool string, input map[string]any) bool {
 		if networkTools[tool] {
 			return true
 		}
-		return tool == "Bash" && networkCommand.MatchString(command(input))
+		if tool != "Bash" {
+			return false
+		}
+		for _, part := range splitCommand(command(input)) {
+			if networkCommand.MatchString(byName(part)) {
+				return true
+			}
+		}
+		return false
 
 	case backendv1.PermissionCapability_PERMISSION_CAPABILITY_TOOL:
 		return tool == r.Match
@@ -302,6 +310,53 @@ func specialAssignment(cmd string) string {
 		}
 	}
 	return ""
+}
+
+// byName reduces the program of a command to the name it is known by, so that
+// a rule written about `kubectl` is about every way of saying kubectl.
+//
+// A path defeats a rule otherwise, and the provider says as much: its own
+// documentation lists `/usr/bin/curl https://example.com` among what a
+// `Bash(curl *)` rule does not stop. A refusal that a prefix walks around is
+// not a refusal, and the agent reaches for that prefix on its own — not to
+// evade anything, but because it is unsure the program is on PATH.
+//
+// Only the rules read commands this way. What the provider decides for itself
+// it decides for itself, and widening its built-in set is not this package's
+// business.
+func byName(part string) string {
+	fields := strings.Fields(part)
+	for i, field := range fields {
+		// Leading NAME=value assignments precede the program, and their value
+		// is a path often enough that mistaking one for the program is easy:
+		// `KUBECONFIG=/tmp/k kubectl delete …` is a kubectl.
+		if isAssignment(field) {
+			continue
+		}
+		// The assignments are dropped rather than kept, which is also how the
+		// provider reads a refusal: `Bash(rm *)` in deny matches
+		// `FOO=bar rm -rf tmp/`.
+		rest := append([]string{}, fields[i:]...)
+		if slash := strings.LastIndexByte(rest[0], '/'); slash >= 0 {
+			rest[0] = rest[0][slash+1:]
+		}
+		return strings.Join(rest, " ")
+	}
+	return part
+}
+
+// isAssignment reports whether a shell word is a NAME=value assignment.
+func isAssignment(word string) bool {
+	name, _, found := strings.Cut(word, "=")
+	if !found || name == "" {
+		return false
+	}
+	for i, r := range name {
+		if r != '_' && !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') && !(i > 0 && r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	return true
 }
 
 // matches reports whether a pattern with `*` wildcards covers a string. It is
