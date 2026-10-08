@@ -985,6 +985,12 @@ export interface paths {
                     /** @description Which kind of client is calling. Core records it on the work it creates,
                      *     so a device already following it is not also made to ring, and the audit
                      *     trail can say where a change came from.
+                     *
+                     *     Two companion headers, accepted on every route including the stream,
+                     *     tell instances of the same kind apart: X-Threavia-Client, a stable id
+                     *     the client keeps ([A-Za-z0-9_-], at most 64), and X-Threavia-Client-Name,
+                     *     the device name its person chose, URI-encoded. The stream also takes
+                     *     X-Threavia-Active (true or false), the presence when it opens.
                      *      */
                     "X-Threavia-Channel"?: components["parameters"]["Channel"];
                 };
@@ -1121,6 +1127,12 @@ export interface paths {
                     /** @description Which kind of client is calling. Core records it on the work it creates,
                      *     so a device already following it is not also made to ring, and the audit
                      *     trail can say where a change came from.
+                     *
+                     *     Two companion headers, accepted on every route including the stream,
+                     *     tell instances of the same kind apart: X-Threavia-Client, a stable id
+                     *     the client keeps ([A-Za-z0-9_-], at most 64), and X-Threavia-Client-Name,
+                     *     the device name its person chose, URI-encoded. The stream also takes
+                     *     X-Threavia-Active (true or false), the presence when it opens.
                      *      */
                     "X-Threavia-Channel"?: components["parameters"]["Channel"];
                 };
@@ -1286,6 +1298,12 @@ export interface paths {
                     /** @description Which kind of client is calling. Core records it on the work it creates,
                      *     so a device already following it is not also made to ring, and the audit
                      *     trail can say where a change came from.
+                     *
+                     *     Two companion headers, accepted on every route including the stream,
+                     *     tell instances of the same kind apart: X-Threavia-Client, a stable id
+                     *     the client keeps ([A-Za-z0-9_-], at most 64), and X-Threavia-Client-Name,
+                     *     the device name its person chose, URI-encoded. The stream also takes
+                     *     X-Threavia-Active (true or false), the presence when it opens.
                      *      */
                     "X-Threavia-Channel"?: components["parameters"]["Channel"];
                 };
@@ -1665,6 +1683,12 @@ export interface paths {
                     /** @description Which kind of client is calling. Core records it on the work it creates,
                      *     so a device already following it is not also made to ring, and the audit
                      *     trail can say where a change came from.
+                     *
+                     *     Two companion headers, accepted on every route including the stream,
+                     *     tell instances of the same kind apart: X-Threavia-Client, a stable id
+                     *     the client keeps ([A-Za-z0-9_-], at most 64), and X-Threavia-Client-Name,
+                     *     the device name its person chose, URI-encoded. The stream also takes
+                     *     X-Threavia-Active (true or false), the presence when it opens.
                      *      */
                     "X-Threavia-Channel"?: components["parameters"]["Channel"];
                 };
@@ -1748,6 +1772,12 @@ export interface paths {
                     /** @description Which kind of client is calling. Core records it on the work it creates,
                      *     so a device already following it is not also made to ring, and the audit
                      *     trail can say where a change came from.
+                     *
+                     *     Two companion headers, accepted on every route including the stream,
+                     *     tell instances of the same kind apart: X-Threavia-Client, a stable id
+                     *     the client keeps ([A-Za-z0-9_-], at most 64), and X-Threavia-Client-Name,
+                     *     the device name its person chose, URI-encoded. The stream also takes
+                     *     X-Threavia-Active (true or false), the presence when it opens.
                      *      */
                     "X-Threavia-Channel"?: components["parameters"]["Channel"];
                 };
@@ -2007,6 +2037,265 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/push": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The Web Push key to subscribe with, and the browsers subscribed
+         * @description The public key is this Core's VAPID identity (RFC 8292), made on first
+         *     use and kept: a browser subscribes with it as applicationServerKey.
+         *
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The push configuration */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PushConfig"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/push/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Subscribe this browser to notifications
+         * @description The body is PushSubscription.toJSON() plus a label. Core notifies a
+         *     subscribed browser when a validation or a question waits, and when a
+         *     Job ends, unless the client that started the work is connected and
+         *     already showing it. A browser subscribing again replaces its entry.
+         *
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PushSubscriptionInput"];
+                };
+            };
+            responses: {
+                /** @description The subscription */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PushSubscription"];
+                    };
+                };
+                400: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/push/subscriptions/{subscriptionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscriptionId: components["schemas"]["UUID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Stop notifying a browser */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    subscriptionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Forgotten */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Say whether the person is looking at this client
+         * @description Sent by the client named in X-Threavia-Client when that changes: active
+         *     means visible, focused and used in the last minutes. While the person is
+         *     active on one of their clients no device is notified, since that screen
+         *     already shows what happened. A stream may also declare it when it opens,
+         *     with the X-Threavia-Active header; a client that never says is taken as
+         *     active.
+         *
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        active: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Recorded */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The client instances of the caller with a live stream
+         * @description One entry per instance, told apart by X-Threavia-Client and named by
+         *     X-Threavia-Client-Name (URI-encoded), however many streams it holds.
+         *
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The connected clients */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["ConnectedClient"][];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/push/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send a test notification to every subscribed browser */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Sent */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            browsers: number;
+                        };
+                    };
+                };
+                409: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/audit": {
         parameters: {
             query?: never;
@@ -2069,6 +2358,12 @@ export interface paths {
                     /** @description Which kind of client is calling. Core records it on the work it creates,
                      *     so a device already following it is not also made to ring, and the audit
                      *     trail can say where a change came from.
+                     *
+                     *     Two companion headers, accepted on every route including the stream,
+                     *     tell instances of the same kind apart: X-Threavia-Client, a stable id
+                     *     the client keeps ([A-Za-z0-9_-], at most 64), and X-Threavia-Client-Name,
+                     *     the device name its person chose, URI-encoded. The stream also takes
+                     *     X-Threavia-Active (true or false), the presence when it opens.
                      *      */
                     "X-Threavia-Channel"?: components["parameters"]["Channel"];
                 };
@@ -2125,6 +2420,12 @@ export interface paths {
                     /** @description Which kind of client is calling. Core records it on the work it creates,
                      *     so a device already following it is not also made to ring, and the audit
                      *     trail can say where a change came from.
+                     *
+                     *     Two companion headers, accepted on every route including the stream,
+                     *     tell instances of the same kind apart: X-Threavia-Client, a stable id
+                     *     the client keeps ([A-Za-z0-9_-], at most 64), and X-Threavia-Client-Name,
+                     *     the device name its person chose, URI-encoded. The stream also takes
+                     *     X-Threavia-Active (true or false), the presence when it opens.
                      *      */
                     "X-Threavia-Channel"?: components["parameters"]["Channel"];
                 };
@@ -2985,6 +3286,12 @@ export interface paths {
                     /** @description Which kind of client is calling. Core records it on the work it creates,
                      *     so a device already following it is not also made to ring, and the audit
                      *     trail can say where a change came from.
+                     *
+                     *     Two companion headers, accepted on every route including the stream,
+                     *     tell instances of the same kind apart: X-Threavia-Client, a stable id
+                     *     the client keeps ([A-Za-z0-9_-], at most 64), and X-Threavia-Client-Name,
+                     *     the device name its person chose, URI-encoded. The stream also takes
+                     *     X-Threavia-Active (true or false), the presence when it opens.
                      *      */
                     "X-Threavia-Channel"?: components["parameters"]["Channel"];
                 };
@@ -3197,6 +3504,42 @@ export interface components {
             payload?: {
                 [key: string]: unknown;
             };
+        };
+        ConnectedClient: {
+            /** @description Empty when the client did not identify itself. */
+            id: string;
+            name: string;
+            channel: string;
+            active: boolean;
+            /** Format: date-time */
+            since: string;
+        };
+        PushConfig: {
+            /** @description Uncompressed P-256 public key, base64url without padding. */
+            publicKey: string;
+            subscriptions: components["schemas"]["PushSubscription"][];
+        };
+        PushSubscription: {
+            id: components["schemas"]["UUID"];
+            label: string;
+            /** @description The client instance that subscribed (X-Threavia-Client), so a device can tell its own entry. */
+            clientId?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            lastUsedAt?: string;
+            /** @description Why the last delivery failed, empty when it worked. */
+            lastError?: string;
+        };
+        PushSubscriptionInput: {
+            /** @description The push service URL the browser was given; https only. */
+            endpoint: string;
+            keys: {
+                p256dh: string;
+                auth: string;
+            };
+            /** @description What the person calls this device, to tell browsers apart. */
+            label?: string;
         };
         /** @description Every field optional on a change; cron and message required on creation. */
         ScheduleInput: {
@@ -3627,6 +3970,12 @@ export interface components {
         /** @description Which kind of client is calling. Core records it on the work it creates,
          *     so a device already following it is not also made to ring, and the audit
          *     trail can say where a change came from.
+         *
+         *     Two companion headers, accepted on every route including the stream,
+         *     tell instances of the same kind apart: X-Threavia-Client, a stable id
+         *     the client keeps ([A-Za-z0-9_-], at most 64), and X-Threavia-Client-Name,
+         *     the device name its person chose, URI-encoded. The stream also takes
+         *     X-Threavia-Active (true or false), the presence when it opens.
          *      */
         Channel: components["schemas"]["Channel"];
     };

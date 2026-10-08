@@ -423,6 +423,7 @@ func (s *Service) JobEvent(ctx context.Context, instanceID domain.BackendInstanc
 	if !duplicate {
 		s.flush(b)
 		s.afterEvent(ctx, scope, event)
+		s.notifyAttention(ctx, jc, event)
 	}
 
 	sequence, err := s.store.LastBackendSequence(ctx, jobID)

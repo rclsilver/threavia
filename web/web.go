@@ -57,6 +57,16 @@ func Handler() (http.Handler, error) {
 			if strings.HasPrefix(name, "assets/") {
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			}
+			// The service worker and the manifest keep their names across
+			// builds, so a cached copy would pin the previous one: the browser
+			// must ask every time.
+			switch name {
+			case "sw.js":
+				w.Header().Set("Cache-Control", "no-cache")
+			case "manifest.webmanifest":
+				w.Header().Set("Cache-Control", "no-cache")
+				w.Header().Set("Content-Type", "application/manifest+json")
+			}
 			files.ServeHTTP(w, r)
 			return
 		}

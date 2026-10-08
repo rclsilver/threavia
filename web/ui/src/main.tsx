@@ -38,3 +38,14 @@ createRoot(root).render(
     </QueryClientProvider>
   </StrictMode>,
 );
+
+// The worker makes the client installable and receives the notifications Core
+// pushes. It caches nothing, so registering it changes nothing else.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Without it the client still works; it only cannot be installed or
+      // notified, which the Notifications section says.
+    });
+  });
+}

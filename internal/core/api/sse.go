@@ -39,7 +39,7 @@ func (h *handler) stream(w http.ResponseWriter, r *http.Request, identity auth.I
 
 	// Subscribing before the catch-up read is what closes the gap: anything
 	// committed while we page through history is already buffered.
-	sub, cancel := h.svc.Broker().Subscribe(identity.UserID, channel(r))
+	sub, cancel := h.svc.Broker().Subscribe(identity.UserID, channel(r), client(r), presence(r))
 	defer cancel()
 
 	w.Header().Set("Content-Type", "text/event-stream")

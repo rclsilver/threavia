@@ -38,6 +38,7 @@ import { useWideLayout } from '@/use-layout';
 import { SelectedProject } from '@/use-project';
 import { useStream } from '@/use-stream';
 import { Logo } from '@/components/logo';
+import { NotificationsPane } from '@/components/notifications-pane';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CheckboxField } from '@/components/ui/checkbox';
@@ -596,6 +597,15 @@ function UserMenu({
             the whole of a wide screen loses the eye on the way back to the left margin.
             Turn this on and nothing is held back.
           </p>
+        </section>
+
+        <section className="border-border space-y-2 border-t pt-4">
+          <h3 className="text-sm font-medium">Notifications</h3>
+          <DialogDescription>
+            An approval or a question waiting, or work that ended while you were not watching.
+            Never every event.
+          </DialogDescription>
+          <NotificationsPane />
         </section>
 
         <section className="border-border space-y-3 border-t pt-4">

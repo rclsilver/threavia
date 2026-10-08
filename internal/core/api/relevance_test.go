@@ -41,6 +41,12 @@ func (c *core) startSessionFrom(projectID, backendID, originChannel, message str
 // watchOn holds a live SSE connection on one channel, which is what makes
 // that client "watching" as far as Core is concerned.
 func (c *core) watchOn(originChannel string) func() {
+	return c.watchWith(map[string]string{"X-Threavia-Channel": originChannel})
+}
+
+// watchWith holds a live SSE connection opened with the given headers: a
+// channel, a client instance, a presence.
+func (c *core) watchWith(headers map[string]string) func() {
 	c.t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -49,7 +55,9 @@ func (c *core) watchOn(originChannel string) func() {
 		cancel()
 		c.t.Fatalf("building the stream request: %v", err)
 	}
-	req.Header.Set("X-Threavia-Channel", originChannel)
+	for name, value := range headers {
+		req.Header.Set(name, value)
+	}
 
 	resp, err := c.http.Client().Do(req)
 	if err != nil {

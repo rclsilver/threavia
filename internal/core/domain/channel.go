@@ -68,3 +68,47 @@ func ChannelFrom(ctx context.Context) Channel {
 	}
 	return ChannelAPI
 }
+
+// Client is one browser or app instance, as opposed to a Channel, which is
+// only its kind: two web clients — a desktop and a phone — share the channel
+// "web" and are told apart by their ID. The name is what the person calls the
+// device.
+type Client struct {
+	ID   string
+	Name string
+}
+
+// NormaliseClient keeps an identifier that is safe to store and show, and
+// drops one that is not rather than failing the request.
+func NormaliseClient(id, name string) Client {
+	id = strings.TrimSpace(id)
+	if len(id) > 64 {
+		id = ""
+	}
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+		default:
+			id = ""
+		}
+	}
+	name = strings.Join(strings.Fields(name), " ")
+	if runes := []rune(name); len(runes) > 80 {
+		name = string(runes[:80])
+	}
+	return Client{ID: id, Name: name}
+}
+
+type clientKey struct{}
+
+// WithClient marks a context with the client instance behind the request.
+func WithClient(ctx context.Context, client Client) context.Context {
+	return context.WithValue(ctx, clientKey{}, client)
+}
+
+// ClientFrom returns the client instance behind the request, empty when it
+// did not say.
+func ClientFrom(ctx context.Context) Client {
+	client, _ := ctx.Value(clientKey{}).(Client)
+	return client
+}

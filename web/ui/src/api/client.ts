@@ -1,3 +1,5 @@
+import { clientId, deviceName } from '@/lib/device';
+
 /**
  * The HTTP client.
  *
@@ -55,6 +57,10 @@ export function setBearer(token: string | null) {
 /** Adds the credential, when there is one, to a request going to Core. */
 export function authorize(headers: Headers): Headers {
   headers.set('X-Threavia-Channel', CHANNEL);
+  // Which device, beyond which kind: the desktop and the phone are both web.
+  // The name is URI-encoded, a header being Latin-1 and a name not.
+  headers.set('X-Threavia-Client', clientId);
+  headers.set('X-Threavia-Client-Name', encodeURIComponent(deviceName()));
   if (bearer) headers.set('Authorization', `Bearer ${bearer}`);
   return headers;
 }

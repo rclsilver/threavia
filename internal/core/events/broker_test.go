@@ -11,9 +11,9 @@ func TestBrokerDeliversToTheOwnerOnly(t *testing.T) {
 	t.Parallel()
 
 	broker := NewBroker()
-	mine, cancelMine := broker.Subscribe("thomas", domain.ChannelWeb)
+	mine, cancelMine := broker.Subscribe("thomas", domain.ChannelWeb, domain.Client{}, nil)
 	defer cancelMine()
-	theirs, cancelTheirs := broker.Subscribe("someone-else", domain.ChannelWeb)
+	theirs, cancelTheirs := broker.Subscribe("someone-else", domain.ChannelWeb, domain.Client{}, nil)
 	defer cancelTheirs()
 
 	broker.Publish("thomas", Envelope{Sequence: 1, Type: TypeAgentMessage})
@@ -40,7 +40,7 @@ func TestBrokerNeverBlocksOnASlowClient(t *testing.T) {
 	t.Parallel()
 
 	broker := NewBroker()
-	sub, cancel := broker.Subscribe("thomas", domain.ChannelWeb)
+	sub, cancel := broker.Subscribe("thomas", domain.ChannelWeb, domain.Client{}, nil)
 	defer cancel()
 
 	for i := range subscriberBuffer + 10 {
@@ -60,7 +60,7 @@ func TestBrokerUnsubscribe(t *testing.T) {
 	t.Parallel()
 
 	broker := NewBroker()
-	_, cancel := broker.Subscribe("thomas", domain.ChannelWeb)
+	_, cancel := broker.Subscribe("thomas", domain.ChannelWeb, domain.Client{}, nil)
 	if broker.Subscribers() != 1 {
 		t.Fatalf("subscribers = %d, want 1", broker.Subscribers())
 	}
@@ -79,7 +79,7 @@ func TestWatchingReportsLiveChannels(t *testing.T) {
 	t.Parallel()
 
 	broker := NewBroker()
-	_, cancel := broker.Subscribe("thomas", domain.ChannelWeb)
+	_, cancel := broker.Subscribe("thomas", domain.ChannelWeb, domain.Client{}, nil)
 
 	if !broker.Watching("thomas", domain.ChannelWeb) {
 		t.Fatal("a connected channel must be reported as watching")
@@ -97,5 +97,49 @@ func TestWatchingReportsLiveChannels(t *testing.T) {
 	cancel()
 	if broker.Watching("thomas", domain.ChannelWeb) {
 		t.Fatal("a closed stream must stop counting")
+	}
+}
+
+// TestPresenceIsPerDevice pins what decides whether a phone rings: whether
+// the person is looking at one of their clients, device by device, not
+// whether some client of the same kind is connected.
+func TestPresenceIsPerDevice(t *testing.T) {
+	t.Parallel()
+
+	broker := NewBroker()
+	desk := domain.Client{ID: "desk", Name: "workstation"}
+	phone := domain.Client{ID: "phone", Name: "Android — Chrome"}
+
+	_, closeDesk := broker.Subscribe("thomas", domain.ChannelWeb, desk, &Presence{Active: true})
+	defer closeDesk()
+	_, closePhone := broker.Subscribe("thomas", domain.ChannelWeb, phone, &Presence{Active: false})
+	defer closePhone()
+	// A second tab of the same desktop is the same device.
+	_, closeTab := broker.Subscribe("thomas", domain.ChannelWeb, desk, nil)
+	defer closeTab()
+
+	if !broker.AnyActive("thomas") {
+		t.Fatal("the person is at the desk")
+	}
+	if clients := broker.Clients("thomas"); len(clients) != 2 || clients[0].Name != "workstation" {
+		t.Fatalf("clients = %+v, want the desk and the phone, once each", clients)
+	}
+
+	// Leaving the desk: every stream of that device goes idle together.
+	if !broker.SetPresence("thomas", "desk", Presence{Active: false}) {
+		t.Fatal("the desk holds streams")
+	}
+	if broker.AnyActive("thomas") {
+		t.Fatal("nobody is looking any more: the phone must ring")
+	}
+	if broker.Watching("thomas", domain.ChannelWeb) {
+		t.Fatal("an idle client is not watching")
+	}
+
+	// A stream that never said is taken as looked at.
+	_, closeVSCode := broker.Subscribe("thomas", domain.ChannelVSCode, domain.Client{}, nil)
+	defer closeVSCode()
+	if !broker.AnyActive("thomas") {
+		t.Fatal("a client that never reported presence counts as active")
 	}
 }

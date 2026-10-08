@@ -1,6 +1,8 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { dropResolvedAttention } from './attention-cache';
+import { isActive, presenceSentWithStream } from '@/lib/presence';
+
 import { authorize, CHANNEL } from './client';
 import { keys } from './keys';
 import { payloadOf, type Event, type Job, type Snapshot } from './types';
@@ -88,10 +90,16 @@ export class EventStream {
 
     while (!abort.signal.aborted) {
       try {
-        const response = await fetch(
-          `/api/v1/events?after=${this.cursor}&channel=${CHANNEL}`,
-          { headers: authorize(new Headers({ Accept: 'text/event-stream' })), signal: abort.signal },
-        );
+        // The stream says whether the person is looking, so Core never holds
+        // a fresh connection as present by mistake until the first change.
+        const active = isActive();
+        const headers = authorize(new Headers({ Accept: 'text/event-stream' }));
+        headers.set('X-Threavia-Active', String(active));
+        const response = await fetch(`/api/v1/events?after=${this.cursor}&channel=${CHANNEL}`, {
+          headers,
+          signal: abort.signal,
+        });
+        presenceSentWithStream(active);
         if (!response.ok || !response.body) {
           throw new Error(`the stream did not open (${response.status})`);
         }

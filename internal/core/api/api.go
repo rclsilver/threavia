@@ -13,6 +13,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
+	"github.com/rclsilver/threavia/internal/core/events"
 	"github.com/rclsilver/threavia/internal/core/service"
 )
 
@@ -83,6 +85,7 @@ func NewRouter(opts Options) http.Handler {
 	h.registerArtifacts(mux)
 	h.registerSkills(mux)
 	h.registerSchedules(mux)
+	h.registerPush(mux)
 	h.registerStream(mux)
 	h.registerSpec(mux)
 
@@ -137,7 +140,8 @@ func (h *handler) secured(fn func(http.ResponseWriter, *http.Request, auth.Ident
 		}
 		// Every operation below can then say which client it is serving, which is
 		// what the audit trail and the notification relevance both read.
-		fn(w, r.WithContext(domain.WithChannel(r.Context(), channel(r))), identity)
+		ctx := domain.WithClient(domain.WithChannel(r.Context(), channel(r)), client(r))
+		fn(w, r.WithContext(ctx), identity)
 	})
 }
 
@@ -288,6 +292,32 @@ func querySequence(r *http.Request, name string) domain.Sequence {
 func queryBool(r *http.Request, name string) bool {
 	value, err := strconv.ParseBool(r.URL.Query().Get(name))
 	return err == nil && value
+}
+
+// client reports which client instance sent the request: a stable id the
+// client keeps, and the name its person gave the device. The name travels
+// URI-encoded, because a header is Latin-1 and a device name need not be.
+func client(r *http.Request) domain.Client {
+	id := r.Header.Get("X-Threavia-Client")
+	name := r.Header.Get("X-Threavia-Client-Name")
+	if decoded, err := url.QueryUnescape(name); err == nil {
+		name = decoded
+	}
+	return domain.NormaliseClient(id, name)
+}
+
+// presence reads the presence a client declared when opening its stream, or
+// nil when it said nothing.
+func presence(r *http.Request) *events.Presence {
+	raw := r.Header.Get("X-Threavia-Active")
+	if raw == "" {
+		return nil
+	}
+	active, err := strconv.ParseBool(raw)
+	if err != nil {
+		return nil
+	}
+	return &events.Presence{Active: active}
 }
 
 // channel reports which kind of client sent the request (spec section 6).

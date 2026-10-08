@@ -13,6 +13,7 @@ import type {
   Decision,
   Event,
   ExecutionPolicy,
+  PushConfig,
   FileDiff,
   SessionPolicy,
   Handoff,
@@ -732,5 +733,58 @@ export function useRunSchedule(sessionId: string) {
   return useMutation({
     mutationFn: (id: string) => api.post<Job>(`/api/v1/schedules/${id}/run`),
     onSuccess: () => queries.invalidateQueries({ queryKey: keys.schedules(sessionId) }),
+  });
+}
+
+// ---------------------------------------------------------------------- push
+
+export function usePushConfig() {
+  return useQuery({
+    queryKey: keys.push(),
+    queryFn: () => api.get<PushConfig>('/api/v1/me/push'),
+  });
+}
+
+export function useSubscribePush() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { endpoint: string; keys: { p256dh: string; auth: string }; label: string }) =>
+      api.post<{ id: string }>('/api/v1/me/push/subscriptions', input),
+    onSuccess: () => queries.invalidateQueries({ queryKey: keys.push() }),
+  });
+}
+
+export function useUnsubscribePush() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/api/v1/me/push/subscriptions/${id}`),
+    onSuccess: () => queries.invalidateQueries({ queryKey: keys.push() }),
+  });
+}
+
+export function useTestPush() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ browsers: number }>('/api/v1/me/push/test'),
+    // Delivery is recorded on each subscription, a moment after.
+    onSuccess: () => setTimeout(() => void queries.invalidateQueries({ queryKey: keys.push() }), 3000),
+  });
+}
+
+/** A client instance with a live stream, as Core sees it. */
+export interface ConnectedClient {
+  id: string;
+  name: string;
+  channel: string;
+  active: boolean;
+  since: string;
+}
+
+export function useConnectedClients() {
+  return useQuery({
+    queryKey: ['clients'],
+    queryFn: () => api.get<List<ConnectedClient>>('/api/v1/me/clients').then(items),
+    // Presence changes without an event; a dialog left open follows it.
+    refetchInterval: 15_000,
   });
 }

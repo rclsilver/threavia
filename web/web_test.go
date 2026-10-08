@@ -1,6 +1,7 @@
 package web
 
 import (
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -57,6 +58,41 @@ func TestAClientRouteReachesTheApplication(t *testing.T) {
 		}
 		if !strings.Contains(recorder.Body.String(), "<div id=\"root\"") {
 			t.Errorf("GET %s did not return the application document", path)
+		}
+	}
+}
+
+// TestTheServiceWorkerIsNeverCached pins what keeps an installed client
+// current: the worker and the manifest keep their names across builds, so a
+// cached copy would pin the previous release on every phone.
+func TestTheServiceWorkerIsNeverCached(t *testing.T) {
+	t.Parallel()
+
+	if !Built() {
+		t.Skip("no client is built into this test binary; run make web first")
+	}
+	if _, err := fs.Stat(assets, "ui/dist/sw.js"); err != nil {
+		t.Skip("the embedded client predates the service worker; run make web first")
+	}
+
+	handler, err := Handler()
+	if err != nil {
+		t.Fatalf("building the handler: %v", err)
+	}
+	for path, contentType := range map[string]string{
+		"/sw.js":                "javascript",
+		"/manifest.webmanifest": "application/manifest+json",
+	} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, want 200", path, recorder.Code)
+		}
+		if got := recorder.Header().Get("Cache-Control"); got != "no-cache" {
+			t.Errorf("GET %s Cache-Control = %q, want no-cache", path, got)
+		}
+		if got := recorder.Header().Get("Content-Type"); !strings.Contains(got, contentType) {
+			t.Errorf("GET %s Content-Type = %q, want %s", path, got, contentType)
 		}
 	}
 }

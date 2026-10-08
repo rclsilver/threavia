@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { EventStream, type Activity } from '@/api/stream';
+import { followPresence } from '@/lib/presence';
 import { StreamContext } from '@/use-stream';
 
 /** How long a liveness signal keeps saying the agent is working. */
@@ -23,6 +24,7 @@ export function StreamProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const live = stream.current!;
+    followPresence();
     live.open(setConnected, (signal) => {
       setActivity((current) => ({ ...current, [signal.sessionId]: signal }));
     });

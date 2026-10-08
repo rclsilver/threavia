@@ -12,12 +12,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/rclsilver/threavia/internal/core/backendconn"
 	"github.com/rclsilver/threavia/internal/core/domain"
 	"github.com/rclsilver/threavia/internal/core/events"
+	"github.com/rclsilver/threavia/internal/core/push"
 	"github.com/rclsilver/threavia/internal/core/skills"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 	"github.com/rclsilver/threavia/internal/core/storage/s3"
@@ -62,6 +64,12 @@ type Service struct {
 	// diffs holds the diff requests waiting for a backend's answer, by
 	// request id.
 	diffs sync.Map
+
+	// pushKeys is the Web Push identity, loaded or made on first use.
+	pushMu   sync.Mutex
+	pushKeys *push.Keys
+	// pushClient reaches the push services; nil is a default client.
+	pushClient *http.Client
 }
 
 // Option customises a Service.
@@ -150,3 +158,7 @@ func translate(err error) error {
 		return err
 	}
 }
+
+// SetPushClient replaces the HTTP client that reaches push services, for a
+// test standing in for one.
+func (s *Service) SetPushClient(client *http.Client) { s.pushClient = client }

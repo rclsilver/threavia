@@ -69,6 +69,7 @@ func registered(t *testing.T) []string {
 	h.registerArtifacts(mux)
 	h.registerSkills(mux)
 	h.registerSchedules(mux)
+	h.registerPush(mux)
 	h.registerStream(mux)
 
 	routes := h.Routes()

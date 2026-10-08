@@ -1046,6 +1046,119 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Attention" }
 
+  /api/v1/me/push:
+    get:
+      tags: [attention]
+      summary: The Web Push key to subscribe with, and the browsers subscribed
+      description: |
+        The public key is this Core's VAPID identity (RFC 8292), made on first
+        use and kept: a browser subscribes with it as applicationServerKey.
+      responses:
+        "200":
+          description: The push configuration
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PushConfig" }
+
+  /api/v1/me/push/subscriptions:
+    post:
+      tags: [attention]
+      summary: Subscribe this browser to notifications
+      description: |
+        The body is PushSubscription.toJSON() plus a label. Core notifies a
+        subscribed browser when a validation or a question waits, and when a
+        Job ends, unless the client that started the work is connected and
+        already showing it. A browser subscribing again replaces its entry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PushSubscriptionInput" }
+      responses:
+        "201":
+          description: The subscription
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PushSubscription" }
+        "400":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/me/push/subscriptions/{subscriptionId}:
+    parameters:
+      - name: subscriptionId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    delete:
+      tags: [attention]
+      summary: Stop notifying a browser
+      responses:
+        "204":
+          description: Forgotten
+
+  /api/v1/me/presence:
+    post:
+      tags: [attention]
+      summary: Say whether the person is looking at this client
+      description: |
+        Sent by the client named in X-Threavia-Client when that changes: active
+        means visible, focused and used in the last minutes. While the person is
+        active on one of their clients no device is notified, since that screen
+        already shows what happened. A stream may also declare it when it opens,
+        with the X-Threavia-Active header; a client that never says is taken as
+        active.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [active]
+              properties:
+                active: { type: boolean }
+      responses:
+        "204":
+          description: Recorded
+        "400":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/me/clients:
+    get:
+      tags: [attention]
+      summary: The client instances of the caller with a live stream
+      description: |
+        One entry per instance, told apart by X-Threavia-Client and named by
+        X-Threavia-Client-Name (URI-encoded), however many streams it holds.
+      responses:
+        "200":
+          description: The connected clients
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ConnectedClient" }
+
+  /api/v1/me/push/test:
+    post:
+      tags: [attention]
+      summary: Send a test notification to every subscribed browser
+      responses:
+        "202":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [browsers]
+                properties:
+                  browsers: { type: integer }
+        "409":
+          $ref: "#/components/responses/Error"
+
   /api/v1/me/audit:
     get:
       tags: [attention]
@@ -1674,6 +1787,12 @@ components:
         so a device already following it is not also made to ring, and the audit
         trail can say where a change came from.
 
+        Two companion headers, accepted on every route including the stream,
+        tell instances of the same kind apart: X-Threavia-Client, a stable id
+        the client keeps ([A-Za-z0-9_-], at most 64), and X-Threavia-Client-Name,
+        the device name its person chose, URI-encoded. The stream also takes
+        X-Threavia-Active (true or false), the presence when it opens.
+
   responses:
     Error:
       description: The single error shape of the client API
@@ -1902,6 +2021,60 @@ components:
               present when the diff of a file can be asked for
             - `validation.resolved`: `{ validationId, approved, note }`
             - `user_input.resolved`: `{ requestId, value }`
+
+    ConnectedClient:
+      type: object
+      required: [id, name, channel, active, since]
+      properties:
+        id: { type: string, description: Empty when the client did not identify itself. }
+        name: { type: string }
+        channel: { type: string }
+        active: { type: boolean }
+        since: { type: string, format: date-time }
+
+    PushConfig:
+      type: object
+      required: [publicKey, subscriptions]
+      properties:
+        publicKey:
+          type: string
+          description: Uncompressed P-256 public key, base64url without padding.
+        subscriptions:
+          type: array
+          items: { $ref: "#/components/schemas/PushSubscription" }
+
+    PushSubscription:
+      type: object
+      required: [id, label, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        label: { type: string }
+        clientId:
+          type: string
+          description: The client instance that subscribed (X-Threavia-Client), so a device can tell its own entry.
+        createdAt: { type: string, format: date-time }
+        lastUsedAt: { type: string, format: date-time }
+        lastError:
+          type: string
+          description: Why the last delivery failed, empty when it worked.
+
+    PushSubscriptionInput:
+      type: object
+      required: [endpoint, keys]
+      properties:
+        endpoint:
+          type: string
+          description: The push service URL the browser was given; https only.
+        keys:
+          type: object
+          required: [p256dh, auth]
+          properties:
+            p256dh: { type: string }
+            auth: { type: string }
+        label:
+          type: string
+          maxLength: 120
+          description: What the person calls this device, to tell browsers apart.
 
     ScheduleInput:
       type: object

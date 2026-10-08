@@ -15,6 +15,7 @@ export type JobStatus = Schemas['JobStatus'];
 export type Event = Schemas['Event'];
 export type FileDiff = Schemas['FileDiff'];
 export type Schedule = Schemas['Schedule'];
+export type PushConfig = Schemas['PushConfig'];
 export type Snapshot = Schemas['Snapshot'];
 export type Attention = Schemas['Attention'];
 export type ValidationRequest = Schemas['ValidationRequest'];
