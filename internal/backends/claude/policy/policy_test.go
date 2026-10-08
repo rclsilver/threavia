@@ -1,6 +1,7 @@
 package policy_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -76,23 +77,26 @@ func TestAutonomousIsStillBounded(t *testing.T) {
 	}
 }
 
-// TestModesDifferOnReading pins what separates the three modes: who gets asked
-// about an action that only observes.
-func TestModesDifferOnReading(t *testing.T) {
+// TestOnlyAutonomousAnswersForTheUser pins what separates the modes at the
+// gate, now that the provider decides what never reaches it.
+//
+// Anything arriving here is something the provider did not already settle, so
+// the only question left is who answers. AUTONOMOUS answers; the other two put
+// it to the person. What GUARDED lets through without asking at all is the
+// provider's read-only set, and that is pinned on the translation instead —
+// see TestModesAreTranslatedNotReimplemented.
+func TestOnlyAutonomousAnswersForTheUser(t *testing.T) {
 	t.Parallel()
 
 	cases := map[backendv1.ExecutionMode]policy.Verdict{
 		backendv1.ExecutionMode_EXECUTION_MODE_INTERACTIVE: policy.Ask,
-		backendv1.ExecutionMode_EXECUTION_MODE_GUARDED:     policy.Allow,
+		backendv1.ExecutionMode_EXECUTION_MODE_GUARDED:     policy.Ask,
 		backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS:  policy.Allow,
 	}
 	for mode, want := range cases {
 		p := permissive(mode)
-		if d := p.Evaluate("Read", map[string]any{}); d.Verdict != want {
-			t.Errorf("reading under %s = %v, want %v", mode, d.Verdict, want)
-		}
-		if d := p.Evaluate("Bash", bash("git status")); d.Verdict != want {
-			t.Errorf("git status under %s = %v, want %v", mode, d.Verdict, want)
+		if d := p.Evaluate("Bash", bash("./deploy.sh")); d.Verdict != want {
+			t.Errorf("a command under %s = %v, want %v", mode, d.Verdict, want)
 		}
 	}
 
@@ -158,123 +162,201 @@ func TestNetworkCommandsFollowTheNetworkFlag(t *testing.T) {
 	}
 }
 
-// TestGuardedLetsReadingCommandsThrough pins the commands an agent runs to look
-// around. GUARDED asked for every one of them when they began with an export or
-// went through a pipe, which left the mode indistinguishable from INTERACTIVE.
-func TestGuardedLetsReadingCommandsThrough(t *testing.T) {
+// TestEverySwitchBecomesAProviderRefusal pins the translation half of the
+// contract: a capability the policy withholds has to arrive at the provider as
+// a refusal, not as something the gate will catch later.
+func TestEverySwitchBecomesAProviderRefusal(t *testing.T) {
 	t.Parallel()
 
-	guarded := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
-	for _, cmd := range []string{
-		"export PATH=/run/current-system/sw/bin:$PATH && git grep -n foo -- internal",
-		"cd /srv/app && git log --oneline -5",
-		"GOFLAGS=-mod=mod go vet ./...",
-		"grep -rn TODO internal 2>/dev/null | sort | uniq -c | head",
-		"go test ./... 2>&1 | tail -3 && false || true; ls",
-		"git branch",
-		"git branch -a",
-		"git remote -v",
-		"env",
-		"go env GOPATH",
-		"jq .version package.json",
+	p := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
+	p.AllowGitPush = false
+	p.AllowGitCommit = false
+	p.AllowNetwork = false
+	p.AllowFilesystemWrite = false
+
+	native := p.Native()
+	for _, want := range []string{
+		"Bash(git push *)", "Bash(git commit *)", "Bash(curl *)",
+		"WebFetch", "WebSearch", "Write", "Edit", "NotebookEdit",
 	} {
-		// The go test line is not one: it builds and runs code.
-		want := policy.Allow
-		if strings.HasPrefix(cmd, "go test") {
-			want = policy.Ask
+		if !contains(native.Deny, want) {
+			t.Errorf("deny is missing %q, got %v", want, native.Deny)
 		}
-		if d := guarded.Evaluate("Bash", bash(cmd)); d.Verdict != want {
-			t.Errorf("%q = %v, want %v", cmd, d.Verdict, want)
-		}
+	}
+
+	// And a policy that withholds nothing refuses nothing.
+	if open := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED).Native(); len(open.Deny) != 0 {
+		t.Errorf("a policy that forbids nothing produced %v", open.Deny)
 	}
 }
 
-// TestReadingCommandsThatWriteAreStillAsked pins the other half: a command that
-// starts like a read but writes, or runs something else, is not one.
-func TestReadingCommandsThatWriteAreStillAsked(t *testing.T) {
-	t.Parallel()
-
-	guarded := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
-	for _, cmd := range []string{
-		"cat a > b",
-		"echo secret >> ~/.bashrc",
-		"echo $(rm -rf build)",
-		"echo `rm -rf build`",
-		"env rm -rf build",
-		"export X=1 && rm -rf build",
-		"find . -name '*.tmp' -delete",
-		"find . -exec rm {} ;",
-		"rg --pre ./run.sh foo",
-		"git branch -D feature",
-		"git remote add origin x",
-		"git -c core.pager='rm -rf build' log",
-		"git diff --output=patch",
-		"go env -w GOFLAGS=x",
-		"sort -o out.txt in.txt",
-		"export X=1",
-		"cd /tmp",
-		"$CMD status",
-	} {
-		if d := guarded.Evaluate("Bash", bash(cmd)); d.Verdict != policy.Ask {
-			t.Errorf("%q = %v, want Ask", cmd, d.Verdict)
-		}
-	}
-}
-
-// TestQuotingIsReadTheWayTheShellReadsIt pins the rule that decides whether a
-// search is a search.
+// TestModesAreTranslatedNotReimplemented pins what is left of the modes once
+// the provider does the classifying.
 //
-// These are real commands, taken from a session that put every one of them to
-// the user under GUARDED. A separator inside quotes is a character, not a
-// pipeline; a > inside quotes writes nothing. Reading them otherwise turned an
-// alternation into a list of unknown programs, and an unknown program is
-// treated as mutating.
-func TestQuotingIsReadTheWayTheShellReadsIt(t *testing.T) {
+// GUARDED and AUTONOMOUS ask the provider for nothing special: its built-in
+// read-only set is exactly what GUARDED means, and it is better at deciding
+// than a list maintained here ever was. INTERACTIVE is the one that has to say
+// something, because that set runs without asking in every mode and
+// INTERACTIVE is the mode that asks about reading too.
+func TestModesAreTranslatedNotReimplemented(t *testing.T) {
 	t.Parallel()
 
-	guarded := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
-	for _, cmd := range []string{
-		`export PATH=/run/current-system/sw/bin:$PATH && git grep -n -i "old_string\|new_string\|workspace" -- web/ui/src ':!web/ui/src/api/schema.d.ts' | head -15`,
-		`grep -n "message FileChange" -A8 api/proto/threavia/backend/v1/events.proto`,
-		`sed -n 150,165p THREAVIA_SPEC_V1.md; sed -n 385,395p THREAVIA_SPEC_V1.md`,
-		`grep -rn "a > b" internal`,
-		`grep 'a;b' internal`,
-		`rg -n "func New" internal | head`,
-		`find . -name '*.go' -newer go.mod | head`,
-		`git log --grep="fix|feat" --oneline -5`,
-		`echo "a && b"`,
+	interactive := permissive(backendv1.ExecutionMode_EXECUTION_MODE_INTERACTIVE).Native()
+	for _, want := range []string{"Bash", "Read", "Glob", "Grep"} {
+		if !contains(interactive.Ask, want) {
+			t.Errorf("INTERACTIVE does not ask about %q, got %v", want, interactive.Ask)
+		}
+	}
+
+	for _, mode := range []backendv1.ExecutionMode{
+		backendv1.ExecutionMode_EXECUTION_MODE_GUARDED,
+		backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS,
 	} {
-		if d := guarded.Evaluate("Bash", bash(cmd)); d.Verdict != policy.Allow {
-			t.Errorf("%q = %v, want Allow", cmd, d.Verdict)
+		if native := permissive(mode).Native(); len(native.Ask) != 0 {
+			t.Errorf("%v asks the provider for %v, want nothing", mode, native.Ask)
 		}
 	}
 }
 
-// TestQuotingDoesNotHideWhatIsReal pins the other direction: now that quotes
-// are read, everything outside them still has to be.
-func TestQuotingDoesNotHideWhatIsReal(t *testing.T) {
+// TestEveryCapabilityHasATranslation pins that the vocabulary Core promises is
+// one this backend can actually render. A capability with no translation is a
+// rule a user wrote and nobody applied.
+func TestEveryCapabilityHasATranslation(t *testing.T) {
 	t.Parallel()
 
-	guarded := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
-	for _, cmd := range []string{
-		`grep -n "old_string\|new_string" src | rm -rf build`,
-		`grep 'pattern' file > out.txt`,
-		`sed -i 's/a/b/' go.mod`,
-		`sed -i.bak 's/a/b/' go.mod`,
-		`sed -ni 's/a/b/p' go.mod`,
-		`echo "safe" && $(rm -rf build)`,
-		`find . -name '*.tmp' -delete`,
-		`rg --pre ./run.sh "x"`,
-	} {
-		if d := guarded.Evaluate("Bash", bash(cmd)); d.Verdict != policy.Ask {
-			t.Errorf("%q = %v, want Ask", cmd, d.Verdict)
+	capabilities := []backendv1.PermissionCapability{
+		backendv1.PermissionCapability_PERMISSION_CAPABILITY_SHELL,
+		backendv1.PermissionCapability_PERMISSION_CAPABILITY_FILE_READ,
+		backendv1.PermissionCapability_PERMISSION_CAPABILITY_FILE_WRITE,
+		backendv1.PermissionCapability_PERMISSION_CAPABILITY_NETWORK,
+		backendv1.PermissionCapability_PERMISSION_CAPABILITY_GIT_COMMIT,
+		backendv1.PermissionCapability_PERMISSION_CAPABILITY_GIT_PUSH,
+		backendv1.PermissionCapability_PERMISSION_CAPABILITY_TOOL,
+	}
+	for _, capability := range capabilities {
+		p := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
+		p.Rules = []policy.Rule{{
+			Effect:     backendv1.PermissionEffect_PERMISSION_EFFECT_DENY,
+			Capability: capability,
+			Match:      "something",
+		}}
+		if native := p.Native(); len(native.Deny) == 0 {
+			t.Errorf("%v renders to nothing", capability)
 		}
 	}
 }
 
-// TestAForbiddenCallCannotHideBehindQuotes pins that the deny rules read the
-// same command the shell will run: a push is a push wherever it sits in a
-// pipeline, and a quoted one is text.
+// TestRulesLandInTheRightList pins the three effects, and the shapes a reader
+// of the provider settings would expect to see.
+func TestRulesLandInTheRightList(t *testing.T) {
+	t.Parallel()
+
+	p := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
+	p.Rules = []policy.Rule{
+		{
+			Effect:     backendv1.PermissionEffect_PERMISSION_EFFECT_DENY,
+			Capability: backendv1.PermissionCapability_PERMISSION_CAPABILITY_SHELL,
+			Match:      "kubectl delete *",
+			Note:       "shared cluster",
+		},
+		{
+			Effect:     backendv1.PermissionEffect_PERMISSION_EFFECT_ALLOW,
+			Capability: backendv1.PermissionCapability_PERMISSION_CAPABILITY_SHELL,
+			Match:      "npm run *",
+		},
+		{
+			Effect:     backendv1.PermissionEffect_PERMISSION_EFFECT_ASK,
+			Capability: backendv1.PermissionCapability_PERMISSION_CAPABILITY_TOOL,
+			Match:      "mcp__threavia__task_create",
+		},
+		{
+			Effect:     backendv1.PermissionEffect_PERMISSION_EFFECT_DENY,
+			Capability: backendv1.PermissionCapability_PERMISSION_CAPABILITY_NETWORK,
+			Match:      "example.com",
+		},
+	}
+
+	native := p.Native()
+	if !contains(native.Deny, "Bash(kubectl delete *)") {
+		t.Errorf("deny = %v", native.Deny)
+	}
+	if !contains(native.Allow, "Bash(npm run *)") {
+		t.Errorf("allow = %v", native.Allow)
+	}
+	if !contains(native.Ask, "mcp__threavia__task_create") {
+		t.Errorf("ask = %v", native.Ask)
+	}
+	if !contains(native.Deny, "WebFetch(domain:example.com)") {
+		t.Errorf("deny = %v", native.Deny)
+	}
+}
+
+// TestSettingsAreWhatTheProviderReads pins the shape of the document, since it
+// is passed on a command line and a wrong key would fail silently.
+func TestSettingsAreWhatTheProviderReads(t *testing.T) {
+	t.Parallel()
+
+	p := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
+	p.AllowGitPush = false
+
+	rendered, err := p.Native().Settings()
+	if err != nil {
+		t.Fatalf("rendering the settings: %v", err)
+	}
+
+	var document struct {
+		Permissions struct {
+			Allow []string `json:"allow"`
+			Ask   []string `json:"ask"`
+			Deny  []string `json:"deny"`
+		} `json:"permissions"`
+	}
+	if err := json.Unmarshal([]byte(rendered), &document); err != nil {
+		t.Fatalf("the settings are not the document the provider reads: %v", err)
+	}
+	if !contains(document.Permissions.Deny, "Bash(git push *)") {
+		t.Fatalf("deny = %v", document.Permissions.Deny)
+	}
+}
+
+// TestARefusalIsEnforcedTwice pins the half that stays here.
+//
+// The provider's own documentation says a `Bash(git push *)` rule stops
+// `git push origin main` and not `git -C . push origin main`. Reading the
+// arguments is what catches the second, and a refusal is the one verdict worth
+// paying for twice.
+func TestARefusalIsEnforcedTwice(t *testing.T) {
+	t.Parallel()
+
+	p := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
+	p.Rules = []policy.Rule{{
+		Effect:     backendv1.PermissionEffect_PERMISSION_EFFECT_DENY,
+		Capability: backendv1.PermissionCapability_PERMISSION_CAPABILITY_SHELL,
+		Match:      "kubectl delete *",
+		Note:       "shared cluster",
+	}}
+
+	refused := p.Evaluate("Bash", bash("kubectl delete pod x"))
+	if refused.Verdict != policy.Deny {
+		t.Fatalf("a denied command = %v, want Deny", refused.Verdict)
+	}
+	if !strings.Contains(refused.Reason, "shared cluster") {
+		t.Errorf("the refusal does not say why: %q", refused.Reason)
+	}
+
+	// Behind a harmless prefix, and inside a pipeline, it is the same command.
+	if d := p.Evaluate("Bash", bash("echo go && kubectl delete pod x")); d.Verdict != policy.Deny {
+		t.Errorf("a denied command behind a prefix = %v, want Deny", d.Verdict)
+	}
+	// And a command that merely contains the words is not that command.
+	if d := p.Evaluate("Bash", bash(`grep -n "kubectl delete" runbook.md`)); d.Verdict == policy.Deny {
+		t.Error("a search for the words is not the command")
+	}
+}
+
+// TestAForbiddenCallCannotHideBehindQuotes pins that the refusals read the same
+// command the shell will run: a push is a push wherever it sits in a pipeline,
+// and a quoted one is text.
 func TestAForbiddenCallCannotHideBehindQuotes(t *testing.T) {
 	t.Parallel()
 
@@ -284,7 +366,18 @@ func TestAForbiddenCallCannotHideBehindQuotes(t *testing.T) {
 	if d := guarded.Evaluate("Bash", bash(`git status && git push origin master`)); d.Verdict != policy.Deny {
 		t.Errorf("a push behind a status = %v, want Deny", d.Verdict)
 	}
-	if d := guarded.Evaluate("Bash", bash(`grep -n "git push" docs/release.md`)); d.Verdict != policy.Allow {
-		t.Errorf("a search for the words = %v, want Allow", d.Verdict)
+	// Not refused. Whether it then runs without asking is the provider's
+	// answer, not this package's: it is a read, and reads never reach here.
+	if d := guarded.Evaluate("Bash", bash(`grep -n "git push" docs/release.md`)); d.Verdict == policy.Deny {
+		t.Errorf("a search for the words = %v, want anything but Deny", d.Verdict)
 	}
+}
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

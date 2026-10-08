@@ -223,6 +223,8 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 
 // command builds the provider invocation.
 func (c *Claude) command(ctx context.Context, params StartParams, nativeSessionID string, resuming bool, mcpConfig string) *exec.Cmd {
+	native := params.Policy.Native()
+
 	args := []string{
 		"--print",
 		"--output-format", "stream-json",
@@ -232,6 +234,25 @@ func (c *Claude) command(ctx context.Context, params StartParams, nativeSessionI
 		"--mcp-config", mcpConfig,
 		"--strict-mcp-config",
 		"--append-system-prompt", systemPrompt(params),
+		// The policy, in the provider's own vocabulary. What it can settle from
+		// these it settles itself — its read-only set is better at reading a
+		// shell command than anything maintained here — and the permission tool
+		// above hears only what is left.
+		"--permission-mode", native.Mode,
+	}
+
+	// The person's own settings are not read: a Session runs under the policy
+	// Core states, and a file on this machine must not widen or narrow it
+	// behind Core's back.
+	args = append(args, "--setting-sources", "")
+	if settings, err := native.Settings(); err != nil {
+		// Running without them costs prompts, not safety: every refusal in the
+		// policy is enforced a second time by the permission gate, which is
+		// where the ones that matter are read properly anyway.
+		c.logger.Error("cannot render the provider permissions, falling back to the gate alone",
+			slog.String("jobId", params.JobID), slog.String("error", err.Error()))
+	} else {
+		args = append(args, "--settings", settings)
 	}
 	if params.SkillDirectory != "" {
 		// A session-scoped plugin is the one mechanism that adds Skills for a

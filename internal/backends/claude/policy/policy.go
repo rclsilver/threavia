@@ -1,12 +1,23 @@
-// Package policy enforces the ExecutionPolicy of THREAVIA_SPEC_V1.md
-// section 17 at the point where it can actually be enforced: the permission gate
-// the provider calls before it acts.
+// Package policy turns the ExecutionPolicy of THREAVIA_SPEC_V1.md section 17
+// into something the provider enforces, and answers what the provider could not
+// decide on its own.
 //
-// The specification is explicit that a policy is enforced rather than suggested
-// — a policy forbidding a push rejects the push instead of asking the model not
-// to. That is what this package does.
+// The division of labour is the point. Core states a policy in a vocabulary no
+// provider owns — capabilities and rules — and this package renders it as
+// Claude Code permission rules (see native.go). Claude Code then decides
+// everything it can: it ships a built-in set of read-only commands and a
+// shell-aware matcher that reads quoting, compound commands, substitutions and
+// wrappers. It calls the permission tool only for what is left, and that is
+// where Evaluate below answers.
 //
-// What it is not: a sandbox. It reads a command as written, so an agent
+// Classifying a shell command used to happen here, and it should not have: the
+// list was ours to maintain and the parsing was ours to get wrong, which it was
+// — a session spent approving `git grep "a\|b" -- src | head` is what retired
+// it. What stays here is the half with teeth: the refusals, read by parsing the
+// command rather than matching its text, because the provider's own
+// documentation says a `Bash(git push *)` rule does not stop `git -C . push`.
+//
+// What this is not: a sandbox. It reads a command as written, so an agent
 // determined to evade it could. Threavia's model has never been otherwise:
 // filesystem and process access are the real permissions of the account the
 // backend runs as, and section 28 says in as many words not to mistake Threavia
@@ -41,6 +52,14 @@ type Decision struct {
 	Reason string
 }
 
+// Rule is one permission rule as it arrived from Core.
+type Rule struct {
+	Effect     backendv1.PermissionEffect
+	Capability backendv1.PermissionCapability
+	Match      string
+	Note       string
+}
+
 // Policy is the backend view of an ExecutionPolicy.
 type Policy struct {
 	Mode                 backendv1.ExecutionMode
@@ -50,6 +69,8 @@ type Policy struct {
 	AllowNetwork         bool
 	MaxDurationSeconds   int
 	MaxActions           int
+	// Rules arrive already merged from the Project, the Session and the Job.
+	Rules []Rule
 }
 
 // From converts the wire policy, falling back to the most restrained behaviour
@@ -59,7 +80,7 @@ func From(p *backendv1.ExecutionPolicy) Policy {
 	if p == nil {
 		return Policy{Mode: backendv1.ExecutionMode_EXECUTION_MODE_INTERACTIVE}
 	}
-	return Policy{
+	policy := Policy{
 		Mode:                 p.GetMode(),
 		AllowFilesystemWrite: p.GetAllowFilesystemWrite(),
 		AllowGitCommit:       p.GetAllowGitCommit(),
@@ -68,13 +89,15 @@ func From(p *backendv1.ExecutionPolicy) Policy {
 		MaxDurationSeconds:   int(p.GetMaxDurationSeconds()),
 		MaxActions:           int(p.GetMaxActions()),
 	}
-}
-
-// Tools that only read. Under GUARDED they proceed without asking, which is the
-// whole difference between that mode and INTERACTIVE.
-var readOnlyTools = map[string]bool{
-	"Read": true, "Glob": true, "Grep": true, "NotebookRead": true,
-	"TodoWrite": true, "ListMcpResources": true, "ReadMcpResource": true,
+	for _, rule := range p.GetRules() {
+		policy.Rules = append(policy.Rules, Rule{
+			Effect:     rule.GetEffect(),
+			Capability: rule.GetCapability(),
+			Match:      rule.GetMatch(),
+			Note:       rule.GetNote(),
+		})
+	}
+	return policy
 }
 
 // Tools that write to the filesystem.
@@ -88,76 +111,165 @@ var networkTools = map[string]bool{
 }
 
 // Evaluate decides what to do about one tool invocation.
+//
+// It is reached only for what the provider did not already settle from the
+// rules this policy gave it, so there is no classifying left to do here: either
+// the action is refused, or it is the kind of thing this mode asks about.
 func (p Policy) Evaluate(tool string, input map[string]any) Decision {
 	switch {
 	case writeTools[tool]:
 		if !p.AllowFilesystemWrite {
 			return Decision{Deny, "The execution policy of this session forbids writing to the filesystem."}
 		}
-		return p.mutating()
-
 	case networkTools[tool]:
 		if !p.AllowNetwork {
 			return Decision{Deny, "The execution policy of this session forbids network access."}
 		}
-		return p.reading()
-
-	case readOnlyTools[tool]:
-		return p.reading()
-
 	case tool == "Bash":
-		return p.evaluateCommand(command(input))
-
-	default:
-		// An unknown tool is treated as mutating. A capability nobody classified
-		// is not a capability to wave through.
-		return p.mutating()
-	}
-}
-
-// evaluateCommand applies the policy to a shell command.
-func (p Policy) evaluateCommand(cmd string) Decision {
-	if cmd == "" {
-		return p.mutating()
-	}
-	for _, part := range splitCommand(cmd) {
-		git := gitSubcommand(part)
-
-		if !p.AllowGitPush && git == "push" {
-			return Decision{Deny, "The execution policy of this session forbids pushing to a remote."}
-		}
-		if !p.AllowGitCommit && (git == "commit" || git == "am") {
-			return Decision{Deny, "The execution policy of this session forbids committing."}
-		}
-		if !p.AllowNetwork && (networkCommand.MatchString(part) || remoteGitSubcommands[git]) {
-			return Decision{Deny, "The execution policy of this session forbids network access."}
+		if refusal, refused := p.refuse(command(input)); refused {
+			return refusal
 		}
 	}
 
-	if readOnlyCommand(cmd) {
-		return p.reading()
+	if denial, refused := p.refusedByRule(tool, input); refused {
+		return denial
 	}
-	return p.mutating()
-}
 
-// mutating is the verdict for an action that changes something.
-func (p Policy) mutating() Decision {
+	// AUTONOMOUS is the mode that does not ask. It is not permission to do
+	// anything: the refusals above still stand, and the limits in the policy
+	// are what make the mode safe to offer at all.
 	if p.Mode == backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS {
 		return Decision{Verdict: Allow}
 	}
 	return Decision{Verdict: Ask}
 }
 
-// reading is the verdict for an action that only observes. GUARDED lets it
-// through; INTERACTIVE still asks, which is what the mode is for.
-func (p Policy) reading() Decision {
-	switch p.Mode {
-	case backendv1.ExecutionMode_EXECUTION_MODE_GUARDED,
-		backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS:
-		return Decision{Verdict: Allow}
-	default:
-		return Decision{Verdict: Ask}
+// refuse applies the capability switches to a shell command.
+//
+// This is the belt to the provider rules' braces: a rule matches the text of a
+// command, and `git -C /srv/app push` is a push however it is written. Reading
+// the arguments is what catches it.
+func (p Policy) refuse(cmd string) (Decision, bool) {
+	if cmd == "" {
+		return Decision{}, false
 	}
+	for _, part := range splitCommand(cmd) {
+		git := gitSubcommand(part)
+
+		if !p.AllowGitPush && git == "push" {
+			return Decision{Deny, "The execution policy of this session forbids pushing to a remote."}, true
+		}
+		if !p.AllowGitCommit && (git == "commit" || git == "am") {
+			return Decision{Deny, "The execution policy of this session forbids committing."}, true
+		}
+		if !p.AllowNetwork && (networkCommand.MatchString(part) || remoteGitSubcommands[git]) {
+			return Decision{Deny, "The execution policy of this session forbids network access."}, true
+		}
+	}
+	return Decision{}, false
+}
+
+// refusedByRule applies the DENY rules a second time, here rather than only in
+// the provider.
+//
+// Only the refusals are repeated. An ALLOW or an ASK that the provider did not
+// apply costs a prompt, which is a nuisance; a DENY it did not apply costs the
+// thing the rule existed to prevent.
+func (p Policy) refusedByRule(tool string, input map[string]any) (Decision, bool) {
+	for _, rule := range p.Rules {
+		if rule.Effect != backendv1.PermissionEffect_PERMISSION_EFFECT_DENY {
+			continue
+		}
+		if !rule.covers(tool, input) {
+			continue
+		}
+		reason := "The execution policy of this session refuses this."
+		if rule.Note != "" {
+			reason = "The execution policy of this session refuses this: " + rule.Note
+		}
+		return Decision{Deny, reason}, true
+	}
+	return Decision{}, false
+}
+
+// covers reports whether a rule is about this invocation.
+func (r Rule) covers(tool string, input map[string]any) bool {
+	switch r.Capability {
+	case backendv1.PermissionCapability_PERMISSION_CAPABILITY_SHELL:
+		if tool != "Bash" {
+			return false
+		}
+		cmd := command(input)
+		if r.Match == "" {
+			return true
+		}
+		// Every part of a compound command, so a refusal cannot hide behind a
+		// harmless prefix — the same reading the switches above get.
+		for _, part := range splitCommand(cmd) {
+			if matches(r.Match, part) {
+				return true
+			}
+		}
+		return false
+
+	case backendv1.PermissionCapability_PERMISSION_CAPABILITY_GIT_PUSH,
+		backendv1.PermissionCapability_PERMISSION_CAPABILITY_GIT_COMMIT:
+		if tool != "Bash" {
+			return false
+		}
+		want := "push"
+		if r.Capability == backendv1.PermissionCapability_PERMISSION_CAPABILITY_GIT_COMMIT {
+			want = "commit"
+		}
+		for _, part := range splitCommand(command(input)) {
+			sub := gitSubcommand(part)
+			if sub == want || (want == "commit" && sub == "am") {
+				return true
+			}
+		}
+		return false
+
+	case backendv1.PermissionCapability_PERMISSION_CAPABILITY_FILE_WRITE:
+		return writeTools[tool]
+
+	case backendv1.PermissionCapability_PERMISSION_CAPABILITY_NETWORK:
+		if networkTools[tool] {
+			return true
+		}
+		return tool == "Bash" && networkCommand.MatchString(command(input))
+
+	case backendv1.PermissionCapability_PERMISSION_CAPABILITY_TOOL:
+		return tool == r.Match
+
+	default:
+		// FILE_READ is left to the provider: it resolves paths against the
+		// working directory, which is where that question belongs.
+		return false
+	}
+}
+
+// matches reports whether a pattern with `*` wildcards covers a string. It is
+// the one wildcard every provider agrees on, so it is the one Core promises.
+func matches(pattern, value string) bool {
+	segments := strings.Split(pattern, "*")
+	if len(segments) == 1 {
+		return pattern == value
+	}
+
+	if !strings.HasPrefix(value, segments[0]) {
+		return false
+	}
+	value = value[len(segments[0]):]
+
+	last := segments[len(segments)-1]
+	for _, segment := range segments[1 : len(segments)-1] {
+		index := strings.Index(value, segment)
+		if index < 0 {
+			return false
+		}
+		value = value[index+len(segment):]
+	}
+	return strings.HasSuffix(value, last)
 }
 
 // git subcommands that talk to a remote.
@@ -176,7 +288,9 @@ var gitFlagsWithValue = map[string]bool{
 // when the part is not one.
 //
 // Reading the arguments beats matching a pattern: `git -C /srv/app push` is a
-// push, and `git log --grep=push` is not.
+// push, and `git log --grep=push` is not. It is the whole reason this survives
+// the move of classification into the provider, whose own documentation lists
+// `git -C . push origin main` among what its rules do not stop.
 func gitSubcommand(part string) string {
 	fields := strings.Fields(part)
 
@@ -208,177 +322,6 @@ func gitSubcommand(part string) string {
 
 var networkCommand = regexp.MustCompile(`(^|\s)(curl|wget|nc|ncat|telnet|ssh|scp|rsync|ftp)(\s|$)`)
 
-// Commands that only observe, whatever their arguments. Anything not listed is
-// treated as mutating, because guessing the other way is how a guard rail stops
-// being one.
-var readOnlyPrograms = map[string]bool{
-	"ls": true, "cat": true, "head": true, "tail": true, "grep": true, "egrep": true,
-	"fgrep": true, "wc": true, "file": true, "stat": true, "pwd": true, "echo": true,
-	"printf": true, "which": true, "date": true, "sort": true, "uniq": true,
-	"cut": true, "tr": true, "diff": true, "tree": true, "du": true, "df": true,
-	"id": true, "whoami": true, "uname": true, "realpath": true, "readlink": true,
-	"dirname": true, "basename": true, "jq": true, "true": true, "test": true,
-	// Searching a tree is the most common read there is, and both of these
-	// already have an entry in escapingArgs below — which was unreachable while
-	// they were missing here, so every ripgrep and every find went to the user.
-	"rg": true, "find": true, "fd": true,
-	"false": true, "nl": true, "comm": true, "paste": true, "seq": true,
-	"column": true, "rev": true, "tac": true, "fold": true, "ps": true,
-	"md5sum": true, "sha1sum": true, "sha256sum": true, "cksum": true,
-	"xxd": true, "od": true, "strings": true,
-}
-
-// Parts that only shape the shell the rest of the command runs in. They change
-// no file, so they neither make a command mutating nor read-only on their own.
-var shellSetup = map[string]bool{"export": true, "cd": true, "set": true}
-
-// git subcommands that only observe.
-var readOnlyGit = map[string]bool{
-	"status": true, "log": true, "diff": true, "show": true, "describe": true,
-	"rev-parse": true, "ls-files": true, "ls-tree": true, "grep": true,
-	"blame": true, "shortlog": true, "rev-list": true, "cat-file": true,
-}
-
-// git subcommands that list with no argument or only these flags, and change
-// something otherwise (`git branch -D`, `git remote add`).
-var listingGit = map[string]map[string]bool{
-	"branch": {"-a": true, "-r": true, "-v": true, "-vv": true, "--list": true, "--show-current": true, "--all": true},
-	"remote": {"-v": true},
-	"tag":    {"-l": true, "--list": true},
-}
-
-// go subcommands that only observe. `go env -w` writes, and is refused by its
-// argument.
-var readOnlyGo = map[string]bool{"vet": true, "list": true, "version": true, "doc": true, "env": true}
-
-// Arguments that turn an otherwise observing command into one that writes or
-// runs something else.
-var escapingArgs = map[string][]string{
-	"find": {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"},
-	"rg":   {"--pre"},
-	"git":  {"-c", "--config-env", "--output", "-O", "--open-files-in-pager", "--ext-diff"},
-	"go":   {"-w", "-toolexec", "-exec"},
-	"sort": {"-o", "--output"},
-	"tree": {"-o"},
-}
-
-// Redirections that write nowhere a user would care about. They are removed
-// before a command is read, so `grep x 2>/dev/null` stays a read.
-var harmlessRedirection = regexp.MustCompile(`\s*(2>&1|[12&]?>\s*/dev/null)`)
-
-// readOnlyCommand reports whether every part of a command only observes.
-func readOnlyCommand(cmd string) bool {
-	// Substitutions run a command of their own wherever they appear, and a
-	// redirection writes a file whatever the command in front of it is — but
-	// only when the shell would read them as such, which is what the scan is
-	// for.
-	cleaned := harmlessRedirection.ReplaceAllString(cmd, "")
-	parts, escapes := scanCommand(cleaned)
-	if escapes {
-		return false
-	}
-
-	reads := false
-	for _, part := range parts {
-		fields := strings.Fields(part)
-		// Leading NAME=value assignments only set the environment of the command.
-		for len(fields) > 0 && isAssignment(fields[0]) {
-			fields = fields[1:]
-		}
-		if len(fields) == 0 || shellSetup[fields[0]] {
-			continue
-		}
-		if !readOnlyPart(fields) {
-			return false
-		}
-		reads = true
-	}
-	return reads
-}
-
-// readOnlyPart reports whether one command of a pipeline or a list only
-// observes.
-func readOnlyPart(fields []string) bool {
-	program := fields[0][strings.LastIndexByte(fields[0], '/')+1:]
-	for _, arg := range fields[1:] {
-		for _, escaping := range escapingArgs[program] {
-			if arg == escaping || strings.HasPrefix(arg, escaping+"=") {
-				return false
-			}
-		}
-	}
-
-	switch program {
-	case "env":
-		// Alone it prints the environment; followed by a command it runs it.
-		return len(fields) == 1
-	case "sed":
-		// `sed -n 40,60p file` is how a long file gets read a page at a time,
-		// and it is constant in this work. What writes is -i, in any of the
-		// spellings a short option takes: -i, -i.bak, -ni.
-		//
-		// A `w` or an `e` inside the script writes and runs too. They are not
-		// read here, and that is the package's stated limit: this is a guard
-		// rail against an agent doing what it was told not to, never a sandbox
-		// against one trying to get around it.
-		for _, arg := range fields[1:] {
-			if arg == "--in-place" || strings.HasPrefix(arg, "--in-place=") {
-				return false
-			}
-			if strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--") &&
-				strings.ContainsRune(arg, 'i') {
-				return false
-			}
-		}
-		return true
-	case "git":
-		return readOnlyGitPart(strings.Join(fields, " "))
-	case "go":
-		return len(fields) > 1 && readOnlyGo[fields[1]]
-	default:
-		return readOnlyPrograms[program]
-	}
-}
-
-// readOnlyGitPart reports whether a git invocation only observes.
-func readOnlyGitPart(part string) bool {
-	sub := gitSubcommand(part)
-	if readOnlyGit[sub] {
-		return true
-	}
-	flags, listing := listingGit[sub]
-	if !listing {
-		return false
-	}
-	fields := strings.Fields(part)
-	for i, field := range fields {
-		if field != sub {
-			continue
-		}
-		for _, arg := range fields[i+1:] {
-			if !flags[arg] {
-				return false
-			}
-		}
-		return true
-	}
-	return false
-}
-
-// isAssignment reports whether a shell word is a NAME=value assignment.
-func isAssignment(word string) bool {
-	name, _, found := strings.Cut(word, "=")
-	if !found || name == "" {
-		return false
-	}
-	for i, r := range name {
-		if r != '_' && !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') && !(i > 0 && r >= '0' && r <= '9') {
-			return false
-		}
-	}
-	return true
-}
-
 // splitCommand breaks a command on the separators that start a new one, so a
 // forbidden call cannot hide behind a harmless prefix.
 func splitCommand(cmd string) []string {
@@ -397,14 +340,10 @@ const (
 // it is made of along with whether anything outside quotes writes a file or
 // runs a command of its own.
 //
-// Quoting is the whole of it, and reading it was the difference between a guard
-// rail and a nuisance. `git grep "a\|b" -- src | head` is a search and a head,
-// not six programs: splitting on every separator regardless of quotes turned
-// the alternation into a pipeline of programs nobody has ever heard of, and an
-// unclassified program is treated as mutating. A plain search therefore went to
-// the user for approval under GUARDED — the one mode whose entire purpose is to
-// let reads through. The same blindness made `grep "a > b" f` look like a
-// redirection.
+// Quoting has to be read or the refusals read the wrong thing: `grep "git push"
+// release.md` is a search, and splitting on every separator regardless of
+// quotes turns an alternation like `"a\|b"` into a pipeline of programs nobody
+// has ever heard of.
 //
 // Single quotes make everything literal. Double quotes keep substitutions alive
 // but take the meaning out of separators and redirections, which is exactly the
