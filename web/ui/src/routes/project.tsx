@@ -1057,60 +1057,112 @@ function Records<T>({ items, render }: { items: T[]; render: (item: T) => React.
 
 // --------------------------------------------------------------- permissions
 
+/** A policy as it compares: the same rules whether they were sent or left out. */
+function comparable(policy: ExecutionPolicy): string {
+  return JSON.stringify({ ...policy, rules: policy.rules ?? [] });
+}
+
+/**
+ * The Project's policy, edited in place, with a bar that appears once there is
+ * something to save and says so until it is saved or thrown away.
+ */
 function PermissionsPane({ projectId }: { projectId: string }) {
-  const { data } = useProjectPolicy(projectId);
+  const { data, error } = useProjectPolicy(projectId);
   const save = useSetProjectPolicy(projectId);
   const [draft, setDraft] = useState<ExecutionPolicy | null>(null);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (data) setDraft(data);
   }, [data]);
 
-  if (!draft) return null;
+  const dirty = Boolean(data && draft && comparable(data) !== comparable(draft));
+
+  useEffect(() => {
+    if (!dirty) return;
+    const onLeave = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', onLeave);
+    return () => window.removeEventListener('beforeunload', onLeave);
+  }, [dirty]);
+
+  useEffect(() => {
+    if (!saved) return;
+    const timer = setTimeout(() => setSaved(false), 3000);
+    return () => clearTimeout(timer);
+  }, [saved]);
+
+  const commit = () => {
+    if (!draft || !dirty || save.isPending) return;
+    save.mutate(draft, { onSuccess: () => setSaved(true) });
+  };
+
+  if (error) {
+    return <ActionError error={error} outcome="The permissions could not be read" recovery="Reload the page." />;
+  }
+  if (!draft) return <p className="text-muted text-sm">Reading the permissions…</p>;
+
+  const edit = (next: ExecutionPolicy) => {
+    setDraft(next);
+    save.reset();
+    setSaved(false);
+  };
 
   return (
-    <div className="max-w-3xl space-y-4">
-      <PolicyForm
-        value={draft}
-        onChange={(next) => {
-          setDraft(next);
-          save.reset();
-        }}
-        idPrefix="project-policy"
-      />
+    <div
+      className="max-w-3xl space-y-8"
+      onKeyDown={(event) => {
+        if (event.key === 's' && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          commit();
+        }
+      }}
+    >
+      <PolicyForm value={draft} onChange={edit} idPrefix="project-policy" />
 
       <RulesEditor
         rules={draft.rules ?? []}
-        onChange={(rules) => {
-          setDraft({ ...draft, rules });
-          save.reset();
-        }}
+        onChange={(rules) => edit({ ...draft, rules })}
+        note="A refusal written here binds every Session of the Project; the switches above are defaults a Session may loosen, and the audit records it when one does."
       />
 
       <p className="text-muted text-xs">
-        A refusal written here cannot be lifted by a Session. The switches above can: a Session that
-        needs to push once says so, and the audit records it.
-      </p>
-      <p className="text-muted text-xs">
-        A job already running keeps the permissions it started with: a change here applies to each
-        session from its next message.
+        A guard rail, not a sandbox: files and processes stay within what the backend's own account
+        may touch.
       </p>
 
-      <ActionError error={save.error} />
+      <p role="status" className="sr-only">
+        {saved ? 'Permissions saved.' : ''}
+      </p>
 
-      <Button
-        variant="primary"
-        disabled={save.isPending || save.isSuccess}
-        onClick={() => save.mutate(draft)}
-      >
-        {save.isPending ? 'Saving…' : save.isSuccess ? (
-          <>
-            <Check /> Saved
-          </>
-        ) : (
-          'Save'
-        )}
-      </Button>
+      {/* Held to the bottom of the window while there is something to save,
+          so the way to keep or drop a change is never a scroll away. */}
+      {(dirty || saved || save.error) && (
+        <div className="bg-surface border-border sticky bottom-3 z-10 space-y-2 rounded-xl border p-3 shadow-lg">
+          <ActionError error={save.error} outcome="Not saved" recovery="Your changes are still here; save again." className="text-xs" />
+          <div className="flex flex-wrap items-center gap-2">
+            {saved && !dirty ? (
+              <span className="text-ok flex items-center gap-1 text-sm">
+                <Check className="size-4" /> Saved. Each Session follows it from its next message.
+              </span>
+            ) : (
+              <>
+                <span className="text-sm font-medium">Unsaved changes</span>
+                <span className="text-muted hidden text-xs sm:inline">
+                  A job already running keeps the permissions it started with.
+                </span>
+                <span className="ml-auto flex gap-2">
+                  <Button variant="ghost" size="lg" onClick={() => data && edit(data)}>
+                    Discard
+                  </Button>
+                  <Button variant="primary" size="lg" disabled={save.isPending} onClick={commit} title="Save (Ctrl+S)">
+                    {save.isPending ? 'Saving…' : 'Save'}
+                  </Button>
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
