@@ -42,6 +42,27 @@ export function SessionView() {
     if (snapshot.data) seen(snapshot.data.cursor);
   }, [snapshot.data, seen]);
 
+  // Escape stops what is running, as it interrupts Claude Code in a terminal.
+  // It stops the same Job as the Stop button: the oldest one still going.
+  // A second Escape while that one is stopping does nothing, rather than
+  // reaching past it to the Job queued behind.
+  const oldest = snapshot.data?.jobs.find((job) => !FINISHED.has(job.status));
+  const runningId = oldest?.status === 'CANCELLING' ? undefined : oldest?.id;
+  const stop = cancel.mutate;
+  useEffect(() => {
+    if (!runningId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+      // Escape already means something to an open dialog, a menu or a field
+      // being renamed: closing it must never also stop the work behind it.
+      if (document.querySelector('[role="dialog"], [role="listbox"], [role="menu"]')) return;
+      if (event.target instanceof HTMLInputElement) return;
+      stop(runningId);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [runningId, stop]);
+
   if (snapshot.isPending) {
     return <p className="text-muted p-6 text-sm">Loading…</p>;
   }
@@ -241,7 +262,7 @@ function Composer({
                 variant="ghost"
                 size="sm"
                 className="h-6 gap-1.5 px-1.5 text-xs [&_svg]:size-3"
-                title="Stop what is running now"
+                title="Stop what is running now (Esc)"
                 onClick={onStop}
               >
                 <Square className="fill-current" />
@@ -292,7 +313,7 @@ function Composer({
         </div>
       </form>
       <p className="text-muted/70 mt-2 text-center text-xs">
-        Enter sends · Shift+Enter for a newline
+        Enter sends · Shift+Enter for a newline{active && ' · Esc stops'}
       </p>
     </div>
   );
