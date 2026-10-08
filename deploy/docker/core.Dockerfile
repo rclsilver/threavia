@@ -1,7 +1,7 @@
 # Threavia Core.
 #
-# Nothing in Core uses cgo, so the binary is fully static and the runtime image
-# carries no distribution at all: no shell, no package manager, nothing to patch.
+# Nothing in Core uses cgo, so the binary is fully static. The runtime image
+# carries a minimal Alpine only for git, which Skill acquisition runs.
 # The web client is built first and embedded, so the image is one file and the
 # deployment has no asset directory to keep in step with it.
 
@@ -38,11 +38,20 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" \
     -o /out/threavia-core ./cmd/threavia-core
 
-FROM gcr.io/distroless/static-debian12:nonroot
+# Not distroless: installing a Skill from a git source runs git, and ssh for a
+# git+ssh URL. The binary itself still needs nothing from the distribution.
+FROM alpine:3.22
+
+RUN apk add --no-cache ca-certificates git openssh-client \
+ && addgroup -g 65532 nonroot \
+ && adduser -D -u 65532 -G nonroot -h /home/nonroot nonroot
 
 COPY --from=build /out/threavia-core /usr/local/bin/threavia-core
 
 # 8080 is the client HTTP/JSON + SSE API, 9090 the backend control stream.
 EXPOSE 8080 9090
+# The chart mounts the root filesystem read-only and /tmp writable, which is
+# where a Skill is cloned; git and ssh look for their configuration in HOME.
+ENV HOME=/tmp
 USER nonroot:nonroot
 ENTRYPOINT ["/usr/local/bin/threavia-core"]

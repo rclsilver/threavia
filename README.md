@@ -206,7 +206,8 @@ git push origin vX.Y.Z
 tidiness, generated-code freshness for both the protocol and the API types,
 `go vet`, `buf lint` and the test suite. `make docker` builds both images.
 
-The Core image is distroless and static, around 26 MB with the web client
+The Core image is a static binary on a minimal Alpine that carries git, which
+installing a Skill from a git source runs, with the web client
 embedded. The Claude backend image is larger by necessity: it ships Node, the
 Claude Code CLI and git, because the agent needs a real userland to work in.
 Provider credentials are supplied at runtime and never baked into it.
