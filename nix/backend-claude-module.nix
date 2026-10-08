@@ -200,6 +200,11 @@ in
         THREAVIA_BACKEND_TLS_ENABLED = lib.boolToString cfg.tls.enable;
         THREAVIA_BACKEND_STATE_PATH = "${cfg.stateDir}/state.db";
         THREAVIA_BACKEND_SKILL_CACHE_PATH = "${cfg.stateDir}/skills";
+        # Where a Session writes what it will read back. Without it the agent
+        # uses /tmp and then has to be approved to read its own file: anything
+        # outside the working directory is a prompt. Swept of what nobody came
+        # back for after a week.
+        THREAVIA_BACKEND_SCRATCH_PATH = "${cfg.stateDir}/scratch";
         THREAVIA_BACKEND_CLAUDE_BINARY = cfg.claudeBinary;
         THREAVIA_BACKEND_DEFAULT_WORKING_DIRECTORY = toString cfg.defaultWorkingDirectory;
       }

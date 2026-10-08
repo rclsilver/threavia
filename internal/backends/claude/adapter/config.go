@@ -46,6 +46,14 @@ type ClaudeConfig struct {
 	// SkillCachePath is where Core-managed Skill bundles are unpacked and where
 	// the per-Job plugin directories are assembled (spec section 18).
 	SkillCachePath string
+	// ScratchPath is where a Run may write the files it will read back.
+	//
+	// Without one the agent uses /tmp, and then has to ask permission to read
+	// what it wrote a second earlier: a file outside the working directory is a
+	// prompt, and /tmp is outside every working directory. It is also shared
+	// with everything else on the machine, which is a poor place to leave a
+	// project's intermediate work.
+	ScratchPath string
 	// LocalSkillRoots are directories holding Skills that exist only on this
 	// backend. Core learns their names and never their content.
 	LocalSkillRoots []string
@@ -94,6 +102,7 @@ func Default() Config {
 			Binary:                  "claude",
 			DefaultWorkingDirectory: defaultWorkingDirectory(),
 			SkillCachePath:          defaultSkillCachePath(),
+			ScratchPath:             defaultScratchPath(),
 		},
 		Registration: RegistrationConfig{CoreAPI: "http://localhost:8080"},
 		StatePath:    defaultStatePath(),
@@ -129,6 +138,7 @@ func Load() (Config, error) {
 	cfg.Claude.DiscoveryRoots = l.StringSlice("DISCOVERY_ROOTS", cfg.Claude.DiscoveryRoots)
 	cfg.Claude.DefaultWorkingDirectory = l.String("DEFAULT_WORKING_DIRECTORY", cfg.Claude.DefaultWorkingDirectory)
 	cfg.Claude.SkillCachePath = l.String("SKILL_CACHE_PATH", cfg.Claude.SkillCachePath)
+	cfg.Claude.ScratchPath = l.String("SCRATCH_PATH", cfg.Claude.ScratchPath)
 	cfg.Claude.LocalSkillRoots = l.StringSlice("LOCAL_SKILL_ROOTS", cfg.Claude.LocalSkillRoots)
 	cfg.Claude.LocalInstructions = l.String("LOCAL_INSTRUCTIONS", cfg.Claude.LocalInstructions)
 
@@ -222,4 +232,14 @@ func defaultSkillCachePath() string {
 		return filepath.Join(os.TempDir(), "threavia", "skills")
 	}
 	return filepath.Join(home, ".threavia", "skills")
+}
+
+// defaultScratchPath is where a Run writes its intermediate files when nothing
+// says otherwise. It sits beside the skill cache, under the same state.
+func defaultScratchPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return filepath.Join(os.TempDir(), "threavia", "scratch")
+	}
+	return filepath.Join(home, ".threavia", "scratch")
 }

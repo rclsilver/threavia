@@ -93,7 +93,10 @@ func run() error {
 		_ = tools.Close(shutdownCtx)
 	}()
 
-	claude := runner.NewClaude(cfg.Claude.Binary, tools, cfg.Claude.DiscoveryRoots, logger)
+	claude := runner.NewClaude(cfg.Claude.Binary, tools, runner.Options{
+		Readable: cfg.Claude.DiscoveryRoots,
+		Scratch:  cfg.Claude.ScratchPath,
+	}, logger)
 	if err := claude.Available(); err != nil {
 		// Not fatal: the backend connects anyway and reports DEGRADED so the
 		// user can see why it cannot work.

@@ -22,18 +22,17 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
   const save = useSetPolicy(sessionId);
   const [draft, setDraft] = useState<ExecutionPolicy | null>(null);
 
+  // The switches start from what is in force, so an inheriting Session shows
+  // the values it is actually running under. The rules do not: only what this
+  // Session set. The Project's apply all the same — the effective policy
+  // carries them, and a refusal written there cannot be lifted here — but they
+  // are edited where they were written. Listing them here would invite editing
+  // a Project rule from a Session, which saves a copy that stops following it.
   useEffect(() => {
-    if (data) setDraft(data.effective);
+    if (data) setDraft({ ...data.effective, rules: data.own?.rules ?? [] });
   }, [data]);
 
   if (!data || !draft) return null;
-
-  // Only what the Project refuses is binding; the rest of its rules are shown
-  // with the Session's own, because they are what the Session starts from.
-  const inherited = (data.project.rules ?? []).filter((rule) => rule.effect === 'DENY');
-  const own = (draft.rules ?? []).filter(
-    (rule) => !inherited.some((bound) => bound.capability === rule.capability && bound.match === rule.match),
-  );
 
   return (
     <div className="space-y-3">
@@ -58,11 +57,7 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
 
       <PolicyForm value={draft} onChange={setDraft} idPrefix="session-policy" />
 
-      <RulesEditor
-        rules={own}
-        inherited={inherited}
-        onChange={(rules) => setDraft({ ...draft, rules })}
-      />
+      <RulesEditor rules={draft.rules ?? []} onChange={(rules) => setDraft({ ...draft, rules })} />
 
       <p className="text-muted text-xs">
         A guard rail, not a sandbox: filesystem and process access stay the real permissions of the
@@ -75,7 +70,7 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
         variant="primary"
         size="sm"
         disabled={save.isPending}
-        onClick={() => save.mutate({ ...draft, rules: own })}
+        onClick={() => save.mutate(draft)}
       >
         Apply to this session
       </Button>

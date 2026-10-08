@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,7 +23,7 @@ import (
 func TestThePromptNamesWhatIsOnPath(t *testing.T) {
 	t.Parallel()
 
-	prompt := systemPrompt(StartParams{}, []string{"tofu", "kubectl"})
+	prompt := systemPrompt(StartParams{}, []string{"tofu", "kubectl"}, "/var/lib/threavia/scratch/r1")
 	for _, want := range []string{"PATH", "approval", "tofu", "kubectl"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("the system prompt never mentions %q:\n%s", want, prompt)
@@ -56,4 +58,43 @@ func TestWhatIsOnPathIsRead(t *testing.T) {
 func writeExecutable(t *testing.T, dir, name string) error {
 	t.Helper()
 	return os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"), 0o755)
+}
+
+// TestTheRunHasSomewhereToWrite pins the directory that replaces /tmp.
+//
+// Without one the agent writes to /tmp and then has to be approved to read
+// back what it wrote a second earlier: a file outside the working directory is
+// a prompt, and /tmp is outside every working directory. One per Run, not per
+// Job, because the agent writes in answer to one message and reads in answer
+// to the next.
+func TestTheRunHasSomewhereToWrite(t *testing.T) {
+	root := t.TempDir()
+	c := NewClaude("claude", nil, Options{Scratch: root}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	first := c.scratchFor("run-1")
+	if first == "" {
+		t.Fatal("a run with a scratch root got no directory")
+	}
+	if _, err := os.Stat(first); err != nil {
+		t.Fatalf("the directory was not made: %v", err)
+	}
+	// The same Run comes back to the same place, which is the whole point.
+	if again := c.scratchFor("run-1"); again != first {
+		t.Fatalf("the run moved from %q to %q between two jobs", first, again)
+	}
+	if other := c.scratchFor("run-2"); other == first {
+		t.Fatal("two runs share a directory")
+	}
+
+	// It is named where the agent will read it.
+	if prompt := systemPrompt(StartParams{}, nil, first); !strings.Contains(prompt, first) {
+		t.Errorf("the prompt never names the scratch directory:\n%s", prompt)
+	}
+
+	// And a backend configured without one says nothing rather than pointing
+	// the agent at a directory that is not there.
+	bare := NewClaude("claude", nil, Options{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if bare.scratchFor("run-1") != "" {
+		t.Error("a backend with no scratch root invented one")
+	}
 }

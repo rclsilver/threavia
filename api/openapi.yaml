@@ -1941,6 +1941,13 @@ components:
         project:
           allOf: [{ $ref: "#/components/schemas/ExecutionPolicy" }]
           description: What it falls back to, so a client can offer to return to it.
+        own:
+          allOf: [{ $ref: "#/components/schemas/ExecutionPolicy" }]
+          description: |
+            What this Session set, and nothing it inherited. Absent while it
+            follows its Project. A client that edits the effective policy edits
+            the Project's rules into the Session, quietly turning an inherited
+            rule into a copy that stops following it.
 
     KnownDirectory:
       type: object

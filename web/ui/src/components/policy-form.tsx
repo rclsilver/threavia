@@ -143,33 +143,15 @@ export function PolicyForm({
 export function RulesEditor({
   rules,
   onChange,
-  inherited = [],
 }: {
   rules: PermissionRule[];
   onChange: (next: PermissionRule[]) => void;
-  /** Rules that come from the Project. Shown, never edited here. */
-  inherited?: PermissionRule[];
 }) {
   const replace = (index: number, patch: Partial<PermissionRule>) =>
     onChange(rules.map((rule, at) => (at === index ? { ...rule, ...patch } : rule)));
 
   return (
     <div className="space-y-2">
-      {inherited.length > 0 && (
-        <div className="border-border/70 space-y-1 rounded-md border border-dashed p-2">
-          <p className="text-muted text-xs">
-            From the project. A refusal written there cannot be lifted here.
-          </p>
-          {inherited.map((rule, index) => (
-            <p key={index} className="text-muted font-mono text-xs">
-              {rule.effect.toLowerCase()} {rule.capability.toLowerCase()}
-              {rule.match ? ` ${rule.match}` : ''}
-              {rule.note ? <span className="font-sans opacity-70"> — {rule.note}</span> : null}
-            </p>
-          ))}
-        </div>
-      )}
-
       {rules.map((rule, index) => (
         <div key={index} className="flex flex-wrap items-center gap-2">
           <Select

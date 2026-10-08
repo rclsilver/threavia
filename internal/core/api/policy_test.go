@@ -13,6 +13,7 @@ type sessionPolicy struct {
 	Effective executionPolicy `json:"effective"`
 	Inherited bool            `json:"inherited"`
 	Project   executionPolicy `json:"project"`
+	Own       executionPolicy `json:"own"`
 }
 
 type executionPolicy struct {
@@ -157,5 +158,49 @@ func TestASessionGoesBackToTheProject(t *testing.T) {
 	}
 	if view.Effective.AllowGitPush {
 		t.Error("the session kept what it had loosened")
+	}
+}
+
+// TestASessionReportsOnlyItsOwnRules pins what a Session panel edits.
+//
+// The effective policy carries the Project's rules, which is right — they
+// apply. But a panel that edits the effective policy writes them into the
+// Session on the next save, quietly turning an inherited rule into a copy that
+// no longer follows the Project it came from.
+func TestASessionReportsOnlyItsOwnRules(t *testing.T) {
+	c, _, projectID, dirID := setup(t)
+
+	project := guarded()
+	project["rules"] = []map[string]any{{
+		"effect": "DENY", "capability": "SHELL", "match": "kubectl delete *",
+	}}
+	c.mustDo(http.MethodPut, "/api/v1/projects/"+projectID+"/policy", project, nil, http.StatusOK)
+
+	session := c.startSession(projectID, c.backendID, dirID, "Travaille")
+
+	// While it inherits, it owns nothing.
+	var inheriting sessionPolicy
+	c.mustDo(http.MethodGet, "/api/v1/sessions/"+session+"/policy", nil, &inheriting, http.StatusOK)
+	if len(inheriting.Own.Rules) != 0 {
+		t.Fatalf("an inheriting session owns %+v", inheriting.Own.Rules)
+	}
+	if len(inheriting.Effective.Rules) != 1 {
+		t.Fatalf("the project refusal is not in force: %+v", inheriting.Effective.Rules)
+	}
+
+	// Once it sets one, it owns that one and still inherits the other.
+	own := guarded()
+	own["rules"] = []map[string]any{{
+		"effect": "ALLOW", "capability": "SHELL", "match": "npm run *",
+	}}
+	c.mustDo(http.MethodPut, "/api/v1/sessions/"+session+"/policy", own, nil, http.StatusOK)
+
+	var after sessionPolicy
+	c.mustDo(http.MethodGet, "/api/v1/sessions/"+session+"/policy", nil, &after, http.StatusOK)
+	if len(after.Own.Rules) != 1 || after.Own.Rules[0].Match != "npm run *" {
+		t.Fatalf("own = %+v, want the one rule the session set", after.Own.Rules)
+	}
+	if len(after.Effective.Rules) != 2 {
+		t.Fatalf("effective = %+v, want the project refusal and the session rule", after.Effective.Rules)
 	}
 }

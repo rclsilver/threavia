@@ -185,6 +185,10 @@ type SessionPolicyView struct {
 	Inherited bool `json:"inherited"`
 	// Project is what it falls back to, so the panel can offer to return to it.
 	Project domain.ExecutionPolicy `json:"project"`
+	// Own is what this Session set, and nothing it inherited. A panel that
+	// edits the effective policy edits the Project's rules into the Session,
+	// quietly turning an inherited rule into a copy that stops following it.
+	Own *domain.ExecutionPolicy `json:"own,omitempty"`
 }
 
 // SessionPolicyOrigin returns what applies to a Session and where it came from.
@@ -204,6 +208,7 @@ func (s *Service) SessionPolicyOrigin(ctx context.Context, identity auth.Identit
 		Effective: domain.Effective(project, stored, nil),
 		Inherited: stored == nil,
 		Project:   domain.Effective(project, nil, nil),
+		Own:       stored,
 	}, nil
 }
 

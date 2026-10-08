@@ -3056,6 +3056,12 @@ export interface components {
             inherited: boolean;
             /** @description What it falls back to, so a client can offer to return to it. */
             project: components["schemas"]["ExecutionPolicy"];
+            /** @description What this Session set, and nothing it inherited. Absent while it
+             *     follows its Project. A client that edits the effective policy edits
+             *     the Project's rules into the Session, quietly turning an inherited
+             *     rule into a copy that stops following it.
+             *      */
+            own?: components["schemas"]["ExecutionPolicy"];
         };
         /** @description A project-level logical directory. Portability and discovery metadata,
          *     never a sandbox: the agent may work in any directory the backend

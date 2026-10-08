@@ -36,6 +36,8 @@ type Claude struct {
 	tools  *mcp.Server
 	// readable are the directories a Job may read beyond the one it works in.
 	readable []string
+	// scratch is where each Run gets a directory of its own to write in.
+	scratch string
 	// available is what a Job can run by name, read from PATH at start.
 	available []string
 	logger    *slog.Logger
@@ -52,24 +54,79 @@ type execution struct {
 
 // NewClaude builds the runner. The MCP server is where permission prompts and
 // agent questions are turned into Threavia requests.
+// Options are what the runner needs from the machine it runs on.
+type Options struct {
+	// Readable names the directories the agent may read without asking, beyond
+	// the one a Job works in. They are the backend's discovery roots: the trees
+	// this machine keeps its projects in, which is where a Job legitimately
+	// looks when the answer is in the repository next door.
+	Readable []string
+	// Scratch is where a Run writes the files it will read back.
+	Scratch string
+}
+
 // NewClaude builds the runner.
-//
-// readable names the directories the agent may read without asking, beyond the
-// one a Job works in. They are the backend's discovery roots: the trees this
-// machine keeps its projects in, which is where a Job legitimately looks when
-// the answer is in the repository next door.
-func NewClaude(binary string, tools *mcp.Server, readable []string, logger *slog.Logger) *Claude {
+func NewClaude(binary string, tools *mcp.Server, opts Options, logger *slog.Logger) *Claude {
 	if binary == "" {
 		binary = "claude"
 	}
+	sweepScratch(opts.Scratch, logger)
 	return &Claude{
 		binary:    binary,
 		tools:     tools,
-		readable:  readable,
+		readable:  opts.Readable,
+		scratch:   opts.Scratch,
 		available: executablesOnPath(),
 		logger:    logger,
 		running:   make(map[string]*execution),
 	}
+}
+
+// scratchKept is how long an abandoned Run's files stay. Long enough that a
+// Session picked up the next morning still finds what it left, short enough
+// that the state directory does not grow for ever.
+const scratchKept = 7 * 24 * time.Hour
+
+// sweepScratch removes what previous Runs left behind and nobody came back for.
+func sweepScratch(root string, logger *slog.Logger) {
+	if root == "" {
+		return
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil || time.Since(info.ModTime()) < scratchKept {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(root, entry.Name())); err != nil {
+			logger.Warn("cannot remove an abandoned scratch directory",
+				slog.String("path", filepath.Join(root, entry.Name())),
+				slog.String("error", err.Error()))
+		}
+	}
+}
+
+// scratchFor returns the directory this Run writes its intermediate files in,
+// making it if it is not there yet.
+//
+// Per Run rather than per Job, because that is the lifetime the agent works to:
+// it writes a file in answer to one message and reads it back in answer to the
+// next. A directory emptied between the two would be worse than none, since it
+// would fail only sometimes.
+func (c *Claude) scratchFor(runID string) string {
+	if c.scratch == "" || runID == "" {
+		return ""
+	}
+	dir := filepath.Join(c.scratch, runID)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		c.logger.Warn("cannot make the scratch directory, the agent will use its own",
+			slog.String("path", dir), slog.String("error", err.Error()))
+		return ""
+	}
+	return dir
 }
 
 // executablesOnPath lists, once, what a Job can run by name.
@@ -284,6 +341,10 @@ func (c *Claude) command(ctx context.Context, params StartParams, nativeSessionI
 	native := params.Policy.Native()
 	// A FILE_READ refusal in the policy still wins: deny is answered first.
 	native.AdditionalDirectories = c.readable
+	scratch := c.scratchFor(params.RunID)
+	if scratch != "" {
+		native.AdditionalDirectories = append(native.AdditionalDirectories, scratch)
+	}
 
 	args := []string{
 		"--print",
@@ -293,7 +354,7 @@ func (c *Claude) command(ctx context.Context, params StartParams, nativeSessionI
 		"--permission-prompt-tool", mcp.PermissionTool,
 		"--mcp-config", mcpConfig,
 		"--strict-mcp-config",
-		"--append-system-prompt", systemPrompt(params, c.available),
+		"--append-system-prompt", systemPrompt(params, c.available, scratch),
 		// The policy, in the provider's own vocabulary. What it can settle from
 		// these it settles itself — its read-only set is better at reading a
 		// shell command than anything maintained here — and the permission tool
@@ -349,7 +410,7 @@ func stopGroup(cmd *exec.Cmd) error {
 
 // systemPrompt tells the agent about the Threavia-specific tool and about the
 // project it is working on.
-func systemPrompt(params StartParams, available []string) string {
+func systemPrompt(params StartParams, available []string, scratch string) string {
 	var b strings.Builder
 	b.WriteString("You are running inside Threavia, a control plane for coding agents. ")
 	b.WriteString("There is no interactive terminal: the user may be on another device entirely, ")
@@ -375,6 +436,16 @@ func systemPrompt(params StartParams, available []string) string {
 	b.WriteString("variable: it costs an approval the command would not otherwise need, ")
 	b.WriteString("however harmless the rest of it is. ")
 	b.WriteString("If something you need is genuinely missing, say so rather than working around it.\n")
+
+	// Named because the alternative is /tmp, and a file in /tmp has to be
+	// approved to be read back — the agent asking permission for what it wrote
+	// a second earlier. This one is readable without asking, and it is not
+	// shared with everything else on the machine.
+	if scratch != "" {
+		b.WriteString("\nWrite any intermediate file in " + scratch + ", never in /tmp. ")
+		b.WriteString("It belongs to this session, you can read back from it without asking, ")
+		b.WriteString("and it outlives the message you are answering.\n")
+	}
 
 	if len(params.CoreTools) > 0 {
 		// The tool descriptions say when to use each one; this says why they
