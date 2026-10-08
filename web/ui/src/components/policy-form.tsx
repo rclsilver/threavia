@@ -56,10 +56,13 @@ export function PolicyForm({
   value,
   onChange,
   idPrefix,
+  disabled,
 }: {
   value: ExecutionPolicy;
   onChange: (next: ExecutionPolicy) => void;
   idPrefix: string;
+  /** Showing what applies, rather than editing what this level sets. */
+  disabled?: boolean;
 }) {
   const set = (patch: Partial<ExecutionPolicy>) => onChange({ ...value, ...patch });
 
@@ -67,7 +70,11 @@ export function PolicyForm({
     <div className="space-y-3">
       <div className="flex items-center gap-3">
         <Label htmlFor={`${idPrefix}-mode`}>Mode</Label>
-        <Select value={value.mode} onValueChange={(mode) => set({ mode: mode as ExecutionMode })}>
+        <Select
+          value={value.mode}
+          disabled={disabled}
+          onValueChange={(mode) => set({ mode: mode as ExecutionMode })}
+        >
           <SelectTrigger id={`${idPrefix}-mode`} className="flex-1">
             <SelectValue />
           </SelectTrigger>
@@ -85,24 +92,28 @@ export function PolicyForm({
         <CheckboxField
           checked={value.allowFilesystemWrite}
           onCheckedChange={(allowFilesystemWrite) => set({ allowFilesystemWrite })}
+          disabled={disabled}
         >
           write files
         </CheckboxField>
         <CheckboxField
           checked={value.allowGitCommit}
           onCheckedChange={(allowGitCommit) => set({ allowGitCommit })}
+          disabled={disabled}
         >
           git commit
         </CheckboxField>
         <CheckboxField
           checked={value.allowGitPush}
           onCheckedChange={(allowGitPush) => set({ allowGitPush })}
+          disabled={disabled}
         >
           git push
         </CheckboxField>
         <CheckboxField
           checked={value.allowNetwork}
           onCheckedChange={(allowNetwork) => set({ allowNetwork })}
+          disabled={disabled}
         >
           network
         </CheckboxField>
@@ -119,6 +130,7 @@ export function PolicyForm({
             rows={4}
             value={value.supervision ?? ''}
             onChange={(event) => set({ supervision: event.target.value })}
+            disabled={disabled}
             placeholder="This cluster is shared and runs in production. Never deploy or migrate without asking. Reading anything is fine."
           />
           <p className="text-muted text-xs">
@@ -139,6 +151,7 @@ export function PolicyForm({
           placeholder="seconds"
           value={value.maxDurationSeconds ?? ''}
           onChange={(event) => set({ maxDurationSeconds: Number(event.target.value) || 0 })}
+          disabled={disabled}
         />
         <Label htmlFor={`${idPrefix}-actions`}>or after</Label>
         <Input
@@ -149,6 +162,7 @@ export function PolicyForm({
           placeholder="actions"
           value={value.maxActions ?? ''}
           onChange={(event) => set({ maxActions: Number(event.target.value) || 0 })}
+          disabled={disabled}
         />
       </div>
     </div>
@@ -165,9 +179,12 @@ export function PolicyForm({
 export function RulesEditor({
   rules,
   onChange,
+  disabled,
 }: {
   rules: PermissionRule[];
   onChange: (next: PermissionRule[]) => void;
+  /** Showing what applies, rather than editing what this level sets. */
+  disabled?: boolean;
 }) {
   const replace = (index: number, patch: Partial<PermissionRule>) =>
     onChange(rules.map((rule, at) => (at === index ? { ...rule, ...patch } : rule)));
@@ -178,6 +195,7 @@ export function RulesEditor({
         <div key={index} className="flex flex-wrap items-center gap-2">
           <Select
             value={rule.effect}
+            disabled={disabled}
             onValueChange={(effect) => replace(index, { effect: effect as PermissionEffect })}
           >
             <SelectTrigger className="w-28">
@@ -194,6 +212,7 @@ export function RulesEditor({
 
           <Select
             value={rule.capability}
+            disabled={disabled}
             onValueChange={(capability) =>
               replace(index, { capability: capability as PermissionCapability })
             }
@@ -215,17 +234,20 @@ export function RulesEditor({
             placeholder={hintOf(rule.capability) || 'everything of that kind'}
             value={rule.match ?? ''}
             onChange={(event) => replace(index, { match: event.target.value })}
+            disabled={disabled}
           />
           <Input
             className="min-w-32 flex-1"
             placeholder="why"
             value={rule.note ?? ''}
             onChange={(event) => replace(index, { note: event.target.value })}
+            disabled={disabled}
           />
           <Button
             variant="ghost"
             size="icon"
             title="Remove this rule"
+            disabled={disabled}
             onClick={() => onChange(rules.filter((_, at) => at !== index))}
           >
             <Trash2 />
@@ -233,15 +255,19 @@ export function RulesEditor({
         </div>
       ))}
 
-      <Button
-        variant="ghost"
-        size="sm"
-        className="gap-1.5"
-        onClick={() => onChange([...rules, { effect: 'DENY', capability: 'SHELL', match: '' }])}
-      >
-        <Plus className="size-3.5" />
-        Add a rule
-      </Button>
+      {disabled && rules.length === 0 && <p className="text-muted text-xs">No rule.</p>}
+
+      {!disabled && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => onChange([...rules, { effect: 'DENY', capability: 'SHELL', match: '' }])}
+        >
+          <Plus className="size-3.5" />
+          Add a rule
+        </Button>
+      )}
 
       <p className="text-muted text-xs">
         Read in order: refuse, then ask, then allow. <code>*</code> stands for any text.

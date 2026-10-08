@@ -25,14 +25,26 @@ export function CheckboxField({
   checked,
   onCheckedChange,
   children,
+  disabled,
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   children: ReactNode;
+  disabled?: boolean;
 }) {
   return (
-    <label className="text-muted flex cursor-pointer items-center gap-2 text-sm">
-      <Checkbox checked={checked} onCheckedChange={(value) => onCheckedChange(value === true)} />
+    <label
+      className={
+        disabled
+          ? 'text-muted flex items-center gap-2 text-sm opacity-50'
+          : 'text-muted flex cursor-pointer items-center gap-2 text-sm'
+      }
+    >
+      <Checkbox
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={(value) => onCheckedChange(value === true)}
+      />
       {children}
     </label>
   );
