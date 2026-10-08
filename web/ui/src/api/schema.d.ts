@@ -1335,22 +1335,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/sessions/{sessionId}/policy": {
+    "/api/v1/projects/{projectId}/policy": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                sessionId: components["parameters"]["SessionID"];
+                projectId: components["parameters"]["ProjectID"];
             };
             cookie?: never;
         };
-        /** The effective ExecutionPolicy of a Session */
+        /** The ExecutionPolicy every Session of a Project inherits */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    sessionId: components["parameters"]["SessionID"];
+                    projectId: components["parameters"]["ProjectID"];
                 };
                 cookie?: never;
             };
@@ -1368,10 +1368,97 @@ export interface paths {
             };
         };
         /**
+         * Set the default every Session of a Project inherits
+         * @description A Session that set nothing of its own follows this from its next Job,
+         *     and a Job already running has it pushed. An empty body resets to the
+         *     restrained default.
+         *
+         *     The switches are defaults a Session may loosen. A rule here with effect
+         *     DENY is not: it is carried into every Session and answered first, so no
+         *     Session can lift it.
+         *
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: {
+                    /** @description Which kind of client is calling. Core records it on the work it creates,
+                     *     so a device already following it is not also made to ring, and the audit
+                     *     trail can say where a change came from.
+                     *      */
+                    "X-Threavia-Channel"?: components["parameters"]["Channel"];
+                };
+                path: {
+                    projectId: components["parameters"]["ProjectID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ExecutionPolicy"];
+                };
+            };
+            responses: {
+                /** @description The policy now in force for the Project */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ExecutionPolicy"];
+                    };
+                };
+                400: components["responses"]["Error"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sessions/{sessionId}/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["SessionID"];
+            };
+            cookie?: never;
+        };
+        /** The effective ExecutionPolicy of a Session, and where it comes from */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: components["parameters"]["SessionID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The policy */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SessionPolicy"];
+                    };
+                };
+            };
+        };
+        /**
          * Set what the agent may do in a Session
-         * @description An empty body resets to the restrained default rather than leaving the
-         *     previous policy in place. Limits are enforced by Core and the backend,
-         *     never by the prompt alone (spec section 17).
+         * @description An empty body hands the Session back to its Project rather than leaving
+         *     the previous policy in place. Limits are enforced by Core and the
+         *     backend, never by the prompt alone (spec section 17).
+         *
+         *     A rule that would undo a DENY written on the Project is refused: the
+         *     Project is where a limit is set, and a Session is not allowed to reach
+         *     past it.
          *
          */
         put: {
@@ -2916,10 +3003,59 @@ export interface components {
             allowGitCommit: boolean;
             allowGitPush: boolean;
             allowNetwork: boolean;
+            /** @description The fine grain, answered before the switches above: deny, then ask,
+             *     then allow. On a read they arrive already merged from the Project
+             *     and the Session, outermost first.
+             *      */
+            rules?: components["schemas"]["PermissionRule"][];
             /** @description Stops a Run that has been going too long. Zero means no limit. */
             maxDurationSeconds?: number;
             /** @description Stops a Run that has taken too many steps. Zero means no limit. */
             maxActions?: number;
+        };
+        /**
+         * @description What a rule does to the action it matches. DENY never asks — the answer was given in advance.
+         * @enum {string}
+         */
+        PermissionEffect: "ALLOW" | "ASK" | "DENY";
+        /**
+         * @description What a rule is about, named independently of any provider. This is the
+         *     contract: a Project says "never kubectl delete" once, and each backend
+         *     translates it into whatever its own provider understands. A rule written
+         *     in a provider's syntax would be a rule only one backend could honour.
+         *
+         * @enum {string}
+         */
+        PermissionCapability: "SHELL" | "FILE_READ" | "FILE_WRITE" | "NETWORK" | "GIT_COMMIT" | "GIT_PUSH" | "TOOL";
+        /** @description One exception to the switches of an ExecutionPolicy.
+         *
+         *     A rule written on a Project with effect DENY is binding: it travels into
+         *     every Session below and is answered first, so no Session can take it out
+         *     of the set. The switches are not — they are defaults a Session may
+         *     loosen. That is the difference between a convenience and a limit.
+         *      */
+        PermissionRule: {
+            effect: components["schemas"]["PermissionEffect"];
+            capability: components["schemas"]["PermissionCapability"];
+            /** @description A command for SHELL, a host for NETWORK, a path for the file
+             *     capabilities, a name for TOOL. Empty is the whole capability, and
+             *     `*` stands for any text — the one wildcard every provider agrees on.
+             *     Required for TOOL, which otherwise names no tool.
+             *      */
+            match?: string;
+            /** @description Why. Kept for the audit and shown beside the rule, because a rule nobody can explain is a rule nobody dares remove. */
+            note?: string;
+        };
+        /** @description What applies to a Session, and where it comes from. */
+        SessionPolicy: {
+            /** @description What actually applies, the Project refusals included. */
+            effective: components["schemas"]["ExecutionPolicy"];
+            /** @description The Session set nothing of its own and follows its Project, live:
+             *     changing the Project changes this Session.
+             *      */
+            inherited: boolean;
+            /** @description What it falls back to, so a client can offer to return to it. */
+            project: components["schemas"]["ExecutionPolicy"];
         };
         /** @description A project-level logical directory. Portability and discovery metadata,
          *     never a sandbox: the agent may work in any directory the backend

@@ -11,12 +11,15 @@ import {
   useDeleteDecision,
   useInstallSkill,
   useProject,
+  useProjectPolicy,
   useSkills,
   useUploadArtifact,
+  useSetProjectPolicy,
   useUninstallSkill,
   useUpdateProject,
 } from '@/api/queries';
-import type { Decision, SkillSourceType } from '@/api/types';
+import type { Decision, ExecutionPolicy, SkillSourceType } from '@/api/types';
+import { PolicyForm, RulesEditor } from '@/components/policy-form';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, EmptyState } from '@/components/ui/card';
@@ -107,6 +110,26 @@ export function AuditView() {
   return (
     <Section title="Audit" subtitle="Who decided what, through which client.">
       <AuditPane />
+    </Section>
+  );
+}
+
+/**
+ * What every Session of this Project may do, unless it says otherwise.
+ *
+ * This is where a rule gets written once. The switches are defaults a Session
+ * can loosen for one piece of work; the refusals are not — they travel into
+ * every Session and are answered first, so none can lift one. That difference
+ * is the only reason to have a level above the Session at all.
+ */
+export function PermissionsView() {
+  const projectId = useProjectId();
+  return (
+    <Section
+      title="Permissions"
+      subtitle="What every Session of this Project may do, unless it says otherwise."
+    >
+      <PermissionsPane projectId={projectId} />
     </Section>
   );
 }
@@ -470,4 +493,41 @@ function AuditPane() {
 function Records<T>({ items, render }: { items: T[]; render: (item: T) => React.ReactNode }) {
   if (items.length === 0) return <EmptyState>Nothing yet.</EmptyState>;
   return <div className="space-y-2">{items.map(render)}</div>;
+}
+
+// --------------------------------------------------------------- permissions
+
+function PermissionsPane({ projectId }: { projectId: string }) {
+  const { data } = useProjectPolicy(projectId);
+  const save = useSetProjectPolicy(projectId);
+  const [draft, setDraft] = useState<ExecutionPolicy | null>(null);
+
+  useEffect(() => {
+    if (data) setDraft(data);
+  }, [data]);
+
+  if (!draft) return null;
+
+  return (
+    <div className="max-w-3xl space-y-4">
+      <PolicyForm value={draft} onChange={setDraft} idPrefix="project-policy" />
+
+      <RulesEditor rules={draft.rules ?? []} onChange={(rules) => setDraft({ ...draft, rules })} />
+
+      <p className="text-muted text-xs">
+        A refusal written here cannot be lifted by a Session. The switches above can: a Session that
+        needs to push once says so, and the audit records it.
+      </p>
+
+      {save.error && <p className="text-danger text-sm">{save.error.message}</p>}
+
+      <Button
+        variant="primary"
+        disabled={save.isPending}
+        onClick={() => save.mutate(draft)}
+      >
+        {save.isSuccess && !save.isPending ? 'Saved' : 'Save'}
+      </Button>
+    </div>
+  );
 }

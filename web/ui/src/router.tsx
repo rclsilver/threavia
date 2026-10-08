@@ -16,6 +16,7 @@ import {
   AuditView,
   InstructionsView,
   MemoryView,
+  PermissionsView,
   SkillsView,
 } from '@/routes/project';
 import { SessionView } from '@/routes/session';
@@ -104,6 +105,12 @@ const auditRoute = createRoute({
   component: AuditView,
 });
 
+const permissionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects/$projectId/permissions',
+  component: PermissionsView,
+});
+
 /**
  * Where the provider sends the browser back.
  *
@@ -127,6 +134,7 @@ const routeTree = rootRoute.addChildren([
   skillsRoute,
   instructionsRoute,
   auditRoute,
+  permissionsRoute,
   projectRoute,
 ]);
 

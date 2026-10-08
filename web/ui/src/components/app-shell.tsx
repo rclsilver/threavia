@@ -10,6 +10,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -276,6 +277,7 @@ const SECTIONS = [
   { to: '/projects/$projectId/artifacts', label: 'Artifacts', Icon: Package },
   { to: '/projects/$projectId/skills', label: 'Skills', Icon: Sparkles },
   { to: '/projects/$projectId/instructions', label: 'Instructions', Icon: FileText },
+  { to: '/projects/$projectId/permissions', label: 'Permissions', Icon: ShieldCheck },
   { to: '/projects/$projectId/audit', label: 'Audit', Icon: History },
 ] as const;
 

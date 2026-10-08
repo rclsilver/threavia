@@ -12,6 +12,7 @@ import type {
   Decision,
   Event,
   ExecutionPolicy,
+  SessionPolicy,
   Handoff,
   Job,
   KnownDirectory,
@@ -335,18 +336,47 @@ export function useResolveUserInput() {
 export function usePolicy(sessionId: string | undefined) {
   return useQuery({
     queryKey: keys.policy(sessionId ?? ''),
-    queryFn: () => api.get<ExecutionPolicy>(`/api/v1/sessions/${sessionId}/policy`),
+    queryFn: () => api.get<SessionPolicy>(`/api/v1/sessions/${sessionId}/policy`),
     enabled: Boolean(sessionId),
   });
 }
 
+/**
+ * Sets a Session policy, or hands the Session back to its Project.
+ *
+ * Null is how it goes back: an empty body is what Core reads as "follow the
+ * Project", and it is a different act from setting a policy that happens to
+ * match the Project's today.
+ */
 export function useSetPolicy(sessionId: string) {
   const queries = useQueryClient();
   return useMutation({
+    mutationFn: (policy: ExecutionPolicy | null) =>
+      api.put<ExecutionPolicy>(`/api/v1/sessions/${sessionId}/policy`, policy ?? {}),
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: keys.policy(sessionId) });
+      void queries.invalidateQueries({ queryKey: keys.audit() });
+    },
+  });
+}
+
+export function useProjectPolicy(projectId: string | undefined) {
+  return useQuery({
+    queryKey: keys.projectPolicy(projectId ?? ''),
+    queryFn: () => api.get<ExecutionPolicy>(`/api/v1/projects/${projectId}/policy`),
+    enabled: Boolean(projectId),
+  });
+}
+
+export function useSetProjectPolicy(projectId: string) {
+  const queries = useQueryClient();
+  return useMutation({
     mutationFn: (policy: ExecutionPolicy) =>
-      api.put<ExecutionPolicy>(`/api/v1/sessions/${sessionId}/policy`, policy),
+      api.put<ExecutionPolicy>(`/api/v1/projects/${projectId}/policy`, policy),
     onSuccess: (policy) => {
-      queries.setQueryData(keys.policy(sessionId), policy);
+      queries.setQueryData(keys.projectPolicy(projectId), policy);
+      // Every Session that never overrode it now reads differently.
+      void queries.invalidateQueries({ queryKey: ['policy'] });
       void queries.invalidateQueries({ queryKey: keys.audit() });
     },
   });
