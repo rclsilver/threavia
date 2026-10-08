@@ -313,6 +313,10 @@ func (c *Client) dispatch(ctx context.Context, msg *backendv1.CoreToBackend) {
 		c.pending.Complete(body.CoreToolResponse)
 		return
 
+	case *backendv1.CoreToBackend_WorkspaceDiffRequest:
+		go c.answerDiff(ctx, body.WorkspaceDiffRequest)
+		return
+
 	case *backendv1.CoreToBackend_StartJob:
 		err = c.handler.OnStartJob(ctx, body.StartJob)
 	case *backendv1.CoreToBackend_CancelJob:
@@ -522,6 +526,26 @@ func (c *Client) heartbeatLoop(ctx context.Context, sess *session) {
 				return
 			}
 		}
+	}
+}
+
+// answerDiff computes the diff Core asked for and sends it back under the
+// same request id.
+func (c *Client) answerDiff(ctx context.Context, req *backendv1.WorkspaceDiffRequest) {
+	var answer *backendv1.WorkspaceDiff
+	if differ, ok := c.handler.(WorkspaceDiffer); ok {
+		answer = differ.OnWorkspaceDiffRequest(ctx, req)
+	}
+	if answer == nil {
+		answer = &backendv1.WorkspaceDiff{Error: &backendv1.Error{
+			Code: "UNSUPPORTED", Message: "this backend cannot show the diff of a change",
+		}}
+	}
+	answer.RequestId = req.GetRequestId()
+	if err := c.enqueue(ctx, &backendv1.BackendToCore{
+		Message: &backendv1.BackendToCore_WorkspaceDiff{WorkspaceDiff: answer},
+	}); err != nil {
+		c.logger.Warn("cannot answer a diff request", slog.String("error", err.Error()))
 	}
 }
 

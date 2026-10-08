@@ -974,8 +974,15 @@ type WorkspaceChanged struct {
 	Files            []*FileChange          `protobuf:"bytes,2,rep,name=files,proto3" json:"files,omitempty"`
 	Additions        int32                  `protobuf:"varint,3,opt,name=additions,proto3" json:"additions,omitempty"`
 	Deletions        int32                  `protobuf:"varint,4,opt,name=deletions,proto3" json:"deletions,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Where the change happened and the git trees of the working directory
+	// before and after the Job, so a diff can be asked for later with a
+	// WorkspaceDiffRequest. Tree ids name content, they do not carry it. Empty
+	// when the backend could not capture them, and then there is no diff to ask.
+	Directory     string `protobuf:"bytes,5,opt,name=directory,proto3" json:"directory,omitempty"`
+	BaseTree      string `protobuf:"bytes,6,opt,name=base_tree,json=baseTree,proto3" json:"base_tree,omitempty"`
+	HeadTree      string `protobuf:"bytes,7,opt,name=head_tree,json=headTree,proto3" json:"head_tree,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkspaceChanged) Reset() {
@@ -1034,6 +1041,27 @@ func (x *WorkspaceChanged) GetDeletions() int32 {
 		return x.Deletions
 	}
 	return 0
+}
+
+func (x *WorkspaceChanged) GetDirectory() string {
+	if x != nil {
+		return x.Directory
+	}
+	return ""
+}
+
+func (x *WorkspaceChanged) GetBaseTree() string {
+	if x != nil {
+		return x.BaseTree
+	}
+	return ""
+}
+
+func (x *WorkspaceChanged) GetHeadTree() string {
+	if x != nil {
+		return x.HeadTree
+	}
+	return ""
 }
 
 // What one Job consumed.
@@ -1336,12 +1364,15 @@ const file_threavia_backend_v1_events_proto_rawDesc = "" +
 	"\n" +
 	"FileChange\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x124\n" +
-	"\x05state\x18\x02 \x01(\x0e2\x1e.threavia.backend.v1.FileStateR\x05state\"\xb3\x01\n" +
+	"\x05state\x18\x02 \x01(\x0e2\x1e.threavia.backend.v1.FileStateR\x05state\"\x8b\x02\n" +
 	"\x10WorkspaceChanged\x12,\n" +
 	"\x12known_directory_id\x18\x01 \x01(\tR\x10knownDirectoryId\x125\n" +
 	"\x05files\x18\x02 \x03(\v2\x1f.threavia.backend.v1.FileChangeR\x05files\x12\x1c\n" +
 	"\tadditions\x18\x03 \x01(\x05R\tadditions\x12\x1c\n" +
-	"\tdeletions\x18\x04 \x01(\x05R\tdeletions\"\xc4\x01\n" +
+	"\tdeletions\x18\x04 \x01(\x05R\tdeletions\x12\x1c\n" +
+	"\tdirectory\x18\x05 \x01(\tR\tdirectory\x12\x1b\n" +
+	"\tbase_tree\x18\x06 \x01(\tR\bbaseTree\x12\x1b\n" +
+	"\thead_tree\x18\a \x01(\tR\bheadTree\"\xc4\x01\n" +
 	"\x05Usage\x12!\n" +
 	"\finput_tokens\x18\x01 \x01(\x04R\vinputTokens\x12#\n" +
 	"\routput_tokens\x18\x02 \x01(\x04R\foutputTokens\x12*\n" +

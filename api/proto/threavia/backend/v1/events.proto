@@ -123,6 +123,13 @@ message WorkspaceChanged {
   repeated FileChange files = 2;
   int32 additions = 3;
   int32 deletions = 4;
+  // Where the change happened and the git trees of the working directory
+  // before and after the Job, so a diff can be asked for later with a
+  // WorkspaceDiffRequest. Tree ids name content, they do not carry it. Empty
+  // when the backend could not capture them, and then there is no diff to ask.
+  string directory = 5;
+  string base_tree = 6;
+  string head_tree = 7;
 }
 
 // What one Job consumed.

@@ -1,8 +1,36 @@
 /** The tools whose input is a change to a file, and nothing else. */
 const FILE_TOOLS = new Set(['Edit', 'MultiEdit', 'Write']);
 
-/** One line of a diff: kept, removed or added. */
-export type Line = { kind: ' ' | '-' | '+'; text: string };
+/** One line of a diff: kept, removed, added, or the start of a hunk. */
+export type Line = { kind: ' ' | '-' | '+' | '@'; text: string };
+
+/**
+ * Reads a unified diff as git prints it, keeping what a reader looks at: the
+ * hunks and their lines. The file headers say again what the title already
+ * says.
+ */
+export function parseUnified(text: string): Line[] {
+  const out: Line[] = [];
+  let inHunk = false;
+  for (const line of text.replace(/\n$/, '').split('\n')) {
+    if (line.startsWith('@@')) {
+      inHunk = true;
+      out.push({ kind: '@', text: line });
+    } else if (!inHunk) {
+      continue;
+    } else if (line.startsWith('+')) {
+      out.push({ kind: '+', text: line.slice(1) });
+    } else if (line.startsWith('-')) {
+      out.push({ kind: '-', text: line.slice(1) });
+    } else if (line.startsWith('\\')) {
+      // "\ No newline at end of file" is git talking, not the file.
+      continue;
+    } else {
+      out.push({ kind: ' ', text: line.slice(1) });
+    }
+  }
+  return out;
+}
 
 /** One replacement inside a file, as Edit and MultiEdit describe it. */
 type Replacement = { before: string; after: string; all: boolean };

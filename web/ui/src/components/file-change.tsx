@@ -36,22 +36,29 @@ export function FileChangeView({ change, className }: { change: FileChange; clas
   );
 }
 
-function Diff({ lines }: { lines: Line[] }) {
+/** Diff lines, coloured by what happened to each. */
+export function Diff({ lines }: { lines: Line[] }) {
   return (
     <pre className="py-1 font-mono text-xs leading-5">
-      {lines.map((line, index) => (
-        <div
-          key={index}
-          className={cn(
-            'px-2 break-all whitespace-pre-wrap',
-            line.kind === '-' && 'bg-danger/10 text-danger',
-            line.kind === '+' && 'bg-ok/10 text-ok',
-          )}
-        >
-          <span className="mr-2 inline-block w-2 opacity-60 select-none">{line.kind}</span>
-          {line.text || ' '}
-        </div>
-      ))}
+      {lines.map((line, index) =>
+        line.kind === '@' ? (
+          <div key={index} className="text-muted bg-surface-2 px-2 break-all whitespace-pre-wrap">
+            {line.text}
+          </div>
+        ) : (
+          <div
+            key={index}
+            className={cn(
+              'px-2 break-all whitespace-pre-wrap',
+              line.kind === '-' && 'bg-danger/10 text-danger',
+              line.kind === '+' && 'bg-ok/10 text-ok',
+            )}
+          >
+            <span className="mr-2 inline-block w-2 opacity-60 select-none">{line.kind}</span>
+            {line.text || ' '}
+          </div>
+        ),
+      )}
     </pre>
   );
 }

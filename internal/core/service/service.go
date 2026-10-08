@@ -58,6 +58,10 @@ type Service struct {
 
 	// dispatched correlates an in-flight command with the Job it carries.
 	dispatched sync.Map
+
+	// diffs holds the diff requests waiting for a backend's answer, by
+	// request id.
+	diffs sync.Map
 }
 
 // Option customises a Service.

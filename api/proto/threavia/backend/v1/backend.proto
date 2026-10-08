@@ -90,6 +90,7 @@ message BackendToCore {
     CoreToolRequest core_tool_request = 8;
     SkillInventory skill_inventory = 9;
     SkillFetchRequest skill_fetch_request = 10;
+    WorkspaceDiff workspace_diff = 11;
   }
 }
 
@@ -110,6 +111,7 @@ message CoreToBackend {
     CoreToolResponse core_tool_response = 11;
     SkillBundle skill_bundle = 12;
     UpdateJobPolicy update_job_policy = 13;
+    WorkspaceDiffRequest workspace_diff_request = 14;
   }
 }
 
@@ -134,4 +136,19 @@ message SkillFetchRequest {
   string request_id = 1;
   string skill_id = 2;
   string installed_revision = 3;
+}
+
+// The diff of one file, in answer to a WorkspaceDiffRequest.
+message WorkspaceDiff {
+  string request_id = 1;
+  // A unified diff, without colour. Empty when the file did not change
+  // between the two trees.
+  string diff = 2;
+  // Set for a file git treats as binary: there are no lines to show.
+  bool binary = 3;
+  // Set when the diff was cut to stay a reasonable message.
+  bool truncated = 4;
+  // Set instead of the diff when it cannot be computed, for instance once the
+  // trees were collected by git.
+  Error error = 5;
 }

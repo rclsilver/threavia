@@ -46,6 +46,16 @@ type Handler interface {
 	OnReconcileInstruction(ctx context.Context, cmd *backendv1.ReconcileInstruction) error
 }
 
+// WorkspaceDiffer is implemented by a Handler that can show what a Job changed
+// in a file, from the trees its WorkspaceChanged event reported (spec section
+// 22). Optional: a backend without it answers that it cannot.
+//
+// Called on a goroutine of its own, because computing a diff reads the
+// filesystem and must not hold the control stream.
+type WorkspaceDiffer interface {
+	OnWorkspaceDiffRequest(ctx context.Context, req *backendv1.WorkspaceDiffRequest) *backendv1.WorkspaceDiff
+}
+
 // BaseHandler implements Handler by rejecting every command. Embed it to
 // implement only the commands a backend actually supports.
 type BaseHandler struct{}

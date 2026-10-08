@@ -4,6 +4,8 @@ import {
   ArrowDown,
   Ban,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Circle,
   CornerDownLeft,
   FileDiff,
@@ -18,7 +20,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Markdown } from '@/components/markdown';
+import { Diff } from '@/components/file-change';
 import { ToolCallEntry, type ToolCall } from '@/components/tool-call';
+import { useFileDiff } from '@/api/queries';
+import { parseUnified } from '@/lib/file-change';
 import { payloadOf, type Event, type JobStatus } from '@/api/types';
 import { clock, cn, cost, duration, humanise, tokens } from '@/lib/utils';
 
@@ -443,7 +448,7 @@ function Entry({
 
   const changed = payloadOf(event, 'workspace.changed');
   if (changed) {
-    return <WorkspaceChange change={changed} />;
+    return <WorkspaceChange change={changed} sessionId={event.sessionId} sequence={event.sequence} />;
   }
 
   // Everything else is the log running between the messages: a mark, the time
@@ -544,11 +549,25 @@ function JobCost({ event, startedAt }: { event: Event; startedAt?: string }) {
 
 function WorkspaceChange({
   change,
+  sessionId,
+  sequence,
 }: {
   change: NonNullable<ReturnType<typeof payloadOf<'workspace.changed'>>>;
+  sessionId?: string;
+  sequence: number;
 }) {
   const files = change.files ?? [];
-  const shown = files.slice(0, 12);
+  const [all, setAll] = useState(false);
+  const shown = all ? files : files.slice(0, 12);
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  // The backend can only be asked when it recorded the two trees.
+  const diffable = Boolean(sessionId && change.baseTree && change.headTree);
+  const toggle = (path: string) =>
+    setOpen((current) => {
+      const next = new Set(current);
+      if (!next.delete(path)) next.add(path);
+      return next;
+    });
 
   return (
     <div className="bg-surface border-border rounded-[--radius-card] border px-3 py-2 text-sm">
@@ -561,24 +580,85 @@ function WorkspaceChange({
         <span className="text-danger">−{change.deletions}</span>
       </div>
       <ul className="mt-1.5 space-y-0.5 font-mono text-xs">
-        {shown.map((file) => (
-          <li
-            key={file.path}
-            className={cn(
-              'break-all',
-              file.state === 'ADDED' && 'text-ok',
-              file.state === 'DELETED' && 'text-danger',
-              file.state === 'MODIFIED' && 'text-muted',
-              file.state === 'RENAMED' && 'text-warn',
-            )}
-          >
-            {MARK[file.state]} {file.path}
-          </li>
-        ))}
+        {shown.map((file) => {
+          const label = (
+            <span
+              className={cn(
+                'break-all',
+                file.state === 'ADDED' && 'text-ok',
+                file.state === 'DELETED' && 'text-danger',
+                file.state === 'MODIFIED' && 'text-muted',
+                file.state === 'RENAMED' && 'text-warn',
+              )}
+            >
+              {MARK[file.state]} {file.path}
+            </span>
+          );
+          return (
+            <li key={file.path}>
+              {diffable ? (
+                <button
+                  type="button"
+                  onClick={() => toggle(file.path)}
+                  aria-expanded={open.has(file.path)}
+                  className="hover:bg-surface-2 flex w-full items-start gap-1 rounded text-left"
+                >
+                  {open.has(file.path) ? (
+                    <ChevronDown className="text-muted mt-0.5 size-3 shrink-0" />
+                  ) : (
+                    <ChevronRight className="text-muted mt-0.5 size-3 shrink-0" />
+                  )}
+                  {label}
+                </button>
+              ) : (
+                label
+              )}
+              {diffable && open.has(file.path) && sessionId && (
+                <FileDiffPanel sessionId={sessionId} sequence={sequence} path={file.path} />
+              )}
+            </li>
+          );
+        })}
         {files.length > shown.length && (
-          <li className="text-muted">… and {files.length - shown.length} more</li>
+          <li>
+            <button type="button" className="text-muted hover:text-text" onClick={() => setAll(true)}>
+              … and {files.length - shown.length} more
+            </button>
+          </li>
         )}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * The diff of one file of a change, fetched from the backend when unfolded.
+ *
+ * Said plainly when it cannot be shown: the backend is away, or git has
+ * collected the state it was taken from.
+ */
+function FileDiffPanel({ sessionId, sequence, path }: { sessionId: string; sequence: number; path: string }) {
+  const diff = useFileDiff(sessionId, sequence, path, true);
+
+  if (diff.isPending) {
+    return <p className="text-muted py-1 pl-4">Asking the backend for the diff…</p>;
+  }
+  if (diff.error) {
+    return <p className="text-warn py-1 pl-4">{diff.error.message}</p>;
+  }
+  if (diff.data.binary) {
+    return <p className="text-muted py-1 pl-4">A binary file: there are no lines to show.</p>;
+  }
+  const lines = parseUnified(diff.data.diff);
+  if (lines.length === 0) {
+    return <p className="text-muted py-1 pl-4">No difference in content.</p>;
+  }
+  return (
+    <div className="border-border my-1 ml-4 max-h-96 overflow-auto rounded-md border font-sans">
+      <Diff lines={lines} />
+      {diff.data.truncated && (
+        <p className="text-muted border-border border-t px-2 py-1">Cut short: the diff is too long to show whole.</p>
+      )}
     </div>
   );
 }

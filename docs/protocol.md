@@ -27,8 +27,11 @@ provider-specific RPCs, and no provider assumption in any message.
 | `EphemeralJobEvent` | `JobInputNow` |
 | `CommandResult` | `JobInputNext` |
 | `CoreToolRequest` | `ReconcileInstruction` |
-| | `EventAck` |
-| | `CoreToolResponse` |
+| `SkillInventory` | `EventAck` |
+| `SkillFetchRequest` | `CoreToolResponse` |
+| `WorkspaceDiff` | `SkillBundle` |
+| | `UpdateJobPolicy` |
+| | `WorkspaceDiffRequest` |
 
 ## Connection
 

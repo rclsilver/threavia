@@ -9,7 +9,10 @@ package workspace
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"os"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -47,6 +50,12 @@ type Summary struct {
 	Deletions int32
 	// Truncated reports that more paths changed than the list carries.
 	Truncated bool
+	// Directory and the two trees are what a diff is asked for with later:
+	// the working directory, and its git trees before and after the Job.
+	// Empty trees mean they could not be captured, and no diff can be shown.
+	Directory string
+	BaseTree  string
+	HeadTree  string
 }
 
 // Empty reports that nothing changed, in which case there is nothing to say.
@@ -64,6 +73,9 @@ type Snapshot struct {
 	// stats are the per-path line counts, so the summary subtracts what was
 	// already there.
 	stats map[string]lineCount
+	// tree is the git tree of the whole working directory, uncommitted and
+	// untracked files included, which is what a diff is computed against.
+	tree string
 }
 
 type lineCount struct {
@@ -101,7 +113,85 @@ func Observe(ctx context.Context, directory string) Snapshot {
 			snapshot.stats[path] = count
 		}
 	}
+	snapshot.tree = treeOf(ctx, directory)
 	return snapshot
+}
+
+// treeOf records the working directory as a git tree, without touching what
+// the person sees: their index, their branches and their stash stay as they
+// were.
+//
+// It works on a copy of the index, so only the files that changed since it
+// was written are hashed again, which keeps it cheap on a large repository.
+// The one trace it leaves is unreferenced objects in the repository's object
+// store, which git's own maintenance collects after a couple of weeks — and
+// that is how long a diff stays available.
+func treeOf(ctx context.Context, directory string) string {
+	index, err := git(ctx, directory, "rev-parse", "--path-format=absolute", "--git-path", "index")
+	if err != nil {
+		return ""
+	}
+	scratch, err := os.CreateTemp("", "threavia-index-*")
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = os.Remove(scratch.Name()) }()
+	if current, err := os.ReadFile(strings.TrimSpace(index)); err == nil {
+		_, _ = scratch.Write(current)
+	}
+	_ = scratch.Close()
+
+	env := "GIT_INDEX_FILE=" + scratch.Name()
+	if _, err := gitWith(ctx, directory, []string{env}, "add", "--all"); err != nil {
+		return ""
+	}
+	out, err := gitWith(ctx, directory, []string{env}, "write-tree")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}
+
+// maxDiff bounds one file's diff: past this it is a regenerated file or a
+// dump, and a reader is better served by a note than by the bytes.
+const maxDiff = 512 << 10
+
+// objectID is what a tree id looks like, SHA-1 or SHA-256.
+var objectID = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
+
+// Diff is one file's change between two trees.
+type Diff struct {
+	Text      string
+	Binary    bool
+	Truncated bool
+}
+
+// DiffOf computes the diff of one path between the trees a Summary reported.
+//
+// The path is the one the summary listed, relative to the top of the
+// repository, and it is matched literally: a name with a glob character in it
+// is a name, not a pattern.
+func DiffOf(ctx context.Context, directory, base, head, path string) (Diff, error) {
+	if !objectID.MatchString(base) || !objectID.MatchString(head) {
+		return Diff{}, fmt.Errorf("no record of this change to compare")
+	}
+	if path == "" {
+		return Diff{}, fmt.Errorf("no file named")
+	}
+	out, err := git(ctx, directory, "diff", "--no-color", "--no-ext-diff", "--no-textconv",
+		base, head, "--", ":(top,literal)"+path)
+	if err != nil {
+		// The objects are unreferenced on purpose, so git collects them in
+		// time; and the directory may have been removed since.
+		return Diff{}, fmt.Errorf("this change is no longer available on the backend")
+	}
+	if strings.HasPrefix(out, "Binary files ") || strings.Contains(out, "\nBinary files ") {
+		return Diff{Binary: true}, nil
+	}
+	if len(out) > maxDiff {
+		return Diff{Text: out[:maxDiff], Truncated: true}, nil
+	}
+	return Diff{Text: out}, nil
 }
 
 // Since returns what changed between the snapshot taken before a Job and the
@@ -116,7 +206,7 @@ func Since(ctx context.Context, directory string, before Snapshot) Summary {
 		return Summary{}
 	}
 
-	var summary Summary
+	summary := Summary{Directory: directory, BaseTree: before.tree, HeadTree: after.tree}
 	for path, state := range after.states {
 		if previous, existed := before.states[path]; existed && previous == state {
 			// Already in this state when the Job started: not its doing.
@@ -214,8 +304,13 @@ func parseNumstat(out string) map[string]lineCount {
 	return counts
 }
 
-// git runs one read-only git command in a directory.
+// git runs one git command in a directory.
 func git(ctx context.Context, directory string, args ...string) (string, error) {
+	return gitWith(ctx, directory, nil, args...)
+}
+
+// gitWith runs one git command with extra environment.
+func gitWith(ctx context.Context, directory string, env []string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 
@@ -223,7 +318,7 @@ func git(ctx context.Context, directory string, args ...string) (string, error) 
 	cmd.Dir = directory
 	// A repository the backend account does not own would otherwise make git
 	// refuse, and a refusal here must stay a missing summary, never a failed Job.
-	cmd.Env = append(cmd.Environ(), "GIT_OPTIONAL_LOCKS=0")
+	cmd.Env = append(append(cmd.Environ(), "GIT_OPTIONAL_LOCKS=0"), env...)
 
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout

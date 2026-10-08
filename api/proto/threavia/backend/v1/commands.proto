@@ -241,6 +241,18 @@ message CoreToolResponse {
   Error error = 3;
 }
 
+// Asks the backend for the diff of one file between the two trees a
+// WorkspaceChanged reported (spec section 22). The diff never leaves the
+// backend otherwise: it is computed when someone opens it, and answered with a
+// WorkspaceDiff carrying the same request id.
+message WorkspaceDiffRequest {
+  string request_id = 1;
+  string directory = 2;
+  string base_tree = 3;
+  string head_tree = 4;
+  string path = 5;
+}
+
 // One chunk of a Skill bundle, sent in response to a SkillFetchRequest
 // (spec section 18). Core distributes immutable artefacts over the protocol and
 // the backend caches them locally; the bytes never travel on a Job.

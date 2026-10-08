@@ -674,6 +674,42 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/Event" }
 
+  /api/v1/sessions/{sessionId}/diff:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    get:
+      tags: [sessions]
+      summary: The diff of one file a Job changed
+      description: |
+        Computed by the backend that holds the working directory, when asked,
+        from the two trees the workspace.changed event recorded (spec section
+        22). Core keeps no diff. Only a file the event listed can be asked for.
+        A backend that is offline answers 503; one whose git has since
+        collected the trees answers 409.
+      parameters:
+        - name: event
+          in: query
+          required: true
+          schema: { type: integer, format: int64 }
+          description: The sequence of the workspace.changed event.
+        - name: path
+          in: query
+          required: true
+          schema: { type: string }
+          description: A path the event listed, relative to the top of the repository.
+      responses:
+        "200":
+          description: The diff
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileDiff" }
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+
   /api/v1/sessions/{sessionId}/messages:
     parameters:
       - $ref: "#/components/parameters/SessionID"
@@ -1766,9 +1802,26 @@ components:
               bounded excerpt marked with an ellipsis when it was cut
             - `tool.failed`: `{ toolCallId, name, error }`
             - `job.completed`, `job.failed`: `{ summary | error, usage }`
-            - `workspace.changed`: `{ knownDirectoryId, files, additions, deletions }`
+            - `workspace.changed`: `{ knownDirectoryId, files, additions,
+              deletions, directory?, baseTree?, headTree? }`, the last three
+              present when the diff of a file can be asked for
             - `validation.resolved`: `{ validationId, approved, note }`
             - `user_input.resolved`: `{ requestId, value }`
+
+    FileDiff:
+      type: object
+      required: [path, diff, binary, truncated]
+      properties:
+        path: { type: string }
+        diff:
+          type: string
+          description: A unified diff without colour; empty when the file did not change.
+        binary:
+          type: boolean
+          description: Set for a file git treats as binary, which has no lines to show.
+        truncated:
+          type: boolean
+          description: Set when the diff was cut to stay a reasonable answer.
 
     Snapshot:
       type: object

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
@@ -14,6 +15,7 @@ func (h *handler) registerSessions(mux *http.ServeMux) {
 	h.handle(mux, "PATCH /api/v1/sessions/{sessionId}", h.patchSession)
 	h.handle(mux, "DELETE /api/v1/sessions/{sessionId}", h.deleteSession)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/events", h.sessionHistory)
+	h.handle(mux, "GET /api/v1/sessions/{sessionId}/diff", h.workspaceDiff)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/messages", h.postMessage)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/archive", h.archiveSession)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/restore", h.restoreSession)
@@ -184,6 +186,24 @@ func (h *handler) sessionHistory(w http.ResponseWriter, r *http.Request, identit
 		return
 	}
 	writeList(w, history)
+}
+
+// workspaceDiff serves the diff of one file a Job changed, fetched from the
+// backend that holds the working directory.
+func (h *handler) workspaceDiff(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	sequence := querySequence(r, "event")
+	path := r.URL.Query().Get("path")
+	if sequence == 0 || path == "" {
+		h.fail(w, fmt.Errorf("%w: event and path are required", service.ErrInvalid))
+		return
+	}
+	diff, err := h.svc.FileDiffOf(r.Context(), identity,
+		domain.SessionID(r.PathValue("sessionId")), sequence, path)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, diff)
 }
 
 // postMessage appends a message, which becomes a new Job on the current Run and

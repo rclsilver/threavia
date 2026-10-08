@@ -92,6 +92,9 @@ func translateJobEvent(event *backendv1.JobEvent) (events.Type, any, error) {
 			Files:            files,
 			Additions:        body.WorkspaceChanged.GetAdditions(),
 			Deletions:        body.WorkspaceChanged.GetDeletions(),
+			Directory:        body.WorkspaceChanged.GetDirectory(),
+			BaseTree:         body.WorkspaceChanged.GetBaseTree(),
+			HeadTree:         body.WorkspaceChanged.GetHeadTree(),
 		}, nil
 
 	case *backendv1.JobEvent_JobCompleted:

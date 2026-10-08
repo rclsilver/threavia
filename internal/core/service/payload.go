@@ -156,6 +156,11 @@ type WorkspaceChangedPayload struct {
 	Files            []WorkspaceFile `json:"files,omitempty"`
 	Additions        int32           `json:"additions"`
 	Deletions        int32           `json:"deletions"`
+	// Where, and between which two git trees, the diff of a file can be asked
+	// of the backend. Names, never content; absent when it cannot be asked.
+	Directory string `json:"directory,omitempty"`
+	BaseTree  string `json:"baseTree,omitempty"`
+	HeadTree  string `json:"headTree,omitempty"`
 }
 
 // WorkspaceFile is one entry of a workspace change summary.

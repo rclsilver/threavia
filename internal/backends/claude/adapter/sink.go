@@ -97,8 +97,21 @@ func (a *Adapter) WorkspaceChanged(ctx context.Context, runID, jobID string, sum
 			Files:            files,
 			Additions:        summary.Additions,
 			Deletions:        summary.Deletions,
+			Directory:        summary.Directory,
+			BaseTree:         summary.BaseTree,
+			HeadTree:         summary.HeadTree,
 		})
 	})
+}
+
+// OnWorkspaceDiffRequest implements client.WorkspaceDiffer: the diff of one
+// file a Job changed, computed when someone opens it and nowhere kept.
+func (a *Adapter) OnWorkspaceDiffRequest(ctx context.Context, req *backendv1.WorkspaceDiffRequest) *backendv1.WorkspaceDiff {
+	diff, err := workspace.DiffOf(ctx, req.GetDirectory(), req.GetBaseTree(), req.GetHeadTree(), req.GetPath())
+	if err != nil {
+		return &backendv1.WorkspaceDiff{Error: &backendv1.Error{Code: "UNAVAILABLE", Message: err.Error()}}
+	}
+	return &backendv1.WorkspaceDiff{Diff: diff.Text, Binary: diff.Binary, Truncated: diff.Truncated}
 }
 
 // fileState maps a detected state onto the protocol enum.

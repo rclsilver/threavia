@@ -1209,6 +1209,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{sessionId}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["SessionID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The diff of one file a Job changed
+         * @description Computed by the backend that holds the working directory, when asked,
+         *     from the two trees the workspace.changed event recorded (spec section
+         *     22). Core keeps no diff. Only a file the event listed can be asked for.
+         *     A backend that is offline answers 503; one whose git has since
+         *     collected the trees answers 409.
+         *
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description The sequence of the workspace.changed event. */
+                    event: number;
+                    /** @description A path the event listed, relative to the top of the repository. */
+                    path: string;
+                };
+                header?: never;
+                path: {
+                    sessionId: components["parameters"]["SessionID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The diff */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FileDiff"];
+                    };
+                };
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+                503: components["responses"]["Error"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{sessionId}/messages": {
         parameters: {
             query?: never;
@@ -2937,13 +2993,24 @@ export interface components {
              *       bounded excerpt marked with an ellipsis when it was cut
              *     - `tool.failed`: `{ toolCallId, name, error }`
              *     - `job.completed`, `job.failed`: `{ summary | error, usage }`
-             *     - `workspace.changed`: `{ knownDirectoryId, files, additions, deletions }`
+             *     - `workspace.changed`: `{ knownDirectoryId, files, additions,
+             *       deletions, directory?, baseTree?, headTree? }`, the last three
+             *       present when the diff of a file can be asked for
              *     - `validation.resolved`: `{ validationId, approved, note }`
              *     - `user_input.resolved`: `{ requestId, value }`
              *      */
             payload?: {
                 [key: string]: unknown;
             };
+        };
+        FileDiff: {
+            path: string;
+            /** @description A unified diff without colour; empty when the file did not change. */
+            diff: string;
+            /** @description Set for a file git treats as binary, which has no lines to show. */
+            binary: boolean;
+            /** @description Set when the diff was cut to stay a reasonable answer. */
+            truncated: boolean;
         };
         Snapshot: {
             session: components["schemas"]["Session"];

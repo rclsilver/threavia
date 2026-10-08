@@ -48,6 +48,9 @@ type Sink interface {
 	// SkillBundle opens the packed bundle of a Core-managed Skill, so Core can
 	// distribute it to a backend that does not have it cached.
 	SkillBundle(ctx context.Context, instanceID domain.BackendInstanceID, skillID string) (io.ReadCloser, error)
+
+	// WorkspaceDiff receives the answer to a diff Core asked a backend for.
+	WorkspaceDiff(ctx context.Context, instanceID domain.BackendInstanceID, diff *backendv1.WorkspaceDiff)
 }
 
 // NopSink accepts everything and does nothing. It keeps the control service
@@ -96,3 +99,6 @@ func (NopSink) SkillInventory(context.Context, domain.BackendInstanceID, *backen
 func (NopSink) SkillBundle(context.Context, domain.BackendInstanceID, string) (io.ReadCloser, error) {
 	return nil, ErrSkillUnavailable
 }
+
+// WorkspaceDiff implements Sink.
+func (NopSink) WorkspaceDiff(context.Context, domain.BackendInstanceID, *backendv1.WorkspaceDiff) {}

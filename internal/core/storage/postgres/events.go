@@ -217,3 +217,15 @@ func (s *Store) SearchHistory(ctx context.Context, projectID domain.ProjectID, q
 	}
 	return out, classify(rows.Err(), "search project history")
 }
+
+// SessionEvent returns one event of a Session the user can access, by its
+// global sequence.
+func (s *Store) SessionEvent(ctx context.Context, ownerID domain.UserID, sessionID domain.SessionID, sequence domain.Sequence) (events.Envelope, error) {
+	return scanEnvelope(s.q.QueryRow(ctx, `
+		SELECT `+eventColumns+`
+		FROM events e
+		JOIN sessions sess ON sess.id = e.session_id
+		JOIN projects p ON p.id = sess.project_id
+		WHERE e.session_id = $1 AND p.owner_id = $2 AND e.global_sequence = $3`,
+		sessionID, ownerID, sequence))
+}

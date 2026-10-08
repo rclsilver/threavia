@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -164,5 +165,59 @@ func TestParseNumstatSkipsBinaryFiles(t *testing.T) {
 	}
 	if _, reported := counts["image.png"]; reported {
 		t.Fatal("a binary file has no line counts to report")
+	}
+}
+
+// TestADiffIsServedFromTheTreesOfTheJob pins the on-demand diff of spec
+// section 22: the change of one file between the start and the end of a Job,
+// what was already uncommitted before it excluded, without touching the index
+// the person works with.
+func TestADiffIsServedFromTheTreesOfTheJob(t *testing.T) {
+	t.Parallel()
+
+	directory := newRepository(t)
+	ctx := context.Background()
+	// Already dirty before the Job, and staged: neither may leak into the
+	// Job's diff, and the staging must survive the capture.
+	write(t, directory, "README.md", "one\ntwo\nmine\n")
+	stage := exec.Command("git", "add", "README.md")
+	stage.Dir = directory
+	if out, err := stage.CombinedOutput(); err != nil {
+		t.Fatalf("staging: %v: %s", err, out)
+	}
+	stagedBefore, _ := git(ctx, directory, "diff", "--cached", "--name-only")
+
+	before := Observe(ctx, directory)
+	write(t, directory, "README.md", "one\nTWO\nmine\n")
+	write(t, directory, "docs/new file[1].md", "hello\n")
+	summary := Since(ctx, directory, before)
+
+	if summary.Directory != directory || summary.BaseTree == "" || summary.HeadTree == "" {
+		t.Fatalf("summary = %+v, want the directory and both trees", summary)
+	}
+
+	diff, err := DiffOf(ctx, directory, summary.BaseTree, summary.HeadTree, "README.md")
+	if err != nil {
+		t.Fatalf("diffing README.md: %v", err)
+	}
+	if !strings.Contains(diff.Text, "-two") || !strings.Contains(diff.Text, "+TWO") {
+		t.Errorf("diff = %q, want the Job's change", diff.Text)
+	}
+	if strings.Contains(diff.Text, "+mine") {
+		t.Errorf("diff = %q, the change made before the Job is not the Job's", diff.Text)
+	}
+
+	// A name with glob characters is a name.
+	added, err := DiffOf(ctx, directory, summary.BaseTree, summary.HeadTree, "docs/new file[1].md")
+	if err != nil || !strings.Contains(added.Text, "+hello") {
+		t.Errorf("diff of an added file = %q, %v", added.Text, err)
+	}
+
+	if stagedAfter, _ := git(ctx, directory, "diff", "--cached", "--name-only"); stagedAfter != stagedBefore {
+		t.Errorf("staged files went from %q to %q: the capture must leave the index alone", stagedBefore, stagedAfter)
+	}
+
+	if _, err := DiffOf(ctx, directory, "not-a-tree", summary.HeadTree, "README.md"); err == nil {
+		t.Error("a diff against something that is not a tree id must be refused")
 	}
 }

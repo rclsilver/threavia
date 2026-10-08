@@ -327,6 +327,10 @@ func (s *Server) handle(ctx context.Context, instanceID domain.BackendInstanceID
 		go s.sendSkillBundle(context.WithoutCancel(ctx), instanceID, conn, body.SkillFetchRequest, logger)
 		return nil
 
+	case *backendv1.BackendToCore_WorkspaceDiff:
+		s.sink.WorkspaceDiff(ctx, instanceID, body.WorkspaceDiff)
+		return nil
+
 	default:
 		logger.Warn("unknown control message ignored")
 		return nil

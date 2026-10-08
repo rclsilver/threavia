@@ -13,6 +13,7 @@ export type Run = Schemas['Run'];
 export type Job = Schemas['Job'];
 export type JobStatus = Schemas['JobStatus'];
 export type Event = Schemas['Event'];
+export type FileDiff = Schemas['FileDiff'];
 export type Snapshot = Schemas['Snapshot'];
 export type Attention = Schemas['Attention'];
 export type ValidationRequest = Schemas['ValidationRequest'];
@@ -71,6 +72,10 @@ export interface EventPayloads {
     files?: { path: string; state: 'ADDED' | 'MODIFIED' | 'DELETED' | 'RENAMED' }[];
     additions: number;
     deletions: number;
+    // Present when the backend can be asked for the diff of a file.
+    directory?: string;
+    baseTree?: string;
+    headTree?: string;
   };
 }
 

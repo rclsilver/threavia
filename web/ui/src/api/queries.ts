@@ -13,6 +13,7 @@ import type {
   Decision,
   Event,
   ExecutionPolicy,
+  FileDiff,
   SessionPolicy,
   Handoff,
   Job,
@@ -221,6 +222,25 @@ export function useSnapshot(sessionId: string | undefined) {
     // only reorder what is already correct.
     staleTime: Infinity,
     refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * The diff of one file a Job changed, computed by the backend when asked.
+ *
+ * Kept for the visit once read: the trees it compares never change, so asking
+ * again would only cost the backend a git run.
+ */
+export function useFileDiff(sessionId: string, event: number, path: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['diff', sessionId, event, path],
+    queryFn: () =>
+      api.get<FileDiff>(
+        `/api/v1/sessions/${sessionId}/diff?event=${event}&path=${encodeURIComponent(path)}`,
+      ),
+    enabled,
+    staleTime: Infinity,
+    retry: false,
   });
 }
 
