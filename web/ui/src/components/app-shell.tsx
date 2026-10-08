@@ -1,4 +1,4 @@
-import { Link, useParams } from '@tanstack/react-router';
+import { Link, useLocation, useParams } from '@tanstack/react-router';
 import {
   Archive,
   ArchiveRestore,
@@ -8,6 +8,7 @@ import {
   History,
   ListChecks,
   LoaderCircle,
+  Menu,
   MessageCircleQuestion,
   Package,
   PanelLeftClose,
@@ -16,6 +17,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -93,27 +95,71 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // A permission outranks a question: it is the one blocking a tool call.
   for (const request of attention.data?.validations ?? []) waiting.set(request.scope.sessionId, 'validation');
 
+  // On a phone the sidebar is a drawer over the content, closed until asked
+  // for: a column of navigation beside a conversation leaves neither readable
+  // on a screen that narrow. It closes again on the way to wherever was picked.
+  const wide = useMediaQuery('(min-width: 768px)');
+  const [drawer, setDrawer] = useState(false);
+  const pathname = useLocation({ select: (location) => location.pathname });
+  useEffect(() => {
+    setDrawer(false);
+  }, [pathname, wide]);
+  // The rail is a desktop affordance; a drawer is either open in full or gone.
+  const folded = collapsed && wide;
+
   // Collapsed, the sidebar keeps a rail rather than disappearing: the control
   // that brings it back has to live somewhere a person can find without
   // guessing, and the main view keeps a left edge of its own.
   return (
     <div
       className={cn(
-        'grid h-full grid-cols-1',
-        collapsed ? 'md:grid-cols-[3rem_1fr]' : 'md:grid-cols-[17rem_1fr]',
+        // The dynamic viewport height, so the composer of a phone is never
+        // under its browser's toolbar.
+        'grid h-dvh grid-cols-1 grid-rows-[auto_1fr] md:grid-rows-1',
+        folded ? 'md:grid-cols-[3rem_1fr]' : 'md:grid-cols-[17rem_1fr]',
       )}
     >
+      {/* What a phone keeps of the sidebar: the way into it, and whether the
+          stream is up. */}
+      <div className="border-border bg-surface flex items-center gap-2 border-b px-2 py-1.5 md:hidden">
+        <Button variant="ghost" size="icon" title="Open the menu" onClick={() => setDrawer(true)}>
+          <Menu />
+        </Button>
+        <Logo className="h-5 w-auto" />
+        <span className="text-sm font-semibold">Threavia</span>
+        {waiting.size > 0 && (
+          <Badge tone="warn" className="ml-1">
+            {waiting.size} waiting
+          </Badge>
+        )}
+        <Badge tone={connected ? 'ok' : 'neutral'} title="Realtime stream" className="ml-auto">
+          {connected ? 'live' : 'offline'}
+        </Badge>
+      </div>
+
+      {drawer && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          aria-hidden
+          onClick={() => setDrawer(false)}
+        />
+      )}
+
       <aside
         className={cn(
-          'border-border bg-surface flex max-h-[40vh] min-h-0 flex-col border-b md:max-h-none md:border-r md:border-b-0',
-          collapsed ? 'gap-2 p-2' : 'gap-4 p-4',
+          'border-border bg-surface flex min-h-0 flex-col border-r',
+          // A drawer below md, a column of the grid from md up.
+          'fixed inset-y-0 left-0 z-40 w-[min(20rem,85vw)] shadow-xl transition-transform',
+          'md:static md:z-auto md:w-auto md:translate-x-0 md:shadow-none md:transition-none',
+          drawer ? 'translate-x-0' : '-translate-x-full',
+          folded ? 'gap-2 p-2' : 'gap-4 p-4',
         )}
       >
         {/* The mark says whose window this is and goes nowhere: every
             destination is one of the entries below, and a logo that quietly
             lands on one of them makes that entry look like two places. */}
-        <header className={cn('flex items-center gap-2', collapsed && 'flex-col')}>
-          {collapsed ? (
+        <header className={cn('flex items-center gap-2', folded && 'flex-col')}>
+          {folded ? (
             <span title="Threavia" className="py-1">
               <Logo className="w-7" />
             </span>
@@ -128,17 +174,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Badge>
             </>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            title={collapsed ? 'Show the sidebar' : 'Hide the sidebar'}
-            onClick={() => setCollapsed(!collapsed)}
-          >
-            {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
-          </Button>
+          {wide ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              title={collapsed ? 'Show the sidebar' : 'Hide the sidebar'}
+              onClick={() => setCollapsed(!collapsed)}
+            >
+              {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+            </Button>
+          ) : (
+            <Button variant="ghost" size="icon" title="Close the menu" onClick={() => setDrawer(false)}>
+              <X />
+            </Button>
+          )}
         </header>
 
-        {collapsed ? (
+        {folded ? (
           // The rail keeps what is not a list: the way back, the work still
           // owed, and the person using it. A session title cut to three
           // characters would be worse than not showing one.
@@ -413,6 +465,19 @@ function OpenTasks({ projectId, collapsed = false }: { projectId: string; collap
       <Badge tone={open > 0 ? 'accent' : 'neutral'}>{open}</Badge>
     </Link>
   );
+}
+
+/** Whether a media query matches, following the window as it is resized. */
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const onChange = () => setMatches(media.matches);
+    onChange();
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
 }
 
 const COLLAPSED_KEY = 'threavia.sidebar.collapsed';

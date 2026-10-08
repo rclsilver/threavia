@@ -286,7 +286,7 @@ export function Timeline({
               key={item.key}
               ref={virtualizer.measureElement}
               data-index={item.index}
-              className="absolute left-0 top-0 w-full px-6 py-1.5"
+              className="absolute left-0 top-0 w-full px-3 py-1.5 sm:px-6"
               style={{ transform: `translateY(${item.start}px)` }}
             >
               {row.kind === 'tool' ? (

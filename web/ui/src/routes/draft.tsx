@@ -51,7 +51,7 @@ export function DraftView() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-5">
       <header>
         <h2 className="text-lg font-semibold">New session</h2>
         <p className="text-muted text-sm">Nothing is created until you send the first message.</p>

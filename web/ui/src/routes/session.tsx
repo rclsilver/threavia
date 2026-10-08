@@ -88,7 +88,7 @@ export function SessionView() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* The frame keeps the window; only what is read is held to a column. */}
-      <header className="border-border/70 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b px-5 py-3">
+      <header className="border-border/70 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b px-3 py-3 sm:px-5">
         {/* The title takes the width the header has: an input sized by its own
             content is about twenty characters wide, which is narrower than
             most of the titles it is there to edit. */}
@@ -132,7 +132,7 @@ export function SessionView() {
           Held to part of the height, so a burst of requests never pushes the
           composer off the screen. */}
       {(data.attention.validations?.length || data.attention.userInputs?.length) ? (
-        <div className="mx-auto max-h-[45vh] w-full max-w-reading shrink-0 overflow-y-auto px-6 pt-2 pb-3">
+        <div className="mx-auto max-h-[45vh] w-full max-w-reading shrink-0 overflow-y-auto px-3 pt-2 pb-3 sm:px-6">
           <AttentionPanel
             validations={data.attention.validations ?? []}
             userInputs={data.attention.userInputs ?? []}
@@ -250,7 +250,7 @@ function Composer({
   };
 
   return (
-    <div className="mx-auto w-full max-w-reading px-6 pb-4">
+    <div className="mx-auto w-full max-w-reading px-3 pb-3 sm:px-6 sm:pb-4">
       {/* The stop for whatever is holding the Session, where the hands already
           are. Each message carries its own stop, which is the honest place for
           it — but the message that started the work scrolls away, and the one
@@ -319,7 +319,7 @@ function Composer({
           </Button>
         </div>
       </form>
-      <p className="text-muted/70 mt-2 text-center text-xs">
+      <p className="text-muted/70 mt-2 hidden text-center text-xs sm:block">
         Enter sends · Shift+Enter for a newline{active && ' · Esc stops'}
       </p>
     </div>
