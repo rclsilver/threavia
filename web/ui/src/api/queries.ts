@@ -517,8 +517,8 @@ export function useReadyTasks(projectId: string | undefined) {
 export function useCreateTask(projectId: string) {
   const queries = useQueryClient();
   return useMutation({
-    mutationFn: (title: string) =>
-      api.post<Task>(`/api/v1/projects/${projectId}/tasks`, { title, description: '' }),
+    mutationFn: (task: { title: string; description?: string; dependsOn?: string[] }) =>
+      api.post<Task>(`/api/v1/projects/${projectId}/tasks`, { description: '', ...task }),
     onSuccess: () => queries.invalidateQueries({ queryKey: ['tasks'] }),
   });
 }

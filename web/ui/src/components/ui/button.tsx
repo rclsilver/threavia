@@ -23,6 +23,8 @@ const button = cva(
         lg: 'h-11 px-4 text-[0.9375rem] sm:h-9 sm:px-3.5 sm:text-sm',
       },
     },
+    // A link is text: whatever size it is given, it takes no button's box.
+    compoundVariants: [{ variant: 'link', className: 'h-auto p-0' }],
     defaultVariants: { variant: 'secondary', size: 'md' },
   },
 );
