@@ -20,6 +20,7 @@ import {
   SkillsView,
 } from '@/routes/project';
 import { SessionView } from '@/routes/session';
+import { SettingsView, type AccountTab } from '@/routes/settings';
 import { SessionSettingsView, type SettingsTab } from '@/routes/session-settings';
 import { TasksView } from '@/routes/tasks';
 import { HomeView, WaitingView } from '@/routes/waiting';
@@ -59,6 +60,30 @@ const sessionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions/$sessionId',
   component: SessionView,
+});
+
+const ACCOUNT_TABS: AccountTab[] = ['appearance', 'notifications', 'backends'];
+
+/** The person's settings, one tab per URL; an unknown tab lands on the first. */
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/$tab',
+  beforeLoad: ({ params }) => {
+    if (!ACCOUNT_TABS.includes(params.tab as AccountTab)) {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      throw redirect({ to: '/settings/$tab', params: { tab: 'appearance' } });
+    }
+  },
+  component: SettingsView,
+});
+
+const settingsIndexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings',
+  beforeLoad: () => {
+    // eslint-disable-next-line @typescript-eslint/only-throw-error
+    throw redirect({ to: '/settings/$tab', params: { tab: 'appearance' } });
+  },
 });
 
 const SETTINGS_TABS: SettingsTab[] = ['permissions', 'schedules', 'backend', 'session'];
@@ -165,6 +190,8 @@ const routeTree = rootRoute.addChildren([
   sessionRoute,
   sessionSettingsRoute,
   sessionSettingsIndexRoute,
+  settingsRoute,
+  settingsIndexRoute,
   tasksRoute,
   memoryRoute,
   artifactsRoute,

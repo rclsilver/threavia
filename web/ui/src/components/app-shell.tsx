@@ -3,6 +3,7 @@ import {
   Archive,
   ArchiveRestore,
   BookText,
+  Bell,
   Check,
   ChevronsUpDown,
   Clock,
@@ -11,6 +12,7 @@ import {
   Inbox,
   ListChecks,
   LoaderCircle,
+  Monitor,
   Menu as MenuIcon,
   MessageCircleQuestion,
   Package,
@@ -18,6 +20,7 @@ import {
   PanelLeftOpen,
   Plus,
   ShieldAlert,
+  Server,
   ShieldCheck,
   Sparkles,
   X,
@@ -27,37 +30,30 @@ import { useEffect, useState } from 'react';
 import {
   useAttention,
   useBackends,
-  useClaimBackend,
   useCreateProject,
-  useIssueBackendToken,
   useMe,
   useProjects,
-  useRevokeBackend,
   useSessions,
   useSnapshot,
   useTasks,
 } from '@/api/queries';
 import type { BackendInstance, Project, Session } from '@/api/types';
-import { useWideLayout } from '@/use-layout';
 import { SelectedProject } from '@/use-project';
 import { useStream } from '@/use-stream';
 import { Logo } from '@/components/logo';
 import { ActionError } from '@/components/ui/action-error';
-import { NotificationsPane } from '@/components/notifications-pane';
-import { Badge, type BadgeTone } from '@/components/ui/badge';
+import { Avatar } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CheckboxField } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input, Label } from '@/components/ui/input';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
-import { cn, humanise, when } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 /**
  * The frame every view sits in: which Project, its Sessions, and the backends
@@ -595,14 +591,12 @@ function useCollapsed(): [boolean, (collapsed: boolean) => void] {
 }
 
 /**
- * Who is using Threavia, and the machines that work for them.
+ * Who is using the client, and the way to everything about them.
  *
- * It sits at the foot of the sidebar because that is where a person looks for
- * themselves, and it opens what it holds in one move: the whole of it fits on
- * one panel, and a menu whose every branch leads to the same panel is a step
- * that exists only to be clicked through. The warning dot is the part that
- * cannot wait for anyone to open anything: a backend that is not ready is why
- * nothing is answering.
+ * At the foot of the sidebar because that is where a person looks for
+ * themselves. It says the one thing that cannot wait for anyone to open
+ * anything — whether the backends are there to answer — and opens onto the
+ * settings, each a tab of their own page.
  */
 function UserMenu({
   backends,
@@ -612,220 +606,90 @@ function UserMenu({
   collapsed?: boolean;
 }) {
   const me = useMe();
-  // Read here because this is the one control mounted on every page: asking for
-  // it applies the stored choice before anything is laid out.
-  const [wide, setWide] = useWideLayout();
+  const navigate = useNavigate();
 
   // Authenticated or not is not a detail to smooth over: in ModeNone nobody was
   // asked to prove anything, and the id is whatever Core was configured with.
   const anonymous = !me.data || me.data.authMode === 'none';
   const name = anonymous ? 'anonymous' : me.data.name || me.data.email || me.data.userId;
-  const unwell = backends.filter((backend) => backend.operationalStatus !== 'READY');
-
-  const warning = unwell.length > 0 ? `, ${unwell.length} backend(s) not ready` : '';
-  const title = `${name} — account and backends${warning}`;
+  const live = backends.filter((backend) => backend.ownershipStatus !== 'REVOKED');
+  const unwell = live.filter((backend) => backend.operationalStatus !== 'READY');
+  const status =
+    live.length === 0
+      ? 'No backend yet'
+      : unwell.length > 0
+        ? `${unwell.length} of ${live.length} ${live.length === 1 ? 'backend' : 'backends'} not ready`
+        : // Counted, never named: a name alone reads as "the" backend, as if
+          // there could only be one.
+          `${live.length} ${live.length === 1 ? 'backend' : 'backends'} ready`;
+  const go = (tab: 'appearance' | 'notifications' | 'backends') => void navigate({ to: '/settings/$tab', params: { tab } });
 
   return (
-    <Dialog>
-      <DialogTrigger asChild>
+    <Menu>
+      <MenuTrigger asChild>
         {collapsed ? (
           // In the rail the avatar is the whole control, pushed to the foot
           // where it sits when the sidebar is open, so folding the sidebar
           // moves nothing a hand has already learned.
           <button
             type="button"
-            title={title}
-            className="hover:bg-surface-2 relative mt-auto self-center rounded-full p-1"
+            title={`${name} · ${status}`}
+            className="hover:bg-surface-2 data-[state=open]:bg-surface-2 relative mt-auto self-center rounded-full p-1"
           >
-            <span className="bg-surface-2 text-muted flex size-7 items-center justify-center rounded-full text-xs font-medium uppercase">
-              {name.slice(0, 1)}
-            </span>
-            {unwell.length > 0 && (
+            <Avatar name={name} className="size-7 text-xs" />
+            {(unwell.length > 0 || live.length === 0) && (
               <span className="bg-warn ring-surface absolute top-0.5 right-0.5 size-2 rounded-full ring-2" />
             )}
           </button>
         ) : (
           <button
             type="button"
-            title={title}
-            className="hover:bg-surface-2 border-border flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-sm"
+            className="hover:bg-surface-2 data-[state=open]:bg-surface-2 flex w-full items-center gap-2.5 rounded-lg p-2 text-left"
           >
-            <span className="bg-surface-2 text-muted flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium uppercase">
-              {name.slice(0, 1)}
+            <Avatar name={name} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{name}</span>
+              <span
+                className={cn(
+                  'flex items-center gap-1.5 truncate text-xs',
+                  unwell.length > 0 || live.length === 0 ? 'text-warn-text' : 'text-muted',
+                )}
+              >
+                <span
+                  className={cn(
+                    'size-1.5 shrink-0 rounded-full',
+                    unwell.length > 0 || live.length === 0 ? 'bg-warn' : 'bg-ok',
+                  )}
+                />
+                {status}
+              </span>
             </span>
-            <span className="min-w-0 flex-1 truncate">{name}</span>
-            {unwell.length > 0 && <span className="bg-warn size-1.5 shrink-0 rounded-full" />}
+            <ChevronsUpDown className="text-muted size-4 shrink-0" />
           </button>
         )}
-      </DialogTrigger>
-
-      <DialogContent className="w-[min(40rem,calc(100vw-2rem))]">
-        <div>
-          <DialogTitle>{name}</DialogTitle>
-          <DialogDescription>
-            {anonymous
-              ? 'No authentication is configured, so everything here is attributed to one user.'
-              : `Signed in with ${me.data?.authMode} as ${me.data?.userId}.`}
-          </DialogDescription>
-        </div>
-
-        <section className="border-border space-y-2 border-t pt-4">
-          <h3 className="text-sm font-medium">Appearance</h3>
-          <CheckboxField checked={wide} onCheckedChange={setWide}>
-            use the full width of the window
-          </CheckboxField>
-          <p className="text-muted text-xs">
-            A conversation is held to a reading width by default, because a line running
-            the whole of a wide screen loses the eye on the way back to the left margin.
-            Turn this on and nothing is held back.
-          </p>
-        </section>
-
-        <section className="border-border space-y-2 border-t pt-4">
-          <h3 className="text-sm font-medium">Notifications</h3>
-          <DialogDescription>
-            An approval or a question waiting, or work that ended while you were not watching.
-            Never every event.
-          </DialogDescription>
-          <NotificationsPane />
-        </section>
-
-        <section className="border-border space-y-3 border-t pt-4">
-          <h3 className="text-sm font-medium">Backends</h3>
-          <BackendsPane backends={backends} />
-        </section>
-      </DialogContent>
-    </Dialog>
+      </MenuTrigger>
+      <MenuContent side="top" align="start" className="min-w-60">
+        <MenuLabel className="pb-1">
+          <span className="text-text block text-sm font-medium">{name}</span>
+          {anonymous ? 'No authentication configured' : `Signed in with ${me.data?.authMode}`}
+        </MenuLabel>
+        <MenuSeparator />
+        <MenuItem onSelect={() => go('appearance')}>
+          <Monitor className="text-muted size-4" />
+          Appearance
+        </MenuItem>
+        <MenuItem onSelect={() => go('notifications')}>
+          <Bell className="text-muted size-4" />
+          Notifications
+        </MenuItem>
+        <MenuItem onSelect={() => go('backends')}>
+          <Server className="text-muted size-4" />
+          <span className="flex-1">Backends</span>
+          {unwell.length > 0 && <span className="bg-warn size-1.5 rounded-full" />}
+        </MenuItem>
+      </MenuContent>
+    </Menu>
   );
-}
-
-/** The machines that can run work, and what can be done about them. */
-function BackendsPane({ backends }: { backends: BackendInstance[] }) {
-  const revoke = useRevokeBackend();
-  const issue = useIssueBackendToken();
-  const claim = useClaimBackend();
-  const [claimCode, setClaimCode] = useState('');
-  const [confirming, setConfirming] = useState<string | null>(null);
-
-  return (
-    <div className="space-y-5">
-      <ul className="space-y-2">
-        {backends.length === 0 && (
-          <li className="text-muted text-sm">
-            None yet. Issue a registration token below and start a backend with it.
-          </li>
-        )}
-        {backends.map((backend) => (
-          <li key={backend.id} className="border-border rounded-(--radius-card) border p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{backend.name}</span>
-              <Badge tone={backendTone(backend)}>{humanise(backend.operationalStatus)}</Badge>
-              {backend.ownershipStatus !== 'CLAIMED' && (
-                <Badge tone="warn">{humanise(backend.ownershipStatus)}</Badge>
-              )}
-              {backend.ownershipStatus !== 'REVOKED' &&
-                (confirming === backend.id ? (
-                  <span className="ml-auto flex items-center gap-2 text-xs">
-                    <span className="text-muted">Revoke its credential?</span>
-                    <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
-                      No
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      disabled={revoke.isPending}
-                      onClick={() => {
-                        revoke.mutate(backend.id);
-                        setConfirming(null);
-                      }}
-                    >
-                      Revoke
-                    </Button>
-                  </span>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="ml-auto"
-                    onClick={() => setConfirming(backend.id)}
-                  >
-                    Revoke
-                  </Button>
-                ))}
-            </div>
-            <p className="text-muted mt-1 text-xs">
-              {(backend.capabilities ?? []).map(humanise).join(', ') || 'no capability'} ·{' '}
-              {backend.capacity?.activeRuns ?? 0}/{backend.capacity?.maxConcurrentRuns ?? 0} runs ·
-              last seen {when(backend.lastHeartbeatAt) || 'never'}
-            </p>
-            {(backend.conditions ?? []).map((condition) => (
-              <p key={condition.type} className="text-danger mt-1 text-xs break-words">
-                {condition.message || condition.reason || condition.type}
-              </p>
-            ))}
-          </li>
-        ))}
-      </ul>
-
-      {revoke.error && <p className="text-danger text-sm">{revoke.error.message}</p>}
-
-      <section className="border-border space-y-2 border-t pt-4">
-        <h3 className="text-sm font-medium">Add a backend</h3>
-        <p className="text-muted text-xs">
-          A one-shot token, good for one registration. Core returns it once and cannot show it
-          again.
-        </p>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={issue.isPending}
-          onClick={() => issue.mutate({ label: 'issued from the web client', ttlSeconds: 3600 })}
-        >
-          New registration token
-        </Button>
-
-        {issue.data && (
-          <div className="space-y-1">
-            <code className="bg-surface-2 block rounded-md p-2 text-xs break-all">
-              {issue.data.token}
-            </code>
-            <p className="text-muted text-xs">Valid until {when(issue.data.expiresAt)}.</p>
-          </div>
-        )}
-        {issue.error && <p className="text-danger text-sm">{issue.error.message}</p>}
-      </section>
-
-      <section className="border-border space-y-2 border-t pt-4">
-        <h3 className="text-sm font-medium">Claim an instance</h3>
-        <p className="text-muted text-xs">
-          A backend that registered without a user prints a one-time code. Claiming it makes it
-          yours.
-        </p>
-        <div className="flex gap-2">
-          <Input
-            value={claimCode}
-            onChange={(event) => setClaimCode(event.target.value)}
-            placeholder="claim code"
-          />
-          <Button
-            variant="secondary"
-            disabled={!claimCode.trim() || claim.isPending}
-            onClick={() => claim.mutate(claimCode.trim(), { onSuccess: () => setClaimCode('') })}
-          >
-            Claim
-          </Button>
-        </div>
-        {claim.error && <p className="text-danger text-sm">{claim.error.message}</p>}
-      </section>
-    </div>
-  );
-}
-
-function backendTone(backend: BackendInstance): BadgeTone {
-  if (backend.ownershipStatus === 'REVOKED') return 'danger';
-  if (backend.operationalStatus === 'READY') return 'ok';
-  if (backend.operationalStatus === 'DEGRADED') return 'warn';
-  return 'neutral';
 }
 
 const LAST_SESSIONS = 'threavia.lastSessions';

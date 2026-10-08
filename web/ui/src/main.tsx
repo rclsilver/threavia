@@ -7,6 +7,8 @@ import { SessionProvider } from './auth/session';
 import { router } from './router';
 import { StreamProvider } from './stream-provider';
 import './styles.css';
+// Applies the stored layout before anything is laid out.
+import './use-layout';
 
 const queries = new QueryClient({
   defaultOptions: {
