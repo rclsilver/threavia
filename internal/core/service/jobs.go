@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -403,6 +404,23 @@ func derefString(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func derefUserID(value *domain.UserID) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
+
+// resolvedAt renders the moment a request was answered. A resolved request
+// always has one; a nil is a row that contradicts its own check constraint,
+// and an absent timestamp says that more honestly than a zero one.
+func resolvedAt(value *time.Time) *timestamppb.Timestamp {
+	if value == nil {
+		return nil
+	}
+	return timestamppb.New(*value)
 }
 
 // policyToProto renders an execution policy for the wire.

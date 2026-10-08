@@ -229,6 +229,78 @@ func (s *Service) ReconcileState(ctx context.Context, instanceID domain.BackendI
 				},
 			})
 		}
+
+		// The backend is still on this Job, so whatever was already decided has
+		// to reach it again.
+		if !terminalJobStatus(reported.GetStatus()) {
+			s.replayResolutions(ctx, conn, job)
+		}
+	}
+}
+
+// replayResolutions re-sends the answers already given on a Job the backend is
+// still running.
+//
+// An answer travels Core to backend exactly once, over the control stream and
+// without an acknowledgement, so a stream that dies between the decision and
+// its delivery takes the decision with it. Nothing brings it back on its own:
+// the request is already RESOLVED, which is precisely what stops any client
+// from answering it a second time. The tool call it was meant to unblock then
+// waits for ever, its Job never ends, and every later message on that Session
+// queues behind it — a Session wedged by a question that was, in fact,
+// answered.
+//
+// Everything decided on the Job is re-sent rather than only what is still
+// awaited, because only the backend knows which that is, and it is built for
+// this: a resolution nothing waits for is dropped where it lands.
+func (s *Service) replayResolutions(ctx context.Context, conn *backendconn.Connection, job domain.Job) {
+	validations, err := s.store.ResolvedValidationsForJob(ctx, job.ID)
+	if err != nil {
+		s.logger.Error("cannot read the decisions to replay",
+			slog.String("jobId", string(job.ID)), slog.String("error", err.Error()))
+	}
+	for _, validation := range validations {
+		conn.Send(&backendv1.CoreToBackend{
+			CommandId: domain.NewUUID(),
+			Message: &backendv1.CoreToBackend_ValidationResolution{
+				ValidationResolution: &backendv1.ValidationResolution{
+					RunId:            string(job.RunID),
+					JobId:            string(job.ID),
+					RequestId:        validation.BackendRequestID,
+					Approved:         validation.Approved != nil && *validation.Approved,
+					ResolvedByUserId: derefUserID(validation.ResolvedByUserID),
+					ResolvedAt:       resolvedAt(validation.ResolvedAt),
+					Note:             derefString(validation.Note),
+				},
+			},
+		})
+	}
+
+	inputs, err := s.store.ResolvedUserInputsForJob(ctx, job.ID)
+	if err != nil {
+		s.logger.Error("cannot read the answers to replay",
+			slog.String("jobId", string(job.ID)), slog.String("error", err.Error()))
+	}
+	for _, input := range inputs {
+		conn.Send(&backendv1.CoreToBackend{
+			CommandId: domain.NewUUID(),
+			Message: &backendv1.CoreToBackend_UserInputResolution{
+				UserInputResolution: &backendv1.UserInputResolution{
+					RunId:            string(job.RunID),
+					JobId:            string(job.ID),
+					RequestId:        input.BackendRequestID,
+					Value:            derefString(input.Value),
+					ResolvedByUserId: derefUserID(input.ResolvedByUserID),
+					ResolvedAt:       resolvedAt(input.ResolvedAt),
+				},
+			},
+		})
+	}
+
+	if len(validations)+len(inputs) > 0 {
+		s.logger.Info("replayed the decisions of a job the backend is still running",
+			slog.String("jobId", string(job.ID)),
+			slog.Int("validations", len(validations)), slog.Int("userInputs", len(inputs)))
 	}
 }
 

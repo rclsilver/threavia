@@ -137,6 +137,58 @@ func (s *Store) PendingUserInputs(ctx context.Context, ownerID domain.UserID, se
 	return out, classify(rows.Err(), "list pending user inputs")
 }
 
+// ResolvedValidationsForJob returns the decisions already taken on one Job,
+// oldest first.
+//
+// Reconciliation reads them to re-send what a backend may never have received:
+// a decision travels over the control stream once, and a stream that dies
+// between the answer and its delivery takes the answer with it.
+func (s *Store) ResolvedValidationsForJob(ctx context.Context, jobID domain.JobID) ([]domain.ValidationRequest, error) {
+	rows, err := s.q.Query(ctx, `
+		SELECT `+validationColumns+`
+		FROM validation_requests v
+		WHERE v.job_id = $1 AND v.status = 'RESOLVED'
+		ORDER BY v.resolved_at`, jobID)
+	if err != nil {
+		return nil, classify(err, "list resolved validations")
+	}
+	defer rows.Close()
+
+	var out []domain.ValidationRequest
+	for rows.Next() {
+		request, err := scanValidationRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, request)
+	}
+	return out, classify(rows.Err(), "list resolved validations")
+}
+
+// ResolvedUserInputsForJob returns the answers already given on one Job, oldest
+// first, for the same reason as the validations above.
+func (s *Store) ResolvedUserInputsForJob(ctx context.Context, jobID domain.JobID) ([]domain.UserInputRequest, error) {
+	rows, err := s.q.Query(ctx, `
+		SELECT `+userInputColumns+`
+		FROM user_input_requests u
+		WHERE u.job_id = $1 AND u.status = 'RESOLVED'
+		ORDER BY u.resolved_at`, jobID)
+	if err != nil {
+		return nil, classify(err, "list resolved user inputs")
+	}
+	defer rows.Close()
+
+	var out []domain.UserInputRequest
+	for rows.Next() {
+		request, err := scanUserInputRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, request)
+	}
+	return out, classify(rows.Err(), "list resolved user inputs")
+}
+
 // AbandonJobAttention resolves every pending item of a Job that ended without
 // an answer, so a cancelled or failed Job leaves no ghost prompt behind.
 func (s *Store) AbandonJobAttention(ctx context.Context, jobID domain.JobID, reason string) error {

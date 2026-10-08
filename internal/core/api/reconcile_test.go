@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"testing"
 
+	"google.golang.org/protobuf/types/known/structpb"
+
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/core/domain"
 )
@@ -224,5 +226,75 @@ func TestDeletingASessionIsRefusedWhileItRuns(t *testing.T) {
 		nil, &listed, http.StatusOK)
 	if len(listed.Items) != 0 {
 		t.Fatalf("%d sessions left, want none", len(listed.Items))
+	}
+}
+
+// TestADecisionLostWithTheStreamIsSentAgain pins the one failure a client
+// cannot recover from on its own.
+//
+// A decision travels Core to backend once, over the control stream, without an
+// acknowledgement. If the stream dies between the answer and its delivery, the
+// answer is gone: the request is already RESOLVED, which is exactly what stops
+// anyone from answering it a second time, so the tool call it was meant to
+// unblock waits for ever and every later message queues behind a Session that
+// is wedged by a question that was, in fact, answered.
+//
+// Reconnecting has to put it back.
+func TestADecisionLostWithTheStreamIsSentAgain(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	session := c.startSession(projectID, c.backendID, dirID, "Modifie la configuration")
+	start := receive(t, "the dispatched job", backend.starts)
+
+	ctx := context.Background()
+	payload, err := structpb.NewStruct(map[string]any{"tool": "Bash", "command": "git push"})
+	if err != nil {
+		t.Fatalf("building the payload: %v", err)
+	}
+	requested := backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
+		return backend.events.ValidationRequested(ctx, start.GetRunId(), start.GetJobId(),
+			&backendv1.ValidationRequested{RequestId: "req-1", Title: "git push", RequestPayload: payload})
+	})
+	backend.emit(t, ctx, requested)
+	waitUntil(t, "the job to wait for validation", func() bool {
+		return c.jobStatus(session, start.GetJobId()) == "WAITING_VALIDATION"
+	})
+
+	var pending snapshotResponse
+	c.mustDo(http.MethodGet, "/api/v1/sessions/"+session, nil, &pending, http.StatusOK)
+	if len(pending.Attention.Validations) != 1 {
+		t.Fatalf("%d pending validations, want 1", len(pending.Attention.Validations))
+	}
+
+	// The answer is given at the moment the stream is dying. Core sends it
+	// once; draining it here is that loss, the frame that left Core and
+	// reached nobody.
+	c.mustDo(http.MethodPost, "/api/v1/validations/"+pending.Attention.Validations[0].ID+"/resolve",
+		map[string]any{"approved": true, "channel": "web"}, nil, http.StatusOK)
+	receive(t, "the decision Core sends once", backend.validations)
+
+	c.svc.Disconnected(ctx, backendInstance(t, c), "stale-connection")
+	waitUntil(t, "the job to be parked", func() bool {
+		return c.jobStatus(session, start.GetJobId()) == "WAITING_BACKEND"
+	})
+
+	// The backend never restarted: it still runs the Job, and is still blocked
+	// on the question nobody can answer twice.
+	c.svc.ReconcileState(ctx, backendInstance(t, c), &backendv1.ReconcileState{
+		Runs: []*backendv1.RunState{{
+			RunId: start.GetRunId(),
+			Jobs: []*backendv1.JobState{{
+				JobId:               start.GetJobId(),
+				Status:              backendv1.JobStatus_JOB_STATUS_RUNNING,
+				LastBackendSequence: requested.GetBackendSequence(),
+			}},
+		}},
+	})
+
+	resolution := receive(t, "the decision to be sent again", backend.validations)
+	if resolution.GetRequestId() != "req-1" {
+		t.Fatalf("replayed request %q, want req-1", resolution.GetRequestId())
+	}
+	if !resolution.GetApproved() {
+		t.Fatalf("the replayed decision is a refusal, want the approval that was given")
 	}
 }
