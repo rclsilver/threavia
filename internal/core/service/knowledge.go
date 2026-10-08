@@ -264,6 +264,26 @@ func (s *Service) CreateDecision(ctx context.Context, identity auth.Identity, pr
 	return decision, nil
 }
 
+// SetDecisionImportance pins a Decision to every Job of its Project, or
+// unpins it. Only the importance changes: what was decided is never edited,
+// a decision that changed is superseded.
+func (s *Service) SetDecisionImportance(ctx context.Context, identity auth.Identity, id domain.DecisionID, importance domain.DecisionImportance) (domain.Decision, error) {
+	if !importance.Valid() {
+		return domain.Decision{}, fmt.Errorf("%w: unknown importance %q", ErrInvalid, importance)
+	}
+	decision, err := s.store.SetDecisionImportance(ctx, identity.UserID, id, importance)
+	if err != nil {
+		return domain.Decision{}, translate(err)
+	}
+
+	s.emit(ctx, identity.UserID, events.TypeDecisionUpdated,
+		domain.Scope{ProjectID: decision.ProjectID}, DecisionPayload{
+			DecisionID: string(decision.ID), Title: decision.Title,
+			Importance: decision.Importance.String(),
+		})
+	return decision, nil
+}
+
 // ListDecisions returns the Decisions of a Project.
 // DeleteDecision removes a Decision from the Project memory.
 //

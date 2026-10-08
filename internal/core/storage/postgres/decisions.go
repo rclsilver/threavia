@@ -39,6 +39,17 @@ func (s *Store) ReviveDecision(ctx context.Context, id domain.DecisionID) error 
 	return classify(err, "revive a decision")
 }
 
+// SetDecisionImportance changes whether a Decision travels with every Job.
+// The content stays as it was recorded: what was decided is not edited, it is
+// superseded.
+func (s *Store) SetDecisionImportance(ctx context.Context, ownerID domain.UserID, id domain.DecisionID, importance domain.DecisionImportance) (domain.Decision, error) {
+	return scanDecision(s.q.QueryRow(ctx, `
+		UPDATE decisions d SET importance = $3, updated_at = now()
+		FROM projects p
+		WHERE d.id = $1 AND d.project_id = p.id AND p.owner_id = $2
+		RETURNING `+decisionColumns, id, ownerID, importance))
+}
+
 // DeleteDecision removes a Decision for good.
 //
 // A Decision that superseded it keeps its own record and simply stops pointing

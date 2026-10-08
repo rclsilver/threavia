@@ -601,6 +601,31 @@ export function useCreateDecision(projectId: string) {
   });
 }
 
+/**
+ * Pinning a Decision to every Job, or unpinning it.
+ *
+ * Shown at once: the row moves between its groups as the mark is pressed, and
+ * goes back if Core refuses.
+ */
+export function useSetDecisionImportance(projectId: string) {
+  const queries = useQueryClient();
+  const key = keys.decisions(projectId);
+  return useMutation({
+    mutationFn: ({ id, importance }: { id: string; importance: Decision['importance'] }) =>
+      api.patch<Decision>(`/api/v1/decisions/${id}`, { importance }),
+    onMutate: async ({ id, importance }) => {
+      await queries.cancelQueries({ queryKey: key });
+      const before = queries.getQueryData<Decision[]>(key);
+      queries.setQueryData<Decision[]>(key, (list) =>
+        list?.map((decision) => (decision.id === id ? { ...decision, importance } : decision)),
+      );
+      return { before };
+    },
+    onError: (_error, _input, context) => queries.setQueryData(key, context?.before),
+    onSettled: () => queries.invalidateQueries({ queryKey: ['decisions'] }),
+  });
+}
+
 export function useProjectSearch(projectId: string | undefined, query: string) {
   return useQuery({
     queryKey: ['search', projectId, query],

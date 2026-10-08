@@ -1,8 +1,6 @@
 import { Navigate, useParams } from '@tanstack/react-router';
 import {
   Check,
-  ChevronDown,
-  ChevronRight,
   Circle,
   CircleCheck,
   CircleDot,
@@ -12,7 +10,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   useAddTaskDependency,
@@ -25,6 +23,7 @@ import {
 } from '@/api/queries';
 import type { Task, TaskStatus } from '@/api/types';
 import { Button } from '@/components/ui/button';
+import { Fold } from '@/components/record-list';
 import { EmptyState } from '@/components/ui/card';
 import { ActionError } from '@/components/ui/action-error';
 import { Input, Textarea } from '@/components/ui/input';
@@ -37,6 +36,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from '@/components/ui/menu';
+import { useNewShortcut } from '@/use-new-shortcut';
 import { useSelectedProject } from '@/use-project';
 import { cn } from '@/lib/utils';
 
@@ -89,21 +89,9 @@ export function TasksView() {
     const timer = setTimeout(() => setFiled(undefined), 2500);
     return () => clearTimeout(timer);
   }, [filed]);
-  const [showDone, setShowDone] = useDoneShown(projectId);
 
-  // N files a Task, as in the trackers this page is read next to — unless the
-  // key was meant for a field, or a menu or dialog has it.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'n' || event.metaKey || event.ctrlKey || event.altKey) return;
-      const target = event.target as HTMLElement;
-      if (target.closest('input, textarea, select, [contenteditable="true"], [role="menu"], [role="dialog"]')) return;
-      event.preventDefault();
-      setFiling(true);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  // N files a Task, as in the trackers this page is read next to.
+  useNewShortcut(useCallback(() => setFiling(true), []));
 
   if (!projectId) {
     return (
@@ -220,50 +208,13 @@ export function TasksView() {
 
       {/* Finished work stays one click away, where the list ends, and counted
           so the click is not a guess. */}
-      {!loading && done.length > 0 && (
-        <section className="space-y-2">
-          <button
-            type="button"
-            aria-expanded={showDone}
-            onClick={() => setShowDone(!showDone)}
-            className="text-muted hover:text-text -mx-1 flex items-center gap-1 rounded px-1 text-xs tracking-wide uppercase"
-          >
-            {showDone ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-            Done · <span className="figures">{done.length}</span>
-          </button>
-          {showDone && <TaskList tasks={done} all={all} standing={standing} />}
-        </section>
+      {!loading && (
+        <Fold title="Done" count={done.length} storageKey={`threavia.tasks.done.${projectId}`}>
+          <TaskList tasks={done} all={all} standing={standing} />
+        </Fold>
       )}
     </div>
   );
-}
-
-/** Whether a Project's finished Tasks are shown, remembered per Project. */
-function useDoneShown(projectId: string | undefined): [boolean, (shown: boolean) => void] {
-  const key = `threavia.tasks.done.${projectId ?? ''}`;
-  const read = () => {
-    try {
-      return window.localStorage.getItem(key) === 'true';
-    } catch {
-      return false;
-    }
-  };
-  const [shown, setShown] = useState(read);
-  // Another Project, another choice.
-  const [seenKey, setSeenKey] = useState(key);
-  if (seenKey !== key) {
-    setSeenKey(key);
-    setShown(read());
-  }
-  const remember = (next: boolean) => {
-    setShown(next);
-    try {
-      window.localStorage.setItem(key, String(next));
-    } catch {
-      // The choice lasts this visit instead.
-    }
-  };
-  return [shown, remember];
 }
 
 /**

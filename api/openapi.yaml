@@ -1459,6 +1459,32 @@ paths:
         in: path
         required: true
         schema: { $ref: "#/components/schemas/UUID" }
+    patch:
+      tags: [knowledge]
+      summary: Pin or unpin a Decision
+      description: >
+        Changes whether the Decision travels with every Job of its Project.
+        Only the importance can change: what was decided is not edited, a
+        decision that changed is superseded by a new one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [importance]
+              properties:
+                importance: { $ref: "#/components/schemas/DecisionImportance" }
+      responses:
+        "200":
+          description: The Decision as it now stands
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Decision" }
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
     delete:
       tags: [knowledge]
       summary: Delete a Decision

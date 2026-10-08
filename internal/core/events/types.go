@@ -43,6 +43,7 @@ const (
 	TypeTaskDeleted        Type = "task.deleted"
 	TypeDecisionCreated    Type = "decision.created"
 	TypeDecisionSuperseded Type = "decision.superseded"
+	TypeDecisionUpdated    Type = "decision.updated"
 	TypeDecisionDeleted    Type = "decision.deleted"
 
 	TypeWorkingDirectoryChanged Type = "working_directory.changed"
@@ -84,6 +85,7 @@ var persistentTypes = map[Type]bool{
 	TypeTaskDeleted:             true,
 	TypeDecisionCreated:         true,
 	TypeDecisionSuperseded:      true,
+	TypeDecisionUpdated:         true,
 	TypeDecisionDeleted:         true,
 	TypeWorkingDirectoryChanged: true,
 	TypeWorkspaceChanged:        true,

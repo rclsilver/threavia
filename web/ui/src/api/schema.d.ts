@@ -2872,7 +2872,41 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Pin or unpin a Decision
+         * @description Changes whether the Decision travels with every Job of its Project. Only the importance can change: what was decided is not edited, a decision that changed is superseded by a new one.
+         *
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    decisionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        importance: components["schemas"]["DecisionImportance"];
+                    };
+                };
+            };
+            responses: {
+                /** @description The Decision as it now stands */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Decision"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+            };
+        };
         trace?: never;
     };
     "/api/v1/projects/{projectId}/search": {

@@ -200,6 +200,53 @@ func TestDecisionSupersession(t *testing.T) {
 	}
 }
 
+// TestDecisionPinning pins a Decision to every Job and back: the importance is
+// the one thing that changes, and only for the owner of the Project.
+func TestDecisionPinning(t *testing.T) {
+	store, ctx := newTestStore(t)
+	f := newFixture(t, store, ctx)
+
+	decision := domain.Decision{
+		ID: domain.NewDecisionID(), ProjectID: f.project.ID,
+		Title: "Pin chart versions", Content: "A floating version broke a rollout.",
+		Importance: domain.DecisionNormal, Status: domain.DecisionActive,
+	}
+	if err := store.CreateDecision(ctx, &decision); err != nil {
+		t.Fatalf("creating the decision: %v", err)
+	}
+
+	pinned, err := store.SetDecisionImportance(ctx, f.owner, decision.ID, domain.DecisionImportant)
+	if err != nil {
+		t.Fatalf("pinning: %v", err)
+	}
+	if pinned.Importance != domain.DecisionImportant || pinned.Content != decision.Content {
+		t.Fatalf("pinned decision = %+v, want IMPORTANT with its content unchanged", pinned)
+	}
+	important, err := store.ImportantDecisions(ctx, f.project.ID, 10)
+	if err != nil {
+		t.Fatalf("listing important decisions: %v", err)
+	}
+	if len(important) != 1 || important[0].ID != decision.ID {
+		t.Fatalf("a pinned decision must travel with every Job, got %+v", important)
+	}
+
+	if _, err := store.SetDecisionImportance(ctx, f.owner, decision.ID, domain.DecisionNormal); err != nil {
+		t.Fatalf("unpinning: %v", err)
+	}
+	important, err = store.ImportantDecisions(ctx, f.project.ID, 10)
+	if err != nil {
+		t.Fatalf("listing important decisions: %v", err)
+	}
+	if len(important) != 0 {
+		t.Fatalf("an unpinned decision must stop travelling, got %+v", important)
+	}
+
+	// Someone else's decision is not found, rather than changed.
+	if _, err := store.SetDecisionImportance(ctx, "someone-else", decision.ID, domain.DecisionImportant); !errors.Is(err, postgres.ErrNotFound) {
+		t.Fatalf("pinning another user's decision: got %v, want ErrNotFound", err)
+	}
+}
+
 // TestKnowledgeSearch pins the searchable half of project memory: NORMAL
 // decisions and the message history are found without being injected anywhere.
 func TestKnowledgeSearch(t *testing.T) {
