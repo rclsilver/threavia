@@ -149,6 +149,10 @@
   .prose-agent > * + * {
     @apply mt-3;
   }
+  /* A heading that opens the text starts at its top edge, not a gap below it. */
+  .prose-agent > :first-child {
+    @apply mt-0;
+  }
   .prose-agent h1,
   .prose-agent h2,
   .prose-agent h3 {

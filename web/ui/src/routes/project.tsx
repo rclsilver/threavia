@@ -5,6 +5,7 @@ import {
   Copy,
   Download,
   Eye,
+  Pencil,
   File as FileIcon,
   FileArchive,
   FileCode,
@@ -36,6 +37,7 @@ import {
   useUpdateProject,
 } from '@/api/queries';
 import type { Artifact, Decision, ExecutionPolicy, Skill, SkillSourceType } from '@/api/types';
+import { Markdown } from '@/components/markdown';
 import { PolicyForm, RulesEditor } from '@/components/policy-form';
 import { SkillViewer } from '@/components/skill-viewer';
 import {
@@ -53,7 +55,7 @@ import { CheckboxField } from '@/components/ui/checkbox';
 import { Card, EmptyState } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { MenuItem, MenuSeparator } from '@/components/ui/menu';
-import { useNewShortcut } from '@/use-new-shortcut';
+import { useShortcut } from '@/use-shortcut';
 import { bytes, cn, humanise, when } from '@/lib/utils';
 
 /**
@@ -105,7 +107,7 @@ function useProjectId(): string {
 /** Whether the panel that makes a new one is open, and N to open it. */
 function useCreating(): [boolean, (open: boolean) => void] {
   const [creating, setCreating] = useState(false);
-  useNewShortcut(useCallback(() => setCreating(true), []));
+  useShortcut('n', useCallback(() => setCreating(true), []));
   return [creating, setCreating];
 }
 
@@ -127,7 +129,7 @@ export function ArtifactsView() {
   const projectId = useProjectId();
   const upload = useUploadArtifact(projectId);
   const picker = useRef<HTMLInputElement>(null);
-  useNewShortcut(useCallback(() => picker.current?.click(), []));
+  useShortcut('n', useCallback(() => picker.current?.click(), []));
   return (
     <Section
       title="Artifacts"
@@ -182,9 +184,26 @@ export function SkillsView() {
 
 export function InstructionsView() {
   const projectId = useProjectId();
+  const [editing, setEditing] = useState(false);
+  // E edits, as N makes a new one elsewhere.
+  useShortcut('e', useCallback(() => setEditing(true), []));
   return (
-    <Section title="Instructions" subtitle="The standing rules every Job of this Project reads.">
-      <InstructionsPane projectId={projectId} />
+    <Section
+      title="Instructions"
+      subtitle="The standing rules every Job of this Project reads first."
+      action={
+        !editing && (
+          <Button size="lg" className="gap-1.5" title="Edit the instructions (E)" aria-keyshortcuts="E" onClick={() => setEditing(true)}>
+            <Pencil />
+            Edit
+            <kbd className="text-muted border-border ml-1 hidden rounded border px-1 font-sans text-[0.6875rem] leading-4 sm:inline">
+              E
+            </kbd>
+          </Button>
+        )
+      }
+    >
+      <InstructionsPane projectId={projectId} editing={editing} onEditingChange={setEditing} />
     </Section>
   );
 }
@@ -752,46 +771,188 @@ function SkillRow({ skill, projectId }: { skill: Skill; projectId: string }) {
 
 // -------------------------------------------------------------- instructions
 
-function InstructionsPane({ projectId }: { projectId: string }) {
+/**
+ * The Project's standing rules: read as the agent will read them, and written
+ * in a panel that shows the same rendering before it is saved.
+ *
+ * It used to be a bare text box under a paragraph, saved by a button that went
+ * grey once pressed. Rules are read far more often than they are written, so
+ * reading is the page and writing is a mode of it.
+ */
+function InstructionsPane({
+  projectId,
+  editing,
+  onEditingChange,
+}: {
+  projectId: string;
+  editing: boolean;
+  onEditingChange: (editing: boolean) => void;
+}) {
   const project = useProject(projectId);
-  const update = useUpdateProject(projectId);
-  const [draft, setDraft] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const text = project.data?.instructions ?? '';
 
+  // "Saved" is said once, then the page is simply the page again.
   useEffect(() => {
-    if (project.data) setDraft(project.data.instructions ?? '');
-  }, [project.data]);
+    if (!saved) return;
+    const timer = setTimeout(() => setSaved(false), 3000);
+    return () => clearTimeout(timer);
+  }, [saved]);
+
+  if (project.isPending) return <p className="text-muted text-sm">Reading the instructions…</p>;
+  if (project.error) {
+    return <ActionError error={project.error} outcome="The instructions could not be read" recovery="Reload the page." />;
+  }
 
   return (
-    <div className="max-w-3xl space-y-3">
-      <p className="text-muted text-sm">
-        Provider-independent rules every agent on this project follows. The backend maps them to
-        whatever its provider reads.
+    <>
+      <p role="status" className="sr-only">
+        {saved ? 'Instructions saved.' : ''}
       </p>
-      <Textarea
-        rows={14}
-        value={draft ?? ''}
-        onChange={(event) => {
-          setDraft(event.target.value);
-          // "Saved" describes the text that was saved, not this one.
-          update.reset();
-        }}
-        placeholder="Always run the chart tests before packaging."
-      />
-      <Button
-        variant="primary"
-        disabled={draft === null || update.isPending || update.isSuccess}
-        onClick={() => update.mutate({ instructions: draft ?? '' })}
-      >
-        {update.isPending ? 'Saving…' : update.isSuccess ? (
-          <>
-            <Check /> Saved
-          </>
-        ) : (
-          'Save'
-        )}
-      </Button>
-      <ActionError error={update.error} />
-    </div>
+      {editing ? (
+        <InstructionsEditor
+          projectId={projectId}
+          initial={text}
+          onDone={(didSave) => {
+            onEditingChange(false);
+            setSaved(didSave);
+          }}
+        />
+      ) : text.trim() ? (
+        <article className="bg-surface border-border max-w-reading rounded-xl border px-5 py-4">
+          <Markdown>{text}</Markdown>
+        </article>
+      ) : (
+        <EmptyState>
+          No instructions yet. Write the rules every agent on this project follows — how to test,
+          what never to touch, how to ship — and each Job reads them before it starts.{' '}
+          <button type="button" className="text-text font-medium underline underline-offset-2" onClick={() => onEditingChange(true)}>
+            Write them
+          </button>
+        </EmptyState>
+      )}
+      {saved && (
+        <p className="text-ok -mt-2 flex items-center gap-1 text-xs">
+          <Check className="size-3.5" /> Saved.
+        </p>
+      )}
+      <p className="text-muted max-w-reading text-xs">
+        Provider-independent: the backend running a Job hands them to its agent in whatever form that
+        agent reads. A Job already running keeps the instructions it started with.
+      </p>
+    </>
+  );
+}
+
+/**
+ * Writing the instructions, with the rendering one switch away. Leaving with
+ * unsaved changes asks first, here and when the tab is closed.
+ */
+function InstructionsEditor({
+  projectId,
+  initial,
+  onDone,
+}: {
+  projectId: string;
+  initial: string;
+  onDone: (saved: boolean) => void;
+}) {
+  const update = useUpdateProject(projectId);
+  const [draft, setDraft] = useState(initial);
+  const [preview, setPreview] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+  const dirty = draft !== initial;
+
+  useEffect(() => {
+    if (!dirty) return;
+    const onLeave = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', onLeave);
+    return () => window.removeEventListener('beforeunload', onLeave);
+  }, [dirty]);
+
+  const save = () => {
+    if (!dirty || update.isPending) return;
+    update.mutate({ instructions: draft }, { onSuccess: () => onDone(true) });
+  };
+  const cancel = () => (dirty ? setDiscarding(true) : onDone(false));
+
+  return (
+    <form
+      className="bg-surface border-border space-y-3 rounded-xl border p-3 shadow-xs"
+      onSubmit={(event) => {
+        event.preventDefault();
+        save();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 's' && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          save();
+        } else if (event.key === 'Escape' && !event.defaultPrevented) {
+          cancel();
+        }
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <div role="radiogroup" aria-label="View" className="border-border bg-surface-2 text-muted flex w-fit rounded-md border p-0.5 text-xs">
+          {[
+            { value: false, label: 'Write' },
+            { value: true, label: 'Preview' },
+          ].map((option) => (
+            <button
+              key={option.label}
+              type="button"
+              role="radio"
+              aria-checked={preview === option.value}
+              onClick={() => setPreview(option.value)}
+              className={cn('min-h-11 rounded px-2.5 sm:min-h-7', preview === option.value && 'bg-surface text-text shadow-sm')}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <span className="text-muted text-xs">Markdown</span>
+        {dirty && <span className="text-warn-text ml-auto text-xs">Unsaved changes</span>}
+      </div>
+
+      {preview ? (
+        <div className="border-border min-h-80 rounded-md border px-4 py-3">
+          {draft.trim() ? <Markdown>{draft}</Markdown> : <p className="text-muted text-sm">Nothing to preview yet.</p>}
+        </div>
+      ) : (
+        <Textarea
+          autoFocus
+          aria-label="Instructions"
+          rows={16}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={'- Always run the chart tests before packaging.\n- Never push to master without a review.'}
+          className="min-h-80 font-mono text-[0.8125rem] leading-6"
+        />
+      )}
+
+      <ActionError error={update.error} outcome="Not saved" recovery="Your text is still here; save it again." />
+
+      {discarding ? (
+        <div className="border-border border-t pt-3">
+          <ConfirmLine
+            question="Discard your changes?"
+            confirm="Discard"
+            onConfirm={() => onDone(false)}
+            onCancel={() => setDiscarding(false)}
+          />
+        </div>
+      ) : (
+        <div className="border-border flex items-center justify-end gap-2 border-t pt-3">
+          <span className="text-muted mr-auto hidden text-xs sm:inline">Ctrl+S saves · Esc cancels</span>
+          <Button type="button" variant="ghost" size="lg" onClick={cancel}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" size="lg" disabled={!dirty || update.isPending}>
+            {update.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      )}
+    </form>
   );
 }
 

@@ -36,7 +36,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from '@/components/ui/menu';
-import { useNewShortcut } from '@/use-new-shortcut';
+import { useShortcut } from '@/use-shortcut';
 import { useSelectedProject } from '@/use-project';
 import { cn } from '@/lib/utils';
 
@@ -91,7 +91,7 @@ export function TasksView() {
   }, [filed]);
 
   // N files a Task, as in the trackers this page is read next to.
-  useNewShortcut(useCallback(() => setFiling(true), []));
+  useShortcut('n', useCallback(() => setFiling(true), []));
 
   if (!projectId) {
     return (
