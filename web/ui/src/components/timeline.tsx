@@ -12,6 +12,7 @@ import {
   CornerDownLeft,
   FileDiff,
   Flag,
+  Layers,
   ShieldCheck,
   ShieldX,
   Square,
@@ -51,11 +52,32 @@ const RENDERED = new Set([
   'job.cancelled',
 ]);
 
-/** One line of the timeline: a plain event, a tool call, or a change of day. */
+/**
+ * One line of the timeline: a plain event, a tool call, a change of day, or the
+ * folded steps of a finished Job.
+ */
 type Row =
   | { kind: 'event'; key: number; event: Event; startedAt?: string }
-  | { kind: 'tool'; key: number; call: ToolCall }
-  | { kind: 'day'; key: number; label: string };
+  | { kind: 'tool'; key: number; call: ToolCall; jobId?: string }
+  | { kind: 'day'; key: number; label: string }
+  | { kind: 'steps'; key: number; at: string; steps: Steps; open: boolean };
+
+/** What a fold holds, counted, so it can be judged without opening it. */
+interface Steps {
+  tools: number;
+  failed: number;
+  notes: number;
+}
+
+/** How a Job ends, in the log. */
+const ENDINGS = new Set(['job.completed', 'job.failed', 'job.cancelled']);
+
+/** The Job a row belongs to, if any. */
+function jobOf(row: Row): string | undefined {
+  if (row.kind === 'tool') return row.jobId;
+  if (row.kind === 'event') return row.event.jobId || undefined;
+  return undefined;
+}
 
 /**
  * The day an event belongs to, named the way a person would.
@@ -94,7 +116,7 @@ function dayOf(timestamp: string): { key: string; label: string } {
  */
 function rowsOf(events: Event[]): Row[] {
   const rows: Row[] = [];
-  const byCall = new Map<string, { kind: 'tool'; key: number; call: ToolCall }>();
+  const byCall = new Map<string, Extract<Row, { kind: 'tool' }>>();
   // When each Job started, so its ending can say how long it took. The timeline
   // already carries both timestamps; asking the server again would be slower
   // and no more true.
@@ -121,6 +143,7 @@ function rowsOf(events: Event[]): Row[] {
       const row = {
         kind: 'tool' as const,
         key: event.sequence,
+        jobId: event.jobId || undefined,
         call: {
           id: started.toolCallId || `${event.sequence}`,
           name: started.name,
@@ -156,6 +179,7 @@ function rowsOf(events: Event[]): Row[] {
         rows.push({
           kind: 'tool',
           key: event.sequence,
+          jobId: event.jobId || undefined,
           call: {
             id: failed.toolCallId || `${event.sequence}`,
             name: failed.name,
@@ -183,6 +207,77 @@ function rowsOf(events: Event[]): Row[] {
 }
 
 /**
+ * Folds the work of every finished Job behind one line.
+ *
+ * While a Job runs, each step is shown as it happens: that is how a person
+ * follows what the agent is doing. Once it has ended, what is left to read is
+ * what was asked and what came back; the thirty commands in between are a
+ * record, kept one click away rather than scrolled through. What stays out:
+ * the person's messages, the agent's last word, and how the Job ended. Two
+ * steps or more fold — one alone is already a single line.
+ */
+function foldFinished(rows: Row[], opened: ReadonlySet<number>): Row[] {
+  const finished = new Set<string>();
+  const answer = new Map<string, number>();
+  for (const row of rows) {
+    if (row.kind !== 'event' || !row.event.jobId) continue;
+    if (ENDINGS.has(row.event.type)) finished.add(row.event.jobId);
+    if (row.event.type === 'agent.message') answer.set(row.event.jobId, row.key);
+  }
+  if (finished.size === 0) return rows;
+
+  const folds = (row: Row) => {
+    const job = jobOf(row);
+    if (!job || !finished.has(job) || row.kind === 'day' || row.kind === 'steps') return false;
+    if (row.kind === 'tool') return true;
+    const type = row.event.type;
+    return !(type === 'user.message' || ENDINGS.has(type) || row.key === answer.get(job));
+  };
+
+  const out: Row[] = [];
+  for (let index = 0; index < rows.length; ) {
+    const row = rows[index];
+    if (!folds(row)) {
+      out.push(row);
+      index++;
+      continue;
+    }
+    const job = jobOf(row);
+    let end = index;
+    while (end < rows.length && folds(rows[end]) && jobOf(rows[end]) === job) end++;
+    const group = rows.slice(index, end);
+    index = end;
+    if (group.length < 2) {
+      out.push(...group);
+      continue;
+    }
+    const steps: Steps = { tools: 0, failed: 0, notes: 0 };
+    for (const step of group) {
+      if (step.kind === 'tool') {
+        steps.tools++;
+        if (step.call.error !== undefined) steps.failed++;
+      } else if (step.kind === 'event' && step.event.type === 'agent.message') {
+        steps.notes++;
+      }
+    }
+    // Keyed just after its first step, so it sorts where the steps began and
+    // keeps its measured size when rows around it change.
+    const key = group[0].key + 0.5;
+    const first = group[0];
+    const at = first.kind === 'tool' ? first.call.at : first.kind === 'event' ? first.event.timestamp : '';
+    const open = opened.has(key);
+    out.push({ kind: 'steps', key, at, steps, open });
+    if (open) out.push(...group);
+  }
+  return out;
+}
+
+/** Whether more of the timeline lies below what is on screen. */
+function below(element: HTMLElement): boolean {
+  return element.scrollHeight - element.scrollTop - element.clientHeight > 8;
+}
+
+/**
  * The Session timeline.
  *
  * Virtualised because a Session is append-only and unbounded: a long one holds
@@ -202,8 +297,10 @@ export function Timeline({
   earlier?: { more: boolean; loading: boolean; load: () => void };
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const rows = useMemo(() => rowsOf(events), [events]);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [opened, setOpened] = useState<ReadonlySet<number>>(new Set());
+  const all = useMemo(() => rowsOf(events), [events]);
+  const rows = useMemo(() => foldFinished(all, opened), [all, opened]);
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -243,7 +340,6 @@ export function Timeline({
       lastIntent.current = Date.now();
       if (up) {
         stick.current = false;
-        setAway(true);
       }
     };
     const onWheel = (event: WheelEvent) => intent(event.deltaY < 0);
@@ -272,7 +368,7 @@ export function Timeline({
       } else if (Date.now() - lastIntent.current < 600) {
         stick.current = false;
       }
-      setAway(!stick.current);
+      setAway(!stick.current && below(element));
       if (element.scrollTop < 400) reachTop.current();
     };
     element.addEventListener('wheel', onWheel, { passive: true });
@@ -380,6 +476,17 @@ export function Timeline({
     }
   });
 
+  // The way back down is offered only when there is a way down: a reader who
+  // turned the wheel or opened a step on a conversation that fits on screen
+  // has nothing below to return to. And with nothing to scroll there is
+  // nothing to have scrolled away from, so the next line is followed again.
+  useLayoutEffect(() => {
+    const element = parentRef.current;
+    if (!element) return;
+    if (element.scrollHeight <= element.clientHeight + 8) stick.current = true;
+    setAway(!stick.current && below(element));
+  });
+
   // A way back to the latest line, for a reader who scrolled up to read and
   // now wants to see what the agent is doing.
   const toLatest = () => {
@@ -390,12 +497,27 @@ export function Timeline({
     element.scrollTop = element.scrollHeight;
   };
 
-  const toggle = (id: string) =>
+  // Opening something is reading it: following the bottom would pull what was
+  // just opened out of sight as it grows.
+  const holdStill = () => {
+    stick.current = false;
+  };
+  const toggle = (id: string) => {
+    holdStill();
     setExpanded((current) => {
       const next = new Set(current);
       if (!next.delete(id)) next.add(id);
       return next;
     });
+  };
+  const toggleSteps = (key: number) => {
+    holdStill();
+    setOpened((current) => {
+      const next = new Set(current);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  };
 
   // The scroller is rendered even when empty: the listeners above attach to it
   // once, and a Session that starts empty would otherwise never get them.
@@ -446,7 +568,9 @@ export function Timeline({
                   // column empty and runs beside it.
                   <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-x-2 sm:grid-cols-[3.25rem_minmax(0,1fr)]">
                     <Gutter row={row} />
-                    {row.kind === 'tool' ? (
+                    {row.kind === 'steps' ? (
+                      <StepsEntry row={row} onToggle={() => toggleSteps(row.key)} />
+                    ) : row.kind === 'tool' ? (
                       <ToolCallEntry
                         call={row.call}
                         expanded={expanded.has(row.call.id)}
@@ -551,18 +675,61 @@ function Entry({
 /** The time of a row, in the log's gutter, aligned with its first line. */
 function Gutter({ row }: { row: Exclude<Row, { kind: 'day' }> }) {
   if (row.kind === 'event' && row.event.type === 'agent.message') return <span />;
-  const at = row.kind === 'tool' ? row.call.at : row.event.timestamp;
+  const at = row.kind === 'tool' ? row.call.at : row.kind === 'steps' ? row.at : row.event.timestamp;
   const user = row.kind === 'event' && row.event.type === 'user.message';
   return (
     <time
       dateTime={at}
       className={cn(
         'text-muted text-right font-mono text-[0.6875rem] leading-5',
-        row.kind === 'tool' ? 'pt-1' : user ? 'pt-2' : 'pt-px',
+        row.kind === 'tool' || row.kind === 'steps' ? 'pt-1' : user ? 'pt-2' : 'pt-px',
       )}
     >
       {clock(at)}
     </time>
+  );
+}
+
+/**
+ * The folded work of a finished Job: one line saying how much there was and
+ * whether any of it went wrong, which opens onto the steps themselves.
+ */
+function StepsEntry({
+  row,
+  onToggle,
+}: {
+  row: Extract<Row, { kind: 'steps' }>;
+  onToggle: () => void;
+}) {
+  const { tools, failed, notes } = row.steps;
+  const parts = [
+    tools > 0 && `${tools} ${tools === 1 ? 'step' : 'steps'}`,
+    notes > 0 && `${notes} ${notes === 1 ? 'message' : 'messages'}`,
+  ].filter(Boolean);
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={row.open}
+      className="hover:bg-surface-2 text-muted hover:text-text flex w-full items-center gap-2 rounded-(--radius-card) px-2 py-1 text-left text-xs transition-colors"
+    >
+      {row.open ? (
+        <ChevronDown className="size-3.5 shrink-0" />
+      ) : (
+        <ChevronRight className="size-3.5 shrink-0" />
+      )}
+      <Layers className="size-3.5 shrink-0" />
+      <span className="figures">
+        {row.open ? 'Hide ' : ''}
+        {parts.join(' · ') || 'Steps'}
+      </span>
+      {failed > 0 && (
+        <span className="text-danger figures flex items-center gap-1">
+          <AlertTriangle className="size-3" />
+          {failed} failed
+        </span>
+      )}
+    </button>
   );
 }
 
