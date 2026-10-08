@@ -213,7 +213,8 @@ function rowsOf(events: Event[]): Row[] {
  * follows what the agent is doing. Once it has ended, what is left to read is
  * what was asked and what came back; the thirty commands in between are a
  * record, kept one click away rather than scrolled through. What stays out:
- * the person's messages, the agent's last word, and how the Job ended. Two
+ * the person's messages, the files the Job changed, the agent's last word,
+ * and how the Job ended. Two
  * steps or more fold — one alone is already a single line.
  */
 function foldFinished(rows: Row[], opened: ReadonlySet<number>): Row[] {
@@ -231,7 +232,9 @@ function foldFinished(rows: Row[], opened: ReadonlySet<number>): Row[] {
     if (!job || !finished.has(job) || row.kind === 'day' || row.kind === 'steps') return false;
     if (row.kind === 'tool') return true;
     const type = row.event.type;
-    return !(type === 'user.message' || ENDINGS.has(type) || row.key === answer.get(job));
+    // What the job changed in the files is part of its result, not of how it
+    // got there, so it stays out with the answer.
+    return !(type === 'user.message' || type === 'workspace.changed' || ENDINGS.has(type) || row.key === answer.get(job));
   };
 
   const out: Row[] = [];
@@ -708,6 +711,7 @@ function StepsEntry({
   ].filter(Boolean);
   return (
     <button
+      data-tour="steps"
       type="button"
       onClick={onToggle}
       aria-expanded={row.open}
@@ -836,7 +840,7 @@ function WorkspaceChange({
     });
 
   return (
-    <div className="bg-surface border-border rounded-(--radius-card) border px-3 py-2 text-sm">
+    <div data-tour="workspace" className="bg-surface border-border rounded-(--radius-card) border px-3 py-2 text-sm">
       <div className="text-muted flex items-center gap-2">
         <FileDiff className="size-3.5" />
         <span>

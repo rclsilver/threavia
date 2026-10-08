@@ -361,6 +361,7 @@ function Composer({
           would have to go looking for it. This stops the oldest Job still
           going, which is the one everything else is queued behind. */}
       <form
+        data-tour="composer"
         onSubmit={(event) => {
           event.preventDefault();
           submit();

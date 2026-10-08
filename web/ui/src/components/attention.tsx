@@ -68,7 +68,7 @@ export function AttentionPanel({
   if (validations.length === 0 && userInputs.length === 0 && recent.length === 0) return null;
 
   return (
-    <div className={cn('space-y-2', className)}>
+    <div data-tour="attention" className={cn('space-y-2', className)}>
       {validations.map((request) => (
         <ValidationCard key={request.id} request={request} showSession={showSession} />
       ))}

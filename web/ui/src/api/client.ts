@@ -65,7 +65,36 @@ export function authorize(headers: Headers): Headers {
   return headers;
 }
 
+/**
+ * Somewhere else to send requests: the demo answers them in the browser, and
+ * nothing reaches a server. Unset, every request goes to Core.
+ */
+export interface Transport {
+  request: (method: string, path: string, body: unknown) => Promise<unknown>;
+  upload: (path: string, file: File) => Promise<unknown>;
+  href: (path: string) => string;
+  /** Told after every change, so the views reread what changed. */
+  changed: () => void;
+}
+
+let transport: Transport | null = null;
+
+export function setTransport(next: Transport) {
+  transport = next;
+}
+
+/** The address of something to download, wherever requests go. */
+export function hrefFor(path: string): string {
+  return transport ? transport.href(path) : path;
+}
+
 async function request<T>(method: string, path: string, init: RequestInit = {}): Promise<T> {
+  if (transport) {
+    const body = typeof init.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined;
+    const result = (await transport.request(method, path, body)) as T;
+    if (method !== 'GET') transport.changed();
+    return result;
+  }
   const headers = authorize(new Headers(init.headers));
 
   const response = await fetch(path, { ...init, method, headers });
@@ -105,6 +134,13 @@ export const api = {
 
   /** Uploads a file. An artifact and a skill bundle travel as bytes, not as a field. */
   upload: <T>(path: string, file: File, fields: Record<string, string> = {}) => {
+    if (transport) {
+      const done = transport.upload(path, file) as Promise<T>;
+      return done.then((result) => {
+        transport?.changed();
+        return result;
+      });
+    }
     const form = new FormData();
     form.append('file', file);
     for (const [key, value] of Object.entries(fields)) {

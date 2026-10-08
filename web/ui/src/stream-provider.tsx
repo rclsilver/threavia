@@ -14,22 +14,24 @@ const ACTIVITY_TTL = 15_000;
  * One stream per user carries every Session, so this sits above the router: a
  * navigation must not drop the connection and replay history to get it back.
  */
-export function StreamProvider({ children }: { children: ReactNode }) {
+export function StreamProvider({ children, demo = false }: { children: ReactNode; demo?: boolean }) {
   const queries = useQueryClient();
-  const [connected, setConnected] = useState(false);
+  // The demo has no Core to stream from; what it shows is already all there.
+  const [connected, setConnected] = useState(demo);
   const [activity, setActivity] = useState<Record<string, Activity>>({});
   const stream = useRef<EventStream | null>(null);
 
   stream.current ??= new EventStream(queries);
 
   useEffect(() => {
+    if (demo) return;
     const live = stream.current!;
     followPresence();
     live.open(setConnected, (signal) => {
       setActivity((current) => ({ ...current, [signal.sessionId]: signal }));
     });
     return () => live.close();
-  }, []);
+  }, [demo]);
 
   // A signal is liveness, so it expires rather than lingering as a stale claim
   // that something is still running.

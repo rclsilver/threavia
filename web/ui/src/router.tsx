@@ -9,7 +9,10 @@ import {
 
 import { CALLBACK_PATH } from '@/auth/oidc';
 import { landingPath } from '@/auth/landing';
+import { lazy, Suspense } from 'react';
+
 import { AppShell } from '@/components/app-shell';
+import { DEMO } from '@/demo/mode';
 import { DraftView } from '@/routes/draft';
 import {
   ArtifactsView,
@@ -25,10 +28,18 @@ import { SessionSettingsView, type SettingsTab } from '@/routes/session-settings
 import { TasksView } from '@/routes/tasks';
 import { HomeView, WaitingView } from '@/routes/waiting';
 
+// The tour exists only in the demo, and is fetched only there.
+const DemoTour = lazy(() => import('@/demo/tour'));
+
 const rootRoute = createRootRoute({
   component: () => (
     <AppShell>
       <Outlet />
+      {DEMO && (
+        <Suspense fallback={null}>
+          <DemoTour />
+        </Suspense>
+      )}
     </AppShell>
   ),
 });
@@ -202,7 +213,9 @@ const routeTree = rootRoute.addChildren([
   projectRoute,
 ]);
 
-export const router = createRouter({ routeTree, defaultPreload: 'intent' });
+// The demo is the whole client under /demo, so every link it follows stays in
+// the demo.
+export const router = createRouter({ routeTree, defaultPreload: 'intent', basepath: DEMO ? '/demo' : undefined });
 
 declare module '@tanstack/react-router' {
   interface Register {

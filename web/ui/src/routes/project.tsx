@@ -38,6 +38,7 @@ import {
 import type { Artifact, Decision, ExecutionPolicy, Skill, SkillSourceType } from '@/api/types';
 import { AuditTimeline } from '@/components/audit-timeline';
 import { Markdown } from '@/components/markdown';
+import { hrefFor } from '@/api/client';
 import { PolicyForm, RulesEditor } from '@/components/policy-form';
 import { SkillViewer } from '@/components/skill-viewer';
 import {
@@ -506,7 +507,7 @@ function ArtifactsPane({
 function ArtifactRow({ artifact, projectId }: { artifact: Artifact; projectId: string }) {
   const remove = useDeleteArtifact(projectId);
   const [asking, setAsking] = useState(false);
-  const href = `/api/v1/artifacts/${artifact.id}/content`;
+  const href = hrefFor(`/api/v1/artifacts/${artifact.id}/content`);
 
   return (
     <RecordRow

@@ -38,6 +38,7 @@ import {
   useTasks,
 } from '@/api/queries';
 import type { BackendInstance, Project, Session } from '@/api/types';
+import { DEMO } from '@/demo/mode';
 import { SelectedProject } from '@/use-project';
 import { useStream } from '@/use-stream';
 import { Logo } from '@/components/logo';
@@ -187,9 +188,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {waitingCount} waiting
           </Link>
         )}
-        <Badge tone={connected ? 'ok' : 'neutral'} title="Realtime stream" className="ml-auto">
-          {connected ? 'live' : 'offline'}
-        </Badge>
+        <StreamBadge connected={connected} />
       </div>
 
       {drawer && (
@@ -227,9 +226,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Logo className="h-5 w-auto" />
                 Threavia
               </span>
-              <Badge tone={connected ? 'ok' : 'neutral'} title="Realtime stream" className="ml-auto">
-                {connected ? 'live' : 'offline'}
-              </Badge>
+              <StreamBadge connected={connected} />
             </>
           )}
           {wide ? (
@@ -265,7 +262,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {projectId && <ProjectNav projectId={projectId} />}
         </section>
 
-        <section className="flex min-h-0 flex-1 flex-col gap-2">
+        <section data-tour="sessions" className="flex min-h-0 flex-1 flex-col gap-2">
           <div className="flex items-center justify-between">
             <Label>{showArchived ? 'Archived sessions' : 'Sessions'}</Label>
             <div className="flex items-center">
@@ -451,7 +448,7 @@ function WaitingLink({ count, active, collapsed = false }: { count: number; acti
     );
   }
   return (
-    <Link to="/waiting" className={cn(nav.className, active && nav.activeProps.className)}>
+    <Link to="/waiting" data-tour="waiting" className={cn(nav.className, active && nav.activeProps.className)}>
       <Inbox className={cn('size-4', count > 0 ? 'text-warn-text' : 'text-muted')} />
       <span className={cn('flex-1', count > 0 && 'font-medium')}>Waiting</span>
       {count > 0 && <Badge tone="warn" className="figures">{count}</Badge>}
@@ -644,6 +641,7 @@ function UserMenu({
         ) : (
           <button
             type="button"
+            data-tour="user"
             className="hover:bg-surface-2 data-[state=open]:bg-surface-2 flex w-full items-center gap-2.5 rounded-lg p-2 text-left"
           >
             <Avatar name={name} />
@@ -837,5 +835,29 @@ function NewProjectDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Whether the stream is up — or, in the demo, that this is the demo, and the
+ * way back into its tour.
+ */
+function StreamBadge({ connected }: { connected: boolean }) {
+  if (DEMO) {
+    return (
+      <button
+        type="button"
+        title="Fictitious data, nothing leaves this browser. Restart the tour."
+        onClick={() => window.dispatchEvent(new Event('threavia:tour'))}
+        className="bg-accent/12 text-accent hover:bg-accent/20 ml-auto rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap"
+      >
+        Demo
+      </button>
+    );
+  }
+  return (
+    <Badge tone={connected ? 'ok' : 'neutral'} title="Realtime stream" className="ml-auto">
+      {connected ? 'live' : 'offline'}
+    </Badge>
   );
 }
