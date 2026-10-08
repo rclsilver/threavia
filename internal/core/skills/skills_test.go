@@ -156,6 +156,56 @@ func TestPackIsDeterministic(t *testing.T) {
 	}
 }
 
+// TestFilesReadsTheBundleBack pins what a person is shown of an installed
+// Skill: every file, the text of the readable ones, and nothing of the rest.
+func TestFilesReadsTheBundleBack(t *testing.T) {
+	t.Parallel()
+
+	source := t.TempDir()
+	writeSkill(t, source)
+	if err := os.WriteFile(filepath.Join(source, "logo.bin"), []byte{0x89, 0x50, 0x00, 0xff}, 0o644); err != nil {
+		t.Fatalf("writing a binary asset: %v", err)
+	}
+	bundle, err := NewAcquirer(DefaultLimits()).Acquire(context.Background(),
+		domain.SkillSource{Type: domain.SkillSourceUpload, URL: "a.tar.gz"},
+		bytes.NewReader(tarGz(t, source, "skill/")))
+	if err != nil {
+		t.Fatalf("acquiring: %v", err)
+	}
+
+	files, err := Files(bytes.NewReader(bundle.Content), 1<<20)
+	if err != nil {
+		t.Fatalf("reading the files back: %v", err)
+	}
+	byPath := make(map[string]File)
+	for _, file := range files {
+		byPath[file.Path] = file
+	}
+	if len(byPath) != 3 {
+		t.Fatalf("got %d files, want SKILL.md, scripts/check.sh and logo.bin: %+v", len(byPath), files)
+	}
+	if got := byPath[Manifest].Text; got == nil || *got != manifest {
+		t.Fatalf("the manifest must come back as written, got %v", got)
+	}
+	if byPath["scripts/check.sh"].Text == nil {
+		t.Fatal("a script is text and must be shown")
+	}
+	if byPath["logo.bin"].Text != nil || byPath["logo.bin"].Size != 4 {
+		t.Fatalf("a binary file is listed with its size and no text, got %+v", byPath["logo.bin"])
+	}
+
+	// Past the limit, a text file is listed but not shown.
+	small, err := Files(bytes.NewReader(bundle.Content), 8)
+	if err != nil {
+		t.Fatalf("reading with a small limit: %v", err)
+	}
+	for _, file := range small {
+		if file.Path == Manifest && file.Text != nil {
+			t.Fatal("a file over the limit must carry no text")
+		}
+	}
+}
+
 // TestAcquireRefusesAnArchiveThatEscapesItsRoot pins that a third-party archive
 // cannot write outside the directory it is unpacked into.
 func TestAcquireRefusesAnArchiveThatEscapesItsRoot(t *testing.T) {

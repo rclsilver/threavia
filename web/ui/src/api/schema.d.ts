@@ -3286,6 +3286,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/skills/{skillId}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skillId: components["schemas"]["UUID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The files of an installed Skill
+         * @description Read from the bundle Core stored, which is what an agent is given. Text files up to 256 KiB carry their content; binary or larger files are listed with their size only.
+         *
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    skillId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The files, in bundle order */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["SkillFile"][];
+                        };
+                    };
+                };
+                404: components["responses"]["Error"];
+                503: components["responses"]["Error"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/events": {
         parameters: {
             query?: never;
@@ -3950,6 +3998,13 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        SkillFile: {
+            path: string;
+            /** Format: int64 */
+            size: number;
+            /** @description The content, when the file is text and small enough to show. */
+            text?: string;
         };
         /** @description A Skill that exists only on one BackendInstance. Core knows its metadata and never its content. */
         BackendSkill: {

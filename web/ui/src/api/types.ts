@@ -38,6 +38,7 @@ export type Artifact = Schemas['Artifact'];
 export type Skill = Schemas['Skill'];
 export type SkillSource = Schemas['SkillSource'];
 export type SkillSourceType = Schemas['SkillSourceType'];
+export type SkillFile = Schemas['SkillFile'];
 export type BackendSkill = Schemas['BackendSkill'];
 export type AuditEntry = Schemas['AuditEntry'];
 export type Usage = Schemas['Usage'];

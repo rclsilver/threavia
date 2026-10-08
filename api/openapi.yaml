@@ -1719,6 +1719,36 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
 
+  /api/v1/skills/{skillId}/files:
+    parameters:
+      - name: skillId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    get:
+      tags: [skills]
+      summary: The files of an installed Skill
+      description: >
+        Read from the bundle Core stored, which is what an agent is given.
+        Text files up to 256 KiB carry their content; binary or larger files
+        are listed with their size only.
+      responses:
+        "200":
+          description: The files, in bundle order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/SkillFile" }
+        "404":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+
   /api/v1/events:
     get:
       tags: [stream]
@@ -2574,6 +2604,16 @@ components:
         bundleSha256: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+
+    SkillFile:
+      type: object
+      required: [path, size]
+      properties:
+        path: { type: string }
+        size: { type: integer, format: int64 }
+        text:
+          type: string
+          description: The content, when the file is text and small enough to show.
 
     BackendSkill:
       type: object

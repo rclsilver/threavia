@@ -105,6 +105,32 @@ func (s *Service) ListSkills(ctx context.Context, identity auth.Identity, projec
 	return installed, translate(err)
 }
 
+// skillTextLimit is the largest file of a Skill whose text is shown. A Skill
+// is instructions and small scripts; anything larger is listed by size.
+const skillTextLimit = 256 << 10
+
+// SkillFiles returns the files of an installed Skill, read from the bundle
+// Core stored: what an agent is given, which is not always what the source
+// holds today.
+func (s *Service) SkillFiles(ctx context.Context, identity auth.Identity, id domain.SkillID) ([]skills.File, error) {
+	skill, err := s.store.GetSkill(ctx, identity.UserID, id)
+	if err != nil {
+		return nil, translate(err)
+	}
+	_, body, err := s.OpenArtifact(ctx, identity, skill.ArtifactID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = body.Close() }()
+
+	files, err := skills.Files(body, skillTextLimit)
+	if err != nil {
+		// What Core stored is unreadable: a fault here, not in the request.
+		return nil, err
+	}
+	return files, nil
+}
+
 // UninstallSkill removes a Skill. The bundle it referenced goes with it: nothing
 // else can point at it, because a Skill owns its own Artifact.
 func (s *Service) UninstallSkill(ctx context.Context, identity auth.Identity, id domain.SkillID) error {

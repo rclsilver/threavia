@@ -12,6 +12,7 @@ import (
 func (h *handler) registerSkills(mux *http.ServeMux) {
 	h.handle(mux, "GET /api/v1/projects/{projectId}/skills", h.listSkills)
 	h.handle(mux, "POST /api/v1/projects/{projectId}/skills", h.installSkill)
+	h.handle(mux, "GET /api/v1/skills/{skillId}/files", h.skillFiles)
 	h.handle(mux, "DELETE /api/v1/skills/{skillId}", h.uninstallSkill)
 	h.handle(mux, "GET /api/v1/backends/{backendId}/skills", h.listBackendSkills)
 }
@@ -23,6 +24,17 @@ func (h *handler) listSkills(w http.ResponseWriter, r *http.Request, identity au
 		return
 	}
 	writeList(w, installed)
+}
+
+// skillFiles lists what an installed Skill holds, with the text of what can be
+// read.
+func (h *handler) skillFiles(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	files, err := h.svc.SkillFiles(r.Context(), identity, domain.SkillID(r.PathValue("skillId")))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeList(w, files)
 }
 
 // installSkill acquires a Skill. A JSON body names a git or archive source; a

@@ -28,6 +28,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/rclsilver/threavia/internal/core/domain"
 )
@@ -556,4 +557,54 @@ func gitOutput(ctx context.Context, directory string, args ...string) (string, e
 		return "", fmt.Errorf("%w: %s", ErrInvalidSkill, message)
 	}
 	return stdout.String(), nil
+}
+
+// File is one file of a packed Skill, as a person reads it.
+type File struct {
+	Path string `json:"path"`
+	Size int64  `json:"size"`
+	// Text is the content when it is readable text of a size worth showing. A
+	// binary file, or one past the limit, carries none: it is listed, not shown.
+	Text *string `json:"text,omitempty"`
+}
+
+// Files reads back what a packed bundle holds, in the order it was packed,
+// with the text of every file that is text and no larger than maxText bytes.
+//
+// It only reads. The bundle is what Core stored after inspecting it, and what
+// a backend receives; showing it is how a person sees what an agent will be
+// given, without anything being unpacked onto a disk.
+func Files(bundle io.Reader, maxText int64) ([]File, error) {
+	gz, err := gzip.NewReader(bundle)
+	if err != nil {
+		return nil, fmt.Errorf("read the skill bundle: %w", err)
+	}
+	defer func() { _ = gz.Close() }()
+
+	var files []File
+	reader := tar.NewReader(gz)
+	for {
+		header, err := reader.Next()
+		if errors.Is(err, io.EOF) {
+			return files, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read the skill bundle: %w", err)
+		}
+		if header.Typeflag != tar.TypeReg {
+			continue
+		}
+		file := File{Path: header.Name, Size: header.Size}
+		if header.Size <= maxText {
+			content, err := io.ReadAll(io.LimitReader(reader, maxText+1))
+			if err != nil {
+				return nil, fmt.Errorf("read %s: %w", header.Name, err)
+			}
+			if utf8.Valid(content) && !bytes.ContainsRune(content, 0) {
+				text := string(content)
+				file.Text = &text
+			}
+		}
+		files = append(files, file)
+	}
 }

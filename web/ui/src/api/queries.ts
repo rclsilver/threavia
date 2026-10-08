@@ -26,6 +26,7 @@ import type {
   Schedule,
   Session,
   Skill,
+  SkillFile,
   SkillSource,
   Snapshot,
   Task,
@@ -671,6 +672,19 @@ export function useSkills(projectId: string | undefined) {
     queryKey: keys.skills(projectId ?? ''),
     queryFn: () => api.get<List<Skill>>(`/api/v1/projects/${projectId}/skills`).then(items),
     enabled: Boolean(projectId),
+  });
+}
+
+/**
+ * What an installed Skill holds, read from the bundle Core stored. Asked for
+ * only when someone opens it; a bundle never changes, so it is not asked twice.
+ */
+export function useSkillFiles(skillId: string | undefined) {
+  return useQuery({
+    queryKey: ['skill-files', skillId],
+    queryFn: () => api.get<List<SkillFile>>(`/api/v1/skills/${skillId}/files`).then(items),
+    enabled: Boolean(skillId),
+    staleTime: Infinity,
   });
 }
 

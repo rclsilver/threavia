@@ -4,6 +4,7 @@ import {
   Check,
   Copy,
   Download,
+  Eye,
   File as FileIcon,
   FileArchive,
   FileCode,
@@ -36,6 +37,7 @@ import {
 } from '@/api/queries';
 import type { Artifact, Decision, ExecutionPolicy, Skill, SkillSourceType } from '@/api/types';
 import { PolicyForm, RulesEditor } from '@/components/policy-form';
+import { SkillViewer } from '@/components/skill-viewer';
 import {
   ConfirmLine,
   NewButton,
@@ -685,55 +687,66 @@ function NewSkill({ projectId, onClose }: { projectId: string; onClose: () => vo
 function SkillRow({ skill, projectId }: { skill: Skill; projectId: string }) {
   const uninstall = useUninstallSkill(projectId);
   const [asking, setAsking] = useState(false);
+  const [viewing, setViewing] = useState(false);
 
   return (
-    <RecordRow
-      icon={Sparkles}
-      tone="text-accent"
-      title={skill.name}
-      badges={<Badge>{humanise(skill.source.type)}</Badge>}
-      body={skill.description}
-      // The installed revision is what is actually there, which is not the
-      // same as the branch someone asked for.
-      meta={`${skill.installedRevision.slice(0, 12)} · ${skill.source.url || 'uploaded'} · ${when(skill.installedAt)}`}
-      menuLabel={`More for ${skill.name}`}
-      menu={
-        <>
-          {skill.source.url && (
-            <MenuItem onSelect={() => copy(skill.source.url ?? '')}>
-              <Copy className="text-muted size-4" />
-              Copy source URL
-            </MenuItem>
-          )}
-          <MenuItem onSelect={() => copy(skill.installedRevision)}>
-            <Check className="text-muted size-4" />
-            Copy installed revision
-          </MenuItem>
-          <MenuSeparator />
-          <MenuItem className="text-danger" onSelect={() => setAsking(true)}>
-            <Trash2 className="size-4" />
-            Uninstall…
-          </MenuItem>
-        </>
-      }
-      below={
-        (asking || uninstall.error) && (
+    <>
+      <SkillViewer skill={skill} open={viewing} onOpenChange={setViewing} />
+      <RecordRow
+        icon={Sparkles}
+        tone="text-accent"
+        title={skill.name}
+        badges={<Badge>{humanise(skill.source.type)}</Badge>}
+        body={skill.description}
+        // The installed revision is what is actually there, which is not the
+        // same as the branch someone asked for.
+        meta={`${skill.installedRevision.slice(0, 12)} · ${skill.source.url || 'uploaded'} · ${when(skill.installedAt)}`}
+        // What the agent is given, read before it is relied on.
+        action={
+          <Button size="sm" className="max-sm:size-11 max-sm:p-0" onClick={() => setViewing(true)} aria-label={`View ${skill.name}`}>
+            <Eye />
+            <span className="max-sm:sr-only">View</span>
+          </Button>
+        }
+        menuLabel={`More for ${skill.name}`}
+        menu={
           <>
-            <ConfirmLine
-              question="Uninstall this skill?"
-              confirm="Uninstall"
-              pending={uninstall.isPending}
-              onConfirm={() => uninstall.mutate(skill.id)}
-              onCancel={() => {
-                setAsking(false);
-                uninstall.reset();
-              }}
-            />
-            <ActionError error={uninstall.error} recovery="It is still installed; try again." className="mt-1 text-xs" />
+            {skill.source.url && (
+              <MenuItem onSelect={() => copy(skill.source.url ?? '')}>
+                <Copy className="text-muted size-4" />
+                Copy source URL
+              </MenuItem>
+            )}
+            <MenuItem onSelect={() => copy(skill.installedRevision)}>
+              <Check className="text-muted size-4" />
+              Copy installed revision
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem className="text-danger" onSelect={() => setAsking(true)}>
+              <Trash2 className="size-4" />
+              Uninstall…
+            </MenuItem>
           </>
-        )
-      }
-    />
+        }
+        below={
+          (asking || uninstall.error) && (
+            <>
+              <ConfirmLine
+                question="Uninstall this skill?"
+                confirm="Uninstall"
+                pending={uninstall.isPending}
+                onConfirm={() => uninstall.mutate(skill.id)}
+                onCancel={() => {
+                  setAsking(false);
+                  uninstall.reset();
+                }}
+              />
+              <ActionError error={uninstall.error} recovery="It is still installed; try again." className="mt-1 text-xs" />
+            </>
+          )
+        }
+      />
+    </>
   );
 }
 
