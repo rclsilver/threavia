@@ -214,7 +214,22 @@ export function Timeline({
   });
 
   // Follow the conversation as it arrives, which is what a chat does.
-  const atBottom = useRef(true);
+  //
+  // Only the reader stops it. A scroll event alone cannot say who scrolled:
+  // the timeline scrolls itself to the bottom, then the rows that came into
+  // view are measured, and when they are taller than estimated — a burst of
+  // tool calls — the bottom moves away again. Read as "the reader scrolled
+  // up", that stopped the following for good, a little short of the end. So
+  // following stops only on what a person does — a wheel, a finger, a key,
+  // the scrollbar — and resumes when they come back to the bottom.
+  //
+  // It stops on the gesture, not on the scroll it causes: the virtualiser
+  // re-renders on that scroll before any listener here hears of it, and a
+  // render that still believed in following put the reader back at the
+  // bottom — every turn of the wheel bounced.
+  const stick = useRef(true);
+  const lastIntent = useRef(0);
+  const [away, setAway] = useState(false);
   // Reaching the top asks for what came before. Read through a ref so the
   // listener is attached once and still sees the current state.
   const reachTop = useRef<() => void>(() => {});
@@ -224,12 +239,56 @@ export function Timeline({
   useLayoutEffect(() => {
     const element = parentRef.current;
     if (!element) return;
+    const intent = (up: boolean) => {
+      lastIntent.current = Date.now();
+      if (up) {
+        stick.current = false;
+        setAway(true);
+      }
+    };
+    const onWheel = (event: WheelEvent) => intent(event.deltaY < 0);
+    let touchY = 0;
+    const onTouchStart = (event: TouchEvent) => {
+      touchY = event.touches[0]?.clientY ?? 0;
+    };
+    // A finger moving down the screen pulls the page up, to older lines.
+    const onTouchMove = (event: TouchEvent) => {
+      const y = event.touches[0]?.clientY ?? touchY;
+      intent(y > touchY);
+      touchY = y;
+    };
+    // The scrollbar is the element itself being pressed, not a row in it.
+    const onPress = (event: PointerEvent) => {
+      if (event.target === element) intent(true);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (['ArrowUp', 'PageUp', 'Home'].includes(event.key)) intent(true);
+      else if (['ArrowDown', 'PageDown', 'End', ' '].includes(event.key)) intent(false);
+    };
     const onScroll = () => {
-      atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+      const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
+      if (distance <= 8) {
+        stick.current = true;
+      } else if (Date.now() - lastIntent.current < 600) {
+        stick.current = false;
+      }
+      setAway(!stick.current);
       if (element.scrollTop < 400) reachTop.current();
     };
+    element.addEventListener('wheel', onWheel, { passive: true });
+    element.addEventListener('touchstart', onTouchStart, { passive: true });
+    element.addEventListener('touchmove', onTouchMove, { passive: true });
+    element.addEventListener('pointerdown', onPress);
+    element.addEventListener('keydown', onKey);
     element.addEventListener('scroll', onScroll, { passive: true });
-    return () => element.removeEventListener('scroll', onScroll);
+    return () => {
+      element.removeEventListener('wheel', onWheel);
+      element.removeEventListener('touchstart', onTouchStart);
+      element.removeEventListener('touchmove', onTouchMove);
+      element.removeEventListener('pointerdown', onPress);
+      element.removeEventListener('keydown', onKey);
+      element.removeEventListener('scroll', onScroll);
+    };
   }, []);
 
   // A page of history lands above what is being read. Without this the reader
@@ -262,7 +321,7 @@ export function Timeline({
     if (!element) return;
     const observer = new ResizeObserver(() => {
       setViewport(element.clientHeight);
-      if (atBottom.current) element.scrollTop = element.scrollHeight;
+      if (stick.current) element.scrollTop = element.scrollHeight;
     });
     observer.observe(element);
     return () => observer.disconnect();
@@ -302,37 +361,33 @@ export function Timeline({
     const element = parentRef.current;
     if (!element || anchorIndex < 0) return;
     element.scrollTop = Math.max(0, anchorStart - 8);
-    atBottom.current = true;
+    stick.current = true;
     // Placed once per message; the reader is free to scroll away after.
   }, [anchor]);
 
-  // Following the last row means following its height too: a row is measured
-  // after it is rendered, and one that grows afterwards — a message that gains
-  // a stop control, a tool call being unfolded — would otherwise end up half
-  // hidden under the composer. While the spacer is there, the answer still fits
-  // under the message, and following would only pull the message back down.
-  useEffect(() => {
-    if (atBottom.current && rows.length > 0 && spacer === 0) {
-      virtualizer.scrollToIndex(rows.length - 1, { align: 'end' });
+  // Following means the true bottom of the scroller, its padding included,
+  // after every render: a row is measured after it is drawn, and one that
+  // grows — a burst of logs, a stop control appearing, a tool call unfolded —
+  // re-renders with a new total, which lands here again until it settles.
+  // Pointing at the last row instead stopped short by the padding, and used
+  // estimated offsets. While the spacer is there, the answer still fits under
+  // the message just sent, and following would pull the message back down.
+  useLayoutEffect(() => {
+    const element = parentRef.current;
+    if (!element || !stick.current || spacer > 0) return;
+    if (element.scrollHeight - element.scrollTop - element.clientHeight > 1) {
+      element.scrollTop = element.scrollHeight;
     }
-  }, [rows.length, height, spacer, virtualizer]);
+  });
 
   // A way back to the latest line, for a reader who scrolled up to read and
   // now wants to see what the agent is doing.
-  const [away, setAway] = useState(false);
-  useLayoutEffect(() => {
-    const element = parentRef.current;
-    if (!element) return;
-    const onScroll = () => setAway(!atBottom.current);
-    element.addEventListener('scroll', onScroll, { passive: true });
-    return () => element.removeEventListener('scroll', onScroll);
-  }, []);
   const toLatest = () => {
     const element = parentRef.current;
     if (!element) return;
-    atBottom.current = true;
+    stick.current = true;
     setAway(false);
-    element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
+    element.scrollTop = element.scrollHeight;
   };
 
   const toggle = (id: string) =>
