@@ -576,6 +576,10 @@ function PermissionsPane({ projectId }: { projectId: string }) {
         A refusal written here cannot be lifted by a Session. The switches above can: a Session that
         needs to push once says so, and the audit records it.
       </p>
+      <p className="text-muted text-xs">
+        A job already running keeps the permissions it started with: a change here applies to each
+        session from its next message.
+      </p>
 
       {save.error && <p className="text-danger text-sm">{save.error.message}</p>}
 

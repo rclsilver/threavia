@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 
-import { usePolicy, useSetPolicy } from '@/api/queries';
+import { usePolicy, useSetPolicy, useSnapshot } from '@/api/queries';
 import type { ExecutionPolicy } from '@/api/types';
 import { PolicyForm, RulesEditor } from '@/components/policy-form';
 import { Button } from '@/components/ui/button';
+
+const FINISHED = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
 
 /**
  * What the agent may do in this Session.
@@ -23,6 +25,8 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
   const { data } = usePolicy(sessionId);
   const save = useSetPolicy(sessionId);
   const [overriding, setOverriding] = useState(false);
+  const snapshot = useSnapshot(sessionId);
+  const running = snapshot.data?.jobs.some((job) => !FINISHED.has(job.status));
   const [draft, setDraft] = useState<ExecutionPolicy | null>(null);
 
   const editing = Boolean(data && (!data.inherited || overriding));
@@ -90,6 +94,16 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
       </p>
 
       {save.error && <p className="text-danger text-sm">{save.error.message}</p>}
+
+      {/* The provider reads its permissions when the process starts, so a
+          change cannot reach a turn already under way. Saying so here is the
+          difference between a setting and a promise. */}
+      {running && (
+        <p className="text-warn text-xs">
+          A job is running and keeps the permissions it started with. A change applies from the next
+          message.
+        </p>
+      )}
 
       {editing && (
         <Button
