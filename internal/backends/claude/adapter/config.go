@@ -235,11 +235,22 @@ func defaultSkillCachePath() string {
 }
 
 // defaultScratchPath is where a Run writes its intermediate files when nothing
-// says otherwise. It sits beside the skill cache, under the same state.
+// says otherwise: the home of the account the agent works as.
+//
+// These are that person's files, made by an agent running as them, so they
+// belong where that person would look for them and where no permission has to
+// be arranged. A service state directory would be the wrong place twice: it
+// mixes what the backend owns — its identity, its event log — with what the
+// work produced, and it asks for a directory the account can write to for no
+// reason of its own.
+//
+// Empty when there is no home to put it in, which turns the feature off rather
+// than falling back to a shared directory: /tmp is exactly what this exists to
+// avoid, since reading a file back from it costs an approval.
 func defaultScratchPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		return filepath.Join(os.TempDir(), "threavia", "scratch")
+		return ""
 	}
-	return filepath.Join(home, ".threavia", "scratch")
+	return filepath.Join(home, ".threavia", "claude", "scratch")
 }

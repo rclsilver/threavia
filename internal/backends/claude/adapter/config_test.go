@@ -60,3 +60,28 @@ func TestValidate(t *testing.T) {
 		})
 	}
 }
+
+// TestScratchLivesInTheAccountsHome pins where a Session's intermediate files
+// go, which is not a question of taste.
+//
+// They are the files of the account the agent works as, made on its behalf, so
+// they belong where that person would look for them and where no permission
+// has to be arranged. A service state directory would mix what the backend
+// owns with what the work produced, and ask the account for write access it
+// has no other reason to want.
+func TestScratchLivesInTheAccountsHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	scratch := defaultScratchPath()
+	if !strings.HasPrefix(scratch, home) {
+		t.Fatalf("scratch = %q, want it under the account's home %q", scratch, home)
+	}
+
+	// With nowhere to put it the feature is off, rather than falling back to a
+	// directory a read has to be approved out of.
+	t.Setenv("HOME", "")
+	if fallback := defaultScratchPath(); fallback != "" {
+		t.Fatalf("with no home, scratch = %q, want none", fallback)
+	}
+}

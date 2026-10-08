@@ -92,6 +92,29 @@ in
       '';
     };
 
+    scratchDir = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      example = "/srv/threavia-scratch";
+      description = ''
+        Where a Session writes the files it will read back, one directory per
+        Run. Without one the agent uses /tmp and then needs an approval to read
+        back what it wrote a second earlier, because anything outside the
+        working directory is a prompt.
+
+        Null leaves it to the backend, which puts it in the home of the account
+        it runs as: <literal>~/.threavia/claude/scratch</literal>. These are
+        that person's files, made by an agent running as them, so they belong
+        where that person would look for them and where no permission has to be
+        arranged. The state directory would be the wrong place twice — it mixes
+        what the backend owns with what the work produced, and it asks the
+        account for write access it has no other reason to want.
+
+        Whatever the location, what nobody came back for after a week is swept
+        when the backend starts.
+      '';
+    };
+
     extraPackages = lib.mkOption {
       type = lib.types.listOf lib.types.package;
       default = [ ];
@@ -200,11 +223,6 @@ in
         THREAVIA_BACKEND_TLS_ENABLED = lib.boolToString cfg.tls.enable;
         THREAVIA_BACKEND_STATE_PATH = "${cfg.stateDir}/state.db";
         THREAVIA_BACKEND_SKILL_CACHE_PATH = "${cfg.stateDir}/skills";
-        # Where a Session writes what it will read back. Without it the agent
-        # uses /tmp and then has to be approved to read its own file: anything
-        # outside the working directory is a prompt. Swept of what nobody came
-        # back for after a week.
-        THREAVIA_BACKEND_SCRATCH_PATH = "${cfg.stateDir}/scratch";
         THREAVIA_BACKEND_CLAUDE_BINARY = cfg.claudeBinary;
         THREAVIA_BACKEND_DEFAULT_WORKING_DIRECTORY = toString cfg.defaultWorkingDirectory;
       }
@@ -213,6 +231,9 @@ in
       }
       // lib.optionalAttrs (cfg.tls.caFile != null) {
         THREAVIA_BACKEND_TLS_CA_FILE = toString cfg.tls.caFile;
+      }
+      // lib.optionalAttrs (cfg.scratchDir != null) {
+        THREAVIA_BACKEND_SCRATCH_PATH = toString cfg.scratchDir;
       }
       // cfg.settings;
 
