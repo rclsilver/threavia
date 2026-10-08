@@ -298,3 +298,47 @@ func TestADecisionLostWithTheStreamIsSentAgain(t *testing.T) {
 		t.Fatalf("the replayed decision is a refusal, want the approval that was given")
 	}
 }
+
+// TestADispatchOutlivesTheRequestThatAskedForIt pins a failure that showed up
+// as a flaky test and was neither flaky nor a test problem.
+//
+// A dispatch is called from an HTTP handler, from a gRPC stream and from
+// reconciliation, and every one of those contexts can end while Core is still
+// reading what the Job needs. The reads then failed with "context canceled",
+// each one was logged and skipped, and the Job went out anyway — with no
+// decisions, no tasks and the default policy. An agent cannot tell that apart
+// from a project that has never decided anything: it simply works as though
+// nothing had been, and the ruling someone recorded so every later session
+// would know goes unread.
+func TestADispatchOutlivesTheRequestThatAskedForIt(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	session := c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
+	start := receive(t, "the dispatched job", backend.starts)
+
+	ctx := context.Background()
+	backend.callCoreTool(t, ctx, start.GetRunId(), start.GetJobId(),
+		"decision_create", map[string]any{
+			"title":      "Deploy with Puppet",
+			"content":    "Ansible was tried and rejected.",
+			"importance": "IMPORTANT",
+		})
+
+	// Park it, so dispatching it again is a thing Core will do.
+	c.svc.Disconnected(ctx, backendInstance(t, c), "stale-connection")
+	waitUntil(t, "the job to be parked", func() bool {
+		return c.jobStatus(session, start.GetJobId()) == "WAITING_BACKEND"
+	})
+
+	// The caller is already gone by the time the dispatch runs.
+	dead, cancel := context.WithCancel(context.Background())
+	cancel()
+	c.svc.DispatchJob(dead, domain.JobID(start.GetJobId()))
+
+	again := receive(t, "the job to be dispatched again", backend.starts)
+	if decisions := again.GetProjectContext().GetDecisions(); len(decisions) != 1 {
+		t.Fatalf("the re-dispatched job carries %d decisions, want the one that was recorded", len(decisions))
+	}
+	if again.GetExecutionPolicy() == nil {
+		t.Error("the re-dispatched job carries no execution policy")
+	}
+}

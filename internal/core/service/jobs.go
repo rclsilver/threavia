@@ -35,6 +35,15 @@ const (
 // reconnection. Errors are logged, not returned, because nothing the caller
 // could do about them would be correct.
 func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
+	// Detached from whatever asked for it. A dispatch is called from an HTTP
+	// handler, from a gRPC stream and from reconciliation, and every one of
+	// those contexts can end while this is still reading what the Job needs —
+	// the request answered, the stream closed. Cancellation there used to land
+	// as a handful of logged errors and a Job sent anyway, which is the worst
+	// of both: the work starts, without the policy or the project memory it was
+	// supposed to carry.
+	ctx = context.WithoutCancel(ctx)
+
 	jc, err := s.store.LoadJobContext(ctx, jobID)
 	if err != nil {
 		s.logger.Error("cannot load job context", slog.String("jobId", string(jobID)), slog.String("error", err.Error()))
@@ -68,6 +77,18 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 		return
 	}
 
+	// Built before the slot is reserved: a Job sent without the knowledge it was
+	// supposed to carry is worse than a Job that waits. An agent cannot tell
+	// that its project memory is missing — it just works as if the project had
+	// none, and the decisions someone recorded so every later session would
+	// know go unread.
+	projectContext, err := s.projectContext(ctx, jc)
+	if err != nil {
+		s.logger.Error("cannot build the project context, leaving the job queued",
+			slog.String("jobId", string(jobID)), slog.String("error", err.Error()))
+		return
+	}
+
 	// Reserving the active slot before sending is what keeps a second Job of the
 	// same Run from being dispatched concurrently.
 	if _, err := s.store.TransitionJob(ctx, jobID, from, domain.JobRunning, nil); err != nil {
@@ -89,7 +110,7 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 				JobId:           string(jobID),
 				NativeSessionId: derefString(jc.NativeSessionID),
 				Prompt:          prompt,
-				ProjectContext:  s.projectContext(ctx, jc),
+				ProjectContext:  projectContext,
 				ExecutionPolicy: policyToProto(policy),
 			},
 		},
@@ -116,7 +137,14 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 // projectContext builds the compact structured context of specification
 // section 12. It never carries the project history: everything else is
 // searchable on demand.
-func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) *backendv1.ProjectContext {
+//
+// A read that fails is returned rather than logged and skipped. An agent has no
+// way to tell an empty project from one whose memory could not be read: it
+// simply works as though nothing had ever been decided, and the ruling someone
+// recorded so that every later session would know goes unread. Refusing to
+// build the context leaves the Job queued, which is recoverable; sending it
+// without is not.
+func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) (*backendv1.ProjectContext, error) {
 	pc := &backendv1.ProjectContext{
 		ProjectId:           string(jc.ProjectID),
 		ProjectName:         jc.ProjectName,
@@ -138,8 +166,7 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) *b
 	// no longer true or not important enough to have been marked so.
 	decisions, err := s.store.ImportantDecisions(ctx, jc.ProjectID, contextDecisionLimit)
 	if err != nil {
-		s.logger.Error("cannot read the project decisions",
-			slog.String("projectId", string(jc.ProjectID)), slog.String("error", err.Error()))
+		return nil, fmt.Errorf("read the project decisions: %w", err)
 	}
 	for _, decision := range decisions {
 		pc.Decisions = append(pc.Decisions, &backendv1.ContextDecision{
@@ -151,8 +178,7 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) *b
 	// filed: in progress first, then what is ready to start.
 	tasks, err := s.store.OpenTasks(ctx, jc.ProjectID, contextTaskLimit)
 	if err != nil {
-		s.logger.Error("cannot read the project tasks",
-			slog.String("projectId", string(jc.ProjectID)), slog.String("error", err.Error()))
+		return nil, fmt.Errorf("read the project tasks: %w", err)
 	}
 	for _, task := range tasks {
 		pc.Tasks = append(pc.Tasks, &backendv1.ContextTask{
@@ -164,8 +190,7 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) *b
 	// bundles it does not already have, so a Job never carries their content.
 	installed, err := s.store.ListSkills(ctx, jc.ProjectID)
 	if err != nil {
-		s.logger.Error("cannot read the project skills",
-			slog.String("projectId", string(jc.ProjectID)), slog.String("error", err.Error()))
+		return nil, fmt.Errorf("read the project skills: %w", err)
 	}
 	for _, skill := range installed {
 		pc.Skills = append(pc.Skills, &backendv1.ProjectSkill{
@@ -177,7 +202,7 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) *b
 		})
 	}
 
-	return pc
+	return pc, nil
 }
 
 // coreToolSpecs renders the Core Tools for the wire. A backend never hardcodes
