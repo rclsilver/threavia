@@ -1,0 +1,782 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-08T19:54:31.131919+00:00",
+  "title": "Design System: Threavia",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Working Indigo",
+        "canonical": "oklch(52% 0.19 275)",
+        "scheme": "light",
+        "cssVar": "--color-accent",
+        "tonalRamp": [
+          "oklch(15% 0.19 275)",
+          "oklch(25% 0.19 275)",
+          "oklch(35% 0.19 275)",
+          "oklch(45% 0.19 275)",
+          "oklch(55% 0.19 275)",
+          "oklch(65% 0.19 275)",
+          "oklch(80% 0.19 275)",
+          "oklch(95% 0.19 275)"
+        ]
+      },
+      "accent-text": {
+        "role": "primary",
+        "displayName": "Accent Ink",
+        "canonical": "oklch(99% 0 0)",
+        "scheme": "light",
+        "cssVar": "--color-accent-text",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "accent-2": {
+        "role": "primary",
+        "displayName": "Mark Violet",
+        "canonical": "oklch(58% 0.21 310)",
+        "scheme": "light",
+        "cssVar": "--color-accent-2",
+        "tonalRamp": [
+          "oklch(15% 0.21 310)",
+          "oklch(25% 0.21 310)",
+          "oklch(35% 0.21 310)",
+          "oklch(45% 0.21 310)",
+          "oklch(55% 0.21 310)",
+          "oklch(65% 0.21 310)",
+          "oklch(80% 0.21 310)",
+          "oklch(95% 0.21 310)"
+        ]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Canvas",
+        "canonical": "oklch(98.6% 0.002 265)",
+        "scheme": "light",
+        "cssVar": "--color-canvas",
+        "tonalRamp": [
+          "oklch(15% 0.002 265)",
+          "oklch(25% 0.002 265)",
+          "oklch(35% 0.002 265)",
+          "oklch(45% 0.002 265)",
+          "oklch(55% 0.002 265)",
+          "oklch(65% 0.002 265)",
+          "oklch(80% 0.002 265)",
+          "oklch(95% 0.002 265)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "oklch(100% 0 0)",
+        "scheme": "light",
+        "cssVar": "--color-surface",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Raised Grey",
+        "canonical": "oklch(96.4% 0.003 265)",
+        "scheme": "light",
+        "cssVar": "--color-surface-2",
+        "tonalRamp": [
+          "oklch(15% 0.003 265)",
+          "oklch(25% 0.003 265)",
+          "oklch(35% 0.003 265)",
+          "oklch(45% 0.003 265)",
+          "oklch(55% 0.003 265)",
+          "oklch(65% 0.003 265)",
+          "oklch(80% 0.003 265)",
+          "oklch(95% 0.003 265)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "oklch(91.5% 0.004 265)",
+        "scheme": "light",
+        "cssVar": "--color-border",
+        "tonalRamp": [
+          "oklch(15% 0.004 265)",
+          "oklch(25% 0.004 265)",
+          "oklch(35% 0.004 265)",
+          "oklch(45% 0.004 265)",
+          "oklch(55% 0.004 265)",
+          "oklch(65% 0.004 265)",
+          "oklch(80% 0.004 265)",
+          "oklch(95% 0.004 265)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "oklch(22% 0.007 265)",
+        "scheme": "light",
+        "cssVar": "--color-text",
+        "tonalRamp": [
+          "oklch(15% 0.007 265)",
+          "oklch(25% 0.007 265)",
+          "oklch(35% 0.007 265)",
+          "oklch(45% 0.007 265)",
+          "oklch(55% 0.007 265)",
+          "oklch(65% 0.007 265)",
+          "oklch(80% 0.007 265)",
+          "oklch(95% 0.007 265)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "canonical": "oklch(50% 0.01 265)",
+        "scheme": "light",
+        "cssVar": "--color-muted",
+        "tonalRamp": [
+          "oklch(15% 0.01 265)",
+          "oklch(25% 0.01 265)",
+          "oklch(35% 0.01 265)",
+          "oklch(45% 0.01 265)",
+          "oklch(55% 0.01 265)",
+          "oklch(65% 0.01 265)",
+          "oklch(80% 0.01 265)",
+          "oklch(95% 0.01 265)"
+        ]
+      },
+      "ok": {
+        "role": "secondary",
+        "displayName": "Done Green",
+        "canonical": "oklch(55% 0.14 155)",
+        "scheme": "light",
+        "cssVar": "--color-ok",
+        "tonalRamp": [
+          "oklch(15% 0.14 155)",
+          "oklch(25% 0.14 155)",
+          "oklch(35% 0.14 155)",
+          "oklch(45% 0.14 155)",
+          "oklch(55% 0.14 155)",
+          "oklch(65% 0.14 155)",
+          "oklch(80% 0.14 155)",
+          "oklch(95% 0.14 155)"
+        ]
+      },
+      "warn": {
+        "role": "secondary",
+        "displayName": "Waiting Amber",
+        "canonical": "oklch(68% 0.15 75)",
+        "scheme": "light",
+        "cssVar": "--color-warn",
+        "tonalRamp": [
+          "oklch(15% 0.15 75)",
+          "oklch(25% 0.15 75)",
+          "oklch(35% 0.15 75)",
+          "oklch(45% 0.15 75)",
+          "oklch(55% 0.15 75)",
+          "oklch(65% 0.15 75)",
+          "oklch(80% 0.15 75)",
+          "oklch(95% 0.15 75)"
+        ]
+      },
+      "warn-text": {
+        "role": "secondary",
+        "displayName": "Waiting Amber, Text Voice",
+        "canonical": "oklch(49% 0.11 65)",
+        "scheme": "light",
+        "cssVar": "--color-warn-text",
+        "tonalRamp": [
+          "oklch(15% 0.11 65)",
+          "oklch(25% 0.11 65)",
+          "oklch(35% 0.11 65)",
+          "oklch(45% 0.11 65)",
+          "oklch(55% 0.11 65)",
+          "oklch(65% 0.11 65)",
+          "oklch(80% 0.11 65)",
+          "oklch(95% 0.11 65)"
+        ]
+      },
+      "danger": {
+        "role": "secondary",
+        "displayName": "Danger Red",
+        "canonical": "oklch(55% 0.2 25)",
+        "scheme": "light",
+        "cssVar": "--color-danger",
+        "tonalRamp": [
+          "oklch(15% 0.2 25)",
+          "oklch(25% 0.2 25)",
+          "oklch(35% 0.2 25)",
+          "oklch(45% 0.2 25)",
+          "oklch(55% 0.2 25)",
+          "oklch(65% 0.2 25)",
+          "oklch(80% 0.2 25)",
+          "oklch(95% 0.2 25)"
+        ]
+      },
+      "danger-solid": {
+        "role": "secondary",
+        "displayName": "Danger Fill",
+        "canonical": "oklch(55% 0.2 25)",
+        "scheme": "light",
+        "cssVar": "--color-danger-solid",
+        "tonalRamp": [
+          "oklch(15% 0.2 25)",
+          "oklch(25% 0.2 25)",
+          "oklch(35% 0.2 25)",
+          "oklch(45% 0.2 25)",
+          "oklch(55% 0.2 25)",
+          "oklch(65% 0.2 25)",
+          "oklch(80% 0.2 25)",
+          "oklch(95% 0.2 25)"
+        ]
+      },
+      "accent-dark": {
+        "role": "primary",
+        "displayName": "Working Indigo (dark scheme)",
+        "canonical": "oklch(70% 0.15 275)",
+        "scheme": "dark",
+        "cssVar": "--color-accent",
+        "tonalRamp": [
+          "oklch(15% 0.15 275)",
+          "oklch(25% 0.15 275)",
+          "oklch(35% 0.15 275)",
+          "oklch(45% 0.15 275)",
+          "oklch(55% 0.15 275)",
+          "oklch(65% 0.15 275)",
+          "oklch(80% 0.15 275)",
+          "oklch(95% 0.15 275)"
+        ]
+      },
+      "accent-text-dark": {
+        "role": "primary",
+        "displayName": "Accent Ink (dark scheme)",
+        "canonical": "oklch(17% 0.012 265)",
+        "scheme": "dark",
+        "cssVar": "--color-accent-text",
+        "tonalRamp": [
+          "oklch(15% 0.012 265)",
+          "oklch(25% 0.012 265)",
+          "oklch(35% 0.012 265)",
+          "oklch(45% 0.012 265)",
+          "oklch(55% 0.012 265)",
+          "oklch(65% 0.012 265)",
+          "oklch(80% 0.012 265)",
+          "oklch(95% 0.012 265)"
+        ]
+      },
+      "accent-2-dark": {
+        "role": "primary",
+        "displayName": "Mark Violet (dark scheme)",
+        "canonical": "oklch(72% 0.17 310)",
+        "scheme": "dark",
+        "cssVar": "--color-accent-2",
+        "tonalRamp": [
+          "oklch(15% 0.17 310)",
+          "oklch(25% 0.17 310)",
+          "oklch(35% 0.17 310)",
+          "oklch(45% 0.17 310)",
+          "oklch(55% 0.17 310)",
+          "oklch(65% 0.17 310)",
+          "oklch(80% 0.17 310)",
+          "oklch(95% 0.17 310)"
+        ]
+      },
+      "canvas-dark": {
+        "role": "neutral",
+        "displayName": "Canvas (dark scheme)",
+        "canonical": "oklch(15.5% 0.003 265)",
+        "scheme": "dark",
+        "cssVar": "--color-canvas",
+        "tonalRamp": [
+          "oklch(15% 0.003 265)",
+          "oklch(25% 0.003 265)",
+          "oklch(35% 0.003 265)",
+          "oklch(45% 0.003 265)",
+          "oklch(55% 0.003 265)",
+          "oklch(65% 0.003 265)",
+          "oklch(80% 0.003 265)",
+          "oklch(95% 0.003 265)"
+        ]
+      },
+      "surface-dark": {
+        "role": "neutral",
+        "displayName": "Surface (dark scheme)",
+        "canonical": "oklch(19.5% 0.004 265)",
+        "scheme": "dark",
+        "cssVar": "--color-surface",
+        "tonalRamp": [
+          "oklch(15% 0.004 265)",
+          "oklch(25% 0.004 265)",
+          "oklch(35% 0.004 265)",
+          "oklch(45% 0.004 265)",
+          "oklch(55% 0.004 265)",
+          "oklch(65% 0.004 265)",
+          "oklch(80% 0.004 265)",
+          "oklch(95% 0.004 265)"
+        ]
+      },
+      "surface-2-dark": {
+        "role": "neutral",
+        "displayName": "Raised Grey (dark scheme)",
+        "canonical": "oklch(24% 0.005 265)",
+        "scheme": "dark",
+        "cssVar": "--color-surface-2",
+        "tonalRamp": [
+          "oklch(15% 0.005 265)",
+          "oklch(25% 0.005 265)",
+          "oklch(35% 0.005 265)",
+          "oklch(45% 0.005 265)",
+          "oklch(55% 0.005 265)",
+          "oklch(65% 0.005 265)",
+          "oklch(80% 0.005 265)",
+          "oklch(95% 0.005 265)"
+        ]
+      },
+      "border-dark": {
+        "role": "neutral",
+        "displayName": "Hairline (dark scheme)",
+        "canonical": "oklch(29% 0.006 265)",
+        "scheme": "dark",
+        "cssVar": "--color-border",
+        "tonalRamp": [
+          "oklch(15% 0.006 265)",
+          "oklch(25% 0.006 265)",
+          "oklch(35% 0.006 265)",
+          "oklch(45% 0.006 265)",
+          "oklch(55% 0.006 265)",
+          "oklch(65% 0.006 265)",
+          "oklch(80% 0.006 265)",
+          "oklch(95% 0.006 265)"
+        ]
+      },
+      "text-dark": {
+        "role": "neutral",
+        "displayName": "Ink (dark scheme)",
+        "canonical": "oklch(94% 0.004 265)",
+        "scheme": "dark",
+        "cssVar": "--color-text",
+        "tonalRamp": [
+          "oklch(15% 0.004 265)",
+          "oklch(25% 0.004 265)",
+          "oklch(35% 0.004 265)",
+          "oklch(45% 0.004 265)",
+          "oklch(55% 0.004 265)",
+          "oklch(65% 0.004 265)",
+          "oklch(80% 0.004 265)",
+          "oklch(95% 0.004 265)"
+        ]
+      },
+      "muted-dark": {
+        "role": "neutral",
+        "displayName": "Muted Ink (dark scheme)",
+        "canonical": "oklch(66% 0.008 265)",
+        "scheme": "dark",
+        "cssVar": "--color-muted",
+        "tonalRamp": [
+          "oklch(15% 0.008 265)",
+          "oklch(25% 0.008 265)",
+          "oklch(35% 0.008 265)",
+          "oklch(45% 0.008 265)",
+          "oklch(55% 0.008 265)",
+          "oklch(65% 0.008 265)",
+          "oklch(80% 0.008 265)",
+          "oklch(95% 0.008 265)"
+        ]
+      },
+      "ok-dark": {
+        "role": "secondary",
+        "displayName": "Done Green (dark scheme)",
+        "canonical": "oklch(72% 0.16 155)",
+        "scheme": "dark",
+        "cssVar": "--color-ok",
+        "tonalRamp": [
+          "oklch(15% 0.16 155)",
+          "oklch(25% 0.16 155)",
+          "oklch(35% 0.16 155)",
+          "oklch(45% 0.16 155)",
+          "oklch(55% 0.16 155)",
+          "oklch(65% 0.16 155)",
+          "oklch(80% 0.16 155)",
+          "oklch(95% 0.16 155)"
+        ]
+      },
+      "warn-dark": {
+        "role": "secondary",
+        "displayName": "Waiting Amber (dark scheme)",
+        "canonical": "oklch(80% 0.14 80)",
+        "scheme": "dark",
+        "cssVar": "--color-warn",
+        "tonalRamp": [
+          "oklch(15% 0.14 80)",
+          "oklch(25% 0.14 80)",
+          "oklch(35% 0.14 80)",
+          "oklch(45% 0.14 80)",
+          "oklch(55% 0.14 80)",
+          "oklch(65% 0.14 80)",
+          "oklch(80% 0.14 80)",
+          "oklch(95% 0.14 80)"
+        ]
+      },
+      "warn-text-dark": {
+        "role": "secondary",
+        "displayName": "Waiting Amber, Text Voice (dark scheme)",
+        "canonical": "oklch(80% 0.14 80)",
+        "scheme": "dark",
+        "cssVar": "--color-warn-text",
+        "tonalRamp": [
+          "oklch(15% 0.14 80)",
+          "oklch(25% 0.14 80)",
+          "oklch(35% 0.14 80)",
+          "oklch(45% 0.14 80)",
+          "oklch(55% 0.14 80)",
+          "oklch(65% 0.14 80)",
+          "oklch(80% 0.14 80)",
+          "oklch(95% 0.14 80)"
+        ]
+      },
+      "danger-dark": {
+        "role": "secondary",
+        "displayName": "Danger Red (dark scheme)",
+        "canonical": "oklch(68% 0.18 22)",
+        "scheme": "dark",
+        "cssVar": "--color-danger",
+        "tonalRamp": [
+          "oklch(15% 0.18 22)",
+          "oklch(25% 0.18 22)",
+          "oklch(35% 0.18 22)",
+          "oklch(45% 0.18 22)",
+          "oklch(55% 0.18 22)",
+          "oklch(65% 0.18 22)",
+          "oklch(80% 0.18 22)",
+          "oklch(95% 0.18 22)"
+        ]
+      },
+      "danger-solid-dark": {
+        "role": "secondary",
+        "displayName": "Danger Fill (dark scheme)",
+        "canonical": "oklch(50% 0.19 25)",
+        "scheme": "dark",
+        "cssVar": "--color-danger-solid",
+        "tonalRamp": [
+          "oklch(15% 0.19 25)",
+          "oklch(25% 0.19 25)",
+          "oklch(35% 0.19 25)",
+          "oklch(45% 0.19 25)",
+          "oklch(55% 0.19 25)",
+          "oklch(65% 0.19 25)",
+          "oklch(80% 0.19 25)",
+          "oklch(95% 0.19 25)"
+        ]
+      }
+    },
+    "schemes": {
+      "light": "default, @theme in web/ui/src/styles.css",
+      "dark": "@media (prefers-color-scheme: dark) :root overrides in web/ui/src/styles.css; follows the OS"
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page titles such as Waiting for you."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Session title in the header."
+      },
+      "prose": {
+        "displayName": "Prose",
+        "purpose": "The agent's markdown, bounded by the 46rem reading container."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "The person's messages, nav, inputs, buttons."
+      },
+      "log-line": {
+        "displayName": "Log line",
+        "purpose": "Plain events in the timeline, muted."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Context strips, card timestamps, toolbar status."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase field and sidebar section labels; never an eyebrow above a headline."
+      },
+      "badge": {
+        "displayName": "Badge",
+        "purpose": "Status and risk badges."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Commands, paths, directories, code, tool names, costs only."
+      },
+      "gutter": {
+        "displayName": "Gutter",
+        "purpose": "The HH:MM column of the log, tabular."
+      }
+    },
+    "shadows": [
+      {
+        "name": "lift",
+        "value": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
+        "purpose": "Attention cards and the composer over the log; selected delivery segment."
+      },
+      {
+        "name": "float",
+        "value": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+        "purpose": "Jump-to-latest button over the log."
+      },
+      {
+        "name": "popover",
+        "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+        "purpose": "Select menus."
+      },
+      {
+        "name": "overlay",
+        "value": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+        "purpose": "Dialogs and the mobile drawer, with a 40% black scrim."
+      }
+    ],
+    "focus": {
+      "value": "outline: 2px solid var(--color-accent); outline-offset: 2px",
+      "purpose": "Global :focus-visible ring, keyboard only."
+    },
+    "motion": [
+      {
+        "name": "colors",
+        "value": "transition-colors 150ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Hover and state colour changes on buttons, segments, composer border."
+      },
+      {
+        "name": "drawer",
+        "value": "transform 150ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Mobile drawer slide; none from 768px."
+      },
+      {
+        "name": "disclosure",
+        "value": "rotate(90deg) transform transition",
+        "purpose": "Chevron of Full request and tool-call rows."
+      },
+      {
+        "name": "receipt",
+        "value": "4000ms",
+        "purpose": "How long a decision receipt stays after its card resolves."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px",
+        "purpose": "44px phone targets collapse to 32-36px; gutter widens to 3.25rem; page padding 24px."
+      },
+      {
+        "name": "md",
+        "value": "768px",
+        "purpose": "Drawer becomes a sidebar column; the top bar goes."
+      }
+    ],
+    "containers": [
+      {
+        "name": "reading",
+        "value": "46rem",
+        "purpose": "Session log, composer, Waiting inbox."
+      },
+      {
+        "name": "page",
+        "value": "64rem",
+        "purpose": "Lists and forms."
+      }
+    ],
+    "accessibility": [
+      "WCAG 2.2 AA",
+      "44px phone targets for every decision",
+      "muted text at 4.5:1 on white",
+      "warn-text and danger-solid as text-safe and white-safe variants",
+      "closed drawer is inert",
+      "ActionError is role=alert; decision receipts are role=status aria-live=polite",
+      "state never by colour alone"
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one accent action: Approve, Send, Answer.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Approve</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:6px;font:500 14px/1 system-ui,-apple-system,'Segoe UI',sans-serif;border:1px solid transparent;cursor:pointer;transition:background-color .15s,color .15s,opacity .15s}.ds-btn:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}.ds-btn:disabled{opacity:.5;pointer-events:none}.ds-btn-primary{background:var(--color-accent);color:var(--color-accent-text)}.ds-btn-primary:hover{opacity:.9}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Default button: Deny, choices, most commands.",
+      "html": "<button class=\"ds-btn ds-btn-secondary\">Deny</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:6px;font:500 14px/1 system-ui,-apple-system,'Segoe UI',sans-serif;border:1px solid transparent;cursor:pointer;transition:background-color .15s,color .15s,opacity .15s}.ds-btn:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}.ds-btn:disabled{opacity:.5;pointer-events:none}.ds-btn-secondary{background:var(--color-surface-2);color:var(--color-text);border-color:var(--color-border)}.ds-btn-secondary:hover{background:color-mix(in oklch,var(--color-border) 60%,var(--color-surface-2))}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Toolbar Stop, icon controls, ConfirmAction No.",
+      "html": "<button class=\"ds-btn ds-btn-ghost\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"2\"/></svg>Stop</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:6px;font:500 14px/1 system-ui,-apple-system,'Segoe UI',sans-serif;border:1px solid transparent;cursor:pointer;transition:background-color .15s,color .15s,opacity .15s}.ds-btn:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}.ds-btn:disabled{opacity:.5;pointer-events:none}.ds-btn-ghost{background:transparent;color:var(--color-muted)}.ds-btn-ghost:hover{background:var(--color-surface-2);color:var(--color-text)}"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Approve on a dangerous request, Delete; always danger-solid under white.",
+      "html": "<button class=\"ds-btn ds-btn-danger\">Delete</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:6px;font:500 14px/1 system-ui,-apple-system,'Segoe UI',sans-serif;border:1px solid transparent;cursor:pointer;transition:background-color .15s,color .15s,opacity .15s}.ds-btn:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}.ds-btn:disabled{opacity:.5;pointer-events:none}.ds-btn-danger{background:var(--color-danger-solid);color:#fff}.ds-btn-danger:hover{opacity:.9}"
+    },
+    {
+      "name": "Decision Button (lg)",
+      "kind": "button",
+      "refersTo": "button-lg-phone",
+      "description": "44px tall with 15px text on the phone, 36px from 640px; every decision uses it.",
+      "html": "<div class=\"ds-pair\"><button class=\"ds-btn ds-btn-secondary ds-btn-lg\">Deny</button><button class=\"ds-btn ds-btn-primary ds-btn-lg\">Approve</button></div>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:6px;font:500 14px/1 system-ui,-apple-system,'Segoe UI',sans-serif;border:1px solid transparent;cursor:pointer;transition:background-color .15s,color .15s,opacity .15s}.ds-btn:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}.ds-btn:disabled{opacity:.5;pointer-events:none}.ds-btn-primary{background:var(--color-accent);color:var(--color-accent-text)}.ds-btn-secondary{background:var(--color-surface-2);color:var(--color-text);border-color:var(--color-border)}.ds-btn-lg{height:44px;padding:0 16px;font-size:15px}@media (min-width:640px){.ds-btn-lg{height:36px;padding:0 14px;font-size:14px}}.ds-pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}"
+    },
+    {
+      "name": "Badge",
+      "kind": "chip",
+      "refersTo": "badge-warn",
+      "description": "Status and risk words on a 15% tint of their tone.",
+      "html": "<span class=\"ds-badge ds-n\">live</span> <span class=\"ds-badge ds-w\">waiting validation</span> <span class=\"ds-badge ds-d\">Deletes or changes infrastructure</span>",
+      "css": ".ds-badge{display:inline-flex;align-items:center;border-radius:4px;padding:2px 6px;font:500 11px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif;white-space:nowrap}.ds-n{background:var(--color-surface-2);color:var(--color-muted)}.ds-w{background:color-mix(in oklch,var(--color-warn) 15%,transparent);color:var(--color-warn-text)}.ds-d{background:color-mix(in oklch,var(--color-danger) 15%,transparent);color:var(--color-danger)}"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Hairline field with the accent focus ring.",
+      "html": "<label class=\"ds-label\">Project</label><input class=\"ds-input\" placeholder=\"Your answer\">",
+      "css": ".ds-label{display:block;margin-bottom:6px;color:var(--color-muted);font:500 12px system-ui,sans-serif;letter-spacing:.025em;text-transform:uppercase}.ds-input{width:100%;height:36px;padding:8px 12px;background:var(--color-surface);color:var(--color-text);border:1px solid var(--color-border);border-radius:6px;font:14px system-ui,-apple-system,'Segoe UI',sans-serif;caret-color:var(--color-accent)}.ds-input::placeholder{color:var(--color-muted)}.ds-input:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}"
+    },
+    {
+      "name": "Approval Card",
+      "kind": "card",
+      "refersTo": "approval-card",
+      "description": "Risk badge, command headline in mono, context strip, Full request disclosure, separated Deny and Approve.",
+      "html": "<section class=\"ds-ap\"><div class=\"ds-ap-head\"><span class=\"ds-badge ds-d\">Deletes or changes infrastructure</span><span class=\"ds-meta\">Bash</span><time class=\"ds-meta ds-age\">21 min ago</time></div><h3 class=\"ds-cmd\">cd apps &amp;&amp; tofu apply -no-color threavia-0.5.0.tfplan</h3><p class=\"ds-meta ds-ctx\"><span>workstation</span><span class=\"ds-mono\">home-deployment-kubernetes</span></p><p class=\"ds-meta ds-more\">&#8250; Full request</p><div class=\"ds-pair\"><button class=\"ds-btn ds-btn-secondary\">Deny</button><button class=\"ds-btn ds-btn-danger\">Approve</button></div></section>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:6px;font:500 14px/1 system-ui,-apple-system,'Segoe UI',sans-serif;border:1px solid transparent;cursor:pointer;transition:background-color .15s,color .15s,opacity .15s}.ds-btn:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}.ds-btn:disabled{opacity:.5;pointer-events:none}.ds-btn-secondary{background:var(--color-surface-2);color:var(--color-text);border-color:var(--color-border)}.ds-btn-danger{background:var(--color-danger-solid);color:#fff}.ds-ap{background:var(--color-surface);border:1px solid color-mix(in oklch,var(--color-danger) 50%,transparent);border-radius:8px;padding:12px;box-shadow:0 1px 3px rgb(0 0 0/.1),0 1px 2px -1px rgb(0 0 0/.1);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--color-text)}.ds-ap-head{display:flex;align-items:center;gap:8px}.ds-age{margin-left:auto;font-variant-numeric:tabular-nums}.ds-badge{border-radius:4px;padding:2px 6px;font-size:11px;font-weight:500}.ds-d{background:color-mix(in oklch,var(--color-danger) 15%,transparent);color:var(--color-danger)}.ds-meta{color:var(--color-muted);font-size:12px}.ds-cmd{margin:8px 0 0;font:400 14px/1.625 ui-monospace,'SF Mono',Menlo,monospace;word-break:break-word;white-space:pre-wrap}.ds-ctx{display:flex;gap:12px;margin:8px 0 0}.ds-mono{font-family:ui-monospace,'SF Mono',Menlo,monospace}.ds-more{margin:8px 0 0}.ds-pair{display:flex;justify-content:flex-end;gap:12px;margin-top:12px}"
+    },
+    {
+      "name": "Composer",
+      "kind": "custom",
+      "refersTo": "composer",
+      "description": "Squared panel: textarea, then a toolbar with the delivery switch, Stop and a flat accent Send.",
+      "html": "<div class=\"ds-comp\"><textarea class=\"ds-ta\" rows=\"1\" placeholder=\"Queue a message for when this is done...\"></textarea><div class=\"ds-bar\"><div class=\"ds-seg\" role=\"radiogroup\"><button class=\"ds-on\" role=\"radio\" aria-checked=\"true\">Queue</button><button role=\"radio\" aria-checked=\"false\">Next step</button><button role=\"radio\" aria-checked=\"false\">Interrupt</button></div><span style=\"margin-left:auto\"></span><button class=\"ds-stop\">&#9632; Stop</button><button class=\"ds-send\" aria-label=\"Send\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"m5 12 7-7 7 7\"/><path d=\"M12 19V5\"/></svg></button></div></div>",
+      "css": ".ds-comp{background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;box-shadow:0 1px 3px rgb(0 0 0/.1);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;transition:border-color .15s}.ds-comp:focus-within{border-color:var(--color-accent);box-shadow:0 0 0 2px color-mix(in oklch,var(--color-accent) 20%,transparent)}.ds-ta{display:block;width:100%;resize:none;border:0;background:transparent;padding:10px 12px 4px;font-size:14px;color:var(--color-text);outline:none;caret-color:var(--color-accent)}.ds-ta::placeholder{color:var(--color-muted)}.ds-bar{display:flex;align-items:center;gap:8px;padding:0 6px 6px}.ds-seg{display:flex;padding:2px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:6px}.ds-seg button{min-height:28px;padding:0 10px;border:0;border-radius:4px;background:transparent;color:var(--color-muted);font-size:12px;cursor:pointer}.ds-seg button:hover{color:var(--color-text)}.ds-seg .ds-on{background:var(--color-surface);color:var(--color-text);box-shadow:0 1px 2px rgb(0 0 0/.08)}.ds-stop{border:0;background:transparent;color:var(--color-muted);font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer}.ds-stop:hover{background:var(--color-surface-2);color:var(--color-text)}.ds-send{display:grid;place-items:center;width:32px;height:32px;border:0;border-radius:6px;background:var(--color-accent);color:var(--color-accent-text);cursor:pointer}.ds-send:hover{opacity:.9}.ds-send:focus-visible,.ds-seg button:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}"
+    },
+    {
+      "name": "Log Row with Gutter",
+      "kind": "custom",
+      "refersTo": "user-row",
+      "description": "The operations log: mono HH:MM gutter, tinted You row, one-line tool call, unmarked agent prose.",
+      "html": "<div class=\"ds-log\"><time class=\"ds-g\">21:07</time><div class=\"ds-you\"><p class=\"ds-who\">You</p><p>Upgrade Core in the cluster.</p></div><time class=\"ds-g\">21:09</time><div class=\"ds-tool\"><b>Bash</b> <span>sops --set '[\"version\"] \"0.5.0\"'</span></div><span></span><p class=\"ds-prose\">I will set the chart version and show you the plan first.</p></div>",
+      "css": ".ds-log{display:grid;grid-template-columns:3.25rem minmax(0,1fr);gap:12px 8px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--color-text)}.ds-g{text-align:right;color:var(--color-muted);font:11px/20px ui-monospace,'SF Mono',Menlo,monospace;font-variant-numeric:tabular-nums;padding-top:8px}.ds-you{background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:14px}.ds-you p{margin:0}.ds-who{font-size:12px;font-weight:500}.ds-tool{font:12px/20px ui-monospace,'SF Mono',Menlo,monospace;padding:4px 8px;color:var(--color-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ds-tool b{font-weight:400;color:var(--color-text)}.ds-prose{margin:0;font-size:15px;line-height:1.625}"
+    },
+    {
+      "name": "ConfirmAction",
+      "kind": "custom",
+      "refersTo": "button-danger",
+      "description": "In-place destructive confirmation: question, No first, then the danger verb.",
+      "html": "<span class=\"ds-cf\"><span class=\"ds-q\">Delete this schedule?</span><button class=\"ds-btn ds-sm ds-btn-ghost\">No</button><button class=\"ds-btn ds-sm ds-btn-danger\">Delete</button></span>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:6px;font:500 14px/1 system-ui,-apple-system,'Segoe UI',sans-serif;border:1px solid transparent;cursor:pointer;transition:background-color .15s,color .15s,opacity .15s}.ds-btn:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}.ds-btn:disabled{opacity:.5;pointer-events:none}.ds-cf{display:inline-flex;align-items:center;gap:8px;font-family:system-ui,sans-serif}.ds-q{color:var(--color-muted);font-size:12px}.ds-sm{height:32px;padding:0 10px}.ds-btn-ghost{background:transparent;color:var(--color-muted)}.ds-btn-ghost:hover{background:var(--color-surface-2);color:var(--color-text)}.ds-btn-danger{background:var(--color-danger-solid);color:#fff}"
+    },
+    {
+      "name": "ActionError",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "role=alert: outcome, reason, recovery, next to the control that tried.",
+      "html": "<p class=\"ds-err\" role=\"alert\">Not sent: connection lost. Your message is still in the field; send it again.</p>",
+      "css": ".ds-err{margin:0;color:var(--color-danger);font:14px/1.43 system-ui,-apple-system,'Segoe UI',sans-serif}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Operations Log",
+    "overview": "**Creative North Star: \"The Operations Log\"**\n\nThreavia is the category standard played straight: a clean working product at the craft level of Linear and Vercel, with no irony and no smuggled quirk. Its signature is structural, not ornamental. A session is an operations log that contains the conversation: every row hangs off one timestamp gutter, tool calls are one-line rows, the agent's prose runs unmarked beside an empty gutter, and the person's messages are tinted rows headed by the word \"You\". It is not a chat that happens to contain logs.\n\nThe surface is a neutral cool grey ground with white surfaces, 1px hairline borders and a single indigo accent for primary actions, focus and selection. Colour carries meaning only where something means something: green for done, amber for waiting, red for danger, each with a variant that stays legible as text. Depth is tonal; shadows are faint and reserved for things that float. The densest information on screen is the most important: the approval card puts the exact command in mono as its headline, with the machine, directory and risk underneath, and two large separated answers below.\n\nRejected by the build and the brief: the ChatGPT clone (pill composer, gradient send, chat bubbles on opposite sides), gradients outside the mark, glass and blur.",
+    "keyCharacteristics": [
+      "One left margin: a timestamp gutter down the whole session, every entry starting at the same edge.",
+      "One accent (indigo), three state hues, everything else cool neutral.",
+      "System UI type; monospace only for commands, paths, code and the gutter's times; tabular figures for every time, count, duration and cost.",
+      "6–8px radii, 1px hairlines, tonal depth, no gradients, no glass.",
+      "Phone first where it matters: 44px targets for every decision, collapsing to 32–36px where the pointer is precise.",
+      "Nothing fails silently: an outcome, a reason and a recovery, announced."
+    ],
+    "rules": [
+      {
+        "name": "The One Accent Rule",
+        "body": "Indigo is the only colour that invites action. State hues describe; they never decorate.",
+        "section": "colors"
+      },
+      {
+        "name": "The Text-Voice Rule",
+        "body": "A state hue used as words uses its text-safe token: `warn-text` for amber words, `danger` for red words, `danger-solid` under white text. A fill token is never set as text, and a text token is never filled under white.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mark-Only Gradient Rule",
+        "body": "The indigo-to-violet gradient lives in the logo. Nowhere else carries a gradient.",
+        "section": "colors"
+      },
+      {
+        "name": "The Literal Mono Rule",
+        "body": "Monospace is reserved for what is literal: commands, paths, directories, code, tool names in a tool row, diff counts, costs and the gutter's clock. Prose, labels and headings never go mono.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Figures Rule",
+        "body": "Every time, duration, count and cost sets in tabular figures (`<time>` elements and the `figures` utility do it globally), so columns of numbers line up.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Margin Rule",
+        "body": "Every entry in the log starts at the same left edge. The speaker is marked by a tinted row and a word, never by sending a message to the other side of the page or by a coloured side stripe.",
+        "section": "layout"
+      },
+      {
+        "name": "The Tonal-First Rule",
+        "body": "If a surface can separate by tone and a hairline, it does. A shadow means \"this is above the log\", nothing else.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Squared Composer Rule",
+        "body": "The composer is an 8px panel with a toolbar row, never a pill.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do use `lg` buttons (44px on the phone) for every decision and give every other phone-reachable control a 44px target.",
+      "Do put the literal thing being decided (command, path, URL) in mono as the headline, with machine, directory and risk beside it.",
+      "Do use `warn-text` for amber words and `danger-solid` under white text, in both schemes.",
+      "Do report every failed mutation with ActionError (outcome, reason, recovery) and every landed decision with a `role=\"status\"` receipt.",
+      "Do ask for permanent removals with ConfirmAction, in place, \"No\" first.",
+      "Do keep every log entry on the gutter's single left margin and every time in tabular figures.",
+      "Do pair every state colour with a word or icon; colour never carries state alone."
+    ],
+    "donts": [
+      "Don't build the ChatGPT clone: no pill composer, no gradient send, no chat bubbles on opposite sides.",
+      "Don't use a gradient outside the mark, or glass and backdrop blur anywhere.",
+      "Don't introduce a second accent; state hues are not decoration.",
+      "Don't set amber text in `warn` on a light ground (about 2.5:1), or white text on the dark scheme's `danger`.",
+      "Don't set prose, labels or headings in monospace.",
+      "Don't mark a speaker with a coloured side stripe; the mark is a tinted row and a word.",
+      "Don't let a closed drawer keep focus: off-screen means `inert`."
+    ]
+  }
+}

@@ -48,6 +48,7 @@ Interface consequence: the person must always see **which machine** is doing **w
 - Name: Threavia.
 - The existing mark and icon (`brand/threavia-icon.png`, `web/ui/src/components/logo.tsx`, `web/ui/public/icon-*.png`) are kept as they are.
 - Light and dark themes follow the operating system.
+- Visual register (chosen 2026-10-08 over rolled directions): the category standard played straight, without irony or smuggled quirk — a clean working product at the craft level of Linear and Vercel. The session timeline is organised as an operations log that contains the conversation, not a chat that contains logs.
 
 ## Evidence on Hand
 
