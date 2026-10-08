@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -33,7 +36,9 @@ type Claude struct {
 	tools  *mcp.Server
 	// readable are the directories a Job may read beyond the one it works in.
 	readable []string
-	logger   *slog.Logger
+	// available is what a Job can run by name, read from PATH at start.
+	available []string
+	logger    *slog.Logger
 
 	mu      sync.Mutex
 	running map[string]*execution
@@ -58,12 +63,55 @@ func NewClaude(binary string, tools *mcp.Server, readable []string, logger *slog
 		binary = "claude"
 	}
 	return &Claude{
-		binary:   binary,
-		tools:    tools,
-		readable: readable,
-		logger:   logger,
-		running:  make(map[string]*execution),
+		binary:    binary,
+		tools:     tools,
+		readable:  readable,
+		available: executablesOnPath(),
+		logger:    logger,
+		running:   make(map[string]*execution),
 	}
+}
+
+// executablesOnPath lists, once, what a Job can run by name.
+//
+// Read rather than declared. The agent cannot see its own PATH before running
+// something, and the cost of it guessing wrong is not a failed command — it is
+// a command prefixed with `export PATH=…:$PATH`, which no permission rule can
+// approve and which therefore wakes a person up for a search. A list written by
+// hand would answer that until the day someone adds a package, and then answer
+// it wrongly, which is worse than not answering: it tells the agent the tool is
+// absent when it is there.
+func executablesOnPath() []string {
+	seen := make(map[string]struct{})
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		if dir == "" {
+			continue
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			seen[entry.Name()] = struct{}{}
+		}
+	}
+
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	// A PATH nobody curated can hold thousands. Past this the list stops being
+	// information and starts being noise in every Job's prompt.
+	const most = 400
+	if len(names) > most {
+		names = names[:most]
+	}
+	return names
 }
 
 // Binary returns the configured executable.
@@ -244,7 +292,7 @@ func (c *Claude) command(ctx context.Context, params StartParams, nativeSessionI
 		"--permission-prompt-tool", mcp.PermissionTool,
 		"--mcp-config", mcpConfig,
 		"--strict-mcp-config",
-		"--append-system-prompt", systemPrompt(params),
+		"--append-system-prompt", systemPrompt(params, c.available),
 		// The policy, in the provider's own vocabulary. What it can settle from
 		// these it settles itself — its read-only set is better at reading a
 		// shell command than anything maintained here — and the permission tool
@@ -300,7 +348,7 @@ func stopGroup(cmd *exec.Cmd) error {
 
 // systemPrompt tells the agent about the Threavia-specific tool and about the
 // project it is working on.
-func systemPrompt(params StartParams) string {
+func systemPrompt(params StartParams, available []string) string {
 	var b strings.Builder
 	b.WriteString("You are running inside Threavia, a control plane for coding agents. ")
 	b.WriteString("There is no interactive terminal: the user may be on another device entirely, ")
@@ -313,7 +361,15 @@ func systemPrompt(params StartParams) string {
 	// otherwise forms is expensive: a command that assigns PATH needs the
 	// user's approval whatever else it does, so one prefix turns every reading
 	// command into a question for someone who may be asleep.
-	b.WriteString("\nYour PATH already carries the tools for this work. ")
+	//
+	// Named rather than described. "Your PATH carries the tools for this work"
+	// is a claim the agent has no way to check and every reason to doubt, and
+	// doubt is what produces the prefix. The list is read from PATH at start,
+	// so adding a package to the service is the whole of adding it here.
+	b.WriteString("\nYou can run these by name, they are already on your PATH:\n")
+	if len(available) > 0 {
+		b.WriteString(strings.Join(available, " ") + "\n")
+	}
 	b.WriteString("Never prefix a command with an assignment to PATH or to another special shell ")
 	b.WriteString("variable: it costs an approval the command would not otherwise need, ")
 	b.WriteString("however harmless the rest of it is. ")

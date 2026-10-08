@@ -151,11 +151,15 @@ func (p Policy) Evaluate(tool string, input map[string]any) Decision {
 	// Last, so that a genuine refusal above keeps its own reason.
 	if tool == "Bash" && p.Mode != backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS {
 		if assigned := specialAssignment(command(input)); assigned != "" {
+			// No list of tools here. The system prompt names what is on PATH,
+			// read from PATH rather than written down, and a second list kept
+			// by hand is one that goes stale the day someone adds a package —
+			// telling the agent a tool is absent when it is there.
 			return Decision{Deny, "This command assigns " + assigned + ", which makes it impossible to " +
 				"approve without asking a person: the value cannot be checked before it runs. " +
-				"Your PATH already carries git, ssh, coreutils, bash, grep, sed, awk, find, " +
-				"ripgrep, jq, tar, gzip, less and which. Run the command again without the " +
-				"assignment. If something you need is genuinely missing, say so."}
+				"The tools you need are already on your PATH, and the system prompt lists them. " +
+				"Run the command again without the assignment. If something is genuinely " +
+				"missing, say so."}
 		}
 	}
 
