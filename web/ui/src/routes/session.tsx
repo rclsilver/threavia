@@ -41,6 +41,21 @@ export function SessionView() {
   const cancel = useCancelJob(sessionId);
   const earlier = useEarlierEvents(sessionId);
   const backends = useBackends();
+  const message = useRef<HTMLTextAreaElement>(null);
+
+  // A click on the page with nothing under it means "back to writing", as in a
+  // terminal: the field takes the focus. Not on a control, not after selecting
+  // text to copy, not in a menu or dialog drawn over the page, and not on a
+  // touch screen, where the focus opens a keyboard over what is being read.
+  const focusMessage = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target as Element;
+    if (event.defaultPrevented || !event.currentTarget.contains(target)) return;
+    if (!window.matchMedia('(pointer: fine)').matches) return;
+    if ((event.nativeEvent as PointerEvent).pointerType === 'touch') return;
+    if (target.closest('a, button, input, textarea, select, label, summary, [role], [contenteditable="true"]')) return;
+    if (window.getSelection()?.toString()) return;
+    message.current?.focus({ preventScroll: true });
+  };
 
   // The snapshot is a point the stream has already passed, so a reconnection
   // resumes from here rather than replaying what is on screen.
@@ -100,7 +115,9 @@ export function SessionView() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    // Not a control itself: every control inside keeps its own click, and the
+    // field is reachable from the keyboard as it always was.
+    <div className="flex min-h-0 flex-1 flex-col" onClick={focusMessage}>
       {/* The frame keeps the window; only what is read is held to a column. */}
       <header className="border-border/70 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b px-3 py-3 sm:px-5">
         {/* The title takes the width the header has: an input sized by its own
@@ -164,6 +181,7 @@ export function SessionView() {
         active={active}
         deliveries={deliveries}
         onStop={() => active && cancel.mutate(active.id)}
+        field={message}
       />
     </div>
   );
@@ -300,16 +318,18 @@ function Composer({
   active,
   deliveries,
   onStop,
+  field,
 }: {
   sessionId: string;
   active?: { id: string; status: string };
   /** What the running work can take besides a queued message. */
   deliveries: ('NEXT' | 'NOW')[];
   onStop: () => void;
+  /** The field, so a click elsewhere on the page can hand it the focus. */
+  field: React.RefObject<HTMLTextAreaElement | null>;
 }) {
   const send = usePostMessage(sessionId);
   const [message, setMessage] = useState('');
-  const field = useRef<HTMLTextAreaElement>(null);
 
   useLayoutEffect(() => {
     const element = field.current;
