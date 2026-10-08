@@ -220,3 +220,71 @@ func TestReadingCommandsThatWriteAreStillAsked(t *testing.T) {
 		}
 	}
 }
+
+// TestQuotingIsReadTheWayTheShellReadsIt pins the rule that decides whether a
+// search is a search.
+//
+// These are real commands, taken from a session that put every one of them to
+// the user under GUARDED. A separator inside quotes is a character, not a
+// pipeline; a > inside quotes writes nothing. Reading them otherwise turned an
+// alternation into a list of unknown programs, and an unknown program is
+// treated as mutating.
+func TestQuotingIsReadTheWayTheShellReadsIt(t *testing.T) {
+	t.Parallel()
+
+	guarded := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
+	for _, cmd := range []string{
+		`export PATH=/run/current-system/sw/bin:$PATH && git grep -n -i "old_string\|new_string\|workspace" -- web/ui/src ':!web/ui/src/api/schema.d.ts' | head -15`,
+		`grep -n "message FileChange" -A8 api/proto/threavia/backend/v1/events.proto`,
+		`sed -n 150,165p THREAVIA_SPEC_V1.md; sed -n 385,395p THREAVIA_SPEC_V1.md`,
+		`grep -rn "a > b" internal`,
+		`grep 'a;b' internal`,
+		`rg -n "func New" internal | head`,
+		`find . -name '*.go' -newer go.mod | head`,
+		`git log --grep="fix|feat" --oneline -5`,
+		`echo "a && b"`,
+	} {
+		if d := guarded.Evaluate("Bash", bash(cmd)); d.Verdict != policy.Allow {
+			t.Errorf("%q = %v, want Allow", cmd, d.Verdict)
+		}
+	}
+}
+
+// TestQuotingDoesNotHideWhatIsReal pins the other direction: now that quotes
+// are read, everything outside them still has to be.
+func TestQuotingDoesNotHideWhatIsReal(t *testing.T) {
+	t.Parallel()
+
+	guarded := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
+	for _, cmd := range []string{
+		`grep -n "old_string\|new_string" src | rm -rf build`,
+		`grep 'pattern' file > out.txt`,
+		`sed -i 's/a/b/' go.mod`,
+		`sed -i.bak 's/a/b/' go.mod`,
+		`sed -ni 's/a/b/p' go.mod`,
+		`echo "safe" && $(rm -rf build)`,
+		`find . -name '*.tmp' -delete`,
+		`rg --pre ./run.sh "x"`,
+	} {
+		if d := guarded.Evaluate("Bash", bash(cmd)); d.Verdict != policy.Ask {
+			t.Errorf("%q = %v, want Ask", cmd, d.Verdict)
+		}
+	}
+}
+
+// TestAForbiddenCallCannotHideBehindQuotes pins that the deny rules read the
+// same command the shell will run: a push is a push wherever it sits in a
+// pipeline, and a quoted one is text.
+func TestAForbiddenCallCannotHideBehindQuotes(t *testing.T) {
+	t.Parallel()
+
+	guarded := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED)
+	guarded.AllowGitPush = false
+
+	if d := guarded.Evaluate("Bash", bash(`git status && git push origin master`)); d.Verdict != policy.Deny {
+		t.Errorf("a push behind a status = %v, want Deny", d.Verdict)
+	}
+	if d := guarded.Evaluate("Bash", bash(`grep -n "git push" docs/release.md`)); d.Verdict != policy.Allow {
+		t.Errorf("a search for the words = %v, want Allow", d.Verdict)
+	}
+}

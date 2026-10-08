@@ -218,6 +218,14 @@ var readOnlyPrograms = map[string]bool{
 	"cut": true, "tr": true, "diff": true, "tree": true, "du": true, "df": true,
 	"id": true, "whoami": true, "uname": true, "realpath": true, "readlink": true,
 	"dirname": true, "basename": true, "jq": true, "true": true, "test": true,
+	// Searching a tree is the most common read there is, and both of these
+	// already have an entry in escapingArgs below — which was unreachable while
+	// they were missing here, so every ripgrep and every find went to the user.
+	"rg": true, "find": true, "fd": true,
+	"false": true, "nl": true, "comm": true, "paste": true, "seq": true,
+	"column": true, "rev": true, "tac": true, "fold": true, "ps": true,
+	"md5sum": true, "sha1sum": true, "sha256sum": true, "cksum": true,
+	"xxd": true, "od": true, "strings": true,
 }
 
 // Parts that only shape the shell the rest of the command runs in. They change
@@ -261,14 +269,17 @@ var harmlessRedirection = regexp.MustCompile(`\s*(2>&1|[12&]?>\s*/dev/null)`)
 // readOnlyCommand reports whether every part of a command only observes.
 func readOnlyCommand(cmd string) bool {
 	// Substitutions run a command of their own wherever they appear, and a
-	// redirection writes a file whatever the command in front of it is.
+	// redirection writes a file whatever the command in front of it is — but
+	// only when the shell would read them as such, which is what the scan is
+	// for.
 	cleaned := harmlessRedirection.ReplaceAllString(cmd, "")
-	if strings.ContainsAny(cleaned, "`><") || strings.Contains(cleaned, "$(") {
+	parts, escapes := scanCommand(cleaned)
+	if escapes {
 		return false
 	}
 
 	reads := false
-	for _, part := range splitCommand(cleaned) {
+	for _, part := range parts {
 		fields := strings.Fields(part)
 		// Leading NAME=value assignments only set the environment of the command.
 		for len(fields) > 0 && isAssignment(fields[0]) {
@@ -301,6 +312,25 @@ func readOnlyPart(fields []string) bool {
 	case "env":
 		// Alone it prints the environment; followed by a command it runs it.
 		return len(fields) == 1
+	case "sed":
+		// `sed -n 40,60p file` is how a long file gets read a page at a time,
+		// and it is constant in this work. What writes is -i, in any of the
+		// spellings a short option takes: -i, -i.bak, -ni.
+		//
+		// A `w` or an `e` inside the script writes and runs too. They are not
+		// read here, and that is the package's stated limit: this is a guard
+		// rail against an agent doing what it was told not to, never a sandbox
+		// against one trying to get around it.
+		for _, arg := range fields[1:] {
+			if arg == "--in-place" || strings.HasPrefix(arg, "--in-place=") {
+				return false
+			}
+			if strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--") &&
+				strings.ContainsRune(arg, 'i') {
+				return false
+			}
+		}
+		return true
 	case "git":
 		return readOnlyGitPart(strings.Join(fields, " "))
 	case "go":
@@ -352,16 +382,89 @@ func isAssignment(word string) bool {
 // splitCommand breaks a command on the separators that start a new one, so a
 // forbidden call cannot hide behind a harmless prefix.
 func splitCommand(cmd string) []string {
-	fields := strings.FieldsFunc(cmd, func(r rune) bool {
-		return r == ';' || r == '|' || r == '&' || r == '\n'
-	})
-	parts := make([]string, 0, len(fields))
-	for _, field := range fields {
-		if trimmed := strings.TrimSpace(field); trimmed != "" {
+	parts, _ := scanCommand(cmd)
+	return parts
+}
+
+// Where a scan currently stands with respect to shell quoting.
+const (
+	bare = iota
+	singleQuoted
+	doubleQuoted
+)
+
+// scanCommand reads a command once, tracking quoting, and returns the commands
+// it is made of along with whether anything outside quotes writes a file or
+// runs a command of its own.
+//
+// Quoting is the whole of it, and reading it was the difference between a guard
+// rail and a nuisance. `git grep "a\|b" -- src | head` is a search and a head,
+// not six programs: splitting on every separator regardless of quotes turned
+// the alternation into a pipeline of programs nobody has ever heard of, and an
+// unclassified program is treated as mutating. A plain search therefore went to
+// the user for approval under GUARDED — the one mode whose entire purpose is to
+// let reads through. The same blindness made `grep "a > b" f` look like a
+// redirection.
+//
+// Single quotes make everything literal. Double quotes keep substitutions alive
+// but take the meaning out of separators and redirections, which is exactly the
+// distinction the shell itself draws.
+func scanCommand(cmd string) (parts []string, escapes bool) {
+	var current strings.Builder
+	flush := func() {
+		if trimmed := strings.TrimSpace(current.String()); trimmed != "" {
 			parts = append(parts, trimmed)
 		}
+		current.Reset()
 	}
-	return parts
+
+	state := bare
+	runes := []rune(cmd)
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+
+		switch state {
+		case singleQuoted:
+			// Not even a backslash means anything in here.
+			if r == '\'' {
+				state = bare
+			}
+
+		case doubleQuoted:
+			switch {
+			case r == '\\' && i+1 < len(runes):
+				current.WriteRune(r)
+				i++
+				r = runes[i]
+			case r == '"':
+				state = bare
+			case r == '`', r == '$' && i+1 < len(runes) && runes[i+1] == '(':
+				escapes = true
+			}
+
+		default:
+			switch {
+			case r == '\\' && i+1 < len(runes):
+				current.WriteRune(r)
+				i++
+				r = runes[i]
+			case r == '\'':
+				state = singleQuoted
+			case r == '"':
+				state = doubleQuoted
+			case r == '`', r == '$' && i+1 < len(runes) && runes[i+1] == '(':
+				escapes = true
+			case r == '>', r == '<':
+				escapes = true
+			case r == ';', r == '|', r == '&', r == '\n':
+				flush()
+				continue
+			}
+		}
+		current.WriteRune(r)
+	}
+	flush()
+	return parts, escapes
 }
 
 // command reads the shell command out of a Bash tool input.
