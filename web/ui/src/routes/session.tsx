@@ -17,6 +17,7 @@ import {
 import { AttentionPanel } from '@/components/attention';
 import { Badge } from '@/components/ui/badge';
 import { PolicyPanel } from '@/components/policy-panel';
+import { SchedulesPanel } from '@/components/schedules-panel';
 import { Timeline, type Pending } from '@/components/timeline';
 import { Button } from '@/components/ui/button';
 import {
@@ -436,6 +437,16 @@ function SessionSettings({ sessionId, archived }: { sessionId: string; archived:
             alone.
           </DialogDescription>
           <PolicyPanel sessionId={sessionId} />
+        </section>
+
+        <section className="border-border space-y-2 border-t pt-4">
+          <h3 className="text-sm font-medium">Schedules</h3>
+          <DialogDescription>
+            Messages sent to this session at set times, as if you typed them. One is skipped, and
+            the conversation says so, when the previous job is still running or the backend is
+            away: nothing is sent late or piled up.
+          </DialogDescription>
+          <SchedulesPanel sessionId={sessionId} />
         </section>
 
         <section className="border-border space-y-2 border-t pt-4">

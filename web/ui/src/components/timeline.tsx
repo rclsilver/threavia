@@ -3,6 +3,8 @@ import {
   AlertTriangle,
   ArrowDown,
   Ban,
+  CalendarClock,
+  CalendarX,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -41,6 +43,7 @@ const RENDERED = new Set([
   'user.message',
   'agent.message',
   'workspace.changed',
+  'schedule.skipped',
   'validation.resolved',
   'user_input.resolved',
   'job.completed',
@@ -432,6 +435,13 @@ function Entry({
             {user.delivery === 'NOW' ? 'Interrupted the job with' : 'Added to the running job'}
           </p>
         )}
+        {/* Nobody typed it: a schedule did, and the reader should not wonder
+            when they wrote this. */}
+        {user.scheduleId && (
+          <p className="text-muted flex items-center gap-1 text-xs">
+            <CalendarClock className="size-3" /> Sent by a schedule
+          </p>
+        )}
         <p className="text-sm whitespace-pre-wrap">{user.text}</p>
         {jobId && status && <Stop status={status} onStop={() => onStop(jobId)} />}
       </div>
@@ -692,6 +702,12 @@ function describe(event: Event): {
             Failed: {payloadOf(event, 'job.failed')?.error ?? 'unknown error'}
           </span>
         ),
+      };
+    case 'schedule.skipped':
+      return {
+        Icon: CalendarX,
+        tone: 'text-warn',
+        text: `Scheduled message not sent: ${payloadOf(event, 'schedule.skipped')?.reason ?? 'skipped'}.`,
       };
     case 'job.cancelled':
       return { Icon: Ban, text: 'Cancelled.' };

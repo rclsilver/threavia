@@ -19,4 +19,5 @@ export const keys = {
   decisions: (projectId: string) => ['decisions', projectId] as const,
   artifacts: (projectId: string) => ['artifacts', projectId] as const,
   skills: (projectId: string) => ['skills', projectId] as const,
+  schedules: (sessionId: string) => ['schedules', sessionId] as const,
 };

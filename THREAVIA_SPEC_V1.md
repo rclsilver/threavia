@@ -160,6 +160,21 @@ Optional CODE backend features:
 
 Later work is a new queued Job; no `later` mode.
 
+A message reaches a working Session through `POST /sessions/{id}/messages`
+with `delivery`: `QUEUE` (default, a new Job), `NEXT` or `NOW` (the running
+Job, when its backend announces the feature; refused rather than queued when
+nothing runs).
+
+Scheduled messages: a Session may carry Schedules, a five-field cron
+expression read in a named time zone (Europe/Paris by default) and a message.
+When one comes due, Core posts the message like any other, marked as sent by
+the Schedule. A due run is skipped, and the Session says so in a
+`schedule.skipped` event, when the previous Job is still going, when the
+backend is offline, or when Core was not running at the time: it is never sent
+late and runs never stack up. A run is claimed in PostgreSQL, so replicas never
+send it twice. This is not a Job scheduler: it only decides when a message is
+posted, and the Job it creates follows every rule above.
+
 ### 3.6 Event
 
 Events form the observable timeline and realtime synchronization mechanism.
@@ -856,6 +871,8 @@ summary:
 ```
 
 Detailed diff is fetched on demand from Backend; Core does not need to persist every diff as source of truth. Event history may retain the list of files touched.
+
+The Claude backend records the working directory as a git tree before and after a Job (from a copy of the index, leaving the person's index alone) and puts the two tree ids and the directory on `workspace.changed`. `GET /sessions/{id}/diff?event=&path=` relays a `WorkspaceDiffRequest` to that backend, which answers with a `WorkspaceDiff`. Only a path the event listed can be asked for. The trees are unreferenced git objects, so a diff stays available until git collects them.
 
 Future review/ChangeSet/Crit integration should not force V1 into a GitHub-PR model.
 

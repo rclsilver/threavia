@@ -200,6 +200,13 @@ func run() error {
 	})
 
 	group.Go(func() error {
+		// Messages planned on a Session go out from here. A run is claimed in
+		// the database, so a second replica never sends the same one.
+		svc.RunSchedules(groupCtx)
+		return nil
+	})
+
+	group.Go(func() error {
 		<-groupCtx.Done()
 		logger.Info("shutting down")
 

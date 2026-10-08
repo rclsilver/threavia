@@ -3,7 +3,10 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
+
+	"github.com/rclsilver/threavia/internal/core/domain"
 )
 
 // encodePayload serialises an event payload. Payloads stay small and structured;
@@ -32,6 +35,18 @@ type UserMessagePayload struct {
 	// Delivery says how a message sent while a Job ran reached it: NOW or
 	// NEXT. Absent for a message that started a Job of its own.
 	Delivery Delivery `json:"delivery,omitempty"`
+	// ScheduleID names the Schedule that sent the message, when nobody typed
+	// it.
+	ScheduleID domain.ScheduleID `json:"scheduleId,omitempty"`
+}
+
+// ScheduleSkippedPayload is the body of a schedule.skipped event: a scheduled
+// message that was not sent, and why.
+type ScheduleSkippedPayload struct {
+	ScheduleID domain.ScheduleID      `json:"scheduleId"`
+	Outcome    domain.ScheduleOutcome `json:"outcome"`
+	Reason     string                 `json:"reason"`
+	Due        string                 `json:"due"`
 }
 
 // AgentMessagePayload is the body of an agent.message event.

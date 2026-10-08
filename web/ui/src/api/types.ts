@@ -14,6 +14,7 @@ export type Job = Schemas['Job'];
 export type JobStatus = Schemas['JobStatus'];
 export type Event = Schemas['Event'];
 export type FileDiff = Schemas['FileDiff'];
+export type Schedule = Schemas['Schedule'];
 export type Snapshot = Schemas['Snapshot'];
 export type Attention = Schemas['Attention'];
 export type ValidationRequest = Schemas['ValidationRequest'];
@@ -56,7 +57,8 @@ export interface List<T> {
  */
 export interface EventPayloads {
   'session.created': { title: string };
-  'user.message': { text: string; delivery?: 'NOW' | 'NEXT' };
+  'user.message': { text: string; delivery?: 'NOW' | 'NEXT'; scheduleId?: string };
+  'schedule.skipped': { scheduleId: string; outcome: string; reason: string; due: string };
   'agent.message': { text: string };
   'tool.started': { toolCallId: string; name: string; input?: Record<string, unknown> };
   // The backend keeps a bounded excerpt of the output and marks it with an

@@ -755,6 +755,98 @@ paths:
         "409":
           $ref: "#/components/responses/Error"
 
+  /api/v1/sessions/{sessionId}/schedules:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    get:
+      tags: [sessions]
+      summary: The Schedules of a Session
+      responses:
+        "200":
+          description: The Schedules
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Schedule" }
+    post:
+      tags: [sessions]
+      summary: Send a message to this Session on a schedule
+      description: |
+        A five-field cron expression (minute hour day month weekday), read in
+        the given time zone, Europe/Paris when none is given. When it comes
+        due Core posts the message like any other, marked as scheduled. A run
+        is skipped, and the Session says so in a schedule.skipped event, when
+        the previous Job is still going, when the backend is offline, or when
+        Core was not running at the time: it is never sent late, and runs do
+        not stack up.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScheduleInput" }
+      responses:
+        "201":
+          description: The created Schedule
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Schedule" }
+        "400":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/schedules/{scheduleId}:
+    parameters:
+      - name: scheduleId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    patch:
+      tags: [sessions]
+      summary: Change, pause or resume a Schedule
+      description: Its next run is worked out again from now.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScheduleInput" }
+      responses:
+        "200":
+          description: The Schedule
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Schedule" }
+        "400":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [sessions]
+      summary: Delete a Schedule; what it sent stays in the Session
+      responses:
+        "204":
+          description: Deleted
+
+  /api/v1/schedules/{scheduleId}/run:
+    parameters:
+      - name: scheduleId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    post:
+      tags: [sessions]
+      summary: Send a Schedule's message now
+      description: |
+        An explicit act, so it queues behind a running Job like any message,
+        and it leaves the next planned run where it was.
+      responses:
+        "201":
+          description: The created Job
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+
   /api/v1/sessions/{sessionId}/archive:
     parameters:
       - $ref: "#/components/parameters/SessionID"
@@ -1794,8 +1886,11 @@ components:
             The shape depends on `type`, and a backend may add one without a
             Core release, so it is open. The ones a client renders:
 
-            - `user.message`: `{ text, delivery? }`, delivery NOW or NEXT for a
-              message that joined a Job already running
+            - `user.message`: `{ text, delivery?, scheduleId? }`, delivery NOW or
+              NEXT for a message that joined a Job already running, scheduleId
+              for one a Schedule sent
+            - `schedule.skipped`: `{ scheduleId, outcome, reason, due }`, a
+              scheduled message that was not sent
             - `agent.message`: `{ text }`
             - `tool.started`: `{ toolCallId, name, input }`
             - `tool.completed`: `{ toolCallId, name, output }`, the output a
@@ -1807,6 +1902,41 @@ components:
               present when the diff of a file can be asked for
             - `validation.resolved`: `{ validationId, approved, note }`
             - `user_input.resolved`: `{ requestId, value }`
+
+    ScheduleInput:
+      type: object
+      description: Every field optional on a change; cron and message required on creation.
+      properties:
+        cron: { type: string, example: "0 8 * * mon-fri" }
+        timezone: { type: string, example: Europe/Paris }
+        message: { type: string }
+        enabled: { type: boolean }
+
+    Schedule:
+      type: object
+      required: [id, sessionId, cron, timezone, message, enabled, upcoming, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        sessionId: { $ref: "#/components/schemas/UUID" }
+        cron: { type: string }
+        timezone: { type: string }
+        message: { type: string }
+        enabled: { type: boolean }
+        nextRunAt:
+          type: string
+          format: date-time
+          description: Absent while paused.
+        lastRunAt: { type: string, format: date-time }
+        lastOutcome:
+          type: string
+          enum: [SENT, SKIPPED_BUSY, SKIPPED_MISSED, FAILED]
+        lastJobId: { $ref: "#/components/schemas/UUID" }
+        upcoming:
+          type: array
+          description: The next few runs, for a person to read as dates.
+          items: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
 
     FileDiff:
       type: object

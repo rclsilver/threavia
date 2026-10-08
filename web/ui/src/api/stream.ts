@@ -222,6 +222,14 @@ export class EventStream {
       case 'job.failed':
       case 'job.cancelled':
         void this.queries.invalidateQueries({ queryKey: ['sessions'] });
+        // A Job may be a Schedule's doing, which changes what it last did.
+        if (event.type === 'job.created') {
+          void this.queries.invalidateQueries({ queryKey: keys.schedules(event.sessionId ?? '') });
+        }
+        break;
+
+      case 'schedule.skipped':
+        void this.queries.invalidateQueries({ queryKey: keys.schedules(event.sessionId ?? '') });
         break;
 
       case 'backend.registered':

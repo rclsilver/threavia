@@ -1343,6 +1343,198 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{sessionId}/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["SessionID"];
+            };
+            cookie?: never;
+        };
+        /** The Schedules of a Session */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: components["parameters"]["SessionID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The Schedules */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["Schedule"][];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Send a message to this Session on a schedule
+         * @description A five-field cron expression (minute hour day month weekday), read in
+         *     the given time zone, Europe/Paris when none is given. When it comes
+         *     due Core posts the message like any other, marked as scheduled. A run
+         *     is skipped, and the Session says so in a schedule.skipped event, when
+         *     the previous Job is still going, when the backend is offline, or when
+         *     Core was not running at the time: it is never sent late, and runs do
+         *     not stack up.
+         *
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: components["parameters"]["SessionID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ScheduleInput"];
+                };
+            };
+            responses: {
+                /** @description The created Schedule */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Schedule"];
+                    };
+                };
+                400: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schedules/{scheduleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scheduleId: components["schemas"]["UUID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a Schedule; what it sent stays in the Session */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    scheduleId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Change, pause or resume a Schedule
+         * @description Its next run is worked out again from now.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    scheduleId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ScheduleInput"];
+                };
+            };
+            responses: {
+                /** @description The Schedule */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Schedule"];
+                    };
+                };
+                400: components["responses"]["Error"];
+            };
+        };
+        trace?: never;
+    };
+    "/api/v1/schedules/{scheduleId}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scheduleId: components["schemas"]["UUID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a Schedule's message now
+         * @description An explicit act, so it queues behind a running Job like any message,
+         *     and it leaves the next planned run where it was.
+         *
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    scheduleId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The created Job */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Job"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{sessionId}/archive": {
         parameters: {
             query?: never;
@@ -2985,8 +3177,11 @@ export interface components {
             /** @description The shape depends on `type`, and a backend may add one without a
              *     Core release, so it is open. The ones a client renders:
              *
-             *     - `user.message`: `{ text, delivery? }`, delivery NOW or NEXT for a
-             *       message that joined a Job already running
+             *     - `user.message`: `{ text, delivery?, scheduleId? }`, delivery NOW or
+             *       NEXT for a message that joined a Job already running, scheduleId
+             *       for one a Schedule sent
+             *     - `schedule.skipped`: `{ scheduleId, outcome, reason, due }`, a
+             *       scheduled message that was not sent
              *     - `agent.message`: `{ text }`
              *     - `tool.started`: `{ toolCallId, name, input }`
              *     - `tool.completed`: `{ toolCallId, name, output }`, the output a
@@ -3002,6 +3197,39 @@ export interface components {
             payload?: {
                 [key: string]: unknown;
             };
+        };
+        /** @description Every field optional on a change; cron and message required on creation. */
+        ScheduleInput: {
+            /** @example 0 8 * * mon-fri */
+            cron?: string;
+            /** @example Europe/Paris */
+            timezone?: string;
+            message?: string;
+            enabled?: boolean;
+        };
+        Schedule: {
+            id: components["schemas"]["UUID"];
+            sessionId: components["schemas"]["UUID"];
+            cron: string;
+            timezone: string;
+            message: string;
+            enabled: boolean;
+            /**
+             * Format: date-time
+             * @description Absent while paused.
+             */
+            nextRunAt?: string;
+            /** Format: date-time */
+            lastRunAt?: string;
+            /** @enum {string} */
+            lastOutcome?: "SENT" | "SKIPPED_BUSY" | "SKIPPED_MISSED" | "FAILED";
+            lastJobId?: components["schemas"]["UUID"];
+            /** @description The next few runs, for a person to read as dates. */
+            upcoming: string[];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
         FileDiff: {
             path: string;

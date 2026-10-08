@@ -82,6 +82,7 @@ func NewRouter(opts Options) http.Handler {
 	h.registerPolicy(mux)
 	h.registerArtifacts(mux)
 	h.registerSkills(mux)
+	h.registerSchedules(mux)
 	h.registerStream(mux)
 	h.registerSpec(mux)
 

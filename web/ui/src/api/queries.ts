@@ -22,6 +22,7 @@ import type {
   List,
   Me,
   Project,
+  Schedule,
   Session,
   Skill,
   SkillSource,
@@ -683,3 +684,53 @@ export function useAudit() {
 
 /** The client used by the stream, which writes to the same cache the hooks read. */
 export type Cache = QueryClient;
+
+// ------------------------------------------------------------------ schedules
+
+export interface ScheduleInput {
+  cron?: string;
+  timezone?: string;
+  message?: string;
+  enabled?: boolean;
+}
+
+export function useSchedules(sessionId: string) {
+  return useQuery({
+    queryKey: keys.schedules(sessionId),
+    queryFn: () => api.get<List<Schedule>>(`/api/v1/sessions/${sessionId}/schedules`).then(items),
+  });
+}
+
+export function useCreateSchedule(sessionId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ScheduleInput) =>
+      api.post<Schedule>(`/api/v1/sessions/${sessionId}/schedules`, input),
+    onSuccess: () => queries.invalidateQueries({ queryKey: keys.schedules(sessionId) }),
+  });
+}
+
+export function useUpdateSchedule(sessionId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...input }: ScheduleInput & { id: string }) =>
+      api.patch<Schedule>(`/api/v1/schedules/${id}`, input),
+    onSuccess: () => queries.invalidateQueries({ queryKey: keys.schedules(sessionId) }),
+  });
+}
+
+export function useDeleteSchedule(sessionId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/api/v1/schedules/${id}`),
+    onSuccess: () => queries.invalidateQueries({ queryKey: keys.schedules(sessionId) }),
+  });
+}
+
+export function useRunSchedule(sessionId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<Job>(`/api/v1/schedules/${id}/run`),
+    onSuccess: () => queries.invalidateQueries({ queryKey: keys.schedules(sessionId) }),
+  });
+}

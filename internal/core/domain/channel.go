@@ -23,6 +23,8 @@ const (
 	// ChannelAPI is the fallback for a caller that names no channel, such as a
 	// script or a test.
 	ChannelAPI Channel = "api"
+	// ChannelSchedule marks work Core started itself, on a Schedule.
+	ChannelSchedule Channel = "schedule"
 )
 
 // NormaliseChannel turns what a client declared into a stored Channel. An empty

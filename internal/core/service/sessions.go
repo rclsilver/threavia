@@ -173,7 +173,13 @@ func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessi
 	default:
 		return domain.Job{}, fmt.Errorf("%w: unknown delivery %q", ErrInvalid, delivery)
 	}
+	return s.queueMessage(ctx, identity, sessionID, message, idempotencyKey, "")
+}
 
+// queueMessage makes a message a Job of its own on the current Run. A
+// scheduled one carries the Schedule that sent it, so the timeline says it was
+// not typed by anyone.
+func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string, scheduleID domain.ScheduleID) (domain.Job, error) {
 	if idempotencyKey != "" {
 		job, err := s.store.JobByIdempotencyKey(ctx, idempotencyKey)
 		if err == nil {
@@ -216,7 +222,7 @@ func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessi
 		}
 		return s.appendAll(ctx, tx, b,
 			record{events.TypeJobCreated, scope, JobCreatedPayload{RunID: string(run.ID)}},
-			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message}},
+			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, ScheduleID: scheduleID}},
 		)
 	})
 	if err != nil {

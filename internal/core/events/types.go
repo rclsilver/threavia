@@ -50,6 +50,10 @@ const (
 
 	TypeBackendRegistered Type = "backend.registered"
 	TypeBackendRevoked    Type = "backend.revoked"
+
+	// TypeScheduleSkipped says, in the Session, that a scheduled message was
+	// not sent and why.
+	TypeScheduleSkipped Type = "schedule.skipped"
 )
 
 // persistentTypes is the set of event types Core persists and assigns a global
@@ -85,6 +89,7 @@ var persistentTypes = map[Type]bool{
 	TypeWorkspaceChanged:        true,
 	TypeBackendRegistered:       true,
 	TypeBackendRevoked:          true,
+	TypeScheduleSkipped:         true,
 }
 
 func (t Type) String() string { return string(t) }
