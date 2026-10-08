@@ -1,5 +1,5 @@
 import { useParams } from '@tanstack/react-router';
-import { Download, Trash2 } from 'lucide-react';
+import { Check, Download, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import {
@@ -20,7 +20,9 @@ import {
 } from '@/api/queries';
 import type { Decision, ExecutionPolicy, SkillSourceType } from '@/api/types';
 import { PolicyForm, RulesEditor } from '@/components/policy-form';
+import { ActionError } from '@/components/ui/action-error';
 import { Badge } from '@/components/ui/badge';
+import { ConfirmAction } from '@/components/ui/confirm';
 import { Button } from '@/components/ui/button';
 import { Card, EmptyState } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
@@ -150,9 +152,16 @@ function DecisionsPane({ projectId }: { projectId: string }) {
         onSubmit={(event) => {
           event.preventDefault();
           if (!title.trim()) return;
-          create.mutate({ title: title.trim(), content: content.trim(), importance });
-          setTitle('');
-          setContent('');
+          // Cleared once recorded, so a failure leaves the text to retry.
+          create.mutate(
+            { title: title.trim(), content: content.trim(), importance },
+            {
+              onSuccess: () => {
+                setTitle('');
+                setContent('');
+              },
+            },
+          );
         }}
       >
         <div className="flex gap-2">
@@ -180,6 +189,7 @@ function DecisionsPane({ projectId }: { projectId: string }) {
           onChange={(event) => setContent(event.target.value)}
           placeholder="Why, and what it rules out"
         />
+        <ActionError error={create.error} />
       </form>
 
       <p className="text-muted text-xs">
@@ -216,9 +226,9 @@ function DeleteDecision({ decision }: { decision: Decision }) {
   const remove = useDeleteDecision();
   const [asking, setAsking] = useState(false);
 
-  if (asking) {
+  if (asking || remove.error) {
     return (
-      <span className="text-muted ml-auto flex items-center gap-2 text-xs">
+      <span className="text-muted ml-auto flex flex-wrap items-center gap-2 text-xs">
         Delete?
         <Button variant="ghost" size="sm" onClick={() => setAsking(false)}>
           No
@@ -231,6 +241,7 @@ function DeleteDecision({ decision }: { decision: Decision }) {
         >
           Delete
         </Button>
+        <ActionError error={remove.error} className="text-xs" />
       </span>
     );
   }
@@ -275,7 +286,7 @@ function ArtifactsPane({ projectId }: { projectId: string }) {
         </Button>
       </form>
 
-      {upload.error && <p className="text-danger text-sm">{(upload.error).message}</p>}
+      <ActionError error={upload.error ?? remove.error} />
 
       <Records
         items={artifacts.data ?? []}
@@ -289,13 +300,17 @@ function ArtifactsPane({ projectId }: { projectId: string }) {
                     <Download /> download
                   </a>
                 </Button>
-                <Button
-                  variant="link"
-                  className="text-danger"
-                  onClick={() => remove.mutate(artifact.id)}
-                >
-                  <Trash2 /> delete
-                </Button>
+                <ConfirmAction
+                  question="Delete this file?"
+                  confirm="Delete"
+                  pending={remove.isPending}
+                  onConfirm={() => remove.mutate(artifact.id)}
+                  trigger={(ask) => (
+                    <Button variant="link" className="text-danger" onClick={ask}>
+                      <Trash2 /> delete
+                    </Button>
+                  )}
+                />
               </span>
             </div>
             <p className="text-muted mt-1.5 font-mono text-xs break-all">
@@ -389,7 +404,7 @@ function SkillsPane({ projectId }: { projectId: string }) {
         Core fetches and repacks a skill. It never runs anything the source contains.
       </p>
 
-      {install.error && <p className="text-danger text-sm">{(install.error).message}</p>}
+      <ActionError error={install.error ?? uninstall.error} />
 
       <Records
         items={skills.data ?? []}
@@ -398,13 +413,19 @@ function SkillsPane({ projectId }: { projectId: string }) {
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{skill.name}</span>
               <Badge>{humanise(skill.source.type)}</Badge>
-              <Button
-                variant="link"
-                className="text-danger ml-auto"
-                onClick={() => uninstall.mutate(skill.id)}
-              >
-                uninstall
-              </Button>
+              <span className="ml-auto">
+                <ConfirmAction
+                  question="Uninstall this skill?"
+                  confirm="Uninstall"
+                  pending={uninstall.isPending}
+                  onConfirm={() => uninstall.mutate(skill.id)}
+                  trigger={(ask) => (
+                    <Button variant="link" className="text-danger" onClick={ask}>
+                      uninstall
+                    </Button>
+                  )}
+                />
+              </span>
             </div>
             {skill.description && <p className="mt-1.5 text-sm">{skill.description}</p>}
             {/* The installed revision is what is actually there, which is not the
@@ -440,16 +461,27 @@ function InstructionsPane({ projectId }: { projectId: string }) {
       <Textarea
         rows={14}
         value={draft ?? ''}
-        onChange={(event) => setDraft(event.target.value)}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          // "Saved" describes the text that was saved, not this one.
+          update.reset();
+        }}
         placeholder="Always run the chart tests before packaging."
       />
       <Button
         variant="primary"
-        disabled={draft === null || update.isPending}
+        disabled={draft === null || update.isPending || update.isSuccess}
         onClick={() => update.mutate({ instructions: draft ?? '' })}
       >
-        {update.isSuccess && !update.isPending ? 'Saved' : 'Save'}
+        {update.isPending ? 'Saving…' : update.isSuccess ? (
+          <>
+            <Check /> Saved
+          </>
+        ) : (
+          'Save'
+        )}
       </Button>
+      <ActionError error={update.error} />
     </div>
   );
 }
@@ -568,9 +600,22 @@ function PermissionsPane({ projectId }: { projectId: string }) {
 
   return (
     <div className="max-w-3xl space-y-4">
-      <PolicyForm value={draft} onChange={setDraft} idPrefix="project-policy" />
+      <PolicyForm
+        value={draft}
+        onChange={(next) => {
+          setDraft(next);
+          save.reset();
+        }}
+        idPrefix="project-policy"
+      />
 
-      <RulesEditor rules={draft.rules ?? []} onChange={(rules) => setDraft({ ...draft, rules })} />
+      <RulesEditor
+        rules={draft.rules ?? []}
+        onChange={(rules) => {
+          setDraft({ ...draft, rules });
+          save.reset();
+        }}
+      />
 
       <p className="text-muted text-xs">
         A refusal written here cannot be lifted by a Session. The switches above can: a Session that
@@ -581,14 +626,20 @@ function PermissionsPane({ projectId }: { projectId: string }) {
         session from its next message.
       </p>
 
-      {save.error && <p className="text-danger text-sm">{save.error.message}</p>}
+      <ActionError error={save.error} />
 
       <Button
         variant="primary"
-        disabled={save.isPending}
+        disabled={save.isPending || save.isSuccess}
         onClick={() => save.mutate(draft)}
       >
-        {save.isSuccess && !save.isPending ? 'Saved' : 'Save'}
+        {save.isPending ? 'Saving…' : save.isSuccess ? (
+          <>
+            <Check /> Saved
+          </>
+        ) : (
+          'Save'
+        )}
       </Button>
     </div>
   );

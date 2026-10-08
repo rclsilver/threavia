@@ -14,7 +14,7 @@ export function DialogContent({ className, children, ...props }: ComponentProps<
       <Primitive.Overlay className="fixed inset-0 z-40 bg-black/40" />
       <Primitive.Content
         className={cn(
-          'bg-surface border-border fixed top-1/2 left-1/2 z-50 flex max-h-[85vh] w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-[--radius-card] border p-5 shadow-xl',
+          'bg-surface border-border fixed top-1/2 left-1/2 z-50 flex max-h-[85vh] w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-(--radius-card) border p-5 shadow-xl',
           className,
         )}
         {...props}

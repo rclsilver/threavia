@@ -4,13 +4,13 @@ import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
 const badge = cva(
-  'inline-flex items-center rounded-full px-2 py-0.5 text-[0.6875rem] font-medium whitespace-nowrap',
+  'inline-flex items-center rounded px-1.5 py-0.5 text-[0.6875rem] font-medium whitespace-nowrap',
   {
     variants: {
       tone: {
         neutral: 'bg-surface-2 text-muted',
         ok: 'bg-ok/15 text-ok',
-        warn: 'bg-warn/15 text-warn',
+        warn: 'bg-warn/15 text-warn-text',
         danger: 'bg-danger/15 text-danger',
         accent: 'bg-accent/15 text-accent',
       },

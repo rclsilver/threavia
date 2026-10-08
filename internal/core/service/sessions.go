@@ -513,7 +513,35 @@ func (s *Service) Attention(ctx context.Context, identity auth.Identity, session
 
 	attention := domain.Attention{Validations: validations, UserInputs: inputs}
 	s.markRelevance(ctx, identity.UserID, &attention)
+	s.addContext(ctx, identity.UserID, &attention)
 	return attention, nil
+}
+
+// addContext says where each pending request comes from. Context is a help to
+// the person deciding; losing it must not cost them the list itself.
+func (s *Service) addContext(ctx context.Context, ownerID domain.UserID, attention *domain.Attention) {
+	runs := make([]domain.RunID, 0, len(attention.Validations)+len(attention.UserInputs))
+	for _, item := range attention.Validations {
+		runs = append(runs, item.Scope.RunID)
+	}
+	for _, item := range attention.UserInputs {
+		runs = append(runs, item.Scope.RunID)
+	}
+	contexts, err := s.store.AttentionContexts(ctx, ownerID, runs)
+	if err != nil {
+		s.logger.Error("cannot read the context of pending work", slog.String("error", err.Error()))
+		return
+	}
+	for i := range attention.Validations {
+		if c, ok := contexts[attention.Validations[i].Scope.RunID]; ok {
+			attention.Validations[i].Context = &c
+		}
+	}
+	for i := range attention.UserInputs {
+		if c, ok := contexts[attention.UserInputs[i].Scope.RunID]; ok {
+			attention.UserInputs[i].Context = &c
+		}
+	}
 }
 
 // markRelevance fills in the notification relevance of specification section 6.

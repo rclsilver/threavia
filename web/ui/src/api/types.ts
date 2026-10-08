@@ -68,7 +68,7 @@ export interface EventPayloads {
   'tool.failed': { toolCallId: string; name: string; error?: string };
   'job.completed': { summary?: string; usage?: Usage };
   'job.failed': { error?: string; usage?: Usage };
-  'validation.resolved': { validationId: string; approved: boolean; note?: string };
+  'validation.resolved': { validationId: string; approved: boolean; note?: string; title?: string };
   'user_input.resolved': { requestId: string; value: string };
   'workspace.changed': {
     knownDirectoryId?: string;

@@ -223,3 +223,41 @@ func scanUserInputRequest(row scanner) (domain.UserInputRequest, error) {
 		&u.ResolvedByUserID, &u.ResolvedChannel, &u.CreatedAt, &u.ResolvedAt)
 	return u, classify(err, "read user input request")
 }
+
+// AttentionContexts says, for the Runs pending requests belong to, which
+// session of which project they come from, which machine runs them and in
+// which directory: what a person deciding a request needs to see.
+func (s *Store) AttentionContexts(ctx context.Context, ownerID domain.UserID, runIDs []domain.RunID) (map[domain.RunID]domain.AttentionContext, error) {
+	out := make(map[domain.RunID]domain.AttentionContext, len(runIDs))
+	if len(runIDs) == 0 {
+		return out, nil
+	}
+	ids := make([]string, 0, len(runIDs))
+	for _, id := range runIDs {
+		ids = append(ids, string(id))
+	}
+	rows, err := s.q.Query(ctx, `
+		SELECT r.id, sess.title, p.name, b.name, COALESCE(kd.name, '')
+		FROM runs r
+		JOIN sessions sess ON sess.id = r.session_id
+		JOIN projects p ON p.id = sess.project_id
+		JOIN backend_instances b ON b.id = r.backend_instance_id
+		LEFT JOIN known_directories kd ON kd.id = sess.working_directory_id
+		WHERE r.id = ANY($1::uuid[]) AND p.owner_id = $2`, ids, ownerID)
+	if err != nil {
+		return nil, classify(err, "read attention context")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			runID   domain.RunID
+			context domain.AttentionContext
+		)
+		if err := rows.Scan(&runID, &context.SessionTitle, &context.ProjectName,
+			&context.BackendName, &context.Directory); err != nil {
+			return nil, classify(err, "read attention context")
+		}
+		out[runID] = context
+	}
+	return out, classify(rows.Err(), "read attention context")
+}

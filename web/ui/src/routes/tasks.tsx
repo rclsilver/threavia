@@ -14,6 +14,7 @@ import {
 import type { Task, TaskStatus } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import { CheckboxField } from '@/components/ui/checkbox';
+import { ActionError } from '@/components/ui/action-error';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSelectedProject } from '@/use-project';
@@ -105,8 +106,8 @@ export function TasksView() {
         onSubmit={(event) => {
           event.preventDefault();
           if (!title.trim()) return;
-          create.mutate(title.trim());
-          setTitle('');
+          // Cleared once added, so a failure leaves the title to retry.
+          create.mutate(title.trim(), { onSuccess: () => setTitle('') });
         }}
       >
         <Input
@@ -118,6 +119,8 @@ export function TasksView() {
           Add
         </Button>
       </form>
+
+      <ActionError error={create.error} />
 
       <CheckboxField checked={includeDone} onCheckedChange={setIncludeDone}>
         show finished
@@ -155,7 +158,7 @@ function Group({
   return (
     <section className="space-y-2">
       <h3 className="text-muted text-xs tracking-wide uppercase">{title}</h3>
-      <ul className="border-border divide-border divide-y rounded-[--radius-card] border">
+      <ul className="border-border divide-border divide-y rounded-(--radius-card) border">
         {tasks.map((task) => (
           <li key={task.id} className="px-3 py-2.5">
             <div className="flex items-start gap-3">
@@ -198,6 +201,7 @@ function Group({
           </li>
         ))}
       </ul>
+      <ActionError error={update.error} />
     </section>
   );
 }
@@ -213,9 +217,9 @@ function DeleteTask({ task }: { task: Task }) {
   const remove = useDeleteTask();
   const [asking, setAsking] = useState(false);
 
-  if (asking) {
+  if (asking || remove.error) {
     return (
-      <span className="text-muted flex items-center gap-2 text-xs">
+      <span className="text-muted flex flex-wrap items-center gap-2 text-xs">
         Delete?
         <Button variant="ghost" size="sm" onClick={() => setAsking(false)}>
           No
@@ -228,6 +232,7 @@ function DeleteTask({ task }: { task: Task }) {
         >
           Delete
         </Button>
+        <ActionError error={remove.error} className="text-xs" />
       </span>
     );
   }

@@ -8,6 +8,7 @@ import {
   useTestPush,
   useUnsubscribePush,
 } from '@/api/queries';
+import { ActionError } from '@/components/ui/action-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { clientId, deviceName, guessedDeviceName, setDeviceName } from '@/lib/device';
@@ -169,11 +170,16 @@ export function NotificationsPane() {
             )}
           </div>
           {permission === 'denied' && (
-            <p className="text-warn text-xs">
+            <p className="text-warn-text text-xs">
               Notifications are blocked for this site; allow them in the browser settings.
             </p>
           )}
-          {problem && <p className="text-danger text-sm">{problem}</p>}
+          {problem && (
+            <p role="alert" className="text-danger text-sm">
+              {problem}
+            </p>
+          )}
+          <ActionError error={test.error ?? unsubscribe.error} />
 
           {devices.length > 0 && (
             <ul className="space-y-1">
@@ -183,7 +189,7 @@ export function NotificationsPane() {
                     {device.label || 'Unnamed device'}
                     {device.clientId === clientId && <span className="text-muted"> (this one)</span>}
                   </span>
-                  <span className={device.lastError ? 'text-warn text-xs' : 'text-muted text-xs'}>
+                  <span className={device.lastError ? 'text-warn-text text-xs' : 'text-muted text-xs'}>
                     {device.lastError
                       ? `last delivery failed: ${device.lastError}`
                       : device.lastUsedAt

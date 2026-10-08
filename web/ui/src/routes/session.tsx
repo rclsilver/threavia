@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowUp, Settings2, Square } from 'lucide-react';
+import { ArrowUp, Server, Settings2, Square } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import {
@@ -15,6 +15,7 @@ import {
   type Delivery,
 } from '@/api/queries';
 import { AttentionPanel } from '@/components/attention';
+import { ActionError } from '@/components/ui/action-error';
 import { Badge } from '@/components/ui/badge';
 import { PolicyPanel } from '@/components/policy-panel';
 import { SchedulesPanel } from '@/components/schedules-panel';
@@ -82,7 +83,8 @@ export function SessionView() {
   // A message can reach the running work only if something is running to
   // receive it, and only the way the backend holding the Session announced.
   const run = [...data.runs].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
-  const features = backends.data?.find((backend) => backend.id === run?.backendInstanceId)?.features ?? [];
+  const backend = backends.data?.find((candidate) => candidate.id === run?.backendInstanceId);
+  const features = backend?.features ?? [];
   const receiving = active && !['QUEUED', 'CANCELLING', 'WAITING_BACKEND'].includes(active.status);
   const deliveries = receiving
     ? (['NEXT', 'NOW'] as const).filter((delivery) => features.includes(`JOB_INPUT_${delivery}`))
@@ -117,7 +119,14 @@ export function SessionView() {
                 {humanise(active.status)}
               </Badge>
             ) : (
-              <span>Idle</span>
+              <Badge>Idle</Badge>
+            )}
+            {/* Which machine does the work: first-class, never a detail. */}
+            {backend && (
+              <span className="flex items-center gap-1" title="The backend running this session">
+                <Server className="size-3" />
+                {backend.name}
+              </span>
             )}
             {active && working && (
               // A liveness signal, not history: it says the agent is still
@@ -126,6 +135,7 @@ export function SessionView() {
               // timeline and one can arrive after the Job it describes ended.
               <span className="text-accent">{humanise(working)}…</span>
             )}
+            <ActionError error={cancel.error} className="text-xs" />
           </div>
         </div>
         <SessionSettings sessionId={sessionId} archived={data.session.status === 'ARCHIVED'} />
@@ -143,14 +153,11 @@ export function SessionView() {
           while a Job runs. Above the timeline it was a scroll away from both.
           Held to part of the height, so a burst of requests never pushes the
           composer off the screen. */}
-      {(data.attention.validations?.length || data.attention.userInputs?.length) ? (
-        <div className="mx-auto max-h-[45vh] w-full max-w-reading shrink-0 overflow-y-auto px-3 pt-2 pb-3 sm:px-6">
-          <AttentionPanel
-            validations={data.attention.validations ?? []}
-            userInputs={data.attention.userInputs ?? []}
-          />
-        </div>
-      ) : null}
+      <AttentionPanel
+        validations={data.attention.validations ?? []}
+        userInputs={data.attention.userInputs ?? []}
+        className="mx-auto max-h-[45vh] w-full max-w-reading shrink-0 overflow-y-auto px-3 pt-2 pb-3 sm:px-6"
+      />
 
       <Composer
         sessionId={sessionId}
@@ -214,16 +221,19 @@ function SessionTitle({ sessionId, title }: { sessionId: string; title: string }
   }
 
   return (
-    <h2 className="truncate text-[0.9375rem] font-semibold">
-      <button
-        type="button"
-        title="Rename this session"
-        onClick={() => setEditing(true)}
-        className="hover:bg-surface-2 max-w-full truncate rounded-md px-1.5 py-0.5 text-left"
-      >
-        {title || 'Untitled session'}
-      </button>
-    </h2>
+    <>
+      <h2 className="truncate text-[0.9375rem] font-semibold">
+        <button
+          type="button"
+          title="Rename this session"
+          onClick={() => setEditing(true)}
+          className="hover:bg-surface-2 max-w-full truncate rounded-md px-1.5 py-0.5 text-left"
+        >
+          {title || 'Untitled session'}
+        </button>
+      </h2>
+      <ActionError error={rename.error} className="pl-1.5 text-xs" />
+    </>
   );
 }
 
@@ -242,10 +252,12 @@ const PLACEHOLDERS: Record<Delivery | 'IDLE', string> = {
   NOW: 'Interrupt it and say what to do instead…',
 };
 
-const DELIVERY_LABELS: Record<Delivery, { label: string; title: string }> = {
-  QUEUE: { label: 'Queue', title: 'Start a new job once this one is done' },
-  NEXT: { label: 'Next step', title: 'Let the running job read it after what it is doing now' },
-  NOW: { label: 'Interrupt', title: 'Stop what it is doing and redirect it with this message' },
+// Short labels fit a phone's toolbar beside Stop and Send; the full ones say
+// more where there is room.
+const DELIVERY_LABELS: Record<Delivery, { label: string; short: string; title: string }> = {
+  QUEUE: { label: 'Queue', short: 'Queue', title: 'Start a new job once this one is done' },
+  NEXT: { label: 'Next step', short: 'Next', title: 'Let the running job read it after what it is doing now' },
+  NOW: { label: 'Interrupt', short: 'Now', title: 'Stop what it is doing and redirect it with this message' },
 };
 
 /** Where a message sent while the agent works goes. */
@@ -260,7 +272,7 @@ function DeliveryChoice({
 }) {
   const options: Delivery[] = ['QUEUE', ...(['NEXT', 'NOW'] as const).filter((d) => offered.includes(d))];
   return (
-    <div role="radiogroup" aria-label="How to send" className="border-border ml-1 flex rounded-full border p-0.5">
+    <div role="radiogroup" aria-label="How to send" className="border-border bg-surface-2 text-muted flex rounded-md border p-0.5 text-xs">
       {options.map((option) => (
         <button
           key={option}
@@ -270,12 +282,13 @@ function DeliveryChoice({
           title={DELIVERY_LABELS[option].title}
           onClick={() => onChange(option)}
           className={cn(
-            'rounded-full px-2 py-0.5 transition-colors',
-            value === option ? 'bg-surface-2 text-text' : 'hover:text-text',
-            value === option && option === 'NOW' && 'text-warn',
+            'min-h-11 rounded px-2.5 whitespace-nowrap transition-colors sm:min-h-7',
+            value === option ? 'bg-surface text-text shadow-sm' : 'hover:text-text',
+            value === option && option === 'NOW' && 'text-warn-text',
           )}
         >
-          {DELIVERY_LABELS[option].label}
+          <span className="sm:hidden">{DELIVERY_LABELS[option].short}</span>
+          <span className="hidden sm:inline">{DELIVERY_LABELS[option].label}</span>
         </button>
       ))}
     </div>
@@ -334,71 +347,86 @@ function Composer({
           time a person urgently wants to stop something is the one time they
           would have to go looking for it. This stops the oldest Job still
           going, which is the one everything else is queued behind. */}
-      {active && (
-        <div className="text-muted mb-2 flex items-center justify-center gap-2 text-xs">
-          {active.status === 'CANCELLING' ? (
-            <span>Stopping…</span>
-          ) : (
-            <>
-              <span className="first-letter:uppercase">{humanise(active.status)}</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 gap-1.5 px-1.5 text-xs [&_svg]:size-3"
-                title="Stop what is running now (Esc)"
-                onClick={onStop}
-              >
-                <Square className="fill-current" />
-                Stop
-              </Button>
-              {deliveries.length > 0 && (
-                <DeliveryChoice value={chosen} offered={deliveries} onChange={setDelivery} />
-              )}
-            </>
-          )}
-        </div>
-      )}
       <form
         onSubmit={(event) => {
           event.preventDefault();
           submit();
         }}
       >
-        <div className="bg-surface border-border focus-within:border-muted/60 flex items-end gap-2 rounded-3xl border py-1.5 pr-1.5 pl-4 transition-colors">
-          <textarea
-            ref={field}
-            rows={1}
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-            onKeyDown={(event) => {
-              // Enter sends, as in every chat. A newline is still reachable
-              // with Shift, which is where a person already looks for it. An
-              // Enter that closes an input method is composing text, not
-              // sending it.
-              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                submit();
-              }
-            }}
-            placeholder={PLACEHOLDERS[active ? chosen : 'IDLE']}
-            className="placeholder:text-muted/80 max-h-60 flex-1 resize-none bg-transparent py-2 text-sm outline-none"
-          />
-          <Button
-            type="submit"
-            variant="primary"
-            size="icon"
-            // As tall as one line of the field it sits in, so a single-line
-            // message has it centred and a grown one keeps it on the last line
-            // rather than floating up the side.
-            className="from-accent to-accent-2 size-9 rounded-full bg-linear-to-br"
-            title="Send (Enter)"
-            disabled={send.isPending || !message.trim()}
-          >
-            <ArrowUp />
-          </Button>
+        {/* One panel: the field and its send on one line, then — only while
+            something runs — a toolbar with how the message goes, what is
+            running and its stop. Idle, it is just a field. */}
+        <div className="bg-surface border-border focus-within:border-muted/60 rounded-xl border shadow-xs transition-colors">
+          <div className="flex items-end gap-2 py-1.5 pr-1.5 pl-3.5">
+            <textarea
+              ref={field}
+              rows={1}
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              onKeyDown={(event) => {
+                // Enter sends, as in every chat. A newline is still reachable
+                // with Shift, which is where a person already looks for it. An
+                // Enter that closes an input method is composing text, not
+                // sending it.
+                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  submit();
+                }
+              }}
+              placeholder={PLACEHOLDERS[active ? chosen : 'IDLE']}
+              aria-label="Message"
+              className="placeholder:text-muted block max-h-60 min-w-0 flex-1 resize-none bg-transparent py-2.5 text-base outline-none sm:py-1.5 sm:text-sm"
+            />
+            <Button
+              type="submit"
+              variant="primary"
+              size="icon"
+              className="disabled:bg-surface-2 disabled:text-muted size-11 rounded-lg disabled:opacity-100 sm:size-8"
+              title="Send (Enter)"
+              aria-label="Send"
+              disabled={send.isPending || !message.trim()}
+            >
+              <ArrowUp />
+            </Button>
+          </div>
+          {active && (
+            <div className="border-border flex items-center gap-2 border-t px-1.5 py-1.5">
+              {active.status !== 'CANCELLING' && deliveries.length > 0 && (
+                <DeliveryChoice value={chosen} offered={deliveries} onChange={setDelivery} />
+              )}
+              <span className="ml-auto" />
+              {active.status === 'CANCELLING' ? (
+                <span className="text-muted px-2 text-xs whitespace-nowrap">Stopping…</span>
+              ) : (
+                <>
+                  {/* The header already says it on a phone. */}
+                  <span className="text-muted hidden text-xs whitespace-nowrap first-letter:uppercase sm:inline">
+                    {humanise(active.status)}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="min-h-11 gap-1.5 px-2.5 text-xs whitespace-nowrap sm:min-h-0 [&_svg]:size-3"
+                    title="Stop what is running now (Esc)"
+                    onClick={onStop}
+                  >
+                    <Square className="fill-current" />
+                    Stop
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </form>
+      {/* The text is kept in the field when sending fails; this says why. */}
+      <ActionError
+        error={send.error}
+        outcome="Not sent"
+        recovery="Your message is still in the field; send it again."
+        className="mt-2"
+      />
       <p className="text-muted/70 mt-2 hidden text-center text-xs sm:block">
         Enter sends · Shift+Enter for a newline{active && ' · Esc stops'}
       </p>
@@ -558,7 +586,7 @@ function MoveSession({ sessionId }: { sessionId: string }) {
       {move.error && <p className="text-danger text-sm">{(move.error).message}</p>}
 
       {move.data?.missingSkills?.length ? (
-        <p className="text-warn text-sm">
+        <p className="text-warn-text text-sm">
           Moved. These local skills are not on the new backend:{' '}
           {move.data.missingSkills.join(', ')}.
         </p>

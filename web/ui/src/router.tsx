@@ -21,6 +21,7 @@ import {
 } from '@/routes/project';
 import { SessionView } from '@/routes/session';
 import { TasksView } from '@/routes/tasks';
+import { HomeView, WaitingView } from '@/routes/waiting';
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -32,9 +33,16 @@ const rootRoute = createRootRoute({
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
-  // Landing on the work still owed, for whichever Project the sidebar points at.
+  // Landing on what waits for a decision when something does, on the work
+  // still owed otherwise.
   path: '/',
-  component: TasksView,
+  component: HomeView,
+});
+
+const waitingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/waiting',
+  component: WaitingView,
 });
 
 const draftRoute = createRoute({
@@ -126,6 +134,7 @@ const callbackRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   callbackRoute,
+  waitingRoute,
   draftRoute,
   sessionRoute,
   tasksRoute,

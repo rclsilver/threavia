@@ -145,7 +145,10 @@ type ValidationResolvedPayload struct {
 	ActorUserID   string `json:"actorUserId"`
 	Channel       string `json:"channel"`
 	PayloadSHA256 string `json:"payloadSha256"`
-	Note          string `json:"note,omitempty"`
+	// Title is what was decided, as the request named it ("Bash: go test"),
+	// so the timeline can say what was allowed rather than that something was.
+	Title string `json:"title,omitempty"`
+	Note  string `json:"note,omitempty"`
 }
 
 // UserInputRequestedPayload is the body of a user_input.requested event.

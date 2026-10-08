@@ -1,7 +1,9 @@
 import { useNavigate, useSearch } from '@tanstack/react-router';
+import { Plus } from 'lucide-react';
 import { useState } from 'react';
 
 import { useBackends, useCreateDirectory, useDirectories, useStartSession } from '@/api/queries';
+import { ActionError } from '@/components/ui/action-error';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input, Label, Textarea } from '@/components/ui/input';
@@ -175,7 +177,7 @@ function NewDirectoryButton({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <Button variant="secondary" size="icon" onClick={() => setOpen(true)} title="New directory">
-        +
+        <Plus />
       </Button>
       <DialogContent>
         <DialogTitle>New known directory</DialogTitle>
@@ -193,7 +195,9 @@ function NewDirectoryButton({
                 setName('');
                 setGitRemote('');
                 setOpen(false);
-              });
+              })
+              // Shown below the form; only success resolves.
+              .catch(() => {});
           }}
         >
           <div className="space-y-1.5">
@@ -228,6 +232,7 @@ function NewDirectoryButton({
               Create
             </Button>
           </div>
+          <ActionError error={create.error} />
         </form>
       </DialogContent>
     </Dialog>

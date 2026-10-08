@@ -52,6 +52,8 @@ type ValidationRequest struct {
 	// sending. They are derived at read time, never stored on the request.
 	OriginChannel Channel `json:"originChannel,omitempty"`
 	Notify        bool    `json:"notify"`
+	// Context is filled when the request is read for a client.
+	Context *AttentionContext `json:"context,omitempty"`
 
 	Approved         *bool      `json:"approved,omitempty"`
 	ResolvedByUserID *UserID    `json:"resolvedByUserId,omitempty"`
@@ -76,6 +78,8 @@ type UserInputRequest struct {
 	// They are derived at read time, never stored on the request.
 	OriginChannel Channel `json:"originChannel,omitempty"`
 	Notify        bool    `json:"notify"`
+	// Context is filled when the request is read for a client.
+	Context *AttentionContext `json:"context,omitempty"`
 
 	Value            *string    `json:"value,omitempty"`
 	ResolvedByUserID *UserID    `json:"resolvedByUserId,omitempty"`
@@ -94,3 +98,14 @@ type Attention struct {
 
 // Empty reports whether nothing is waiting for the user.
 func (a Attention) Empty() bool { return len(a.Validations) == 0 && len(a.UserInputs) == 0 }
+
+// AttentionContext says where a request comes from, in the words a person
+// deciding it needs: which session of which project, which machine, which
+// directory. Derived at read time, never stored on the request.
+type AttentionContext struct {
+	SessionTitle string `json:"sessionTitle"`
+	ProjectName  string `json:"projectName"`
+	BackendName  string `json:"backendName"`
+	// Directory is the session's KnownDirectory, empty when it has none.
+	Directory string `json:"directory,omitempty"`
+}

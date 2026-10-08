@@ -6,22 +6,29 @@
  * theme change is a change here and nowhere else.
  */
 @theme {
-  --color-canvas: oklch(99% 0.001 265);
+  --color-canvas: oklch(98.6% 0.002 265);
   --color-surface: oklch(100% 0 0);
-  --color-surface-2: oklch(96.5% 0.002 265);
-  --color-border: oklch(92% 0.003 265);
-  --color-text: oklch(24% 0.006 265);
-  --color-muted: oklch(55% 0.008 265);
+  --color-surface-2: oklch(96.4% 0.003 265);
+  --color-border: oklch(91.5% 0.004 265);
+  --color-text: oklch(22% 0.007 265);
+  /* Secondary text, dark enough to read on every surface (4.5:1 on white). */
+  --color-muted: oklch(50% 0.01 265);
   --color-accent: oklch(52% 0.19 275);
   --color-accent-text: oklch(99% 0 0);
-  /* The far end of the brand gradient: the mark and the send button, and
-     nothing else. A gradient that spreads stops meaning anything. */
+  /* The far end of the brand gradient: the mark, and nothing else. A
+     gradient that spreads stops meaning anything. */
   --color-accent-2: oklch(58% 0.21 310);
   --color-ok: oklch(55% 0.14 155);
+  /* Amber reads as a fill, an icon or a dot; as text on a light ground it
+     falls to 2.5:1, so text that warns uses its darker voice. */
   --color-warn: oklch(68% 0.15 75);
+  --color-warn-text: oklch(49% 0.11 65);
   --color-danger: oklch(55% 0.2 25);
+  /* A fill white text sits on: the dark scheme's danger is a text colour,
+     too light to carry white at 4.5:1. */
+  --color-danger-solid: oklch(55% 0.2 25);
 
-  --radius-card: 0.75rem;
+  --radius-card: 0.5rem;
   /*
    * How wide a line of prose is allowed to get. A conversation is read, not
    * scanned, and a line running the full width of a desktop screen loses the
@@ -59,7 +66,9 @@
     --color-accent-2: oklch(72% 0.17 310);
     --color-ok: oklch(72% 0.16 155);
     --color-warn: oklch(80% 0.14 80);
+    --color-warn-text: oklch(80% 0.14 80);
     --color-danger: oklch(68% 0.18 22);
+    --color-danger-solid: oklch(50% 0.19 25);
   }
 }
 
@@ -94,6 +103,24 @@
   /* A focus ring that appears for a keyboard user and not for a mouse click. */
   :focus-visible {
     @apply outline-accent outline-2 outline-offset-2;
+  }
+
+  /* The parts the browser draws carry the palette too. */
+  ::selection {
+    background: color-mix(in oklch, var(--color-accent) 22%, transparent);
+  }
+  input,
+  textarea {
+    caret-color: var(--color-accent);
+  }
+  * {
+    scrollbar-color: var(--color-border) transparent;
+    scrollbar-width: thin;
+  }
+  /* Times, durations, counts and costs line up in columns. */
+  time,
+  .figures {
+    font-variant-numeric: tabular-nums;
   }
 
   /* A scrollbar that stays out of the way until there is something to drag. */

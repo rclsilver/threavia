@@ -99,7 +99,7 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
           change cannot reach a turn already under way. Saying so here is the
           difference between a setting and a promise. */}
       {running && (
-        <p className="text-warn text-xs">
+        <p className="text-warn-text text-xs">
           A job is running and keeps the permissions it started with. A change applies from the next
           message.
         </p>

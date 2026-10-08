@@ -437,21 +437,30 @@ export function Timeline({
                 className="absolute left-0 top-0 w-full px-3 py-1.5 sm:px-6"
                 style={{ transform: `translateY(${item.start}px)` }}
               >
-                {row.kind === 'tool' ? (
-                  <ToolCallEntry
-                    call={row.call}
-                    expanded={expanded.has(row.call.id)}
-                    onToggle={() => toggle(row.call.id)}
-                  />
-                ) : row.kind === 'day' ? (
+                {row.kind === 'day' ? (
                   <DaySeparator label={row.label} />
                 ) : (
-                  <Entry
-                    event={row.event}
-                    startedAt={row.startedAt}
-                    pending={pending}
-                    onStop={onStop}
-                  />
+                  // The log's spine: every row's time in one column, so the
+                  // session reads down a timeline the way an operations log
+                  // does, whatever kind of row it is. Agent prose keeps the
+                  // column empty and runs beside it.
+                  <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-x-2 sm:grid-cols-[3.25rem_minmax(0,1fr)]">
+                    <Gutter row={row} />
+                    {row.kind === 'tool' ? (
+                      <ToolCallEntry
+                        call={row.call}
+                        expanded={expanded.has(row.call.id)}
+                        onToggle={() => toggle(row.call.id)}
+                      />
+                    ) : (
+                      <Entry
+                        event={row.event}
+                        startedAt={row.startedAt}
+                        pending={pending}
+                        onStop={onStop}
+                      />
+                    )}
+                  </div>
                 )}
               </div>
             );
@@ -482,21 +491,29 @@ function Entry({
     const jobId = event.jobId;
     const status = jobId ? pending[jobId] : undefined;
     return (
-      <div className="border-accent bg-surface-2/60 space-y-1 rounded-r-md border-l-2 py-2 pr-3 pl-3">
-        {/* Sent while the agent worked: it changed the course of a Job
-            rather than starting one, and the reader of the log should know. */}
-        {user.delivery && (
-          <p className={cn('text-xs', user.delivery === 'NOW' ? 'text-warn' : 'text-muted')}>
-            {user.delivery === 'NOW' ? 'Interrupted the job with' : 'Added to the running job'}
-          </p>
-        )}
-        {/* Nobody typed it: a schedule did, and the reader should not wonder
-            when they wrote this. */}
-        {user.scheduleId && (
-          <p className="text-muted flex items-center gap-1 text-xs">
-            <CalendarClock className="size-3" /> Sent by a schedule
-          </p>
-        )}
+      // A tinted row headed by who spoke, rather than a coloured stripe down
+      // its side: the log keeps one left margin, and the mark is a word.
+      <div className="bg-surface-2 border-border space-y-1 rounded-(--radius-card) border px-3 py-2">
+        <p className="text-muted flex flex-wrap items-center gap-x-2 text-xs">
+          <span className="text-text font-medium">
+            {user.scheduleId ? (
+              // Nobody typed it: a schedule did, and the reader should not
+              // wonder when they wrote this.
+              <span className="flex items-center gap-1">
+                <CalendarClock className="size-3" /> Schedule
+              </span>
+            ) : (
+              'You'
+            )}
+          </span>
+          {/* Sent while the agent worked: it changed the course of a Job
+              rather than starting one, and the reader of the log should know. */}
+          {user.delivery && (
+            <span className={user.delivery === 'NOW' ? 'text-warn-text' : undefined}>
+              {user.delivery === 'NOW' ? 'interrupted the job' : 'added to the running job'}
+            </span>
+          )}
+        </p>
         <p className="text-sm whitespace-pre-wrap">{user.text}</p>
         {jobId && status && <Stop status={status} onStop={() => onStop(jobId)} />}
       </div>
@@ -521,14 +538,31 @@ function Entry({
   // without reading it, and the time is what makes it a record.
   const { Icon, tone, text } = describe(event);
   return (
-    <div className="text-muted flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.8125rem]">
-      <Icon className={cn('size-3.5 shrink-0', tone)} />
-      <time dateTime={event.timestamp} className="shrink-0 font-mono text-[0.6875rem] opacity-60">
-        {clock(event.timestamp)}
-      </time>
-      <span className="break-all">{text}</span>
-      <JobCost event={event} startedAt={startedAt} />
+    <div className="text-muted flex items-start gap-x-2 text-[0.8125rem] leading-5">
+      <Icon className={cn('mt-0.5 size-3.5 shrink-0', tone)} />
+      <span className="min-w-0 break-words">
+        {text}
+        <JobCost event={event} startedAt={startedAt} />
+      </span>
     </div>
+  );
+}
+
+/** The time of a row, in the log's gutter, aligned with its first line. */
+function Gutter({ row }: { row: Exclude<Row, { kind: 'day' }> }) {
+  if (row.kind === 'event' && row.event.type === 'agent.message') return <span />;
+  const at = row.kind === 'tool' ? row.call.at : row.event.timestamp;
+  const user = row.kind === 'event' && row.event.type === 'user.message';
+  return (
+    <time
+      dateTime={at}
+      className={cn(
+        'text-muted text-right font-mono text-[0.6875rem] leading-5',
+        row.kind === 'tool' ? 'pt-1' : user ? 'pt-2' : 'pt-px',
+      )}
+    >
+      {clock(at)}
+    </time>
   );
 }
 
@@ -565,7 +599,7 @@ function Stop({ status, onStop }: { status: JobStatus; onStop: () => void }) {
       <Button
         variant="ghost"
         size="sm"
-        className="h-6 gap-1.5 px-1.5 text-xs [&_svg]:size-3"
+        className="min-h-11 gap-1.5 px-2 text-xs sm:h-6 sm:min-h-0 sm:px-1.5 [&_svg]:size-3"
         title={
           status === 'QUEUED'
             ? 'Drop this message before it runs'
@@ -597,7 +631,7 @@ function JobCost({ event, startedAt }: { event: Event; startedAt?: string }) {
   const total = usage ? usage.inputTokens + usage.outputTokens : 0;
 
   return (
-    <span className="text-muted/80 flex flex-wrap items-center gap-x-2.5 font-mono text-xs">
+    <span className="text-muted figures ml-2.5 inline-flex flex-wrap items-center gap-x-2.5 font-mono text-xs">
       {Number.isFinite(elapsed) && elapsed >= 0 && <span>{duration(elapsed)}</span>}
       {usage && (
         <span title={`${usage.inputTokens} in, ${usage.outputTokens} out`}>
@@ -635,7 +669,7 @@ function WorkspaceChange({
     });
 
   return (
-    <div className="bg-surface border-border rounded-[--radius-card] border px-3 py-2 text-sm">
+    <div className="bg-surface border-border rounded-(--radius-card) border px-3 py-2 text-sm">
       <div className="text-muted flex items-center gap-2">
         <FileDiff className="size-3.5" />
         <span>
@@ -653,7 +687,7 @@ function WorkspaceChange({
                 file.state === 'ADDED' && 'text-ok',
                 file.state === 'DELETED' && 'text-danger',
                 file.state === 'MODIFIED' && 'text-muted',
-                file.state === 'RENAMED' && 'text-warn',
+                file.state === 'RENAMED' && 'text-warn-text',
               )}
             >
               {MARK[file.state]} {file.path}
@@ -709,7 +743,7 @@ function FileDiffPanel({ sessionId, sequence, path }: { sessionId: string; seque
     return <p className="text-muted py-1 pl-4">Asking the backend for the diff…</p>;
   }
   if (diff.error) {
-    return <p className="text-warn py-1 pl-4">{diff.error.message}</p>;
+    return <p className="text-warn-text py-1 pl-4">{diff.error.message}</p>;
   }
   if (diff.data.binary) {
     return <p className="text-muted py-1 pl-4">A binary file: there are no lines to show.</p>;
@@ -761,15 +795,29 @@ function describe(event: Event): {
     case 'schedule.skipped':
       return {
         Icon: CalendarX,
-        tone: 'text-warn',
+        tone: 'text-warn-text',
         text: `Scheduled message not sent: ${payloadOf(event, 'schedule.skipped')?.reason ?? 'skipped'}.`,
       };
     case 'job.cancelled':
       return { Icon: Ban, text: 'Cancelled.' };
-    case 'validation.resolved':
-      return payloadOf(event, 'validation.resolved')?.approved
-        ? { Icon: ShieldCheck, tone: 'text-ok', text: 'Permission granted.' }
-        : { Icon: ShieldX, tone: 'text-danger', text: 'Permission denied.' };
+    case 'validation.resolved': {
+      // What was decided, not only that something was: the log is read back
+      // later, and "Permission granted." alone cannot be trusted then.
+      const resolved = payloadOf(event, 'validation.resolved');
+      // "Bash: go test" — the tool in words, the command as a command.
+      const [tool, ...rest] = (resolved?.title ?? '').split(': ');
+      const what = resolved?.title ? (
+        <>
+          : {rest.length ? `${tool} ` : ''}
+          <code className="text-text font-mono text-xs">{rest.length ? rest.join(': ') : tool}</code>
+        </>
+      ) : (
+        '.'
+      );
+      return resolved?.approved
+        ? { Icon: ShieldCheck, tone: 'text-ok', text: <>Allowed{what}</> }
+        : { Icon: ShieldX, tone: 'text-danger', text: <>Denied{what}</> };
+    }
     case 'user_input.resolved':
       return {
         Icon: CornerDownLeft,

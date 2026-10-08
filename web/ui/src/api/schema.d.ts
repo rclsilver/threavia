@@ -3498,7 +3498,8 @@ export interface components {
              *     - `workspace.changed`: `{ knownDirectoryId, files, additions,
              *       deletions, directory?, baseTree?, headTree? }`, the last three
              *       present when the diff of a file can be asked for
-             *     - `validation.resolved`: `{ validationId, approved, note }`
+             *     - `validation.resolved`: `{ validationId, approved, note, title }`, title
+             *       naming what was decided
              *     - `user_input.resolved`: `{ requestId, value }`
              *      */
             payload?: {
@@ -3644,6 +3645,7 @@ export interface components {
             originChannel?: components["schemas"]["Channel"];
             /** @description False while the client that started the work still holds a live stream. */
             notify: boolean;
+            context?: components["schemas"]["AttentionContext"];
             approved?: boolean;
             resolvedByUserId?: string;
             resolvedChannel?: string;
@@ -3652,6 +3654,14 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             resolvedAt?: string;
+        };
+        /** @description Where a pending request comes from, in the words a person deciding it needs. Derived when read. */
+        AttentionContext: {
+            sessionTitle: string;
+            projectName: string;
+            backendName: string;
+            /** @description The session's KnownDirectory, absent when it has none. */
+            directory?: string;
         };
         /** @description A request for an answer, a choice or information. Distinct from a permission request. */
         UserInputRequest: {
@@ -3663,6 +3673,7 @@ export interface components {
             freeText: boolean;
             originChannel?: components["schemas"]["Channel"];
             notify: boolean;
+            context?: components["schemas"]["AttentionContext"];
             value?: string;
             resolvedByUserId?: string;
             resolvedChannel?: string;

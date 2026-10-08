@@ -9,7 +9,9 @@ import {
   useUpdateSchedule,
 } from '@/api/queries';
 import type { Schedule } from '@/api/types';
+import { ActionError } from '@/components/ui/action-error';
 import { Button } from '@/components/ui/button';
+import { ConfirmAction } from '@/components/ui/confirm';
 import { Input, Textarea } from '@/components/ui/input';
 
 /** The zone the browser runs in, which is where the person reading it lives. */
@@ -89,7 +91,7 @@ export function SchedulesPanel({ sessionId }: { sessionId: string }) {
           rows={2}
           placeholder="The message to send, as you would type it"
         />
-        {create.error && <p className="text-danger text-sm">{create.error.message}</p>}
+        <ActionError error={create.error} />
         <Button type="submit" variant="secondary" size="sm" disabled={create.isPending || !message.trim()}>
           Add a schedule
         </Button>
@@ -127,15 +129,17 @@ function ScheduleRow({ sessionId, schedule }: { sessionId: string; schedule: Sch
           >
             {schedule.enabled ? <Pause /> : <Play />}
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            title="Delete this schedule"
-            disabled={remove.isPending}
-            onClick={() => remove.mutate(schedule.id)}
-          >
-            <Trash2 />
-          </Button>
+          <ConfirmAction
+            question="Delete?"
+            confirm="Delete"
+            pending={remove.isPending}
+            onConfirm={() => remove.mutate(schedule.id)}
+            trigger={(ask) => (
+              <Button variant="ghost" size="icon" title="Delete this schedule" onClick={ask}>
+                <Trash2 />
+              </Button>
+            )}
+          />
         </div>
       </div>
       <p className="text-muted text-xs">
@@ -148,9 +152,7 @@ function ScheduleRow({ sessionId, schedule }: { sessionId: string; schedule: Sch
           Last {spoken(schedule.lastRunAt, schedule.timezone)}: {OUTCOMES[schedule.lastOutcome] ?? schedule.lastOutcome}
         </p>
       )}
-      {(update.error || run.error) && (
-        <p className="text-danger text-sm">{(update.error ?? run.error)?.message}</p>
-      )}
+      <ActionError error={update.error ?? run.error ?? remove.error} />
     </div>
   );
 }

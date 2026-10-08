@@ -325,6 +325,7 @@ func (s *Service) ResolveValidation(ctx context.Context, identity auth.Identity,
 		ActorUserID:   string(identity.UserID),
 		Channel:       channel,
 		PayloadSHA256: resolved.PayloadSHA256,
+		Title:         resolved.Title,
 		Note:          note,
 	})
 

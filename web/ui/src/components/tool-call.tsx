@@ -2,7 +2,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Terminal } from 'luc
 
 import { FileChangeView } from '@/components/file-change';
 import { changeCounts, fileChangeOf } from '@/lib/file-change';
-import { clock, cn } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 /** One tool call, with whatever is known about how it ended. */
 export interface ToolCall {
@@ -63,7 +63,7 @@ export function ToolCallEntry({
   return (
     <div
       className={cn(
-        'border-border overflow-hidden rounded-[--radius-card] border',
+        'border-border overflow-hidden rounded-(--radius-card) border',
         expanded ? 'bg-surface' : 'border-transparent',
       )}
     >
@@ -86,13 +86,6 @@ export function ToolCallEntry({
         ) : (
           <Terminal className="text-muted size-3.5 shrink-0" />
         )}
-
-        <time
-          dateTime={call.at}
-          className="text-muted shrink-0 font-mono text-[0.6875rem] opacity-60"
-        >
-          {clock(call.at)}
-        </time>
 
         <span className={cn('font-mono shrink-0', failed ? 'text-danger' : 'text-text')}>
           {label(call.name)}

@@ -2019,7 +2019,8 @@ components:
             - `workspace.changed`: `{ knownDirectoryId, files, additions,
               deletions, directory?, baseTree?, headTree? }`, the last three
               present when the diff of a file can be asked for
-            - `validation.resolved`: `{ validationId, approved, note }`
+            - `validation.resolved`: `{ validationId, approved, note, title }`, title
+              naming what was decided
             - `user_input.resolved`: `{ requestId, value }`
 
     ConnectedClient:
@@ -2220,12 +2221,23 @@ components:
         notify:
           type: boolean
           description: False while the client that started the work still holds a live stream.
+        context: { $ref: "#/components/schemas/AttentionContext" }
         approved: { type: boolean }
         resolvedByUserId: { type: string }
         resolvedChannel: { type: string }
         note: { type: string }
         createdAt: { type: string, format: date-time }
         resolvedAt: { type: string, format: date-time }
+
+    AttentionContext:
+      type: object
+      description: Where a pending request comes from, in the words a person deciding it needs. Derived when read.
+      required: [sessionTitle, projectName, backendName]
+      properties:
+        sessionTitle: { type: string }
+        projectName: { type: string }
+        backendName: { type: string }
+        directory: { type: string, description: "The session's KnownDirectory, absent when it has none." }
 
     UserInputRequest:
       type: object
@@ -2242,6 +2254,7 @@ components:
         freeText: { type: boolean }
         originChannel: { $ref: "#/components/schemas/Channel" }
         notify: { type: boolean }
+        context: { $ref: "#/components/schemas/AttentionContext" }
         value: { type: string }
         resolvedByUserId: { type: string }
         resolvedChannel: { type: string }

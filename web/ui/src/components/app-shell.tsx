@@ -6,6 +6,7 @@ import {
   Clock,
   FileText,
   History,
+  Inbox,
   ListChecks,
   LoaderCircle,
   Menu,
@@ -38,6 +39,7 @@ import { useWideLayout } from '@/use-layout';
 import { SelectedProject } from '@/use-project';
 import { useStream } from '@/use-stream';
 import { Logo } from '@/components/logo';
+import { ActionError } from '@/components/ui/action-error';
 import { NotificationsPane } from '@/components/notifications-pane';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -95,6 +97,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   for (const request of attention.data?.userInputs ?? []) waiting.set(request.scope.sessionId, 'input');
   // A permission outranks a question: it is the one blocking a tool call.
   for (const request of attention.data?.validations ?? []) waiting.set(request.scope.sessionId, 'validation');
+  // Requests, not sessions: one session may ask twice, and each needs an answer.
+  const waitingCount = (attention.data?.validations.length ?? 0) + (attention.data?.userInputs.length ?? 0);
 
   // On a phone the sidebar is a drawer over the content, closed until asked
   // for: a column of navigation beside a conversation leaves neither readable
@@ -105,6 +109,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setDrawer(false);
   }, [pathname, wide]);
+  // Escape closes the drawer, as it closes any surface laid over the page.
+  useEffect(() => {
+    if (!drawer) return;
+    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setDrawer(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawer]);
   // The rail is a desktop affordance; a drawer is either open in full or gone.
   const folded = collapsed && wide;
 
@@ -128,10 +139,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </Button>
         <Logo className="h-5 w-auto" />
         <span className="text-sm font-semibold">Threavia</span>
-        {waiting.size > 0 && (
-          <Badge tone="warn" className="ml-1">
-            {waiting.size} waiting
-          </Badge>
+        {/* The way to what waits, one tap from anywhere: the reason the phone
+            was taken out of the pocket. */}
+        {waitingCount > 0 && (
+          <Link
+            to="/waiting"
+            className="bg-warn/15 text-warn-text ml-1 inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium"
+          >
+            <Inbox className="size-4" />
+            {waitingCount} waiting
+          </Link>
         )}
         <Badge tone={connected ? 'ok' : 'neutral'} title="Realtime stream" className="ml-auto">
           {connected ? 'live' : 'offline'}
@@ -147,6 +164,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <aside
+        // Closed, the drawer is off-screen but would still take the keyboard's
+        // focus and a screen reader's attention; inert takes it out of both.
+        inert={!wide && !drawer}
         className={cn(
           'border-border bg-surface flex min-h-0 flex-col border-r',
           // A drawer below md, a column of the grid from md up.
@@ -196,11 +216,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           // owed, and the person using it. A session title cut to three
           // characters would be worse than not showing one.
           <>
+            <WaitingLink count={waitingCount} active={pathname === '/waiting'} collapsed />
             {projectId && <ProjectNav projectId={projectId} collapsed />}
             <UserMenu backends={backends.data ?? []} collapsed />
           </>
         ) : (
           <>
+        <WaitingLink count={waitingCount} active={pathname === '/waiting'} />
         <section className="space-y-2">
           <Label>Project</Label>
           <div className="flex gap-2">
@@ -253,9 +275,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {showArchived ? 'Nothing archived.' : 'No sessions yet.'}
               </p>
             )}
-            {groupSessions(shown).map((group) => (
+            {groupSessions(shown, waiting).map((group) => (
               <div key={group.label} className="space-y-0.5">
-                <p className="text-muted/80 px-2 pb-1 text-xs">{group.label}</p>
+                <p className={cn('px-2 pb-1 text-xs', group.label === 'Waiting for you' ? 'text-warn-text font-medium' : 'text-muted')}>
+                  {group.label}
+                </p>
                 <ul>
                   {group.sessions.map((session) => (
                     <li key={session.id}>
@@ -264,7 +288,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         params={{ sessionId: session.id }}
                         title={session.title || 'Untitled session'}
                         className={cn(
-                          'hover:bg-surface-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm',
+                          'hover:bg-surface-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
                           params.sessionId === session.id && 'bg-surface-2 font-medium',
                         )}
                       >
@@ -325,10 +349,10 @@ function sessionState(
 function SessionState({ state }: { state: SessionActivity }) {
   switch (state) {
     case 'validation':
-      return <ShieldAlert className="text-warn size-4 shrink-0" aria-label="Waiting for your approval" />;
+      return <ShieldAlert className="text-warn-text size-4 shrink-0" aria-label="Waiting for your approval" />;
     case 'input':
       return (
-        <MessageCircleQuestion className="text-warn size-4 shrink-0" aria-label="Waiting for your answer" />
+        <MessageCircleQuestion className="text-warn-text size-4 shrink-0" aria-label="Waiting for your answer" />
       );
     case 'running':
       return <LoaderCircle className="text-accent size-3.5 shrink-0 animate-spin" aria-label="Working" />;
@@ -347,10 +371,18 @@ function SessionState({ state }: { state: SessionActivity }) {
  * The buckets are the ones a person actually uses to find something again: what
  * they were doing a moment ago, earlier today, this week, before that.
  */
-function groupSessions(sessions: Session[]): { label: string; sessions: Session[] }[] {
+function groupSessions(
+  sessions: Session[],
+  waiting: Map<string, 'validation' | 'input'>,
+): { label: string; sessions: Session[] }[] {
   const now = Date.now();
   const day = 24 * 60 * 60 * 1000;
+  // What waits for a decision comes first, whatever its age: it is the one
+  // row a person opening the list is looking for.
+  const pinned = sessions.filter((session) => waiting.has(session.id));
+  sessions = sessions.filter((session) => !waiting.has(session.id));
   const buckets: { label: string; within: number; sessions: Session[] }[] = [
+    { label: 'Waiting for you', within: -1, sessions: pinned },
     { label: 'Today', within: day, sessions: [] },
     { label: 'Previous 7 days', within: 7 * day, sessions: [] },
     { label: 'Previous 30 days', within: 30 * day, sessions: [] },
@@ -372,14 +404,38 @@ function groupSessions(sessions: Session[]): { label: string; sessions: Session[
  * one on screen.
  */
 const nav = {
-  className: 'hover:bg-surface-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm',
+  className: 'hover:bg-surface-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
   activeProps: { className: 'bg-surface-2 font-medium' },
 };
 
 const rail = {
-  className: 'hover:bg-surface-2 text-muted hover:text-text flex size-8 items-center justify-center rounded-lg [&_svg]:size-4',
+  className: 'hover:bg-surface-2 text-muted hover:text-text flex size-8 items-center justify-center rounded-md [&_svg]:size-4',
   activeProps: { className: 'bg-surface-2 text-text' },
 };
+
+/**
+ * The way to everything waiting for a decision, across projects, above the
+ * project it would otherwise hide behind. Quiet when nothing waits; loud when
+ * something does.
+ */
+function WaitingLink({ count, active, collapsed = false }: { count: number; active: boolean; collapsed?: boolean }) {
+  const label = count > 0 ? `${count} waiting for you` : 'Nothing waiting';
+  if (collapsed) {
+    return (
+      <Link to="/waiting" title={label} aria-label={label} className={cn(rail.className, active && rail.activeProps.className, 'relative')}>
+        <Inbox />
+        {count > 0 && <span className="bg-warn ring-surface absolute top-1 right-1 size-2 rounded-full ring-2" />}
+      </Link>
+    );
+  }
+  return (
+    <Link to="/waiting" className={cn(nav.className, active && nav.activeProps.className)}>
+      <Inbox className={cn('size-4', count > 0 ? 'text-warn-text' : 'text-muted')} />
+      <span className={cn('flex-1', count > 0 && 'font-medium')}>Waiting</span>
+      {count > 0 && <Badge tone="warn" className="figures">{count}</Badge>}
+    </Link>
+  );
+}
 
 /**
  * The parts of a Project, in the order they are usually wanted.
@@ -634,7 +690,7 @@ function BackendsPane({ backends }: { backends: BackendInstance[] }) {
           </li>
         )}
         {backends.map((backend) => (
-          <li key={backend.id} className="border-border rounded-[--radius-card] border p-3">
+          <li key={backend.id} className="border-border rounded-(--radius-card) border p-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{backend.name}</span>
               <Badge tone={backendTone(backend)}>{humanise(backend.operationalStatus)}</Badge>
@@ -767,11 +823,16 @@ function NewProjectButton({ onCreated }: { onCreated: (projectId: string) => voi
             if (!name.trim()) return;
             // The handler returns void, so the promise is discarded here rather
             // than handed to the DOM, which would never await it.
-            void create.mutateAsync(name.trim()).then((project) => {
-              onCreated(project.id);
-              setName('');
-              setOpen(false);
-            });
+            // A failure is shown below the form; the promise only resolves
+            // the success path.
+            void create
+              .mutateAsync(name.trim())
+              .then((project) => {
+                onCreated(project.id);
+                setName('');
+                setOpen(false);
+              })
+              .catch(() => {});
           }}
         >
           <Input
@@ -780,6 +841,7 @@ function NewProjectButton({ onCreated }: { onCreated: (projectId: string) => voi
             placeholder="homelab"
             autoFocus
           />
+          <ActionError error={create.error} />
           <div className="flex justify-end gap-2">
             <DialogClose asChild>
               <Button variant="ghost" size="sm" type="button">
