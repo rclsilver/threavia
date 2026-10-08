@@ -38,6 +38,7 @@ func (h *handler) startSession(w http.ResponseWriter, r *http.Request, identity 
 		BackendInstanceID  string  `json:"backendInstanceId"`
 		WorkingDirectoryID *string `json:"workingDirectoryId"`
 		Message            string  `json:"message"`
+		NativeSessionID    *string `json:"nativeSessionId"`
 	}](w, r)
 	if !ok {
 		return
@@ -48,6 +49,9 @@ func (h *handler) startSession(w http.ResponseWriter, r *http.Request, identity 
 		BackendInstanceID: domain.BackendInstanceID(body.BackendInstanceID),
 		Message:           body.Message,
 		IdempotencyKey:    r.Header.Get("Idempotency-Key"),
+	}
+	if body.NativeSessionID != nil {
+		in.NativeSessionID = *body.NativeSessionID
 	}
 	if body.WorkingDirectoryID != nil && *body.WorkingDirectoryID != "" {
 		dirID := domain.KnownDirectoryID(*body.WorkingDirectoryID)

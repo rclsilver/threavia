@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -301,6 +302,44 @@ func TestSecondMessageResumesTheNativeSession(t *testing.T) {
 	}
 	if secondStart.GetPrompt() != "Et maintenant corrige le role foo" {
 		t.Errorf("prompt = %q, want the second message", secondStart.GetPrompt())
+	}
+}
+
+// TestFirstSendAdoptsAnExistingNativeSession pins the handover from a terminal:
+// a Session started with a provider session id resumes it from its very first
+// Job, and a malformed id is refused before anything is created.
+func TestFirstSendAdoptsAnExistingNativeSession(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	native := domain.NewUUID()
+
+	var started startSessionResponse
+	c.mustDo(http.MethodPost, "/api/v1/sessions/start", map[string]any{
+		"projectId":          projectID,
+		"backendInstanceId":  c.backendID,
+		"workingDirectoryId": dirID,
+		"message":            "Reprends là où on en était",
+		"nativeSessionId":    native,
+	}, &started, http.StatusCreated)
+
+	start := receive(t, "the dispatched job", backend.starts)
+	if start.GetNativeSessionId() != native {
+		t.Errorf("native session = %q, want the adopted %q", start.GetNativeSessionId(), native)
+	}
+
+	for _, bad := range []string{"--dangerously-skip-permissions", "two words", strings.Repeat("a", 201)} {
+		c.mustDo(http.MethodPost, "/api/v1/sessions/start", map[string]any{
+			"projectId":         projectID,
+			"backendInstanceId": c.backendID,
+			"message":           "Reprends",
+			"nativeSessionId":   bad,
+		}, nil, http.StatusBadRequest)
+	}
+	var sessions struct {
+		Items []idOnly `json:"items"`
+	}
+	c.mustDo(http.MethodGet, "/api/v1/projects/"+projectID+"/sessions", nil, &sessions, http.StatusOK)
+	if len(sessions.Items) != 1 {
+		t.Fatalf("%d sessions, want only the adopted one: a refused id must create nothing", len(sessions.Items))
 	}
 }
 

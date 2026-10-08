@@ -27,6 +27,8 @@ export function DraftView() {
   const [backendId, setBackendId] = useState('');
   const [directoryId, setDirectoryId] = useState(NONE);
   const [message, setMessage] = useState('');
+  const [adopting, setAdopting] = useState(false);
+  const [nativeSessionId, setNativeSessionId] = useState('');
 
   const usable = (backends.data ?? []).filter((backend) => backend.ownershipStatus !== 'REVOKED');
   const chosenBackend = backendId || usable[0]?.id || '';
@@ -41,6 +43,7 @@ export function DraftView() {
         backendInstanceId: chosenBackend,
         workingDirectoryId: directoryId === NONE ? null : directoryId,
         message: text,
+        nativeSessionId: (adopting && nativeSessionId.trim()) || null,
       })
       .then((result) =>
         navigate({ to: '/sessions/$sessionId', params: { sessionId: result.session.id } }),
@@ -94,6 +97,35 @@ export function DraftView() {
             you only if it cannot. It is the initial directory, not a boundary.
           </p>
         </div>
+
+        {/* Folded by default: adopting a terminal session is the exception, and
+            an empty field on every new Session would read as something to fill. */}
+        {adopting ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="draft-native">Resume a Claude Code session</Label>
+            <Input
+              id="draft-native"
+              value={nativeSessionId}
+              onChange={(event) => setNativeSessionId(event.target.value)}
+              placeholder="625f3bc1-7def-46bb-a5b8-bfb4cc98b40b"
+              autoFocus
+            />
+            <p className="text-muted text-xs">
+              The id of a session started on this backend, as in{' '}
+              <code>claude --resume &lt;id&gt;</code>. Pick the directory it was started in: that is
+              where the backend looks for it. Exit it in the terminal first, so two processes do
+              not write the same transcript.
+            </p>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="text-muted hover:text-text text-xs underline-offset-2 hover:underline"
+            onClick={() => setAdopting(true)}
+          >
+            Resume a session started in a terminal…
+          </button>
+        )}
 
         <div className="space-y-1.5">
           <Label htmlFor="draft-message">First message</Label>

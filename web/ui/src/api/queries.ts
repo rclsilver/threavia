@@ -215,6 +215,7 @@ interface StartSession {
   backendInstanceId: string;
   workingDirectoryId: string | null;
   message: string;
+  nativeSessionId?: string | null;
 }
 
 export function useStartSession() {

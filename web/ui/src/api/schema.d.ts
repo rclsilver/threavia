@@ -999,6 +999,14 @@ export interface paths {
                         /** Format: uuid */
                         workingDirectoryId?: string | null;
                         message: string;
+                        /** @description Adopts a provider session that already exists on the chosen
+                         *     backend, such as one started in a terminal. The first Job
+                         *     resumes it instead of opening a fresh one. The backend can
+                         *     only find it from the directory it was started in, so give
+                         *     the same working directory. A session that cannot be
+                         *     resumed fails the first Job, it does not start over.
+                         *      */
+                        nativeSessionId?: string | null;
                     };
                 };
             };

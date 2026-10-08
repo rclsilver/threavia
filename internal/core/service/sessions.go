@@ -25,6 +25,9 @@ type StartSessionInput struct {
 	BackendInstanceID  domain.BackendInstanceID
 	WorkingDirectoryID *domain.KnownDirectoryID
 	Message            string
+	// NativeSessionID adopts a provider session that already exists on the
+	// backend, typically one started in a terminal. Empty opens a fresh one.
+	NativeSessionID string
 	// IdempotencyKey makes a retried first send return the same Session rather
 	// than creating a second one.
 	IdempotencyKey string
@@ -44,6 +47,10 @@ func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in S
 	message := strings.TrimSpace(in.Message)
 	if message == "" {
 		return StartSessionResult{}, fmt.Errorf("%w: the first message cannot be empty", ErrInvalid)
+	}
+	native, err := adoptedSession(in.NativeSessionID)
+	if err != nil {
+		return StartSessionResult{}, err
 	}
 
 	if in.IdempotencyKey != "" {
@@ -81,6 +88,7 @@ func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in S
 		ID:                domain.NewRunID(),
 		SessionID:         result.Session.ID,
 		BackendInstanceID: in.BackendInstanceID,
+		NativeSessionID:   native,
 		ResumeStatus:      domain.ResumeUnknown,
 	}
 	result.Job = domain.Job{
@@ -494,6 +502,25 @@ func deriveTitle(message string) string {
 		return line
 	}
 	return strings.TrimSpace(string(runes[:titleLimit])) + "…"
+}
+
+// nativeSessionLimit bounds an adopted provider session id. Core does not know
+// the shape each provider uses, only that an id is a short opaque token.
+const nativeSessionLimit = 200
+
+// adoptedSession checks a provider session id a client asks to adopt. Core
+// cannot tell whether it exists, only the backend can, so this keeps out what
+// no provider would mint: whitespace, control characters, and a leading dash a
+// command line would read as a flag.
+func adoptedSession(id string) (*string, error) {
+	if id == "" {
+		return nil, nil
+	}
+	if len(id) > nativeSessionLimit || strings.HasPrefix(id, "-") ||
+		strings.IndexFunc(id, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
+		return nil, fmt.Errorf("%w: %q is not a provider session id", ErrInvalid, id)
+	}
+	return &id, nil
 }
 
 func optionalString(value string) *string {
