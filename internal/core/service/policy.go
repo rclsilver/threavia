@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 
+	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
@@ -34,7 +37,54 @@ func (s *Service) SetSessionExecutionPolicy(ctx context.Context, identity auth.I
 		SubjectID: string(sessionID),
 		Detail:    mustJSON(effective),
 	})
+	s.pushPolicy(ctx, session)
 	return effective, nil
+}
+
+// pushPolicy hands a changed Session policy to the Job already running in it.
+// The user changes the policy because of what that Job is doing, so making them
+// wait for the next message would answer a question they did not ask.
+//
+// A Job with its own override keeps it: the Session default does not apply to
+// it. A backend that is offline gets nothing, and the Job carries on with the
+// policy it started with; that is the one case left to the next Job.
+func (s *Service) pushPolicy(ctx context.Context, session domain.Session) {
+	runs, err := s.store.ListRuns(ctx, session.ID)
+	if err != nil {
+		s.logger.Error("cannot list the runs to update their policy",
+			slog.String("sessionId", string(session.ID)), slog.String("error", err.Error()))
+		return
+	}
+	for _, run := range runs {
+		job, err := s.store.ActiveJob(ctx, run.ID)
+		if errors.Is(err, postgres.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			s.logger.Error("cannot read the active job of a run",
+				slog.String("runId", string(run.ID)), slog.String("error", err.Error()))
+			continue
+		}
+		if job.Status == domain.JobCancelling {
+			continue
+		}
+		effective, err := s.store.EffectivePolicy(ctx, job.ID)
+		if err != nil {
+			s.logger.Error("cannot read the policy of a running job",
+				slog.String("jobId", string(job.ID)), slog.String("error", err.Error()))
+			continue
+		}
+		scope := domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID, RunID: run.ID, JobID: job.ID}
+		s.sendToBackend(ctx, scope, &backendv1.CoreToBackend{
+			Message: &backendv1.CoreToBackend_UpdateJobPolicy{
+				UpdateJobPolicy: &backendv1.UpdateJobPolicy{
+					RunId:           string(run.ID),
+					JobId:           string(job.ID),
+					ExecutionPolicy: policyToProto(effective),
+				},
+			},
+		})
+	}
 }
 
 // SessionExecutionPolicy returns the policy a Session applies by default.

@@ -251,6 +251,24 @@ func (a *Adapter) OnCancelJob(ctx context.Context, cmd *backendv1.CancelJob) err
 	return nil
 }
 
+// OnUpdateJobPolicy swaps the policy the permission gate consults for a running
+// Job. The gate reads it on every tool call, so the change applies from the next
+// one. The duration and action limits were armed when the process started and
+// keep their original values.
+func (a *Adapter) OnUpdateJobPolicy(_ context.Context, cmd *backendv1.UpdateJobPolicy) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	job, ok := a.jobs[cmd.GetJobId()]
+	if !ok {
+		// The Job already ended: the next one starts with the new policy anyway.
+		return nil
+	}
+	job.policy = policy.From(cmd.GetExecutionPolicy())
+	a.logger.Info("execution policy updated",
+		slog.String("jobId", cmd.GetJobId()), slog.String("mode", job.policy.Mode.String()))
+	return nil
+}
+
 // endedLocally reports whether this backend already recorded an outcome for a
 // Job. It tells a cancel that arrives after the work finished apart from one
 // aimed at a Job nothing is running.

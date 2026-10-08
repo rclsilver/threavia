@@ -782,6 +782,7 @@ type CoreToBackend struct {
 	//	*CoreToBackend_EventAck
 	//	*CoreToBackend_CoreToolResponse
 	//	*CoreToBackend_SkillBundle
+	//	*CoreToBackend_UpdateJobPolicy
 	Message       isCoreToBackend_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -930,6 +931,15 @@ func (x *CoreToBackend) GetSkillBundle() *SkillBundle {
 	return nil
 }
 
+func (x *CoreToBackend) GetUpdateJobPolicy() *UpdateJobPolicy {
+	if x != nil {
+		if x, ok := x.Message.(*CoreToBackend_UpdateJobPolicy); ok {
+			return x.UpdateJobPolicy
+		}
+	}
+	return nil
+}
+
 type isCoreToBackend_Message interface {
 	isCoreToBackend_Message()
 }
@@ -978,6 +988,10 @@ type CoreToBackend_SkillBundle struct {
 	SkillBundle *SkillBundle `protobuf:"bytes,12,opt,name=skill_bundle,json=skillBundle,proto3,oneof"`
 }
 
+type CoreToBackend_UpdateJobPolicy struct {
+	UpdateJobPolicy *UpdateJobPolicy `protobuf:"bytes,13,opt,name=update_job_policy,json=updateJobPolicy,proto3,oneof"`
+}
+
 func (*CoreToBackend_Welcome) isCoreToBackend_Message() {}
 
 func (*CoreToBackend_StartJob) isCoreToBackend_Message() {}
@@ -999,6 +1013,8 @@ func (*CoreToBackend_EventAck) isCoreToBackend_Message() {}
 func (*CoreToBackend_CoreToolResponse) isCoreToBackend_Message() {}
 
 func (*CoreToBackend_SkillBundle) isCoreToBackend_Message() {}
+
+func (*CoreToBackend_UpdateJobPolicy) isCoreToBackend_Message() {}
 
 // Skills the backend has locally, reported on connection and whenever they
 // change (spec section 18). Core knows the metadata and never the content: a
@@ -1229,7 +1245,7 @@ const file_threavia_backend_v1_backend_proto_rawDesc = "" +
 	"\x0fskill_inventory\x18\t \x01(\v2#.threavia.backend.v1.SkillInventoryH\x00R\x0eskillInventory\x12X\n" +
 	"\x13skill_fetch_request\x18\n" +
 	" \x01(\v2&.threavia.backend.v1.SkillFetchRequestH\x00R\x11skillFetchRequestB\t\n" +
-	"\amessage\"\x85\a\n" +
+	"\amessage\"\xd9\a\n" +
 	"\rCoreToBackend\x12\x1d\n" +
 	"\n" +
 	"command_id\x18\x01 \x01(\tR\tcommandId\x128\n" +
@@ -1245,7 +1261,8 @@ const file_threavia_backend_v1_backend_proto_rawDesc = "" +
 	"\tevent_ack\x18\n" +
 	" \x01(\v2\x1d.threavia.backend.v1.EventAckH\x00R\beventAck\x12U\n" +
 	"\x12core_tool_response\x18\v \x01(\v2%.threavia.backend.v1.CoreToolResponseH\x00R\x10coreToolResponse\x12E\n" +
-	"\fskill_bundle\x18\f \x01(\v2 .threavia.backend.v1.SkillBundleH\x00R\vskillBundleB\t\n" +
+	"\fskill_bundle\x18\f \x01(\v2 .threavia.backend.v1.SkillBundleH\x00R\vskillBundle\x12R\n" +
+	"\x11update_job_policy\x18\r \x01(\v2$.threavia.backend.v1.UpdateJobPolicyH\x00R\x0fupdateJobPolicyB\t\n" +
 	"\amessage\"`\n" +
 	"\n" +
 	"LocalSkill\x12\x12\n" +
@@ -1316,6 +1333,7 @@ var file_threavia_backend_v1_backend_proto_goTypes = []any{
 	(*EventAck)(nil),              // 37: threavia.backend.v1.EventAck
 	(*CoreToolResponse)(nil),      // 38: threavia.backend.v1.CoreToolResponse
 	(*SkillBundle)(nil),           // 39: threavia.backend.v1.SkillBundle
+	(*UpdateJobPolicy)(nil),       // 40: threavia.backend.v1.UpdateJobPolicy
 }
 var file_threavia_backend_v1_backend_proto_depIdxs = []int32{
 	13, // 0: threavia.backend.v1.Hello.protocol:type_name -> threavia.backend.v1.ProtocolInfo
@@ -1357,14 +1375,15 @@ var file_threavia_backend_v1_backend_proto_depIdxs = []int32{
 	37, // 36: threavia.backend.v1.CoreToBackend.event_ack:type_name -> threavia.backend.v1.EventAck
 	38, // 37: threavia.backend.v1.CoreToBackend.core_tool_response:type_name -> threavia.backend.v1.CoreToolResponse
 	39, // 38: threavia.backend.v1.CoreToBackend.skill_bundle:type_name -> threavia.backend.v1.SkillBundle
-	10, // 39: threavia.backend.v1.SkillInventory.local:type_name -> threavia.backend.v1.LocalSkill
-	8,  // 40: threavia.backend.v1.BackendControl.Connect:input_type -> threavia.backend.v1.BackendToCore
-	9,  // 41: threavia.backend.v1.BackendControl.Connect:output_type -> threavia.backend.v1.CoreToBackend
-	41, // [41:42] is the sub-list for method output_type
-	40, // [40:41] is the sub-list for method input_type
-	40, // [40:40] is the sub-list for extension type_name
-	40, // [40:40] is the sub-list for extension extendee
-	0,  // [0:40] is the sub-list for field type_name
+	40, // 39: threavia.backend.v1.CoreToBackend.update_job_policy:type_name -> threavia.backend.v1.UpdateJobPolicy
+	10, // 40: threavia.backend.v1.SkillInventory.local:type_name -> threavia.backend.v1.LocalSkill
+	8,  // 41: threavia.backend.v1.BackendControl.Connect:input_type -> threavia.backend.v1.BackendToCore
+	9,  // 42: threavia.backend.v1.BackendControl.Connect:output_type -> threavia.backend.v1.CoreToBackend
+	42, // [42:43] is the sub-list for method output_type
+	41, // [41:42] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_threavia_backend_v1_backend_proto_init() }
@@ -1399,6 +1418,7 @@ func file_threavia_backend_v1_backend_proto_init() {
 		(*CoreToBackend_EventAck)(nil),
 		(*CoreToBackend_CoreToolResponse)(nil),
 		(*CoreToBackend_SkillBundle)(nil),
+		(*CoreToBackend_UpdateJobPolicy)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

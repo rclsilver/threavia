@@ -144,6 +144,7 @@ type fakeBackend struct {
 
 	starts       chan *backendv1.StartJob
 	cancels      chan *backendv1.CancelJob
+	policies     chan *backendv1.UpdateJobPolicy
 	validations  chan *backendv1.ValidationResolution
 	inputs       chan *backendv1.UserInputResolution
 	reconciles   chan *backendv1.ReconcileInstruction
@@ -157,6 +158,11 @@ func (b *fakeBackend) OnStartJob(_ context.Context, cmd *backendv1.StartJob) err
 
 func (b *fakeBackend) OnCancelJob(_ context.Context, cmd *backendv1.CancelJob) error {
 	b.cancels <- cmd
+	return nil
+}
+
+func (b *fakeBackend) OnUpdateJobPolicy(_ context.Context, cmd *backendv1.UpdateJobPolicy) error {
+	b.policies <- cmd
 	return nil
 }
 
@@ -210,6 +216,7 @@ func (c *core) connectBackend(credential string) *fakeBackend {
 		t:           c.t,
 		starts:      make(chan *backendv1.StartJob, 8),
 		cancels:     make(chan *backendv1.CancelJob, 8),
+		policies:    make(chan *backendv1.UpdateJobPolicy, 8),
 		validations: make(chan *backendv1.ValidationResolution, 8),
 		inputs:      make(chan *backendv1.UserInputResolution, 8),
 		reconciles:  make(chan *backendv1.ReconcileInstruction, 8),

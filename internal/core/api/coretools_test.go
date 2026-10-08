@@ -214,6 +214,29 @@ func TestExecutionPolicyReachesTheBackend(t *testing.T) {
 	}
 }
 
+// TestAPolicyChangeReachesTheRunningJob is a regression test: the policy was
+// only sent with StartJob, so a Session switched to GUARDED kept its running Job
+// asking for everything until it ended.
+func TestAPolicyChangeReachesTheRunningJob(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	session := c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
+	running := receive(t, "the dispatched job", backend.starts)
+
+	c.mustDo("PUT", "/api/v1/sessions/"+session+"/policy", map[string]any{
+		"mode": "GUARDED", "allowFilesystemWrite": true, "allowGitCommit": true,
+	}, nil, 200)
+
+	update := receive(t, "the policy update", backend.policies)
+	if update.GetJobId() != running.GetJobId() || update.GetRunId() != running.GetRunId() {
+		t.Errorf("update addressed to %s/%s, want the running job %s/%s",
+			update.GetRunId(), update.GetJobId(), running.GetRunId(), running.GetJobId())
+	}
+	policy := update.GetExecutionPolicy()
+	if policy.GetMode().String() != "EXECUTION_MODE_GUARDED" || !policy.GetAllowGitCommit() {
+		t.Errorf("pushed policy = %+v, want the one just set", policy)
+	}
+}
+
 // TestAutonomousNeedsALimit pins the one combination section 17 exists to
 // prevent: an autonomous Run nobody can stop.
 func TestAutonomousNeedsALimit(t *testing.T) {

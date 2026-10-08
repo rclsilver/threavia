@@ -112,6 +112,16 @@ message StartJob {
   ExecutionPolicy execution_policy = 8;
 }
 
+// Replaces the policy of a Job that is already running, after the user changed
+// it. The permission gate applies it from the next tool call on. The duration
+// and action limits stay those the Job started with: they bound a run that is
+// already under way, and moving them mid-flight would make neither honest.
+message UpdateJobPolicy {
+  string run_id = 1;
+  string job_id = 2;
+  ExecutionPolicy execution_policy = 3;
+}
+
 message CancelJob {
   string run_id = 1;
   string job_id = 2;

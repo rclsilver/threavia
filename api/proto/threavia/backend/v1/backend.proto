@@ -109,6 +109,7 @@ message CoreToBackend {
     EventAck event_ack = 10;
     CoreToolResponse core_tool_response = 11;
     SkillBundle skill_bundle = 12;
+    UpdateJobPolicy update_job_policy = 13;
   }
 }
 

@@ -24,6 +24,10 @@ type Handler interface {
 	// OnCancelJob asks the backend to stop a Job. The Job reaches CANCELLED only
 	// once the backend confirms the stop with a job cancelled event.
 	OnCancelJob(ctx context.Context, cmd *backendv1.CancelJob) error
+	// OnUpdateJobPolicy replaces the policy of a running Job, after the user
+	// changed it. A backend that does not support it keeps the policy the Job
+	// started with, and the next Job gets the new one anyway.
+	OnUpdateJobPolicy(ctx context.Context, cmd *backendv1.UpdateJobPolicy) error
 
 	// OnValidationResolution delivers the user decision on a pending validation.
 	OnValidationResolution(ctx context.Context, cmd *backendv1.ValidationResolution) error
@@ -59,6 +63,11 @@ func (BaseHandler) OnStartJob(context.Context, *backendv1.StartJob) error {
 
 // OnCancelJob implements Handler.
 func (BaseHandler) OnCancelJob(context.Context, *backendv1.CancelJob) error {
+	return ErrUnsupportedCommand
+}
+
+// OnUpdateJobPolicy implements Handler.
+func (BaseHandler) OnUpdateJobPolicy(context.Context, *backendv1.UpdateJobPolicy) error {
 	return ErrUnsupportedCommand
 }
 

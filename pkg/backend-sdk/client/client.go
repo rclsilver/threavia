@@ -317,6 +317,8 @@ func (c *Client) dispatch(ctx context.Context, msg *backendv1.CoreToBackend) {
 		err = c.handler.OnStartJob(ctx, body.StartJob)
 	case *backendv1.CoreToBackend_CancelJob:
 		err = c.handler.OnCancelJob(ctx, body.CancelJob)
+	case *backendv1.CoreToBackend_UpdateJobPolicy:
+		err = c.handler.OnUpdateJobPolicy(ctx, body.UpdateJobPolicy)
 	case *backendv1.CoreToBackend_ValidationResolution:
 		err = c.handler.OnValidationResolution(ctx, body.ValidationResolution)
 	case *backendv1.CoreToBackend_UserInputResolution:
