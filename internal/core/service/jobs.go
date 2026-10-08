@@ -454,6 +454,8 @@ func policyToProto(policy domain.ExecutionPolicy) *backendv1.ExecutionPolicy {
 	switch policy.Mode {
 	case domain.ExecutionGuarded:
 		mode = backendv1.ExecutionMode_EXECUTION_MODE_GUARDED
+	case domain.ExecutionSupervised:
+		mode = backendv1.ExecutionMode_EXECUTION_MODE_SUPERVISED
 	case domain.ExecutionAutonomous:
 		mode = backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS
 	}

@@ -34,6 +34,9 @@ const (
 	ExecutionMode_EXECUTION_MODE_INTERACTIVE ExecutionMode = 1
 	ExecutionMode_EXECUTION_MODE_GUARDED     ExecutionMode = 2
 	ExecutionMode_EXECUTION_MODE_AUTONOMOUS  ExecutionMode = 3
+	// A reviewer stands in for the user where the provider has one. The refusals
+	// stay refusals; a backend without one falls back to GUARDED.
+	ExecutionMode_EXECUTION_MODE_SUPERVISED ExecutionMode = 4
 )
 
 // Enum value maps for ExecutionMode.
@@ -43,12 +46,14 @@ var (
 		1: "EXECUTION_MODE_INTERACTIVE",
 		2: "EXECUTION_MODE_GUARDED",
 		3: "EXECUTION_MODE_AUTONOMOUS",
+		4: "EXECUTION_MODE_SUPERVISED",
 	}
 	ExecutionMode_value = map[string]int32{
 		"EXECUTION_MODE_UNSPECIFIED": 0,
 		"EXECUTION_MODE_INTERACTIVE": 1,
 		"EXECUTION_MODE_GUARDED":     2,
 		"EXECUTION_MODE_AUTONOMOUS":  3,
+		"EXECUTION_MODE_SUPERVISED":  4,
 	}
 )
 
@@ -1863,12 +1868,13 @@ const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"\vchunk_index\x18\x06 \x01(\rR\n" +
 	"chunkIndex\x12\x12\n" +
 	"\x04last\x18\a \x01(\bR\x04last\x120\n" +
-	"\x05error\x18\b \x01(\v2\x1a.threavia.backend.v1.ErrorR\x05error*\x8a\x01\n" +
+	"\x05error\x18\b \x01(\v2\x1a.threavia.backend.v1.ErrorR\x05error*\xa9\x01\n" +
 	"\rExecutionMode\x12\x1e\n" +
 	"\x1aEXECUTION_MODE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aEXECUTION_MODE_INTERACTIVE\x10\x01\x12\x1a\n" +
 	"\x16EXECUTION_MODE_GUARDED\x10\x02\x12\x1d\n" +
-	"\x19EXECUTION_MODE_AUTONOMOUS\x10\x03*\x89\x01\n" +
+	"\x19EXECUTION_MODE_AUTONOMOUS\x10\x03\x12\x1d\n" +
+	"\x19EXECUTION_MODE_SUPERVISED\x10\x04*\x89\x01\n" +
 	"\x10PermissionEffect\x12!\n" +
 	"\x1dPERMISSION_EFFECT_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17PERMISSION_EFFECT_ALLOW\x10\x01\x12\x19\n" +

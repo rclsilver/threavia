@@ -174,7 +174,15 @@ func (p Policy) Evaluate(tool string, input map[string]any) Decision {
 	// why and what to do instead, and it retries in seconds; asking the user
 	// would cost a round trip to a human for a command that was never in doubt.
 	// Last, so that a genuine refusal above keeps its own reason.
-	if tool == "Bash" && p.Mode != backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS {
+	//
+	// Not in the modes where it costs nothing: AUTONOMOUS asks nobody, and
+	// SUPERVISED hands the command to a reviewer that reads what it is for
+	// rather than whether it can be matched. The refusal exists because the
+	// prefix buys a person's attention, so where no person is bought it has no
+	// argument.
+	if tool == "Bash" &&
+		p.Mode != backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS &&
+		p.Mode != backendv1.ExecutionMode_EXECUTION_MODE_SUPERVISED {
 		if assigned := specialAssignment(command(input)); assigned != "" {
 			// No list of tools here. The system prompt names what is on PATH,
 			// read from PATH rather than written down, and a second list kept

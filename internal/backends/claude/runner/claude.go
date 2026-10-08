@@ -372,10 +372,10 @@ func (c *Claude) command(ctx context.Context, params StartParams, nativeSessionI
 		"--permission-mode", native.Mode,
 	}
 
-	// The person's own settings are not read: a Session runs under the policy
-	// Core states, and a file on this machine must not widen or narrow it
-	// behind Core's back.
-	args = append(args, "--setting-sources", "")
+	// Which of this machine's settings the provider may read. None, as a rule:
+	// a Session runs under the policy Core states. SUPERVISED is the exception,
+	// and the Native translation is where that is argued.
+	args = append(args, "--setting-sources", native.SettingSources)
 	if settings, err := native.Settings(); err != nil {
 		// Running without them costs prompts, not safety: every refusal in the
 		// policy is enforced a second time by the permission gate, which is

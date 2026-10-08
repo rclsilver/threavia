@@ -15,6 +15,21 @@ const (
 	// ExecutionGuarded asks only for actions that change something, and lets
 	// reading proceed.
 	ExecutionGuarded ExecutionMode = "GUARDED"
+	// ExecutionSupervised puts a reviewer in the user's place rather than
+	// rules: where the provider has one, a second model judges each action
+	// against what was actually asked for, and the user hears only what it will
+	// not take responsibility for.
+	//
+	// It answers a question rules cannot. A rule describes what a command is;
+	// it has no idea what the command is for. That is why a plain search was
+	// going to the user — the command carried a shell variable nobody could
+	// resolve in advance — while a production deploy written plainly went
+	// through. A reviewer reads the intent.
+	//
+	// The refusals stay refusals: this is where the user is replaced, never
+	// what the policy forbids. A backend whose provider has no such reviewer
+	// falls back to GUARDED, which is restraint rather than silence.
+	ExecutionSupervised ExecutionMode = "SUPERVISED"
 	// ExecutionAutonomous never asks. It is not permission to do anything: the
 	// limits below still apply, and are what make the mode safe to offer.
 	ExecutionAutonomous ExecutionMode = "AUTONOMOUS"
@@ -25,7 +40,7 @@ func (m ExecutionMode) String() string { return string(m) }
 // Valid reports whether m is a known ExecutionMode.
 func (m ExecutionMode) Valid() bool {
 	switch m {
-	case ExecutionInteractive, ExecutionGuarded, ExecutionAutonomous:
+	case ExecutionInteractive, ExecutionGuarded, ExecutionSupervised, ExecutionAutonomous:
 		return true
 	default:
 		return false

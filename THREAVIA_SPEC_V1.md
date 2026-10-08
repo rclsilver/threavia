@@ -714,8 +714,13 @@ Modes:
 ```text
 INTERACTIVE
 GUARDED
+SUPERVISED
 AUTONOMOUS
 ```
+
+SUPERVISED puts a reviewer in the user's place rather than rules: where the provider has one, a second model judges each action against what was actually asked for, and the user hears only what it will not take responsibility for. It answers a question rules cannot, because a rule describes what a command is and has no idea what the command is for — which is how a plain search ends up at the user for carrying a shell variable nobody can resolve in advance, while a production deploy written plainly goes through.
+
+The refusals stay refusals: SUPERVISED replaces the user, never what the policy forbids, and a backend whose provider has no such reviewer falls back to GUARDED rather than to silence. It is also the one mode that reads the machine's own configuration, because a reviewer decides what is ordinary from what that machine says its infrastructure is — which hosts are internal, which namespaces are shared — and without it treats everything as external.
 
 Autonomous execution is constrained by explicit permissions/limits such as duration, maximum actions/jobs, filesystem writes, git commit/push, network/deployment access.
 

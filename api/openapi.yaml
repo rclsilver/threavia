@@ -1610,7 +1610,7 @@ components:
 
     ExecutionMode:
       type: string
-      enum: [INTERACTIVE, GUARDED, AUTONOMOUS]
+      enum: [INTERACTIVE, GUARDED, SUPERVISED, AUTONOMOUS]
 
     SkillSourceType:
       type: string

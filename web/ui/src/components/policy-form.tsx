@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 const MODES: { value: ExecutionMode; label: string }[] = [
   { value: 'INTERACTIVE', label: 'interactive — ask before acting' },
   { value: 'GUARDED', label: 'guarded — act within the allowances below' },
+  { value: 'SUPERVISED', label: 'supervised — a reviewer answers in your place' },
   { value: 'AUTONOMOUS', label: 'autonomous — act until a limit is reached' },
 ];
 

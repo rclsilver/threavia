@@ -572,3 +572,69 @@ func TestWritingToTheSharedTempIsRefused(t *testing.T) {
 		t.Error("refused the shared temp without offering anywhere else")
 	}
 }
+
+// TestSupervisedHandsTheQuestionToTheProvider pins the mode that replaces the
+// user rather than the rules.
+//
+// A rule describes what a command is and has no idea what it is for, which is
+// how a plain search reached the user for carrying a shell variable nobody
+// could resolve in advance. SUPERVISED asks the provider's own reviewer
+// instead — and keeps every refusal, because what is replaced is the person,
+// never the policy.
+func TestSupervisedHandsTheQuestionToTheProvider(t *testing.T) {
+	t.Parallel()
+
+	supervised := permissive(backendv1.ExecutionMode_EXECUTION_MODE_SUPERVISED)
+	supervised.AllowGitPush = false
+	supervised.Rules = []policy.Rule{{
+		Effect:     backendv1.PermissionEffect_PERMISSION_EFFECT_DENY,
+		Capability: backendv1.PermissionCapability_PERMISSION_CAPABILITY_SHELL,
+		Match:      "kubectl delete *",
+	}}
+
+	native := supervised.Native()
+	if native.Mode != "auto" {
+		t.Errorf("mode = %q, want auto", native.Mode)
+	}
+	// The one mode that reads the machine's configuration: its reviewer decides
+	// what is ordinary from what that machine says its infrastructure is.
+	if native.SettingSources != "user" {
+		t.Errorf("settingSources = %q, want user", native.SettingSources)
+	}
+	// The refusals are still stated, and the provider answers them before its
+	// reviewer sees anything.
+	for _, want := range []string{"Bash(git push *)", "Bash(kubectl delete *)"} {
+		if !contains(native.Deny, want) {
+			t.Errorf("deny is missing %q, got %v", want, native.Deny)
+		}
+	}
+
+	// And they are still enforced here, where a path cannot walk around them.
+	if d := supervised.Evaluate("Bash", bash(`/usr/bin/kubectl delete pod x`)); d.Verdict != policy.Deny {
+		t.Errorf("a denied command = %v, want Deny", d.Verdict)
+	}
+	if d := supervised.Evaluate("Bash", bash(`git status && git push origin master`)); d.Verdict != policy.Deny {
+		t.Errorf("a forbidden push = %v, want Deny", d.Verdict)
+	}
+
+	// The PATH prefix is refused only where it costs a person. Under a reviewer
+	// it costs nothing, so the refusal has no argument left.
+	if d := supervised.Evaluate("Bash", bash(`export PATH=/usr/bin:$PATH && ls`)); d.Verdict == policy.Deny {
+		t.Error("the PATH prefix was refused in a mode where it bothers nobody")
+	}
+
+	// Every other mode keeps the machine's settings out.
+	for _, mode := range []backendv1.ExecutionMode{
+		backendv1.ExecutionMode_EXECUTION_MODE_INTERACTIVE,
+		backendv1.ExecutionMode_EXECUTION_MODE_GUARDED,
+		backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS,
+	} {
+		native := permissive(mode).Native()
+		if native.SettingSources != "" {
+			t.Errorf("%v loads %q, want nothing", mode, native.SettingSources)
+		}
+		if native.Mode != "default" {
+			t.Errorf("%v = %q, want default", mode, native.Mode)
+		}
+	}
+}

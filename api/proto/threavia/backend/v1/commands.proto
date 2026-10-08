@@ -26,6 +26,9 @@ enum ExecutionMode {
   EXECUTION_MODE_INTERACTIVE = 1;
   EXECUTION_MODE_GUARDED = 2;
   EXECUTION_MODE_AUTONOMOUS = 3;
+  // A reviewer stands in for the user where the provider has one. The refusals
+  // stay refusals; a backend without one falls back to GUARDED.
+  EXECUTION_MODE_SUPERVISED = 4;
 }
 
 // What a permission rule does to the action it matches.

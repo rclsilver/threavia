@@ -2780,7 +2780,7 @@ export interface components {
         /** @enum {string} */
         ProviderAuthState: "UNKNOWN" | "AUTHENTICATED" | "AUTHENTICATION_REQUIRED";
         /** @enum {string} */
-        ExecutionMode: "INTERACTIVE" | "GUARDED" | "AUTONOMOUS";
+        ExecutionMode: "INTERACTIVE" | "GUARDED" | "SUPERVISED" | "AUTONOMOUS";
         /** @enum {string} */
         SkillSourceType: "GIT" | "ARCHIVE" | "UPLOAD";
         /** @enum {string} */

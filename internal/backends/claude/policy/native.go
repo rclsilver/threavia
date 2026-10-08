@@ -21,6 +21,18 @@ import (
 type Native struct {
 	// Mode is what --permission-mode receives.
 	Mode string `json:"-"`
+	// SettingSources is what --setting-sources receives: which of the machine's
+	// own settings files to load. Empty means none, which is the rule — a
+	// Session runs under the policy Core states, and a file on this machine
+	// must not widen or narrow it behind Core's back.
+	//
+	// SUPERVISED is the exception, and it is not a lapse. Its reviewer decides
+	// what is ordinary by reading what this machine's configuration says the
+	// infrastructure is: which hosts are internal, which namespaces are shared,
+	// which remotes are trusted. Without that it treats everything as external
+	// and refuses most of the work. The user source carries it, and nothing
+	// else is loaded.
+	SettingSources string `json:"-"`
 
 	Allow []string `json:"allow,omitempty"`
 	Ask   []string `json:"ask,omitempty"`
@@ -75,6 +87,15 @@ func (p Policy) Native() Native {
 	// way back to a prompt is to say so.
 	if p.Mode == backendv1.ExecutionMode_EXECUTION_MODE_INTERACTIVE {
 		native.Ask = append(native.Ask, "Bash", "Read", "Glob", "Grep")
+	}
+
+	// SUPERVISED is the one mode that hands the question to the provider's own
+	// reviewer rather than to a list. The refusals above still resolve first —
+	// the decision order answers allow, ask and deny before the reviewer sees
+	// anything — so the policy stays enforced and only the user is replaced.
+	if p.Mode == backendv1.ExecutionMode_EXECUTION_MODE_SUPERVISED {
+		native.Mode = "auto"
+		native.SettingSources = "user"
 	}
 
 	for _, rule := range p.Rules {
