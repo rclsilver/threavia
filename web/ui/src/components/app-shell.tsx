@@ -1,15 +1,17 @@
-import { Link, useLocation, useParams } from '@tanstack/react-router';
+import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
 import {
   Archive,
   ArchiveRestore,
   BookText,
+  Check,
+  ChevronsUpDown,
   Clock,
   FileText,
   History,
   Inbox,
   ListChecks,
   LoaderCircle,
-  Menu,
+  Menu as MenuIcon,
   MessageCircleQuestion,
   Package,
   PanelLeftClose,
@@ -32,9 +34,10 @@ import {
   useProjects,
   useRevokeBackend,
   useSessions,
+  useSnapshot,
   useTasks,
 } from '@/api/queries';
-import type { BackendInstance, Session } from '@/api/types';
+import type { BackendInstance, Project, Session } from '@/api/types';
 import { useWideLayout } from '@/use-layout';
 import { SelectedProject } from '@/use-project';
 import { useStream } from '@/use-stream';
@@ -53,7 +56,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input, Label } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
 import { cn, humanise, when } from '@/lib/utils';
 
 /**
@@ -73,13 +76,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [projectId, setProjectId] = useState<string | undefined>(params.projectId);
 
   // The route wins over local selection: opening a Session link selects its
-  // Project rather than leaving the sidebar pointing somewhere else.
+  // Project rather than leaving the sidebar pointing somewhere else. A
+  // Session's URL carries no Project, but the Session knows its own: opened
+  // from a link, from what waits, or from a notification, the sidebar follows
+  // it. The snapshot is the one the Session view reads, so this asks nothing.
+  const snapshot = useSnapshot(params.sessionId);
+  const draftProject = useLocation({
+    select: (location) => (location.pathname === '/sessions/new' ? (location.search as { projectId?: string }).projectId : undefined),
+  });
+  const routeProject = params.projectId ?? snapshot.data?.session.projectId ?? (draftProject || undefined);
   useEffect(() => {
-    if (params.projectId) setProjectId(params.projectId);
-  }, [params.projectId]);
+    if (routeProject) setProjectId(routeProject);
+  }, [routeProject]);
+  // Nothing chosen and nothing in the route: the first Project. Never over
+  // the route's, which can arrive in the same render as the list of Projects.
   useEffect(() => {
-    if (!projectId && projects.data?.length) setProjectId(projects.data[0].id);
-  }, [projectId, projects.data]);
+    if (!projectId && !routeProject && projects.data?.length) setProjectId(projects.data[0].id);
+  }, [projectId, routeProject, projects.data]);
 
   const [showArchived, setShowArchived] = useState(false);
   // Archived Sessions are read from the same list, because asking for them
@@ -89,6 +102,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     showArchived ? session.status === 'ARCHIVED' : session.status !== 'ARCHIVED',
   );
   const [collapsed, setCollapsed] = useCollapsed();
+
+  // Where each Project was left, so coming back to one lands there. Only a
+  // Session listed under the selected Project is recorded against it.
+  useEffect(() => {
+    const session = params.sessionId;
+    if (!session || !projectId) return;
+    if (sessions.data?.some((candidate) => candidate.id === session)) rememberSession(projectId, session);
+  }, [params.sessionId, projectId, sessions.data]);
+
+  // Choosing another Project goes to it. Staying on a Session of the one just
+  // left, with the sidebar listing the other, showed two Projects at once. A
+  // Project page becomes the same page of the other Project; anything else
+  // becomes the Session last opened there, or a new one. What waits for a
+  // decision is every Project's at once, so it stays.
+  const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const switchProject = (id: string) => {
+    if (id === projectId) return;
+    setProjectId(id);
+    if (pathname === '/waiting') return;
+    if (params.projectId) {
+      void navigate({ to: '.', params: (previous) => ({ ...previous, projectId: id }) });
+      return;
+    }
+    const last = lastSession(id);
+    void (last
+      ? navigate({ to: '/sessions/$sessionId', params: { sessionId: last } })
+      : navigate({ to: '/sessions/new', search: { projectId: id } }));
+  };
 
   // What waits for the user, by Session. The attention route is already the
   // live answer to that question, kept current by the stream.
@@ -105,7 +147,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // on a screen that narrow. It closes again on the way to wherever was picked.
   const wide = useMediaQuery('(min-width: 768px)');
   const [drawer, setDrawer] = useState(false);
-  const pathname = useLocation({ select: (location) => location.pathname });
   useEffect(() => {
     setDrawer(false);
   }, [pathname, wide]);
@@ -135,7 +176,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           stream is up. */}
       <div className="border-border bg-surface flex items-center gap-2 border-b px-2 py-1.5 md:hidden">
         <Button variant="ghost" size="icon" title="Open the menu" onClick={() => setDrawer(true)}>
-          <Menu />
+          <MenuIcon />
         </Button>
         <Logo className="h-5 w-auto" />
         <span className="text-sm font-semibold">Threavia</span>
@@ -224,22 +265,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <>
         <WaitingLink count={waitingCount} active={pathname === '/waiting'} />
         <section className="space-y-2">
-          <Label>Project</Label>
-          <div className="flex gap-2">
-            <Select value={projectId ?? ''} onValueChange={setProjectId}>
-              <SelectTrigger className="flex-1">
-                <SelectValue placeholder="No project" />
-              </SelectTrigger>
-              <SelectContent>
-                {(projects.data ?? []).map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <NewProjectButton onCreated={setProjectId} />
-          </div>
+          <ProjectSwitcher projects={projects.data ?? []} current={projectId} onSwitch={switchProject} />
           {projectId && <ProjectNav projectId={projectId} />}
         </section>
 
@@ -802,18 +828,110 @@ function backendTone(backend: BackendInstance): BadgeTone {
   return 'neutral';
 }
 
-function NewProjectButton({ onCreated }: { onCreated: (projectId: string) => void }) {
+const LAST_SESSIONS = 'threavia.lastSessions';
+
+function lastSessions(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(LAST_SESSIONS) ?? '{}') as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function lastSession(projectId: string): string | undefined {
+  return lastSessions()[projectId];
+}
+
+function rememberSession(projectId: string, sessionId: string) {
+  try {
+    localStorage.setItem(LAST_SESSIONS, JSON.stringify({ ...lastSessions(), [projectId]: sessionId }));
+  } catch {
+    // Without storage a switch lands on a new Session, which is still a place.
+  }
+}
+
+/**
+ * Which Project the sidebar shows, and the way to another or a new one.
+ *
+ * One control, the width of the sidebar, rather than a list box with a button
+ * squeezed beside it: the Project is the frame of everything below, and
+ * creating one is something done from the same place a Project is chosen.
+ */
+function ProjectSwitcher({
+  projects,
+  current,
+  onSwitch,
+}: {
+  projects: Project[];
+  current?: string;
+  onSwitch: (projectId: string) => void;
+}) {
+  const [creating, setCreating] = useState(false);
+  const project = projects.find((candidate) => candidate.id === current);
+
+  return (
+    <>
+      <Menu>
+        <MenuTrigger asChild>
+          <button
+            type="button"
+            title="Switch project"
+            className="hover:bg-surface-2 data-[state=open]:bg-surface-2 border-border flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-sm"
+          >
+            <ProjectMark name={project?.name} />
+            <span className={cn('min-w-0 flex-1 truncate', project ? 'font-medium' : 'text-muted')}>
+              {project?.name ?? 'No project'}
+            </span>
+            <ChevronsUpDown className="text-muted size-4 shrink-0" />
+          </button>
+        </MenuTrigger>
+        <MenuContent align="start">
+          <MenuLabel>Projects</MenuLabel>
+          {projects.map((candidate) => (
+            <MenuItem key={candidate.id} onSelect={() => onSwitch(candidate.id)}>
+              <ProjectMark name={candidate.name} />
+              <span className="min-w-0 flex-1 truncate">{candidate.name}</span>
+              {candidate.id === current && <Check className="text-muted size-3.5 shrink-0" />}
+            </MenuItem>
+          ))}
+          {projects.length > 0 && <MenuSeparator />}
+          <MenuItem onSelect={() => setCreating(true)}>
+            <span className="text-muted flex size-6 shrink-0 items-center justify-center">
+              <Plus className="size-4" />
+            </span>
+            New project…
+          </MenuItem>
+        </MenuContent>
+      </Menu>
+      <NewProjectDialog open={creating} onOpenChange={setCreating} onCreated={onSwitch} />
+    </>
+  );
+}
+
+/** A Project's initial, so it is found by shape in a list before it is read. */
+function ProjectMark({ name }: { name?: string }) {
+  return (
+    <span className="bg-accent/10 text-accent flex size-6 shrink-0 items-center justify-center rounded-md text-xs font-semibold uppercase">
+      {(name ?? '').trim().slice(0, 1) || '·'}
+    </span>
+  );
+}
+
+function NewProjectDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: (projectId: string) => void;
+}) {
   const create = useCreateProject();
   const [name, setName] = useState('');
-  const [open, setOpen] = useState(false);
+  const setOpen = onOpenChange;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="secondary" size="icon" title="New project">
-          <Plus />
-        </Button>
-      </DialogTrigger>
       <DialogContent>
         <DialogTitle>New project</DialogTitle>
         <form
