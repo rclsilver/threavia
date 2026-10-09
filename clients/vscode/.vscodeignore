@@ -1,7 +1,10 @@
-# Everything is bundled into dist/extension.js, so the package carries no
-# sources, tests or dependencies.
+# Everything is bundled into dist/, so the package carries no sources, tests or
+# dependencies: the extension, and the conversation page with its icon font.
 **
 !dist/extension.js
+!dist/webview.js
+!dist/webview-style.css
+!dist/codicon.ttf
 !media/**
 !package.json
 !README.md

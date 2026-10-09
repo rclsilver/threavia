@@ -1,0 +1,993 @@
+/*
+ * The conversation, dressed as part of the editor.
+ *
+ * Every colour, font and border comes from the editor's theme variables, so
+ * the page follows light, dark and high-contrast themes, and a theme switch,
+ * without a line of its own. The few names below map the theme onto the roles
+ * the timeline needs, the same roles as the web client's.
+ */
+@import '@vscode/codicons/dist/codicon.css';
+
+:root {
+  --text: var(--vscode-foreground);
+  --muted: var(--vscode-descriptionForeground);
+  --canvas: var(--vscode-editor-background);
+  --surface: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  --surface-2: var(--vscode-textBlockQuote-background, var(--vscode-editorWidget-background));
+  --border: var(--vscode-widget-border, var(--vscode-panel-border, transparent));
+  --hc-border: var(--vscode-contrastBorder, transparent);
+  --focus: var(--vscode-focusBorder);
+  --link: var(--vscode-textLink-foreground);
+  --link-active: var(--vscode-textLink-activeForeground);
+  --ok: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+  --danger: var(--vscode-errorForeground);
+  --warn: var(--vscode-editorWarning-foreground, var(--vscode-charts-yellow));
+  --accent: var(--vscode-textLink-foreground);
+  --added: var(--vscode-gitDecoration-addedResourceForeground, var(--ok));
+  --deleted: var(--vscode-gitDecoration-deletedResourceForeground, var(--danger));
+  --modified: var(--vscode-gitDecoration-modifiedResourceForeground, var(--muted));
+  --renamed: var(--vscode-gitDecoration-renamedResourceForeground, var(--warn));
+  --hover: var(--vscode-list-hoverBackground);
+  --code-bg: var(--vscode-textCodeBlock-background);
+  --mono: var(--vscode-editor-font-family, ui-monospace, monospace);
+  --mono-size: var(--vscode-editor-font-size, 13px);
+  --radius: 4px;
+  --gutter: 3.25rem;
+  --reading: 52rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--canvas);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size, 13px);
+  line-height: 1.5;
+}
+
+::selection {
+  background: var(--vscode-editor-selectionBackground);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: 1px;
+}
+
+code,
+pre,
+.mono {
+  font-family: var(--mono);
+}
+
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 0.85em;
+}
+.push {
+  margin-left: auto;
+}
+.tone-ok {
+  color: var(--ok);
+}
+.tone-danger {
+  color: var(--danger);
+}
+.tone-warn {
+  color: var(--warn);
+}
+.tone-accent,
+.tone-running {
+  color: var(--accent);
+}
+.tone-added {
+  color: var(--added);
+}
+.tone-deleted {
+  color: var(--deleted);
+}
+
+/* ------------------------------------------------------------- buttons */
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 0;
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+button.primary,
+button.secondary,
+button.danger {
+  padding: 4px 14px;
+  min-height: 26px;
+  line-height: 18px;
+}
+button.primary {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border-color: var(--vscode-button-border, transparent);
+}
+button.primary:not(:disabled):hover {
+  background: var(--vscode-button-hoverBackground);
+}
+button.secondary {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+  border-color: var(--vscode-button-border, transparent);
+}
+button.secondary:not(:disabled):hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+/* Approving something dangerous is coloured as dangerous. */
+button.danger {
+  color: var(--vscode-statusBarItem-errorForeground, #fff);
+  background: var(--vscode-statusBarItem-errorBackground, var(--danger));
+  border-color: var(--vscode-button-border, transparent);
+}
+button.danger:not(:disabled):hover {
+  filter: brightness(1.1);
+}
+
+button.ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  color: var(--muted);
+}
+button.ghost:not(:disabled):hover {
+  color: var(--text);
+  background: var(--vscode-toolbar-hoverBackground, var(--hover));
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--vscode-icon-foreground, var(--text));
+}
+.icon-button:not(:disabled):hover {
+  background: var(--vscode-toolbar-hoverBackground, var(--hover));
+}
+
+.link-button {
+  color: var(--link);
+}
+.link-button:hover {
+  text-decoration: underline;
+}
+
+.codicon {
+  font-size: 14px;
+  vertical-align: -2px;
+}
+
+/* -------------------------------------------------------------- header */
+
+.header {
+  flex: none;
+  padding: 8px 20px 8px;
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, var(--border));
+}
+.title {
+  margin: 0;
+  font-size: 1.1em;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 14px;
+  color: var(--muted);
+  font-size: 0.92em;
+}
+.meta .codicon {
+  font-size: 13px;
+  margin-right: 4px;
+}
+.state,
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.state.tone-running {
+  color: var(--accent);
+}
+.state.tone-waiting {
+  color: var(--warn);
+}
+.activity {
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------------ timeline */
+
+.timeline-frame {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+.scroller {
+  position: relative;
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+.scroller:focus-visible {
+  outline-offset: -1px;
+}
+
+.timeline {
+  max-width: var(--reading);
+  margin: 0 auto;
+  padding: 4px 20px 0;
+}
+
+/* Where nothing is drawn yet, the content of a long row is skipped until it
+   comes near the screen: a Session of thousands of lines stays quick. */
+.row {
+  display: grid;
+  grid-template-columns: var(--gutter) minmax(0, 1fr);
+  column-gap: 8px;
+  padding: 5px 0;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 32px;
+}
+
+.gutter {
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 20px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  padding-top: 1px;
+}
+.row.tool .gutter,
+.row.steps .gutter {
+  padding-top: 3px;
+}
+.row.user-message .gutter {
+  padding-top: 9px;
+}
+
+.row.day {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0 10px;
+}
+.row.day::before,
+.row.day::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.row.day::before {
+  margin-left: calc(var(--gutter) + 8px);
+}
+.day-label {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+.empty {
+  padding: 16px 0;
+  color: var(--muted);
+}
+
+/* What the person said: a tinted card headed by who spoke, the agent unmarked
+   on the page itself. */
+.message-user {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  outline: 1px solid var(--hc-border);
+  border-radius: var(--radius);
+  padding: 7px 12px;
+}
+.message-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+.message-meta strong {
+  color: var(--text);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.message-text {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.stop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+}
+
+.log {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95em;
+  line-height: 20px;
+}
+.log .codicon {
+  margin-top: 3px;
+}
+.log > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.log code {
+  color: var(--text);
+  font-size: 0.92em;
+}
+.cost {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-left: 10px;
+  font-family: var(--mono);
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Agent prose. */
+.prose {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.prose > :first-child {
+  margin-top: 0;
+}
+.prose > :last-child {
+  margin-bottom: 0;
+}
+.prose p,
+.prose ul,
+.prose ol,
+.prose blockquote,
+.prose table,
+.prose .code-block {
+  margin: 0 0 0.7em;
+}
+.prose ul,
+.prose ol {
+  padding-left: 1.6em;
+}
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  margin: 1.1em 0 0.4em;
+  line-height: 1.3;
+  font-weight: 600;
+}
+.prose h1 {
+  font-size: 1.3em;
+}
+.prose h2 {
+  font-size: 1.15em;
+}
+.prose h3,
+.prose h4 {
+  font-size: 1em;
+}
+.prose a {
+  color: var(--link);
+  text-decoration: none;
+}
+.prose a:hover {
+  color: var(--link-active);
+  text-decoration: underline;
+}
+.prose :not(pre) > code {
+  font-size: 0.92em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: var(--vscode-textPreformat-foreground);
+  background: var(--vscode-textPreformat-background, var(--code-bg));
+}
+.prose blockquote {
+  padding: 2px 12px;
+  color: var(--muted);
+  border-left: 2px solid var(--vscode-textBlockQuote-border, var(--border));
+}
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.prose table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+.prose th,
+.prose td {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.prose th {
+  font-weight: 600;
+}
+
+.code-block {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+}
+.code-block pre {
+  margin: 0;
+  padding: 8px 12px;
+  overflow-x: auto;
+  font-size: var(--mono-size);
+  line-height: 1.45;
+}
+.code-language {
+  position: absolute;
+  top: 4px;
+  right: 34px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.code-block .copy {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  opacity: 0;
+}
+.code-block:hover .copy,
+.code-block .copy:focus-visible {
+  opacity: 1;
+}
+
+/* A file path the editor can open. */
+.path-link {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.path-link:hover {
+  color: var(--link-active) !important;
+  text-decoration-style: solid;
+}
+
+/* Tool calls: one line, folded; what went in and came out, unfolded. */
+.tool {
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  min-width: 0;
+}
+.tool.open {
+  border-color: var(--border);
+  outline: 1px solid var(--hc-border);
+  background: var(--surface);
+}
+.tool-head,
+.steps-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 6px;
+  text-align: left;
+  font-size: 0.92em;
+  line-height: 20px;
+}
+.tool-head:hover,
+.steps-button:hover {
+  background: var(--hover);
+}
+.tool-name {
+  flex: none;
+  font-family: var(--mono);
+}
+.tool-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+.tool-body {
+  padding: 4px 12px 10px;
+  display: grid;
+  gap: 8px;
+}
+.tool-file {
+  margin: 0;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.92em;
+}
+.block-label {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.block p {
+  margin: 0;
+}
+.block-text {
+  margin: 0;
+  max-height: 20rem;
+  overflow: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  font-size: var(--mono-size);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.steps-button {
+  color: var(--muted);
+}
+.steps-button:hover {
+  color: var(--text);
+}
+.steps-button .failed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--danger);
+}
+
+/* Cards: what changed, what was published, what waits. */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  outline: 1px solid var(--hc-border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+}
+.changes-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+}
+.files {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+.file-button {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 1px 4px;
+  text-align: left;
+}
+.file-button:hover {
+  background: var(--hover);
+}
+.file-button .file-action {
+  margin-left: auto;
+  color: var(--muted);
+  opacity: 0;
+}
+.file-button:hover .file-action,
+.file-button:focus-visible .file-action {
+  opacity: 1;
+}
+.file {
+  overflow-wrap: anywhere;
+}
+.state-added {
+  color: var(--added);
+}
+.state-deleted {
+  color: var(--deleted);
+}
+.state-modified {
+  color: var(--modified);
+}
+.state-renamed {
+  color: var(--renamed);
+}
+
+.artifact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.artifact > .codicon {
+  font-size: 18px;
+}
+.artifact-text {
+  flex: 1;
+  min-width: 0;
+}
+.artifact-name,
+.artifact-meta {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.artifact-name {
+  font-weight: 600;
+}
+.artifact-meta {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.85em;
+}
+
+/* ------------------------------------------------------- sticky prompt */
+
+.sticky-slot {
+  position: sticky;
+  top: 0;
+  height: 0;
+  z-index: 2;
+}
+/* The canvas fades in behind it, so the rows scrolling under the card do not
+   show through the gap above it. */
+.sticky-prompt {
+  max-width: var(--reading);
+  margin: 0 auto;
+  padding: 8px 20px 12px calc(20px + var(--gutter) + 8px);
+  background: linear-gradient(to bottom, var(--canvas) 75%, transparent);
+}
+.sticky-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 4px 4px 4px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  outline: 1px solid var(--hc-border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent);
+}
+.sticky-toggle {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 0;
+  text-align: left;
+}
+.sticky-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sticky-toggle[aria-expanded='true'] .sticky-text {
+  display: block;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.pill {
+  width: fit-content;
+  margin: 8px auto 0;
+  padding: 2px 12px;
+  color: var(--muted);
+  font-size: 0.85em;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.to-latest {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent);
+}
+.to-latest:hover {
+  background: var(--vscode-button-secondaryHoverBackground) !important;
+}
+
+/* ------------------------------------------------- attention, composer */
+
+.bottom {
+  flex: none;
+  width: 100%;
+  max-width: var(--reading);
+  margin: 0 auto;
+  padding: 0 20px 10px;
+}
+
+.attention {
+  display: grid;
+  gap: 8px;
+  max-height: 45vh;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.request {
+  padding: 10px 12px;
+  box-shadow: 0 1px 4px var(--vscode-widget-shadow, transparent);
+}
+.request.risk-danger {
+  border-color: var(--danger);
+}
+.request-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85em;
+}
+.badge {
+  padding: 0 7px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--vscode-badge-foreground);
+  background: var(--vscode-badge-background);
+}
+.badge.tone-warn {
+  color: var(--warn);
+  background: transparent;
+  border: 1px solid var(--warn);
+}
+.badge.tone-danger {
+  color: var(--danger);
+  background: transparent;
+  border: 1px solid var(--danger);
+}
+.badge.tone-accent {
+  color: var(--vscode-badge-foreground);
+}
+.request-headline {
+  margin: 8px 0 0;
+  font-family: var(--mono);
+  font-size: var(--mono-size);
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.request-prompt {
+  margin: 8px 0 0;
+  font-size: 1em;
+  font-weight: 600;
+  white-space: pre-wrap;
+}
+.context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+.context span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.full-request {
+  margin-top: 6px;
+  font-size: 0.85em;
+}
+.full-request summary {
+  width: fit-content;
+  color: var(--muted);
+  cursor: pointer;
+}
+.full-request summary:hover {
+  color: var(--text);
+}
+.full-request pre {
+  margin-top: 4px;
+  max-height: 15rem;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.answer {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  font: inherit;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 2px;
+}
+.input:focus {
+  outline: 1px solid var(--focus);
+  outline-offset: -1px;
+}
+.receipts p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.composer .panel {
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--border));
+  border-radius: 6px;
+}
+.composer .panel:focus-within {
+  border-color: var(--focus);
+}
+.field-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 4px 4px 4px 10px;
+}
+.field {
+  flex: 1;
+  min-width: 0;
+  max-height: 240px;
+  resize: none;
+  padding: 4px 0;
+  font: inherit;
+  line-height: 1.5;
+  color: var(--vscode-input-foreground);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+.field::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+.send {
+  width: 28px;
+  height: 28px;
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+}
+.send:not(:disabled):hover {
+  background: var(--vscode-button-hoverBackground) !important;
+}
+.send:disabled {
+  color: var(--muted);
+  background: transparent;
+  opacity: 1;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-top: 1px solid var(--vscode-input-border, var(--border));
+}
+.deliveries {
+  display: flex;
+  padding: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.85em;
+}
+.delivery {
+  padding: 1px 9px;
+  color: var(--muted);
+}
+.delivery:hover {
+  color: var(--text);
+}
+/* Drawn as the editor draws an option toggle in a field, such as Match Case:
+   the same look for the same kind of choice. */
+.delivery {
+  border: 1px solid transparent;
+}
+.delivery.selected {
+  color: var(--vscode-inputOption-activeForeground, var(--text));
+  background: var(--vscode-inputOption-activeBackground, var(--vscode-button-secondaryBackground));
+  border-color: var(--vscode-inputOption-activeBorder, transparent);
+}
+.delivery.selected.tone-warn {
+  color: var(--warn);
+}
+.hint {
+  margin: 6px 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8em;
+  opacity: 0.85;
+}
+.error {
+  margin: 6px 0 0;
+  color: var(--danger);
+}
+
+/* ------------------------------------------------------------- motion */
+
+@media (prefers-reduced-motion: reduce) {
+  .codicon-modifier-spin {
+    animation: none !important;
+  }
+  * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
+/* The editor's own switch, which the webview body carries as a class. */
+body.vscode-reduce-motion .codicon-modifier-spin {
+  animation: none !important;
+}

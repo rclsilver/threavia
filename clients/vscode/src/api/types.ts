@@ -20,10 +20,23 @@ export type UserInputRequest = Schemas['UserInputRequest'];
 export type AuthPublic = Schemas['AuthPublic'];
 export type Me = Schemas['Me'];
 export type FileDiff = Schemas['FileDiff'];
+export type Run = Schemas['Run'];
+export type BackendInstance = Schemas['BackendInstance'];
+export type KnownDirectory = Schemas['KnownDirectory'];
+export type Usage = Schemas['Usage'];
 
 /** The envelope every collection response uses. */
 export interface List<T> {
   items: T[];
+}
+
+/** How a message reaches a Session already working (spec section 3.5). */
+export type Delivery = 'QUEUE' | 'NEXT' | 'NOW';
+
+/** One file a Job changed, as workspace.changed lists it. */
+export interface ChangedFile {
+  path: string;
+  state: 'ADDED' | 'MODIFIED' | 'DELETED' | 'RENAMED';
 }
 
 /**
@@ -31,14 +44,35 @@ export interface List<T> {
  *
  * The contract types `payload` as an open object, because its shape depends on
  * the event type and a backend may add one without a Core release. These are
- * the ones documented in the `Event.payload` description of the contract.
+ * the ones documented in the `Event.payload` description of the contract, the
+ * same as the web client's (web/ui/src/api/types.ts).
  */
 export interface EventPayloads {
-  'job.completed': { summary?: string };
-  'job.failed': { error?: string };
+  'session.created': { title: string };
+  'user.message': { text: string; delivery?: 'NOW' | 'NEXT'; scheduleId?: string };
+  'schedule.skipped': { scheduleId: string; outcome: string; reason: string; due: string };
+  'agent.message': { text: string };
+  'tool.started': { toolCallId: string; name: string; input?: Record<string, unknown> };
+  // The backend keeps a bounded excerpt of the output and marks it with an
+  // ellipsis; the whole thing stays on the machine that produced it.
+  'tool.completed': { toolCallId: string; name: string; output?: { output?: string } };
+  'tool.failed': { toolCallId: string; name: string; error?: string };
+  'job.completed': { summary?: string; usage?: Usage };
+  'job.failed': { error?: string; usage?: Usage };
   'validation.resolved': { validationId: string; approved: boolean; note?: string; title?: string };
   'user_input.resolved': { requestId: string; value: string };
   'session.pinned': { pinned: boolean };
+  'artifact.created': { artifactId: string; filename: string; mimeType: string; size: number; title?: string };
+  'workspace.changed': {
+    knownDirectoryId?: string;
+    files?: ChangedFile[];
+    additions: number;
+    deletions: number;
+    // Present when the backend can be asked for the diff of a file.
+    directory?: string;
+    baseTree?: string;
+    headTree?: string;
+  };
 }
 
 /** Reads a payload as the shape its event type implies. */

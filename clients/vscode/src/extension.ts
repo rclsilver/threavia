@@ -10,7 +10,12 @@ import { coreUrl, promptCoreUrl } from './config';
 import { Connection } from './connection';
 import { createIdentity } from './identity';
 import { Presence } from './presence';
-import { openInBrowser, runOpenSession } from './sessions';
+import type { BackendInstance } from './api/types';
+import { Artifacts } from './conversation/artifacts';
+import { ConversationPanels } from './conversation/panel';
+import { VirtualDocuments } from './diff/documents';
+import { PathResolver } from './workspace/resolve';
+import { openInBrowser, runOpenSession, sessionIdOf, setSessionOpener } from './sessions';
 import { UNTITLED, titleOf } from './tree/model';
 import { SidebarProvider, type RequestNode, type SessionNode } from './tree/provider';
 
@@ -48,6 +53,37 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     showCollapseAll: true,
   });
   const presence = new Presence(client);
+
+  // The conversation: one webview per Session, with what it opens — diffs,
+  // artifacts, files — in the editor's own documents.
+  const documents = new VirtualDocuments('threavia-diff');
+  const artifactDocuments = new VirtualDocuments('threavia-artifact');
+  const paths = new PathResolver();
+  let backends: { at: number; list: Promise<BackendInstance[]> } | undefined;
+  const panels = new ConversationPanels({
+    extensionUri: context.extensionUri,
+    client,
+    bus,
+    attention,
+    answers,
+    documents,
+    paths,
+    artifacts: new Artifacts(client, artifactDocuments),
+    // Shared by every panel and kept a minute: a backend's name and features
+    // change rarely, and ten panels restored at start ask once.
+    backends: () => {
+      if (!backends || Date.now() - backends.at > 60_000) {
+        const list = client.backends();
+        list.catch(() => (backends = undefined));
+        backends = { at: Date.now(), list };
+      }
+      return backends.list;
+    },
+  });
+  setSessionOpener((sessionId) => {
+    panels.open(sessionId);
+    return Promise.resolve();
+  });
   const connection = new Connection(context.globalState, client, auth, bus, attention, sidebar, presence);
 
   /** A Session's title from what is already known, asking Core only as a last resort. */
@@ -67,6 +103,10 @@ export function activate(context: vscode.ExtensionContext): Threavia {
 
   context.subscriptions.push(
     auth,
+    panels,
+    paths,
+    documents,
+    artifactDocuments,
     vscode.authentication.registerAuthenticationProvider(PROVIDER_ID, 'Threavia', auth, {
       supportsMultipleAccounts: false,
     }),
@@ -134,17 +174,26 @@ export function activate(context: vscode.ExtensionContext): Threavia {
 
   command('threavia.openSession', (target: unknown) => runOpenSession(target));
 
-  command('threavia.openInBrowser', (node: SessionNode) => openInBrowser(node.session.id));
+  // From a sidebar row, or from the title bar of the conversation in front,
+  // which hands the command nothing that names the Session.
+  const targetSession = (target: unknown) => sessionIdOf(target) ?? panels.activeSessionId;
 
-  command('threavia.pinSession', (node: SessionNode) => pin(node, true));
-  command('threavia.unpinSession', (node: SessionNode) => pin(node, false));
+  command('threavia.openInBrowser', (target: unknown) => {
+    const sessionId = targetSession(target);
+    if (sessionId) return openInBrowser(sessionId);
+  });
 
-  const pin = async (node: SessionNode, pinned: boolean) => {
+  command('threavia.pinSession', (target: unknown) => pin(targetSession(target), true));
+  command('threavia.unpinSession', (target: unknown) => pin(targetSession(target), false));
+
+  const pin = async (sessionId: string | undefined, pinned: boolean) => {
+    if (!sessionId) return;
     try {
-      await client.pinSession(node.session.id, pinned);
+      await client.pinSession(sessionId, pinned);
       // The stream says so too; doing it here is what makes the click count
       // when this window's stream is down.
       sidebar.invalidateSessions();
+      panels.refresh(sessionId);
     } catch (error) {
       failed(error, pinned ? 'Not pinned' : 'Not unpinned');
     }

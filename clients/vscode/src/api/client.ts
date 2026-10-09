@@ -1,10 +1,17 @@
 import type {
   Attention,
   AuthPublic,
+  BackendInstance,
+  Delivery,
+  Event,
+  FileDiff,
+  Job,
+  KnownDirectory,
   List,
   Me,
   Project,
   Repository,
+  Run,
   Session,
   Snapshot,
   UserInputRequest,
@@ -120,10 +127,10 @@ export class CoreClient {
     return response;
   }
 
-  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  async request<T>(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
     const response = await this.raw(path, {
       method,
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      headers: body === undefined ? headers : { 'Content-Type': 'application/json', ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
 
@@ -153,8 +160,8 @@ export class CoreClient {
     return this.request<T>('GET', path);
   }
 
-  post<T>(path: string, body: unknown = {}) {
-    return this.request<T>('POST', path, body);
+  post<T>(path: string, body: unknown = {}, headers?: Record<string, string>) {
+    return this.request<T>('POST', path, body, headers);
   }
 
   patch<T>(path: string, body: unknown) {
@@ -231,6 +238,68 @@ export class CoreClient {
   presence(active: boolean) {
     return this.post<void>('/api/v1/me/presence', { active });
   }
+
+  /** History before `before`, oldest first; a page shorter than `limit` is the start. */
+  earlierEvents(sessionId: string, before: number, limit = EARLIER_PAGE) {
+    return this.get<List<Event>>(`/api/v1/sessions/${sessionId}/events?before=${before}&limit=${limit}`).then(items);
+  }
+
+  /** The diff of one file a workspace.changed event listed, asked of the backend. */
+  diff(sessionId: string, sequence: number, path: string) {
+    return this.get<FileDiff>(
+      `/api/v1/sessions/${sessionId}/diff?event=${sequence}&path=${encodeURIComponent(path)}`,
+    );
+  }
+
+  backends() {
+    return this.get<List<BackendInstance>>('/api/v1/backends').then(items);
+  }
+
+  directories(projectId: string) {
+    return this.get<List<KnownDirectory>>(`/api/v1/projects/${projectId}/directories`).then(items);
+  }
+
+  /**
+   * The first send: Session, Run, Job and message in one transaction. The key
+   * makes a retry after a lost answer start nothing twice.
+   */
+  startSession(input: { projectId: string; backendInstanceId: string; workingDirectoryId: string | null; message: string }) {
+    return this.post<{ session: Session; run: Run; job: Job }>('/api/v1/sessions/start', input, idempotencyKey());
+  }
+
+  /** A message to a Session. Only a queued one carries a key: Core applies it only to QUEUE. */
+  postMessage(sessionId: string, message: string, delivery: Delivery = 'QUEUE') {
+    return this.post<Job>(
+      `/api/v1/sessions/${sessionId}/messages`,
+      delivery === 'QUEUE' ? { message } : { message, delivery },
+      delivery === 'QUEUE' ? idempotencyKey() : undefined,
+    );
+  }
+
+  cancelJob(jobId: string) {
+    return this.post<Job>(`/api/v1/jobs/${jobId}/cancel`, { reason: 'cancelled from VS Code' });
+  }
+
+  /** The bytes of an Artifact, read with the client's credential. */
+  async artifactContent(artifactId: string): Promise<Uint8Array> {
+    const response = await this.raw(`/api/v1/artifacts/${artifactId}/content`);
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as ErrorBody | null;
+      throw new ApiError(
+        response.status,
+        body?.error?.code ?? 'unknown',
+        body?.error?.message ?? `The file could not be read (${response.status})`,
+      );
+    }
+    return new Uint8Array(await response.arrayBuffer());
+  }
+}
+
+/** How many earlier events one page brings, as the web client asks. */
+export const EARLIER_PAGE = 200;
+
+function idempotencyKey(): Record<string, string> {
+  return { 'Idempotency-Key': crypto.randomUUID() };
 }
 
 const items = <T>(list: List<T>) => list.items ?? [];

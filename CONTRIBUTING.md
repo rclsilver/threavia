@@ -108,6 +108,14 @@ fails when they are stale. An event a view follows is handled in
 [`clients/vscode/src/api/events.ts`](clients/vscode/src/api/events.ts), next to
 the web client's `stream.ts`.
 
+The conversation reads the same in both clients because the extension ports
+the web timeline's rules rather than importing them:
+[`clients/vscode/src/conversation/timeline.ts`](clients/vscode/src/conversation/timeline.ts)
+mirrors `rowsOf`, `foldFinished` and the sticky prompt of
+`web/ui/src/components/timeline.tsx`, and
+[`state.ts`](clients/vscode/src/conversation/state.ts) the Job and delivery
+rules of `web/ui/src/routes/session.tsx`. A change to one is a change to both.
+
 ## License
 
 Contributions are licensed under the Apache License 2.0, like the rest of the

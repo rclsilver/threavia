@@ -29,7 +29,8 @@
   "activationEvents": [
     "onStartupFinished",
     "onUri",
-    "onAuthenticationRequest:threavia"
+    "onAuthenticationRequest:threavia",
+    "onWebviewPanel:threavia.conversation"
   ],
   "contributes": {
     "viewsContainers": {
@@ -168,11 +169,11 @@
         },
         {
           "command": "threavia.pinSession",
-          "when": "false"
+          "when": "activeWebviewPanelId == 'threavia.conversation' && !threavia.conversationPinned"
         },
         {
           "command": "threavia.unpinSession",
-          "when": "false"
+          "when": "activeWebviewPanelId == 'threavia.conversation' && threavia.conversationPinned"
         },
         {
           "command": "threavia.renameSession",
@@ -184,7 +185,7 @@
         },
         {
           "command": "threavia.openInBrowser",
-          "when": "false"
+          "when": "activeWebviewPanelId == 'threavia.conversation'"
         },
         {
           "command": "threavia.refreshRepository",
@@ -286,6 +287,23 @@
           "when": "view == threavia.sidebar && viewItem =~ /^session/",
           "group": "4_browser"
         }
+      ],
+      "editor/title": [
+        {
+          "command": "threavia.pinSession",
+          "when": "activeWebviewPanelId == 'threavia.conversation' && !threavia.conversationPinned",
+          "group": "navigation@1"
+        },
+        {
+          "command": "threavia.unpinSession",
+          "when": "activeWebviewPanelId == 'threavia.conversation' && threavia.conversationPinned",
+          "group": "navigation@1"
+        },
+        {
+          "command": "threavia.openInBrowser",
+          "when": "activeWebviewPanelId == 'threavia.conversation'",
+          "group": "navigation@2"
+        }
       ]
     },
     "configuration": {
@@ -334,12 +352,15 @@
   },
   "devDependencies": {
     "@eslint/js": "9.37.0",
+    "@types/markdown-it": "14.2.0",
     "@types/node": "^20.19.0",
     "@types/vscode": "1.95.0",
+    "@vscode/codicons": "0.0.46-24",
     "@vscode/vsce": "3.6.2",
     "esbuild": "0.25.10",
     "eslint": "9.37.0",
     "globals": "16.4.0",
+    "markdown-it": "14.3.2",
     "openapi-typescript": "7.9.1",
     "typescript": "5.9.3",
     "typescript-eslint": "8.46.0",

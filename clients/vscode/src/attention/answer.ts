@@ -18,17 +18,20 @@ export class Answers {
     private readonly attention: AttentionStore,
   ) {}
 
-  async decide(request: ValidationRequest, approved: boolean): Promise<void> {
+  /** Resolves to true once the decision landed. */
+  async decide(request: ValidationRequest, approved: boolean): Promise<boolean> {
     if (this.attention.ready && !this.attention.findValidation(request.id)) {
       void vscode.window.showInformationMessage('Already answered elsewhere.');
-      return;
+      return false;
     }
     try {
       await this.client.resolveValidation(request.id, approved);
       this.attention.drop(request.id);
       vscode.window.setStatusBarMessage(approved ? '$(check) Approved, the agent continues' : '$(close) Denied', 4000);
+      return true;
     } catch (error) {
       this.failed(error, approved ? 'Not approved' : 'Not denied');
+      return false;
     }
   }
 
@@ -64,17 +67,20 @@ export class Answers {
     });
   }
 
-  async reply(request: UserInputRequest, value: string): Promise<void> {
+  /** Resolves to true once the answer landed. */
+  async reply(request: UserInputRequest, value: string): Promise<boolean> {
     if (this.attention.ready && !this.attention.findUserInput(request.id)) {
       void vscode.window.showInformationMessage('Already answered elsewhere.');
-      return;
+      return false;
     }
     try {
       await this.client.resolveUserInput(request.id, value.trim());
       this.attention.drop(undefined, request.id);
       vscode.window.setStatusBarMessage(`$(check) Answered: ${oneLine(value, 60)}`, 4000);
+      return true;
     } catch (error) {
       this.failed(error, 'Not answered');
+      return false;
     }
   }
 
