@@ -21,3 +21,7 @@ web/ui/node_modules/
 # Nix build output: `nix build` symlinks its result here.
 /result
 /result-*
+
+# The VS Code extension's launch configuration is how F5 runs it, so it is
+# shared rather than personal.
+!clients/vscode/.vscode/

@@ -1,0 +1,5 @@
+node_modules/
+dist/
+*.vsix
+# Copied from the repository root when packaging, so the .vsix carries it.
+LICENSE

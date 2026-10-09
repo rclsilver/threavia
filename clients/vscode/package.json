@@ -1,0 +1,348 @@
+{
+  "name": "threavia",
+  "displayName": "Threavia",
+  "description": "Follow and answer your Threavia coding agents from the editor.",
+  "version": "0.0.0",
+  "publisher": "rclsilver",
+  "license": "Apache-2.0",
+  "private": true,
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rclsilver/threavia.git",
+    "directory": "clients/vscode"
+  },
+  "homepage": "https://github.com/rclsilver/threavia/tree/master/clients/vscode",
+  "bugs": "https://github.com/rclsilver/threavia/issues",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "agents",
+    "claude",
+    "threavia"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onUri",
+    "onAuthenticationRequest:threavia"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "threavia",
+          "title": "Threavia",
+          "icon": "media/threavia.svg"
+        }
+      ]
+    },
+    "views": {
+      "threavia": [
+        {
+          "id": "threavia.sidebar",
+          "name": "Sessions",
+          "icon": "media/threavia.svg",
+          "contextualTitle": "Threavia"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "threavia.sidebar",
+        "contents": "Threavia shows your agents' sessions here, and what waits for you.\n[Set Core URL](command:threavia.setCoreUrl)",
+        "when": "threavia.state == unconfigured"
+      },
+      {
+        "view": "threavia.sidebar",
+        "contents": "Sign in to see your sessions.\n[Sign In](command:threavia.signIn)",
+        "when": "threavia.state == signedOut"
+      },
+      {
+        "view": "threavia.sidebar",
+        "contents": "Core does not answer.\n[Try Again](command:threavia.refresh)\n[Set Core URL](command:threavia.setCoreUrl)",
+        "when": "threavia.state == unreachable"
+      }
+    ],
+    "authentication": [
+      {
+        "id": "threavia",
+        "label": "Threavia"
+      }
+    ],
+    "commands": [
+      {
+        "command": "threavia.signIn",
+        "title": "Sign In",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.signOut",
+        "title": "Sign Out",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.setCoreUrl",
+        "title": "Set Core URL",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.refresh",
+        "title": "Refresh",
+        "category": "Threavia",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "threavia.showWaiting",
+        "title": "Show What Is Waiting",
+        "category": "Threavia",
+        "icon": "$(inbox)"
+      },
+      {
+        "command": "threavia.openSession",
+        "title": "Open Session",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.pinSession",
+        "title": "Pin",
+        "category": "Threavia",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "threavia.unpinSession",
+        "title": "Unpin",
+        "category": "Threavia",
+        "icon": "$(pinned)"
+      },
+      {
+        "command": "threavia.renameSession",
+        "title": "Rename…",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.archiveSession",
+        "title": "Archive",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.openInBrowser",
+        "title": "Open in Browser",
+        "category": "Threavia",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "threavia.refreshRepository",
+        "title": "Refresh from Origin",
+        "category": "Threavia",
+        "icon": "$(repo-fetch)"
+      },
+      {
+        "command": "threavia.approve",
+        "title": "Approve",
+        "category": "Threavia",
+        "icon": "$(check)"
+      },
+      {
+        "command": "threavia.deny",
+        "title": "Deny",
+        "category": "Threavia",
+        "icon": "$(close)"
+      },
+      {
+        "command": "threavia.answer",
+        "title": "Answer…",
+        "category": "Threavia",
+        "icon": "$(reply)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "threavia.openSession",
+          "when": "false"
+        },
+        {
+          "command": "threavia.pinSession",
+          "when": "false"
+        },
+        {
+          "command": "threavia.unpinSession",
+          "when": "false"
+        },
+        {
+          "command": "threavia.renameSession",
+          "when": "false"
+        },
+        {
+          "command": "threavia.archiveSession",
+          "when": "false"
+        },
+        {
+          "command": "threavia.openInBrowser",
+          "when": "false"
+        },
+        {
+          "command": "threavia.refreshRepository",
+          "when": "false"
+        },
+        {
+          "command": "threavia.approve",
+          "when": "false"
+        },
+        {
+          "command": "threavia.deny",
+          "when": "false"
+        },
+        {
+          "command": "threavia.answer",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "threavia.refresh",
+          "when": "view == threavia.sidebar",
+          "group": "navigation"
+        },
+        {
+          "command": "threavia.signOut",
+          "when": "view == threavia.sidebar && threavia.signedIn",
+          "group": "settings"
+        },
+        {
+          "command": "threavia.setCoreUrl",
+          "when": "view == threavia.sidebar",
+          "group": "settings"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "threavia.approve",
+          "when": "view == threavia.sidebar && viewItem == validation",
+          "group": "inline@1"
+        },
+        {
+          "command": "threavia.deny",
+          "when": "view == threavia.sidebar && viewItem == validation",
+          "group": "inline@2"
+        },
+        {
+          "command": "threavia.approve",
+          "when": "view == threavia.sidebar && viewItem == validation",
+          "group": "1_answer@1"
+        },
+        {
+          "command": "threavia.deny",
+          "when": "view == threavia.sidebar && viewItem == validation",
+          "group": "1_answer@2"
+        },
+        {
+          "command": "threavia.answer",
+          "when": "view == threavia.sidebar && viewItem == input",
+          "group": "inline"
+        },
+        {
+          "command": "threavia.answer",
+          "when": "view == threavia.sidebar && viewItem == input",
+          "group": "1_answer"
+        },
+        {
+          "command": "threavia.unpinSession",
+          "when": "view == threavia.sidebar && viewItem =~ /^session\\.pinned/",
+          "group": "inline"
+        },
+        {
+          "command": "threavia.pinSession",
+          "when": "view == threavia.sidebar && viewItem == session",
+          "group": "2_session@1"
+        },
+        {
+          "command": "threavia.unpinSession",
+          "when": "view == threavia.sidebar && viewItem =~ /^session\\.pinned/",
+          "group": "2_session@1"
+        },
+        {
+          "command": "threavia.renameSession",
+          "when": "view == threavia.sidebar && viewItem =~ /^session/",
+          "group": "2_session@2"
+        },
+        {
+          "command": "threavia.archiveSession",
+          "when": "view == threavia.sidebar && viewItem =~ /^session/",
+          "group": "2_session@3"
+        },
+        {
+          "command": "threavia.refreshRepository",
+          "when": "view == threavia.sidebar && viewItem =~ /^session/",
+          "group": "3_repository"
+        },
+        {
+          "command": "threavia.openInBrowser",
+          "when": "view == threavia.sidebar && viewItem =~ /^session/",
+          "group": "4_browser"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Threavia",
+      "properties": {
+        "threavia.coreUrl": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Where Threavia Core answers, such as `https://threavia.example.com`, or `http://localhost:8080` for a local Core.",
+          "scope": "application"
+        },
+        "threavia.project": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "The Project this workspace works in, by name or id. It is listed first and expanded, and pinned sessions from other Projects say which one they belong to.",
+          "scope": "resource"
+        },
+        "threavia.clientName": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "How this editor is named in your list of devices. Empty uses `VS Code — <hostname>`.",
+          "scope": "application"
+        },
+        "threavia.notifications.attention": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when an agent asks for an approval or an answer."
+        },
+        "threavia.notifications.jobEnded": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when work ends in a session that is not open."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "generate:api": "openapi-typescript ../../api/openapi.yaml -o src/api/schema.d.ts",
+    "package": "cp ../../LICENSE LICENSE && vsce package --no-dependencies --out threavia.vsix",
+    "vscode:prepublish": "node esbuild.mjs --production"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.37.0",
+    "@types/node": "^20.19.0",
+    "@types/vscode": "1.95.0",
+    "@vscode/vsce": "3.6.2",
+    "esbuild": "0.25.10",
+    "eslint": "9.37.0",
+    "globals": "16.4.0",
+    "openapi-typescript": "7.9.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.46.0",
+    "vitest": "3.2.4"
+  }
+}

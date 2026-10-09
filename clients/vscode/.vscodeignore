@@ -1,0 +1,8 @@
+# Everything is bundled into dist/extension.js, so the package carries no
+# sources, tests or dependencies.
+**
+!dist/extension.js
+!media/**
+!package.json
+!README.md
+!LICENSE
