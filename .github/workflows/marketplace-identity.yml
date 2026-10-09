@@ -34,5 +34,7 @@ jobs:
         run: |
           # 499b84ac-… is Azure DevOps, which the Marketplace belongs to.
           az rest -u https://app.vssps.visualstudio.com/_apis/profile/profiles/me \
-            --resource 499b84ac-1321-427f-aa17-267ca6975798 \
-            --query '{id: id, name: displayName}' -o table
+            --resource 499b84ac-1321-427f-aa17-267ca6975798
+          # Printed whole: the field names of this profile are not documented
+          # for an application identity, and a query that guesses one wrong
+          # prints nothing useful.
