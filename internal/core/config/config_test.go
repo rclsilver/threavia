@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -164,6 +165,38 @@ func TestLoadReportsEveryInvalidValueAtOnce(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q must mention %s", err, want)
 		}
+	}
+}
+
+// Mode none answers only for this machine unless told otherwise; the other
+// modes check no host unless given a list.
+func TestAllowedHosts(t *testing.T) {
+	cases := []struct {
+		name string
+		mode string
+		list string
+		want []string
+	}{
+		{name: "mode none defaults to this machine", mode: "none", want: LocalHosts},
+		{name: "mode none takes the list it is given", mode: "none", list: "threavia.lan, threavia.lan:8443", want: []string{"threavia.lan", "threavia.lan:8443"}},
+		{name: "mode basic checks nothing by default", mode: "basic", want: nil},
+		{name: "mode basic takes the list it is given", mode: "basic", list: "threavia.example.com", want: []string{"threavia.example.com"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("THREAVIA_AUTH_MODE", tc.mode)
+			t.Setenv("THREAVIA_AUTH_BASIC_USERNAME", "thomas")
+			t.Setenv("THREAVIA_AUTH_BASIC_PASSWORD", "s3cr3t")
+			t.Setenv("THREAVIA_HTTP_ALLOWED_HOSTS", tc.list)
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("loading the configuration: %v", err)
+			}
+			if !slices.Equal(cfg.HTTP.AllowedHosts, tc.want) {
+				t.Errorf("allowed hosts = %q, want %q", cfg.HTTP.AllowedHosts, tc.want)
+			}
+		})
 	}
 }
 

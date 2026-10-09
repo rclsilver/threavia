@@ -9,6 +9,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"slices"
 	"time"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
@@ -62,7 +63,18 @@ type HTTPConfig struct {
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
 	ShutdownTimeout time.Duration
+
+	// AllowedHosts lists the Host values Core answers, as host or host:port;
+	// any other gets 421. Empty means any. See LocalHosts for mode none.
+	AllowedHosts []string
 }
+
+// LocalHosts is what AllowedHosts becomes in mode none when it is not set.
+//
+// Mode none trusts every request it receives, so it must only ever receive
+// requests meant for this machine: a page whose own name has been pointed at
+// 127.0.0.1 (DNS rebinding) still sends its own name as Host, and is refused.
+var LocalHosts = []string{"localhost", "127.0.0.1", "[::1]"}
 
 // GRPCConfig is the backend-facing control listener (spec section 9). Backends
 // always connect outbound to this endpoint; Core never dials a backend.
@@ -194,6 +206,11 @@ func Load() (Config, error) {
 	cfg.Backend.HeartbeatInterval = l.Duration("BACKEND_HEARTBEAT_INTERVAL", cfg.Backend.HeartbeatInterval)
 	cfg.Backend.OfflineAfter = l.Duration("BACKEND_OFFLINE_AFTER", cfg.Backend.OfflineAfter)
 	cfg.Backend.SharedRegistrationKey = l.String("BACKEND_SHARED_REGISTRATION_KEY", cfg.Backend.SharedRegistrationKey)
+
+	cfg.HTTP.AllowedHosts = l.StringSlice("HTTP_ALLOWED_HOSTS", cfg.HTTP.AllowedHosts)
+	if len(cfg.HTTP.AllowedHosts) == 0 && cfg.Auth.Mode == auth.ModeNone {
+		cfg.HTTP.AllowedHosts = slices.Clone(LocalHosts)
+	}
 
 	if err := l.Err(); err != nil {
 		return cfg, err

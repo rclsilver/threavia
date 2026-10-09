@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/url"
 	"slices"
@@ -44,6 +45,9 @@ type Options struct {
 	Logger        *slog.Logger
 	// WebUI is served at the root when set.
 	WebUI http.Handler
+	// AllowedHosts lists the Host values Core answers, as host or host:port.
+	// Empty means any.
+	AllowedHosts []string
 }
 
 type handler struct {
@@ -99,7 +103,7 @@ func NewRouter(opts Options) http.Handler {
 	if opts.WebUI != nil {
 		mux.Handle("/", opts.WebUI)
 	}
-	return requestLogger(opts.Logger, mux)
+	return requestLogger(opts.Logger, securityHeaders(allowedHosts(opts.AllowedHosts, mux)))
 }
 
 func (h *handler) registerOperational(mux *http.ServeMux) {
@@ -130,6 +134,9 @@ func (h *handler) registerOperational(mux *http.ServeMux) {
 // supplied by the client.
 func (h *handler) secured(fn func(http.ResponseWriter, *http.Request, auth.Identity)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if refuseCrossSite(w, r) {
+			return
+		}
 		identity, err := h.auth.Authenticate(r)
 		if err != nil {
 			if h.auth.Mode() == auth.ModeBasic {
@@ -238,11 +245,34 @@ func (h *handler) fail(w http.ResponseWriter, err error) {
 }
 
 // decode reads a bounded JSON body.
+//
+// The body must be declared as JSON. A browser sends a text/plain or form body
+// from any page without asking the server first, so accepting whatever the
+// Content-Type says would let another site write here. An empty body with no
+// Content-Type stays acceptable, for the routes whose body is optional.
 func decode[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
 	var target T
+	declared := r.Header.Get("Content-Type")
+	if declared != "" {
+		mediaType, _, err := mime.ParseMediaType(declared)
+		if err != nil || mediaType != "application/json" {
+			writeError(w, http.StatusUnsupportedMediaType, "unsupported_media_type",
+				"the request body must be application/json")
+			return target, false
+		}
+	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBytes))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&target); err != nil && !errors.Is(err, io.EOF) {
+	err := decoder.Decode(&target)
+	if errors.Is(err, io.EOF) {
+		return target, true
+	}
+	if declared == "" {
+		writeError(w, http.StatusUnsupportedMediaType, "unsupported_media_type",
+			"a request body must be sent as application/json")
+		return target, false
+	}
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "malformed JSON body: "+err.Error())
 		return target, false
 	}

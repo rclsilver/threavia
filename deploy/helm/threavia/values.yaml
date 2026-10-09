@@ -40,6 +40,13 @@ log:
   level: info
   format: json
 
+http:
+  # Host values Core answers, as host (any port) or host:port; any other gets
+  # 421. Empty: localhost, 127.0.0.1 and [::1] in auth mode none, no check in
+  # the other modes. Behind an ingress in mode none, list the ingress host here.
+  # The probes are not affected.
+  allowedHosts: []
+
 service:
   type: ClusterIP
   # Client HTTP/JSON + SSE.

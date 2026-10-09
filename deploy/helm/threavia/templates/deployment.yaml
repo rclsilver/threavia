@@ -53,6 +53,10 @@ spec:
               value: {{ .Values.log.format | quote }}
             - name: THREAVIA_HTTP_ADDR
               value: ":8080"
+            {{- with .Values.http.allowedHosts }}
+            - name: THREAVIA_HTTP_ALLOWED_HOSTS
+              value: {{ join "," . | quote }}
+            {{- end }}
             - name: THREAVIA_GRPC_ADDR
               value: ":9090"
             # --- PostgreSQL ---

@@ -118,7 +118,10 @@ func TestABrowserIsNotifiedOfWorkNobodyIsWatching(t *testing.T) {
 			"auth":   base64.RawURLEncoding.EncodeToString(service.auth),
 		},
 		"label": "Android — Chrome",
-	}, nil, http.StatusCreated, [2]string{"Origin", "https://threavia.example"})
+	}, nil, http.StatusCreated, [2]string{"Origin", "https://threavia.example"},
+		// The browser that sends this Origin says the request is its own page's,
+		// which is what lets it through when Core is reached under another name.
+		[2]string{"Sec-Fetch-Site", "same-origin"})
 	c.mustDo(http.MethodPost, "/api/v1/me/push/subscriptions", map[string]any{
 		"endpoint": "http://not-https.example/push", "keys": map[string]string{"p256dh": "x", "auth": "y"},
 	}, nil, http.StatusBadRequest)

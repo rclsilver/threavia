@@ -21,6 +21,13 @@ info:
     Every user-scoped route is checked against the authenticated caller:
     `404` covers both "does not exist" and "not yours", so an identifier cannot
     be probed for existence.
+
+    Requests a page of another site could send are refused before they are
+    handled: a JSON body not declared as `application/json` gets `415
+    unsupported_media_type`, a write a browser marks as cross-site gets `403
+    forbidden_origin`, and a `Host` outside `THREAVIA_HTTP_ALLOWED_HOSTS` gets
+    `421 misdirected_request`. A client that is not a browser sends neither
+    `Origin` nor `Sec-Fetch-Site` and is unaffected.
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0

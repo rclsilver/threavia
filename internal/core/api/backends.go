@@ -93,7 +93,14 @@ func (h *handler) createBackendToken(w http.ResponseWriter, r *http.Request, ide
 
 // registerBackend creates a BackendInstance and issues its persistent
 // credential. The response carries the credential once; Core keeps only a hash.
+//
+// It does not go through secured, so it makes the same origin check itself: a
+// backend is never a page of another site, and nothing such a page sends here
+// should be taken for one.
 func (h *handler) registerBackend(w http.ResponseWriter, r *http.Request) {
+	if refuseCrossSite(w, r) {
+		return
+	}
 	body, ok := decode[struct {
 		Name         string   `json:"name"`
 		Capabilities []string `json:"capabilities"`

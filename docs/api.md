@@ -49,6 +49,43 @@ One shape for every error:
 { "error": { "code": "not_implemented", "message": "..." } }
 ```
 
+## Requests from other sites
+
+A browser lets any page send a form or a `text/plain` body to any address
+without asking first, with the credentials it already holds for that address:
+the development user in mode `none`, cached basic credentials in mode `basic`.
+The page cannot read the answer, but starting a session or approving a
+validation needs no answer. Three checks close that door, and none of them
+concerns a client that is not a browser:
+
+- **`415 unsupported_media_type`.** A JSON body must be sent as
+  `application/json` (parameters such as `charset` are ignored). A route whose
+  body is optional still accepts no body and no `Content-Type`. Uploads, which
+  are not JSON, are unaffected.
+- **`403 forbidden_origin`.** A request other than `GET`, `HEAD` and `OPTIONS`
+  sent by a page of another site is refused before it is handled, registration
+  included. A browser says so in `Sec-Fetch-Site`, which decides when present:
+  only `same-origin` and `none` pass. Without it, an `Origin` header must name
+  the host the request was sent to, ports ignored (the dev server proxies
+  `:5173` to `:8080`); `Origin: null`, which a sandboxed frame sends, is
+  refused. A request with neither header is not from a browser and passes, so
+  scripts and `curl` work as before.
+- **`421 misdirected_request`.** `THREAVIA_HTTP_ALLOWED_HOSTS` lists the
+  `Host` values Core answers, comma-separated, each `host` (any port) or
+  `host:port`. In mode `none` it defaults to `localhost`, `127.0.0.1` and
+  `[::1]`; in the other modes, to no check. This is what stops DNS rebinding, a
+  page whose own name has been pointed at Core's address and which therefore
+  reads the answers too: its requests still carry its own name. `/healthz` and
+  `/readyz` answer whatever the `Host`, because a kubelet probes the pod by its
+  IP. A deployment that serves mode `none` under another name lists that name.
+
+Every response also carries `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, `Content-Security-Policy: frame-ancestors 'none'` and
+`Referrer-Policy: strict-origin-when-cross-origin`, so the web client cannot be
+framed and its approval buttons clicked through a decoy. The policy stops at
+`frame-ancestors`, because the built client uses inline styles; HSTS belongs to
+the ingress that terminates TLS.
+
 ## Authentication
 
 Selected by `THREAVIA_AUTH_MODE`:

@@ -44,7 +44,13 @@ see the installed key and will render a different one. That is expected: only a
 real install or upgrade preserves it.
 
 **Do not expose `auth.mode: none`.** It attributes every request to one user and
-exists for local development.
+exists for local development. It also answers only for `localhost`,
+`127.0.0.1` and `[::1]` unless `http.allowedHosts` names other hosts, so behind
+an ingress it answers `421` until the ingress host is listed there.
+
+**Name your hosts.** `http.allowedHosts` lists the `Host` values Core answers,
+which is what stops a page using DNS rebinding from reading the API. Set it to
+the ingress host in every mode; the probes are not affected.
 
 ## Secrets
 

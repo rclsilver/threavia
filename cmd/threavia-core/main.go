@@ -162,6 +162,7 @@ func run() error {
 			Version:       version,
 			Logger:        logger,
 			WebUI:         webUI,
+			AllowedHosts:  cfg.HTTP.AllowedHosts,
 		}),
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
