@@ -24,8 +24,9 @@ locally passes CI, apart from the database integration tests (`make test-db`).
 
 - **HTTP API.** [`api/openapi.yaml`](api/openapi.yaml) is the contract. A new
   route, field or event type is written there first, then implemented in Core,
-  then `make web-generate` refreshes the client's types
-  (`web/ui/src/api/schema.d.ts`). CI fails if the generated types are stale.
+  then `make web-generate` and `make vscode-generate` refresh the clients'
+  types (`web/ui/src/api/schema.d.ts`, `clients/vscode/src/api/schema.d.ts`).
+  CI fails if the generated types are stale.
 - **Backend protocol.** [`api/proto`](api/proto) is the contract between Core
   and backends; `make generate` refreshes `gen/`. Breaking changes are caught
   by `make proto-breaking`. [`docs/protocol.md`](docs/protocol.md) has to be
@@ -87,6 +88,25 @@ When a change adds or changes something a person can see or do:
 The demo uses the real pages and components, never copies of them: if a
 feature only works in the demo because of a demo-specific branch in a
 component, the branch belongs in `server.ts` or `data.ts` instead.
+
+## Keep the VS Code extension in mind
+
+[`clients/vscode`](clients/vscode) is a second client of the same API, for the
+person who spends the day in their editor. It is not a copy of the web client:
+it shows what an editor is good at showing, natively.
+
+For every change a person can see or do, ask whether the extension needs it
+too, and say in the change what was decided:
+
+- **done**: the extension has it in the same change;
+- **deferred**: it should, and a task says so;
+- **not applicable**: it does not belong in an editor, and why.
+
+Its API types are generated from the contract like the web client's
+(`make vscode-generate`), and `make vscode-check` (in CI and in `make verify`)
+fails when they are stale. An event a view follows is handled in
+[`clients/vscode/src/api/events.ts`](clients/vscode/src/api/events.ts), next to
+the web client's `stream.ts`.
 
 ## License
 

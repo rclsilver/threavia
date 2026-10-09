@@ -49,8 +49,9 @@ directory the backend located and bound on its own.
 
 What is deliberately not implemented, matching the non-goals of section 33:
 
-- the Android, Voice and VS Code clients: Core is client-agnostic and the web
-  client is the one written here;
+- the Android and Voice clients: Core is client-agnostic, and the clients
+  written here are the web client and the VS Code extension
+  ([`clients/vscode`](clients/vscode/README.md));
 - automatic backend scheduling, scoring, failover and transparent migration: a
   backend change is explicit;
 - the REVIEW capability, Crit/ChangeSet integration and vector memory search;
@@ -178,6 +179,8 @@ make generate      # regenerate gen/ from api/proto
 make web-generate  # regenerate the TypeScript API types from api/openapi.yaml
 make lint          # go vet + buf lint
 make web-lint      # type-check and lint the web client
+make vscode-check  # check, lint and test the VS Code extension
+make vscode-package # build the VS Code extension into clients/vscode/threavia.vsix
 make test-race     # test suite under the race detector (needs a C compiler)
 make dev-reset     # stop the dependencies and delete their data
 ```
@@ -197,7 +200,7 @@ Tagging `vX.Y.Z` publishes:
 - the Helm charts as OCI artifacts at `oci://ghcr.io/rclsilver/charts/threavia`
   and `oci://ghcr.io/rclsilver/charts/threavia-backend-claude`;
 - a GitHub release with binary archives for linux and darwin, amd64 and arm64,
-  and their SHA-256 checksums.
+  the VS Code extension as `threavia-X.Y.Z.vsix`, and their SHA-256 checksums.
 
 The flake needs no publishing: it is fetched from the repository, so the tag is
 the release. A NixOS machine installs a backend from it with
