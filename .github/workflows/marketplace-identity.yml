@@ -1,0 +1,38 @@
+# Prints the id the VS Code Marketplace knows the publishing identity by.
+#
+# The Marketplace adds a member by that id, which is neither the Client ID nor
+# the Tenant ID of the identity: it is the Azure DevOps profile the identity
+# gets when it first signs in, and the only way to read it is to sign in as the
+# identity. This workflow does that, once, by hand; the id it prints is added
+# as a Contributor of the rclsilver publisher at
+# https://marketplace.visualstudio.com/manage. It publishes nothing.
+name: "Marketplace identity"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  identity:
+    name: "Print the Marketplace id of the publishing identity"
+    runs-on: "ubuntu-latest"
+    # The federated credential trusts this environment and nothing else.
+    environment: "marketplace-publish"
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - name: "Sign in to Microsoft Entra ID"
+        uses: "azure/login@v3.1.0"
+        with:
+          client-id: "${{ secrets.AZURE_CLIENT_ID }}"
+          tenant-id: "${{ secrets.AZURE_TENANT_ID }}"
+          allow-no-subscriptions: true
+
+      - name: "Read the profile"
+        run: |
+          # 499b84ac-… is Azure DevOps, which the Marketplace belongs to.
+          az rest -u https://app.vssps.visualstudio.com/_apis/profile/profiles/me \
+            --resource 499b84ac-1321-427f-aa17-267ca6975798 \
+            --query '{id: id, name: displayName}' -o table
