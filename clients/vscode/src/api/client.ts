@@ -2,6 +2,8 @@ import type {
   Attention,
   AuthPublic,
   BackendInstance,
+  Decision,
+  DecisionImportance,
   Delivery,
   Event,
   FileDiff,
@@ -14,9 +16,32 @@ import type {
   Run,
   Session,
   Snapshot,
+  Task,
+  TaskStatus,
   UserInputRequest,
   ValidationRequest,
 } from './types';
+
+/** The body of POST /projects/{id}/tasks, as the web client's form sends it. */
+export interface NewTaskBody {
+  title: string;
+  description: string;
+  dependsOn: string[];
+}
+
+/**
+ * The body of PATCH /tasks/{id}: only what changes. Core reads an empty string
+ * as "unchanged", so a field left out and a field emptied mean the same.
+ */
+export type TaskPatch = { title?: string; description?: string; status?: TaskStatus };
+
+/** The body of POST /projects/{id}/decisions; `supersedes` names the one it replaces. */
+export interface NewDecisionBody {
+  title: string;
+  content: string;
+  importance: DecisionImportance;
+  supersedes?: string;
+}
 
 /**
  * The HTTP client.
@@ -168,6 +193,10 @@ export class CoreClient {
     return this.request<T>('PATCH', path, body);
   }
 
+  delete<T>(path: string) {
+    return this.request<T>('DELETE', path);
+  }
+
   // ------------------------------------------------------------- the routes
 
   /**
@@ -278,6 +307,64 @@ export class CoreClient {
 
   cancelJob(jobId: string) {
     return this.post<Job>(`/api/v1/jobs/${jobId}/cancel`, { reason: 'cancelled from VS Code' });
+  }
+
+  // ------------------------------------------------------- project memory
+
+  /** A Project's Tasks; finished ones too when asked, as the Done group needs them. */
+  tasks(projectId: string, includeDone: boolean) {
+    return this.get<List<Task>>(`/api/v1/projects/${projectId}/tasks?includeDone=${includeDone}`).then(items);
+  }
+
+  /**
+   * The Tasks that can start now. Core derives readiness from the graph and
+   * never stores it, so asking is the only way to know.
+   */
+  readyTasks(projectId: string) {
+    return this.get<List<Task>>(`/api/v1/projects/${projectId}/tasks/ready`).then(items);
+  }
+
+  createTask(projectId: string, body: NewTaskBody) {
+    return this.post<Task>(`/api/v1/projects/${projectId}/tasks`, body);
+  }
+
+  updateTask(taskId: string, patch: TaskPatch) {
+    return this.patch<Task>(`/api/v1/tasks/${taskId}`, patch);
+  }
+
+  deleteTask(taskId: string) {
+    return this.delete<void>(`/api/v1/tasks/${taskId}`);
+  }
+
+  addTaskDependency(taskId: string, dependsOn: string) {
+    return this.post<Task>(`/api/v1/tasks/${taskId}/dependencies`, { dependsOn });
+  }
+
+  removeTaskDependency(taskId: string, dependsOn: string) {
+    return this.delete<Task>(`/api/v1/tasks/${taskId}/dependencies/${dependsOn}`);
+  }
+
+  /**
+   * A Project's Decisions. Core lists the current ones unless asked for the
+   * superseded too, which the Memory view folds away at the end.
+   */
+  decisions(projectId: string, includeSuperseded: boolean) {
+    return this.get<List<Decision>>(
+      `/api/v1/projects/${projectId}/decisions${includeSuperseded ? '?includeSuperseded=true' : ''}`,
+    ).then(items);
+  }
+
+  createDecision(projectId: string, body: NewDecisionBody) {
+    return this.post<Decision>(`/api/v1/projects/${projectId}/decisions`, body);
+  }
+
+  /** Pins a Decision to every Job, or unpins it: the only thing about one that changes. */
+  setDecisionImportance(decisionId: string, importance: DecisionImportance) {
+    return this.patch<Decision>(`/api/v1/decisions/${decisionId}`, { importance });
+  }
+
+  deleteDecision(decisionId: string) {
+    return this.delete<void>(`/api/v1/decisions/${decisionId}`);
   }
 
   /** The bytes of an Artifact, read with the client's credential. */

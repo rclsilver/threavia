@@ -19,6 +19,9 @@ import { PathResolver } from './workspace/resolve';
 import { openInBrowser, runOpenSession, sessionIdOf, setSessionOpener } from './sessions';
 import { UNTITLED, titleOf } from './tree/model';
 import { chooseNewSession } from './start/new';
+import { CurrentProject } from './knowledge/current';
+import { MemoryView } from './knowledge/memory';
+import { TasksView } from './knowledge/tasks';
 import { SidebarProvider, type Node, type RequestNode, type SessionNode } from './tree/provider';
 
 /**
@@ -86,7 +89,14 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     panels.open(sessionId);
     return Promise.resolve();
   });
-  const connection = new Connection(context.globalState, client, auth, bus, attention, sidebar, presence);
+  // Tasks and Memory show one Project, the one the person last turned to.
+  const currentProject = new CurrentProject(client);
+  const tasks = new TasksView(client, currentProject, bus);
+  const memory = new MemoryView(client, currentProject, bus);
+  panels.onActiveProject = (projectId) => currentProject.follow(projectId);
+
+  // The Project shown first, so the two views below it ask for the right one.
+  const connection = new Connection(context.globalState, client, auth, bus, attention, [currentProject, sidebar, tasks, memory], presence);
 
   /** A Session's title from what is already known, asking Core only as a last resort. */
   const sessionTitle = async (sessionId: string): Promise<string> => {
@@ -115,7 +125,14 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     vscode.window.registerUriHandler(auth),
     sidebar,
     tree,
-    tree.onDidChangeSelection((event) => sidebar.select(event.selection[0])),
+    tree.onDidChangeSelection((event) => {
+      const node = event.selection[0];
+      sidebar.select(node);
+      currentProject.follow(projectOf(node));
+    }),
+    currentProject,
+    tasks,
+    memory,
     presence,
     connection,
     { dispose: () => attention.dispose() },
@@ -164,8 +181,16 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     if (!(await ensureCore())) return;
     if (connection.status !== 'ready') return connection.start();
     sidebar.reload();
+    tasks.reload();
+    memory.reload();
     await attention.refresh();
   });
+
+  command('threavia.switchProject', async () => {
+    if (await ensureReady()) await currentProject.choose();
+  });
+  tasks.register(command, context.subscriptions);
+  memory.register(command, context.subscriptions);
 
   command('threavia.showWaiting', async () => {
     await vscode.commands.executeCommand('threavia.sidebar.focus');
@@ -198,6 +223,14 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     const start = await chooseNewSession(client, node?.type === 'project' ? node.project : undefined);
     if (start) panels.openDraft(start);
   });
+
+  /** The Project of a row of the Sessions view, so Tasks and Memory follow the selection. */
+  const projectOf = (node: Node | undefined): string | undefined => {
+    if (node?.type === 'project') return node.project.id;
+    if (node?.type === 'session') return node.session.projectId;
+    if (node?.type === 'request') return sidebar.findSession(node.item.sessionId)?.projectId;
+    return undefined;
+  };
 
   // From a sidebar row, or from the title bar of the conversation in front,
   // which hands the command nothing that names the Session.

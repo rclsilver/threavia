@@ -24,6 +24,10 @@ export type Run = Schemas['Run'];
 export type BackendInstance = Schemas['BackendInstance'];
 export type KnownDirectory = Schemas['KnownDirectory'];
 export type Usage = Schemas['Usage'];
+export type Task = Schemas['Task'];
+export type TaskStatus = Schemas['TaskStatus'];
+export type Decision = Schemas['Decision'];
+export type DecisionImportance = Schemas['DecisionImportance'];
 
 /** The envelope every collection response uses. */
 export interface List<T> {

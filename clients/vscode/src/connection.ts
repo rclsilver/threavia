@@ -7,7 +7,10 @@ import type { AttentionStore } from './attention/store';
 import type { ThreaviaAuth } from './auth/provider';
 import { coreUrl } from './config';
 import { isActive, type Presence } from './presence';
-import type { SidebarProvider } from './tree/provider';
+/** A view that shows Core's data only while Core can be asked. */
+export interface Switchable {
+  setEnabled(enabled: boolean): void;
+}
 
 export type State = 'unconfigured' | 'unreachable' | 'signedOut' | 'ready';
 
@@ -36,7 +39,7 @@ export class Connection implements vscode.Disposable {
     private readonly auth: ThreaviaAuth,
     private readonly bus: EventBus,
     private readonly attention: AttentionStore,
-    private readonly sidebar: SidebarProvider,
+    private readonly views: Switchable[],
     private readonly presence: Presence,
   ) {
     // Only a change of whether requests can be sent matters here: a renewed
@@ -58,7 +61,7 @@ export class Connection implements vscode.Disposable {
     this.closeStream();
     this.wasReady = false;
     this.attention.reset();
-    this.sidebar.setEnabled(false);
+    for (const view of this.views) view.setEnabled(false);
 
     if (!coreUrl()) {
       this.auth.forget();
@@ -83,12 +86,12 @@ export class Connection implements vscode.Disposable {
     if (!this.auth.ready) {
       this.closeStream();
       this.attention.reset();
-      this.sidebar.setEnabled(false);
+      for (const view of this.views) view.setEnabled(false);
       void this.publish('signedOut');
       return;
     }
     void this.publish('ready');
-    this.sidebar.setEnabled(true);
+    for (const view of this.views) view.setEnabled(true);
     void this.attention.refresh();
     this.openStream();
   }

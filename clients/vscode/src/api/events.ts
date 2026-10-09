@@ -20,7 +20,11 @@ export type Effect =
   /** A request was answered, here or anywhere else. */
   | { kind: 'resolved'; sessionId?: string; validationId?: string; userInputId?: string }
   /** Work ended, recently enough to be news. */
-  | { kind: 'jobEnded'; sessionId: string; failed: boolean; text: string };
+  | { kind: 'jobEnded'; sessionId: string; failed: boolean; text: string }
+  /** A Project's Tasks changed; without a Project, any list may be stale. */
+  | { kind: 'tasks'; projectId?: string }
+  /** A Project's Decisions changed; without a Project, any list may be stale. */
+  | { kind: 'decisions'; projectId?: string };
 
 /** How old an ended Job can be and still be told: a replay is not news. */
 export const JOB_ENDED_FRESH_FOR = 2 * 60_000;
@@ -92,6 +96,20 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
       }
       return effects;
     }
+
+    // An agent writes project memory through the Core Tools, so these arrive
+    // without anyone in the editor having asked. A dependency added or removed
+    // is a task.updated too, and it can make other Tasks ready.
+    case 'task.created':
+    case 'task.updated':
+    case 'task.deleted':
+      return [{ kind: 'tasks', projectId: event.projectId }];
+
+    case 'decision.created':
+    case 'decision.superseded':
+    case 'decision.updated':
+    case 'decision.deleted':
+      return [{ kind: 'decisions', projectId: event.projectId }];
 
     default:
       return [];

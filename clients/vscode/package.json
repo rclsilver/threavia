@@ -49,6 +49,18 @@
           "name": "Sessions",
           "icon": "media/threavia.svg",
           "contextualTitle": "Threavia"
+        },
+        {
+          "id": "threavia.tasks",
+          "name": "Tasks",
+          "icon": "media/threavia.svg",
+          "contextualTitle": "Threavia"
+        },
+        {
+          "id": "threavia.memory",
+          "name": "Memory",
+          "icon": "media/threavia.svg",
+          "contextualTitle": "Threavia"
         }
       ]
     },
@@ -65,6 +77,36 @@
       },
       {
         "view": "threavia.sidebar",
+        "contents": "Core does not answer.\n[Try Again](command:threavia.refresh)\n[Set Core URL](command:threavia.setCoreUrl)",
+        "when": "threavia.state == unreachable"
+      },
+      {
+        "view": "threavia.tasks",
+        "contents": "Threavia shows what a Project still owes here.\n[Set Core URL](command:threavia.setCoreUrl)",
+        "when": "threavia.state == unconfigured"
+      },
+      {
+        "view": "threavia.tasks",
+        "contents": "Sign in to see what a Project still owes.\n[Sign In](command:threavia.signIn)",
+        "when": "threavia.state == signedOut"
+      },
+      {
+        "view": "threavia.tasks",
+        "contents": "Core does not answer.\n[Try Again](command:threavia.refresh)\n[Set Core URL](command:threavia.setCoreUrl)",
+        "when": "threavia.state == unreachable"
+      },
+      {
+        "view": "threavia.memory",
+        "contents": "Threavia shows what a Project decided here.\n[Set Core URL](command:threavia.setCoreUrl)",
+        "when": "threavia.state == unconfigured"
+      },
+      {
+        "view": "threavia.memory",
+        "contents": "Sign in to see what a Project decided.\n[Sign In](command:threavia.signIn)",
+        "when": "threavia.state == signedOut"
+      },
+      {
+        "view": "threavia.memory",
         "contents": "Core does not answer.\n[Try Again](command:threavia.refresh)\n[Set Core URL](command:threavia.setCoreUrl)",
         "when": "threavia.state == unreachable"
       }
@@ -171,6 +213,115 @@
         "title": "Answer…",
         "category": "Threavia",
         "icon": "$(reply)"
+      },
+      {
+        "command": "threavia.switchProject",
+        "title": "Switch Project…",
+        "category": "Threavia",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "threavia.newTask",
+        "title": "New Task",
+        "category": "Threavia",
+        "icon": "$(add)"
+      },
+      {
+        "command": "threavia.openTask",
+        "title": "Open Task",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.startTask",
+        "title": "Start",
+        "category": "Threavia",
+        "icon": "$(play)"
+      },
+      {
+        "command": "threavia.completeTask",
+        "title": "Mark Done",
+        "category": "Threavia",
+        "icon": "$(check)"
+      },
+      {
+        "command": "threavia.reopenTask",
+        "title": "Reopen",
+        "category": "Threavia",
+        "icon": "$(issue-reopened)"
+      },
+      {
+        "command": "threavia.setTaskTodo",
+        "title": "To Do",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.setTaskInProgress",
+        "title": "In Progress",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.setTaskDone",
+        "title": "Done",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.editTaskTitle",
+        "title": "Edit Title…",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.editTaskDetails",
+        "title": "Edit Details…",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.taskDependencies",
+        "title": "Dependencies…",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.deleteTask",
+        "title": "Delete…",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.recordDecision",
+        "title": "Record Decision",
+        "category": "Threavia",
+        "icon": "$(add)"
+      },
+      {
+        "command": "threavia.openDecision",
+        "title": "Open Decision",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.pinDecision",
+        "title": "Pin",
+        "category": "Threavia",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "threavia.unpinDecision",
+        "title": "Unpin",
+        "category": "Threavia",
+        "icon": "$(pinned)"
+      },
+      {
+        "command": "threavia.supersedeDecision",
+        "title": "Supersede…",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.deleteDecision",
+        "title": "Delete…",
+        "category": "Threavia"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "threavia.taskStatus",
+        "label": "Status"
       }
     ],
     "menus": {
@@ -222,6 +373,82 @@
         {
           "command": "threavia.newSession",
           "when": "threavia.state == ready"
+        },
+        {
+          "command": "threavia.openTask",
+          "when": "false"
+        },
+        {
+          "command": "threavia.startTask",
+          "when": "false"
+        },
+        {
+          "command": "threavia.completeTask",
+          "when": "false"
+        },
+        {
+          "command": "threavia.reopenTask",
+          "when": "false"
+        },
+        {
+          "command": "threavia.setTaskTodo",
+          "when": "false"
+        },
+        {
+          "command": "threavia.setTaskInProgress",
+          "when": "false"
+        },
+        {
+          "command": "threavia.setTaskDone",
+          "when": "false"
+        },
+        {
+          "command": "threavia.editTaskTitle",
+          "when": "false"
+        },
+        {
+          "command": "threavia.editTaskDetails",
+          "when": "false"
+        },
+        {
+          "command": "threavia.taskDependencies",
+          "when": "false"
+        },
+        {
+          "command": "threavia.deleteTask",
+          "when": "false"
+        },
+        {
+          "command": "threavia.openDecision",
+          "when": "false"
+        },
+        {
+          "command": "threavia.pinDecision",
+          "when": "false"
+        },
+        {
+          "command": "threavia.unpinDecision",
+          "when": "false"
+        },
+        {
+          "command": "threavia.supersedeDecision",
+          "when": "false"
+        },
+        {
+          "command": "threavia.deleteDecision",
+          "when": "false"
+        },
+        {
+          "command": "threavia.switchProject",
+          "when": "threavia.state == ready"
+        },
+        {
+          "command": "threavia.newTask",
+          "when": "threavia.state == ready && threavia.hasProject"
+        },
+        {
+          "command": "threavia.recordDecision",
+          "when": "threavia.state == ready && threavia.hasProject"
         }
       ],
       "view/title": [
@@ -244,6 +471,36 @@
           "command": "threavia.setCoreUrl",
           "when": "view == threavia.sidebar",
           "group": "settings"
+        },
+        {
+          "command": "threavia.newTask",
+          "when": "view == threavia.tasks && threavia.state == ready && threavia.hasProject",
+          "group": "navigation@1"
+        },
+        {
+          "command": "threavia.switchProject",
+          "when": "view == threavia.tasks && threavia.state == ready",
+          "group": "navigation@2"
+        },
+        {
+          "command": "threavia.refresh",
+          "when": "view == threavia.tasks",
+          "group": "navigation@3"
+        },
+        {
+          "command": "threavia.recordDecision",
+          "when": "view == threavia.memory && threavia.state == ready && threavia.hasProject",
+          "group": "navigation@1"
+        },
+        {
+          "command": "threavia.switchProject",
+          "when": "view == threavia.memory && threavia.state == ready",
+          "group": "navigation@2"
+        },
+        {
+          "command": "threavia.refresh",
+          "when": "view == threavia.memory",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -321,6 +578,76 @@
           "command": "threavia.newSession",
           "when": "view == threavia.sidebar && viewItem == project",
           "group": "1_project"
+        },
+        {
+          "command": "threavia.startTask",
+          "when": "view == threavia.tasks && viewItem == task.ready",
+          "group": "inline"
+        },
+        {
+          "command": "threavia.completeTask",
+          "when": "view == threavia.tasks && viewItem == task.inProgress",
+          "group": "inline"
+        },
+        {
+          "command": "threavia.reopenTask",
+          "when": "view == threavia.tasks && viewItem == task.done",
+          "group": "inline"
+        },
+        {
+          "submenu": "threavia.taskStatus",
+          "when": "view == threavia.tasks && viewItem =~ /^task\\./",
+          "group": "1_status"
+        },
+        {
+          "command": "threavia.editTaskTitle",
+          "when": "view == threavia.tasks && viewItem =~ /^task\\./",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "threavia.editTaskDetails",
+          "when": "view == threavia.tasks && viewItem =~ /^task\\./",
+          "group": "2_edit@2"
+        },
+        {
+          "command": "threavia.taskDependencies",
+          "when": "view == threavia.tasks && viewItem =~ /^task\\./",
+          "group": "2_edit@3"
+        },
+        {
+          "command": "threavia.deleteTask",
+          "when": "view == threavia.tasks && viewItem =~ /^task\\./",
+          "group": "3_delete"
+        },
+        {
+          "command": "threavia.pinDecision",
+          "when": "view == threavia.memory && viewItem == decision.normal",
+          "group": "inline"
+        },
+        {
+          "command": "threavia.unpinDecision",
+          "when": "view == threavia.memory && viewItem == decision.important",
+          "group": "inline"
+        },
+        {
+          "command": "threavia.pinDecision",
+          "when": "view == threavia.memory && viewItem == decision.normal",
+          "group": "1_pin"
+        },
+        {
+          "command": "threavia.unpinDecision",
+          "when": "view == threavia.memory && viewItem == decision.important",
+          "group": "1_pin"
+        },
+        {
+          "command": "threavia.supersedeDecision",
+          "when": "view == threavia.memory && viewItem =~ /^decision\\.(important|normal)$/",
+          "group": "2_change"
+        },
+        {
+          "command": "threavia.deleteDecision",
+          "when": "view == threavia.memory && viewItem =~ /^decision\\./",
+          "group": "3_delete"
         }
       ],
       "editor/title": [
@@ -353,6 +680,23 @@
           "when": "threavia.state == ready && !explorerResourceIsFolder",
           "group": "threavia@1"
         }
+      ],
+      "threavia.taskStatus": [
+        {
+          "command": "threavia.setTaskTodo",
+          "when": "viewItem =~ /^task\\.(inProgress|done)$/",
+          "group": "1_status@1"
+        },
+        {
+          "command": "threavia.setTaskInProgress",
+          "when": "viewItem =~ /^task\\.(ready|waiting|done)$/",
+          "group": "1_status@2"
+        },
+        {
+          "command": "threavia.setTaskDone",
+          "when": "viewItem =~ /^task\\.(ready|waiting|inProgress)$/",
+          "group": "1_status@3"
+        }
       ]
     },
     "configuration": {
@@ -367,7 +711,7 @@
         "threavia.project": {
           "type": "string",
           "default": "",
-          "markdownDescription": "The Project this workspace works in, by name or id. It is listed first and expanded, and pinned sessions from other Projects say which one they belong to.",
+          "markdownDescription": "The Project this workspace works in, by name or id. It is listed first and expanded, pinned sessions from other Projects say which one they belong to, and the Tasks and Memory views show it until you turn to another.",
           "scope": "resource"
         },
         "threavia.clientName": {

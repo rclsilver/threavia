@@ -1,8 +1,8 @@
 # Threavia for VS Code
 
 Follow and answer your Threavia agents without leaving the editor: what waits
-for you, your pinned sessions, and every Project's sessions with what each one
-is doing, kept live from Core's event stream.
+for you, your pinned sessions, every Project's sessions with what each one is
+doing, and a Project's tasks and decisions, kept live from Core's event stream.
 
 - **Sidebar.** The Threavia view in the activity bar lists what waits for you
   (approvals and questions, across every Project), your pinned sessions, and
@@ -54,6 +54,30 @@ is doing, kept live from Core's event stream.
   the whole file, is sent with its path and lines and what you ask, to a new
   session (choose the Project, the backend, the working directory) or to a
   recent one, whose conversation then opens.
+- **Tasks.** The Tasks view lists what a Project still owes, as the web
+  client's Tasks page does: In progress, Ready to start, Waiting on other work
+  (with what each one waits on), and Done, folded and counted. Each row offers
+  its next step inline (Start, Mark done, Reopen); right-click for every
+  status, Edit Title…, Edit Details…, Dependencies… (tick every task that
+  must come first) and Delete…. **+** files a task: a title, details if you
+  want them (Enter with nothing skips), then what it waits on. Clicking a task
+  opens it as a read-only markdown preview, which follows the task as it
+  changes.
+- **Memory.** The Memory view lists a Project's decisions: what travels with
+  every Job (the agent reads it before it starts), what is on record, and,
+  folded, what was superseded and by what. A decision an agent recorded says
+  "agent". The pin on a row makes it travel with every Job, or stops it;
+  right-click to Supersede… (record the decision that replaces it) or
+  Delete…. **+** records a decision: what was decided, why, and whether it
+  travels with every Job. Each answer is one line in the editor's input box:
+  the why of a decision is a sentence or two, and a document to write it in
+  would be one more tab to find and close. Clicking a decision opens it as a
+  markdown preview.
+- **Which Project.** Both views show one Project, named next to their title:
+  the one of the session or Project last selected in the Sessions view, or of
+  the conversation in front; until then the one `threavia.project` names, or
+  your first. **Switch Project…** in their title bar chooses another. Both
+  are kept live from the event stream, whoever made the change.
 
 The extension tells Core when the editor has the focus, so your phone does not
 ring for what you are already looking at.
@@ -89,7 +113,7 @@ Out** forgets them.
 | Setting | What it does |
 | --- | --- |
 | `threavia.coreUrl` | Where Core answers. Empty until set. |
-| `threavia.project` | The Project this workspace works in, by name or id. It is listed first and expanded, and pinned sessions from other Projects name theirs. |
+| `threavia.project` | The Project this workspace works in, by name or id. It is listed first and expanded, pinned sessions from other Projects name theirs, and Tasks and Memory show it until you turn to another. |
 | `threavia.clientName` | How this editor appears in your list of devices. Defaults to `VS Code — <hostname>`. |
 | `threavia.notifications.attention` | Notify when an agent asks for an approval or an answer. |
 | `threavia.notifications.jobEnded` | Notify when work ends in a session that is not open. |
@@ -133,5 +157,7 @@ and are covered by `test/`, as are the conversation's rules
 (`src/conversation/timeline.ts` and `state.ts`, ported from the web client's
 timeline), a new session's draft and how it becomes the session
 (`src/conversation/draft.ts`), the diff reconstruction (`src/diff/unified.ts`), the "Ask" message
-(`src/ask/message.ts`) and the path matching (`src/workspace/paths.ts`). The
+(`src/ask/message.ts`), the path matching (`src/workspace/paths.ts`), and how
+Tasks and Decisions are grouped, which Project the views show and what they
+send (`src/knowledge/model.ts`). The
 rest turns them into views and commands; `src/webview` is the page.

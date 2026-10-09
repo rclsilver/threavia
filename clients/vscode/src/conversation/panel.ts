@@ -85,6 +85,11 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
   private readonly panels = new Map<string, ConversationPanel>();
   private active: ConversationPanel | undefined;
   private readonly registration: vscode.Disposable;
+  /**
+   * Told the Project of the conversation in front when it comes forward, or
+   * once its Session is read: the Tasks and Memory views follow it.
+   */
+  onActiveProject: (projectId: string) => void = () => undefined;
 
   constructor(private readonly services: Services) {
     this.registration = vscode.window.registerWebviewPanelSerializer(VIEW_TYPE, this);
@@ -158,6 +163,9 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
     conversation.onPinned = () => {
       if (this.active === conversation) void this.setActive(conversation);
     };
+    conversation.onLoaded = () => {
+      if (this.active === conversation && conversation.projectId) this.onActiveProject(conversation.projectId);
+    };
     // The draft became a Session: found by its id from now on, and the title
     // bar offers what a Session's offers.
     conversation.onStarted = (draft) => {
@@ -169,7 +177,9 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
   }
 
   private async setActive(conversation: ConversationPanel | undefined) {
+    const changed = conversation !== this.active;
     this.active = conversation;
+    if (changed && conversation?.projectId) this.onActiveProject(conversation.projectId);
     await Promise.all([
       vscode.commands.executeCommand('setContext', PINNED_KEY, Boolean(conversation?.pinned)),
       vscode.commands.executeCommand('setContext', DRAFT_KEY, Boolean(conversation && !conversation.sessionId)),
@@ -225,6 +235,8 @@ class ConversationPanel {
   private activityTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly disposables: vscode.Disposable[] = [];
   onPinned: () => void = () => undefined;
+  /** Called each time the Session is read, which is when its Project is first known. */
+  onLoaded: () => void = () => undefined;
   /** Called with the draft's key once its first message created the Session. */
   onStarted: (draft: string) => void = () => undefined;
 
@@ -291,6 +303,11 @@ class ConversationPanel {
     return this.target.kind === 'session' ? this.target.sessionId : undefined;
   }
 
+  /** The Project it works in: chosen for a draft, read with the Session otherwise. */
+  get projectId(): string | undefined {
+    return this.target.kind === 'session' ? this.session?.projectId : this.target.start.projectId;
+  }
+
   /** How the panels find this one again. */
   get key(): string {
     return targetKey(this.target);
@@ -339,8 +356,10 @@ class ConversationPanel {
       };
       this.events = mergeEvents(this.events, snapshot.events);
       this.panel.title = titleOf(snapshot.session);
+      const firstRead = !this.loaded;
       this.loaded = true;
       if (this.pinned !== wasPinned) this.onPinned();
+      if (firstRead) this.onLoaded();
       if (this.ready) this.post({ type: 'events', events: this.events, reset: true });
       this.postView();
       void this.loadBackend();
