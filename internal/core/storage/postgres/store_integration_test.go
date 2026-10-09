@@ -37,6 +37,40 @@ func TestOwnershipIsolation(t *testing.T) {
 	}
 }
 
+// TestIdempotencyKeysArePerOwner pins that a key is unique for one person
+// only: two people may send the same one, each finds only their own Job, and
+// the same person cannot use it twice.
+func TestIdempotencyKeysArePerOwner(t *testing.T) {
+	store, ctx := newTestStore(t)
+	mine := newFixture(t, store, ctx)
+	theirs := newFixture(t, store, ctx)
+	key := domain.NewUUID()
+
+	first := domain.Job{ID: domain.NewJobID(), RunID: mine.run.ID, Status: domain.JobQueued, IdempotencyKey: &key}
+	if err := store.CreateJob(ctx, &first); err != nil {
+		t.Fatalf("creating the first keyed job: %v", err)
+	}
+	second := domain.Job{ID: domain.NewJobID(), RunID: theirs.run.ID, Status: domain.JobQueued, IdempotencyKey: &key}
+	if err := store.CreateJob(ctx, &second); err != nil {
+		t.Fatalf("another owner reusing the key: %v", err)
+	}
+
+	for owner, want := range map[domain.UserID]domain.JobID{mine.owner: first.ID, theirs.owner: second.ID} {
+		found, err := store.JobByIdempotencyKey(ctx, owner, key)
+		if err != nil || found.ID != want {
+			t.Fatalf("the key of %s = %s (%v), want %s", owner, found.ID, err, want)
+		}
+	}
+	if _, err := store.JobByIdempotencyKey(ctx, "stranger", key); !errors.Is(err, postgres.ErrNotFound) {
+		t.Fatalf("a stranger looking the key up: got %v, want ErrNotFound", err)
+	}
+
+	again := domain.Job{ID: domain.NewJobID(), RunID: mine.run.ID, Status: domain.JobQueued, IdempotencyKey: &key}
+	if err := store.CreateJob(ctx, &again); !errors.Is(err, postgres.ErrConflict) {
+		t.Fatalf("the same owner reusing the key: got %v, want ErrConflict", err)
+	}
+}
+
 // TestOneActiveJobPerRun pins the invariant of specification section 3.4 at the
 // storage level: queued Jobs may pile up, a second active one may not.
 func TestOneActiveJobPerRun(t *testing.T) {

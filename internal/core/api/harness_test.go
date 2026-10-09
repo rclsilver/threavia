@@ -39,6 +39,7 @@ type core struct {
 	backendID string
 	lastBody  string
 	store     *postgres.Store
+	db        *postgres.DB
 	svc       *service.Service
 	http      *httptest.Server
 	dialer    grpc.DialOption
@@ -62,7 +63,23 @@ func newCore(t *testing.T) *core {
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
 
-	authenticator, err := auth.New(auth.Config{Mode: auth.ModeNone, DevUserID: "thomas"})
+	return &core{
+		t:     t,
+		store: store,
+		db:    db,
+		svc:   svc,
+		http:  serveAs(t, svc, db, logger, "thomas"),
+		dialer: grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return listener.DialContext(ctx)
+		}),
+	}
+}
+
+// serveAs builds the HTTP surface of a Core with one user signed in.
+func serveAs(t *testing.T, svc *service.Service, db *postgres.DB, logger *slog.Logger, userID string) *httptest.Server {
+	t.Helper()
+
+	authenticator, err := auth.New(auth.Config{Mode: auth.ModeNone, DevUserID: userID})
 	if err != nil {
 		t.Fatalf("building the authenticator: %v", err)
 	}
@@ -75,16 +92,19 @@ func newCore(t *testing.T) *core {
 		Logger:        logger,
 	}))
 	t.Cleanup(server.Close)
+	return server
+}
 
-	return &core{
-		t:     t,
-		store: store,
-		svc:   svc,
-		http:  server,
-		dialer: grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-			return listener.DialContext(ctx)
-		}),
-	}
+// asUser returns the same Core seen by another user: the same database,
+// services and backends, with someone else signed in. It is how a test checks
+// that what one user made is out of another's reach.
+func (c *core) asUser(userID string) *core {
+	c.t.Helper()
+	other := *c
+	other.backendID = ""
+	other.lastBody = ""
+	other.http = serveAs(c.t, c.svc, c.db, slog.New(slog.NewTextHandler(io.Discard, nil)), userID)
+	return &other
 }
 
 // do performs an API call and decodes the JSON response into target.

@@ -1881,7 +1881,11 @@ components:
       name: Idempotency-Key
       in: header
       schema: { type: string }
-      description: A retry returns what the first attempt created rather than creating a second one.
+      description: |
+        A retry returns what the first attempt created rather than creating a
+        second one. A key belongs to the person who sent it: the same key from
+        someone else is another request. Reusing a key for a message to another
+        Session is refused with 409 rather than answered with the first Job.
     Channel:
       name: X-Threavia-Channel
       in: header

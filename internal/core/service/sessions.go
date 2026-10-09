@@ -139,7 +139,7 @@ func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in S
 
 // replayStartSession returns the Session a retried first send already created.
 func (s *Service) replayStartSession(ctx context.Context, identity auth.Identity, key string) (StartSessionResult, bool, error) {
-	job, err := s.store.JobByIdempotencyKey(ctx, key)
+	job, err := s.store.JobByIdempotencyKey(ctx, identity.UserID, key)
 	if errors.Is(err, postgres.ErrNotFound) {
 		return StartSessionResult{}, false, nil
 	}
@@ -181,8 +181,19 @@ func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessi
 // not typed by anyone.
 func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string, scheduleID domain.ScheduleID) (domain.Job, error) {
 	if idempotencyKey != "" {
-		job, err := s.store.JobByIdempotencyKey(ctx, idempotencyKey)
+		// Keys are per user, so a Job found here is already the caller's. It
+		// is a replay only if it was made in the Session this request names: the
+		// same key on another Session is a client bug, and answering it with a
+		// Job from elsewhere would drop the message without a word.
+		job, err := s.store.JobByIdempotencyKey(ctx, identity.UserID, idempotencyKey)
 		if err == nil {
+			run, err := s.store.GetRun(ctx, identity.UserID, job.RunID)
+			if err != nil {
+				return domain.Job{}, translate(err)
+			}
+			if run.SessionID != sessionID {
+				return domain.Job{}, fmt.Errorf("%w: this Idempotency-Key was already used for a message in another session", ErrConflict)
+			}
 			return job, nil
 		}
 		if !errors.Is(err, postgres.ErrNotFound) {

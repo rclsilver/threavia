@@ -18,20 +18,33 @@ const jobColumns = `j.id, j.run_id, j.status, j.idempotency_key, j.error, j.orig
 
 // CreateJob inserts a Job. A Job is created QUEUED and is dispatched
 // separately, so that enqueueing never depends on backend availability.
+//
+// An idempotency key is recorded with its owner, the owner of the Project the
+// Job is made in. It is read from the Run rather than passed in, so no caller
+// can file a key under someone else.
 func (s *Store) CreateJob(ctx context.Context, job *domain.Job) error {
 	err := s.q.QueryRow(ctx, `
-		INSERT INTO jobs (id, run_id, status, idempotency_key, origin_channel)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO jobs (id, run_id, status, idempotency_key, idempotency_owner_id, origin_channel)
+		VALUES ($1, $2, $3, $4, (
+			SELECT p.owner_id
+			FROM runs r
+			JOIN sessions s ON s.id = r.session_id
+			JOIN projects p ON p.id = s.project_id
+			WHERE r.id = $2 AND $4::text IS NOT NULL
+		), $5)
 		RETURNING created_at, updated_at`,
 		job.ID, job.RunID, job.Status, job.IdempotencyKey, job.OriginChannel,
 	).Scan(&job.CreatedAt, &job.UpdatedAt)
 	return classify(err, "create job")
 }
 
-// JobByIdempotencyKey returns the Job a retried request already created.
-func (s *Store) JobByIdempotencyKey(ctx context.Context, key string) (domain.Job, error) {
-	return scanJob(s.q.QueryRow(ctx,
-		`SELECT `+jobColumns+` FROM jobs j WHERE j.idempotency_key = $1`, key))
+// JobByIdempotencyKey returns the Job a retried request of this user already
+// created. Keys are per user: the same key sent by someone else is another
+// request.
+func (s *Store) JobByIdempotencyKey(ctx context.Context, ownerID domain.UserID, key string) (domain.Job, error) {
+	return scanJob(s.q.QueryRow(ctx, `
+		SELECT `+jobColumns+` FROM jobs j
+		WHERE j.idempotency_owner_id = $1 AND j.idempotency_key = $2`, ownerID, key))
 }
 
 // GetJob returns a Job the user can access through its Project.

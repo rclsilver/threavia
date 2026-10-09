@@ -37,7 +37,9 @@ persistent credential once.
 
 Commands clients may realistically retry — `sessions/start` and
 `sessions/{id}/messages` — accept an `Idempotency-Key` header, so a retry returns
-the Session or Job the first attempt created (section 27).
+the Session or Job the first attempt created (section 27). A key is scoped to
+the user who sent it, and reusing one for a message to another Session answers
+`409 conflict`.
 
 ## Errors
 

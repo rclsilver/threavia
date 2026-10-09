@@ -980,7 +980,11 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description A retry returns what the first attempt created rather than creating a second one. */
+                    /** @description A retry returns what the first attempt created rather than creating a
+                     *     second one. A key belongs to the person who sent it: the same key from
+                     *     someone else is another request. Reusing a key for a message to another
+                     *     Session is refused with 409 rather than answered with the first Job.
+                     *      */
                     "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
                     /** @description Which kind of client is calling. Core records it on the work it creates,
                      *     so a device already following it is not also made to ring, and the audit
@@ -1354,7 +1358,11 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description A retry returns what the first attempt created rather than creating a second one. */
+                    /** @description A retry returns what the first attempt created rather than creating a
+                     *     second one. A key belongs to the person who sent it: the same key from
+                     *     someone else is another request. Reusing a key for a message to another
+                     *     Session is refused with 409 rather than answered with the first Job.
+                     *      */
                     "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
                     /** @description Which kind of client is calling. Core records it on the work it creates,
                      *     so a device already following it is not also made to ring, and the audit
@@ -4175,7 +4183,11 @@ export interface components {
         DirectoryID: components["schemas"]["UUID"];
         ArtifactID: components["schemas"]["UUID"];
         IncludeArchived: boolean;
-        /** @description A retry returns what the first attempt created rather than creating a second one. */
+        /** @description A retry returns what the first attempt created rather than creating a
+         *     second one. A key belongs to the person who sent it: the same key from
+         *     someone else is another request. Reusing a key for a message to another
+         *     Session is refused with 409 rather than answered with the first Job.
+         *      */
         IdempotencyKey: string;
         /** @description Which kind of client is calling. Core records it on the work it creates,
          *     so a device already following it is not also made to ring, and the audit

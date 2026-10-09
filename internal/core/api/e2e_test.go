@@ -494,6 +494,62 @@ func TestStartSessionIsIdempotent(t *testing.T) {
 	expectNothing(t, "a second dispatch for a retried request", backend.starts)
 }
 
+// TestIdempotencyKeysBelongToTheirSender is a regression test.
+//
+// Keys used to be unique across every user and a message was answered with
+// whatever Job held its key, before any ownership check. Someone who knew
+// another user's key read that user's Job; someone who used a key first made
+// the other user's message vanish behind their own Job.
+func TestIdempotencyKeysBelongToTheirSender(t *testing.T) {
+	c, _, projectID, dirID := setup(t)
+	mine := c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
+
+	alice := c.asUser("alice")
+	aliceBackend, _ := alice.registerBackend("alice-laptop")
+	theirs := alice.startSession(alice.createProject("garden"), aliceBackend, "", "Arrose les tomates")
+
+	key := domain.NewUUID()
+	var first, second idOnly
+	c.mustDo(http.MethodPost, "/api/v1/sessions/"+mine+"/messages",
+		map[string]any{"message": "Et les tests ?"}, &first, http.StatusCreated, [2]string{"Idempotency-Key", key})
+	alice.mustDo(http.MethodPost, "/api/v1/sessions/"+theirs+"/messages",
+		map[string]any{"message": "Et les courgettes ?"}, &second, http.StatusCreated, [2]string{"Idempotency-Key", key})
+
+	if first.ID == second.ID {
+		t.Fatalf("alice's message was answered with thomas's job %s", first.ID)
+	}
+	if got := alice.countEvents(theirs, "user.message"); got != 2 {
+		t.Fatalf("alice's session has %d messages, want 2: hers was dropped", got)
+	}
+}
+
+// TestAnIdempotencyKeyIsReplayedOnlyInItsSession pins what a key reused by the
+// same person does: the same request again is the same Job, while the same key
+// on another Session is a visible error rather than a message silently lost.
+func TestAnIdempotencyKeyIsReplayedOnlyInItsSession(t *testing.T) {
+	c, _, projectID, dirID := setup(t)
+	session := c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
+	other := c.startSession(projectID, c.backendID, dirID, "Relis la doc")
+
+	key := domain.NewUUID()
+	body := map[string]any{"message": "Et les tests ?"}
+	var first, retried idOnly
+	c.mustDo(http.MethodPost, "/api/v1/sessions/"+session+"/messages", body, &first, http.StatusCreated, [2]string{"Idempotency-Key", key})
+	c.mustDo(http.MethodPost, "/api/v1/sessions/"+session+"/messages", body, &retried, http.StatusCreated, [2]string{"Idempotency-Key", key})
+
+	if first.ID != retried.ID {
+		t.Fatalf("a retried message made a second job: %s then %s", first.ID, retried.ID)
+	}
+	if got := len(c.snapshot(session).Jobs); got != 2 {
+		t.Fatalf("the session has %d jobs, want the first send and one message", got)
+	}
+
+	c.mustDo(http.MethodPost, "/api/v1/sessions/"+other+"/messages", body, nil, http.StatusConflict, [2]string{"Idempotency-Key", key})
+	if got := len(c.snapshot(other).Jobs); got != 1 {
+		t.Fatalf("the other session has %d jobs, want only its first send", got)
+	}
+}
+
 // TestAJobThatEndsWhileWaitingStillEnds is a regression test.
 //
 // An agent may give up on a question nobody answered and finish its turn
