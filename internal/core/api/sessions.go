@@ -10,6 +10,7 @@ import (
 )
 
 func (h *handler) registerSessions(mux *http.ServeMux) {
+	h.handle(mux, "GET /api/v1/me/pinned-sessions", h.pinnedSessions)
 	h.handle(mux, "POST /api/v1/sessions/start", h.startSession)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}", h.getSession)
 	h.handle(mux, "PATCH /api/v1/sessions/{sessionId}", h.patchSession)
@@ -91,6 +92,9 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 		// explicit act: the timeline stays continuous, but the native provider
 		// session does not travel (spec section 34).
 		BackendInstanceID *string `json:"backendInstanceId"`
+		// Pinned puts the Session one click away from any Project, or takes it
+		// back out.
+		Pinned *bool `json:"pinned"`
 	}](w, r)
 	if !ok {
 		return
@@ -132,6 +136,15 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 			dirID = &value
 		}
 		session, err = h.svc.SetSessionWorkingDirectory(r.Context(), identity, sessionID, dirID)
+		if err != nil {
+			h.fail(w, err)
+			return
+		}
+		changed = true
+	}
+
+	if body.Pinned != nil {
+		session, err = h.svc.SetSessionPinned(r.Context(), identity, sessionID, *body.Pinned)
 		if err != nil {
 			h.fail(w, err)
 			return
@@ -246,4 +259,14 @@ func (h *handler) repository(w http.ResponseWriter, r *http.Request, identity au
 		return
 	}
 	writeJSON(w, http.StatusOK, repo)
+}
+
+// pinnedSessions lists the Sessions the person pinned, from every Project.
+func (h *handler) pinnedSessions(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	sessions, err := h.svc.PinnedSessions(r.Context(), identity)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeList(w, sessions)
 }

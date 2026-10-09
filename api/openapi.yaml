@@ -600,11 +600,13 @@ paths:
           $ref: "#/components/responses/Error"
     patch:
       tags: [sessions]
-      summary: Rename, change the working directory, or move to another backend
+      summary: Rename, pin, change the working directory, or move to another backend
       description: |
         `workingDirectoryId` set to null clears the working directory, while an
         absent field leaves it alone. `backendInstanceId` moves the Session and
-        answers with a handoff instead of the Session.
+        answers with a handoff instead of the Session. `pinned` puts the Session
+        among the ones reached from any Project, or takes it out; pinning one
+        already pinned keeps its place.
       parameters:
         - $ref: "#/components/parameters/Channel"
       requestBody:
@@ -619,6 +621,7 @@ paths:
                   type: [string, "null"]
                   format: uuid
                 backendInstanceId: { $ref: "#/components/schemas/UUID" }
+                pinned: { type: boolean }
       responses:
         "200":
           description: The updated Session, or the handoff when the backend changed
@@ -1072,6 +1075,27 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Me" }
+
+  /api/v1/me/pinned-sessions:
+    get:
+      tags: [sessions]
+      summary: The Sessions the user pinned, from every Project
+      description: |
+        In the order they were pinned, each with its activeJobStatus. An
+        archived Session is left out and comes back pinned when restored. A
+        pin or unpin is announced by a session.pinned event, `{pinned}`.
+      responses:
+        "200":
+          description: Pinned Sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Session" }
 
   /api/v1/me/attention:
     get:
@@ -2068,6 +2092,10 @@ components:
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         archivedAt: { type: string, format: date-time }
+        pinnedAt:
+          type: string
+          format: date-time
+          description: When the Session was pinned, to be reached from any Project. Absent when it is not.
         activeJobStatus:
           allOf: [{ $ref: "#/components/schemas/JobStatus" }]
           description: |

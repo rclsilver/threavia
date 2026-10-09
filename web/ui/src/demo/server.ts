@@ -168,6 +168,10 @@ const routes: [string, RegExp, Handler][] = [
   ['GET', /^\/api\/v1\/me$/, () => data.me],
   ['POST', /^\/api\/v1\/me\/presence$/, () => undefined],
   ['GET', /^\/api\/v1\/me\/attention$/, () => attentionFor()],
+  ['GET', /^\/api\/v1\/me\/pinned-sessions$/, () =>
+    list(state.sessions
+      .filter((session) => session.pinnedAt && session.status === 'ACTIVE')
+      .sort((a, b) => String(a.pinnedAt).localeCompare(String(b.pinnedAt))))],
   ['GET', /^\/api\/v1\/me\/clients$/, () => list(data.clients)],
   ['GET', /^\/api\/v1\/me\/push$/, () => ({ publicKey: data.pushConfig.publicKey, subscriptions: state.pushSubscriptions })],
   ['POST', /^\/api\/v1\/me\/push\/subscriptions$/, () => { throw unavailable('Notifications'); }],
@@ -297,6 +301,8 @@ const routes: [string, RegExp, Handler][] = [
   ['PATCH', /^\/api\/v1\/sessions\/([^/]+)$/, (m, body) => {
     const session = sessionOf(m[1]);
     if (body.title !== undefined) session.title = body.title;
+    if (body.pinned === true) session.pinnedAt ??= nowIso();
+    if (body.pinned === false) delete session.pinnedAt;
     if (body.backendInstanceId) {
       const timeline = timelineOf(m[1]);
       const from = timeline.runs.at(-1)?.backendInstanceId;

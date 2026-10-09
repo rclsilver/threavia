@@ -1121,10 +1121,12 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Rename, change the working directory, or move to another backend
+         * Rename, pin, change the working directory, or move to another backend
          * @description `workingDirectoryId` set to null clears the working directory, while an
          *     absent field leaves it alone. `backendInstanceId` moves the Session and
-         *     answers with a handoff instead of the Session.
+         *     answers with a handoff instead of the Session. `pinned` puts the Session
+         *     among the ones reached from any Project, or takes it out; pinning one
+         *     already pinned keeps its place.
          *
          */
         patch: {
@@ -1155,6 +1157,7 @@ export interface paths {
                         /** Format: uuid */
                         workingDirectoryId?: string | null;
                         backendInstanceId?: components["schemas"]["UUID"];
+                        pinned?: boolean;
                     };
                 };
             };
@@ -2049,6 +2052,50 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["Me"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/pinned-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The Sessions the user pinned, from every Project
+         * @description In the order they were pinned, each with its activeJobStatus. An
+         *     archived Session is left out and comes back pinned when restored. A
+         *     pin or unpin is announced by a session.pinned event, `{pinned}`.
+         *
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Pinned Sessions */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["Session"][];
+                        };
                     };
                 };
             };
@@ -3587,6 +3634,11 @@ export interface components {
             updatedAt: string;
             /** Format: date-time */
             archivedAt?: string;
+            /**
+             * Format: date-time
+             * @description When the Session was pinned, to be reached from any Project. Absent when it is not.
+             */
+            pinnedAt?: string;
             /** @description The status of the oldest Job not yet finished, which everything else
              *     in the Session is queued behind. Absent when nothing is running or
              *     queued. Set on lists only, so a client can say which Session is

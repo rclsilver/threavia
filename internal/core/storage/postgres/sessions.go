@@ -4,11 +4,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/rclsilver/threavia/internal/core/domain"
 )
 
 const sessionColumns = `s.id, s.project_id, s.title, s.status, s.working_directory_id,
-	s.created_at, s.updated_at, s.archived_at`
+	s.created_at, s.updated_at, s.archived_at, s.pinned_at`
 
 // CreateSession inserts a Session.
 func (s *Store) CreateSession(ctx context.Context, session *domain.Session) error {
@@ -53,24 +55,58 @@ func (s *Store) DeleteSession(ctx context.Context, ownerID domain.UserID, id dom
 // which is the one everything else in the Session is queued behind.
 func (s *Store) ListSessions(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID, includeArchived bool) ([]domain.Session, error) {
 	rows, err := s.q.Query(ctx, `
-		SELECT `+sessionColumns+`,
-		       (SELECT j.status FROM jobs j JOIN runs r ON r.id = j.run_id
-		        WHERE r.session_id = s.id
-		          AND j.status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')
-		        ORDER BY j.created_at LIMIT 1)
+		SELECT `+sessionColumns+`, `+activeJobStatus+`
 		FROM sessions s JOIN projects p ON p.id = s.project_id
 		WHERE s.project_id = $1 AND p.owner_id = $2 AND ($3 OR s.status = 'ACTIVE')
 		ORDER BY s.updated_at DESC`, projectID, ownerID, includeArchived)
 	if err != nil {
 		return nil, classify(err, "list sessions")
 	}
+	return readSessionList(rows)
+}
+
+// PinnedSessions returns the Sessions an owner pinned, in every Project, in
+// the order they were pinned. An archived one is left out: it is out of the
+// way on purpose, and it comes back pinned when it is restored.
+func (s *Store) PinnedSessions(ctx context.Context, ownerID domain.UserID) ([]domain.Session, error) {
+	rows, err := s.q.Query(ctx, `
+		SELECT `+sessionColumns+`, `+activeJobStatus+`
+		FROM sessions s JOIN projects p ON p.id = s.project_id
+		WHERE p.owner_id = $1 AND s.pinned_at IS NOT NULL AND s.status = 'ACTIVE'
+		ORDER BY s.pinned_at`, ownerID)
+	if err != nil {
+		return nil, classify(err, "list pinned sessions")
+	}
+	return readSessionList(rows)
+}
+
+// SetSessionPinned pins or unpins a Session. Pinning one already pinned keeps
+// its place.
+func (s *Store) SetSessionPinned(ctx context.Context, ownerID domain.UserID, id domain.SessionID, pinned bool) (domain.Session, error) {
+	return scanSession(s.q.QueryRow(ctx, `
+		UPDATE sessions s
+		SET pinned_at = CASE WHEN $3 THEN coalesce(s.pinned_at, now()) END
+		FROM projects p
+		WHERE s.project_id = p.id AND s.id = $1 AND p.owner_id = $2
+		RETURNING `+sessionColumns, id, ownerID, pinned))
+}
+
+// activeJobStatus is the status of the Job holding a Session: the oldest one
+// not yet finished, which is the one everything else in it is queued behind.
+const activeJobStatus = `(SELECT j.status FROM jobs j JOIN runs r ON r.id = j.run_id
+		 WHERE r.session_id = s.id
+		   AND j.status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')
+		 ORDER BY j.created_at LIMIT 1)`
+
+// readSessionList reads Sessions listed with the status of their active Job.
+func readSessionList(rows pgx.Rows) ([]domain.Session, error) {
 	defer rows.Close()
 
 	var out []domain.Session
 	for rows.Next() {
 		var session domain.Session
 		err := rows.Scan(&session.ID, &session.ProjectID, &session.Title, &session.Status,
-			&session.WorkingDirectoryID, &session.CreatedAt, &session.UpdatedAt, &session.ArchivedAt,
+			&session.WorkingDirectoryID, &session.CreatedAt, &session.UpdatedAt, &session.ArchivedAt, &session.PinnedAt,
 			&session.ActiveJobStatus)
 		if err != nil {
 			return nil, classify(err, "read session")
@@ -122,7 +158,7 @@ func (s *Store) TouchSession(ctx context.Context, id domain.SessionID) error {
 func scanSession(row scanner) (domain.Session, error) {
 	var session domain.Session
 	err := row.Scan(&session.ID, &session.ProjectID, &session.Title, &session.Status,
-		&session.WorkingDirectoryID, &session.CreatedAt, &session.UpdatedAt, &session.ArchivedAt)
+		&session.WorkingDirectoryID, &session.CreatedAt, &session.UpdatedAt, &session.ArchivedAt, &session.PinnedAt)
 	return session, classify(err, "read session")
 }
 

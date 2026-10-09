@@ -156,12 +156,13 @@ export const sessions = [
   session(IDS.certManager, IDS.homelab, 'Upgrade cert-manager to 1.16', 14, 1, { activeJobStatus: 'WAITING_VALIDATION' }),
   session(IDS.ingress, IDS.homelab, 'Fix the flaky deploy of the ingress controller', 70, 22),
   session(IDS.backups, IDS.homelab, 'Check last night’s backups', 60 * 9, 30, { activeJobStatus: 'WAITING_INPUT' }),
-  session(IDS.grafana, IDS.homelab, 'Grafana dashboard for the UPS', 60 * 30, 60 * 28),
+  // Pinned, as someone going back and forth between two Projects would.
+  session(IDS.grafana, IDS.homelab, 'Grafana dashboard for the UPS', 60 * 30, 60 * 28, { pinnedAt: at(60 * 29) }),
   session(IDS.oldSession, IDS.homelab, 'Move Puppet to the new CA', 60 * 24 * 12, 60 * 24 * 11, {
     status: 'ARCHIVED',
     archivedAt: at(60 * 24 * 11),
   }),
-  session(IDS.blog, IDS.website, 'Write the post about the homelab rebuild', 60 * 27, 60 * 26),
+  session(IDS.blog, IDS.website, 'Write the post about the homelab rebuild', 60 * 27, 60 * 26, { pinnedAt: at(60 * 25) }),
 ];
 
 export const directories = [

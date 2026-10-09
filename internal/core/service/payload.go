@@ -222,3 +222,9 @@ func mustJSON(value any) json.RawMessage {
 	}
 	return encoded
 }
+
+// SessionPinnedPayload is the body of a session.pinned event: the Session was
+// pinned, or unpinned, to be reached from any Project.
+type SessionPinnedPayload struct {
+	Pinned bool `json:"pinned"`
+}

@@ -4,6 +4,8 @@ export const keys = {
   project: (projectId: string) => ['project', projectId] as const,
   sessions: (projectId: string, includeArchived = false) =>
     ['sessions', projectId, { includeArchived }] as const,
+  // Under 'sessions', so whatever refreshes the lists refreshes this one too.
+  pinned: () => ['sessions', 'pinned'] as const,
   snapshot: (sessionId: string) => ['snapshot', sessionId] as const,
   repository: (sessionId: string) => ['repository', sessionId] as const,
   policy: (sessionId: string) => ['policy', sessionId] as const,

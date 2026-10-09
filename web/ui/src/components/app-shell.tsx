@@ -18,6 +18,8 @@ import {
   Package,
   PanelLeftClose,
   PanelLeftOpen,
+  Pin,
+  PinOff,
   Plus,
   ShieldAlert,
   Server,
@@ -32,6 +34,8 @@ import {
   useBackends,
   useCreateProject,
   useMe,
+  usePinSession,
+  usePinnedSessions,
   useProjects,
   useSessions,
   useSnapshot,
@@ -258,6 +262,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ) : (
           <>
         <WaitingLink count={waitingCount} active={pathname === '/waiting'} />
+        <PinnedSessions current={params.sessionId} projectId={projectId} projects={projects.data ?? []} waiting={waiting} />
         <section className="space-y-2">
           <ProjectSwitcher projects={projects.data ?? []} current={projectId} onSwitch={switchProject} />
           {projectId && <ProjectNav projectId={projectId} />}
@@ -455,6 +460,78 @@ function WaitingLink({ count, active, collapsed = false }: { count: number; acti
       <span className={cn('flex-1', count > 0 && 'font-medium')}>Waiting</span>
       {count > 0 && <Badge tone="warn" className="figures">{count}</Badge>}
     </Link>
+  );
+}
+
+/**
+ * The Sessions the person pinned, whatever their Project, right under what
+ * waits: the few conversations they go back and forth between, one click
+ * apart even when the Projects are not. A row from another Project names it,
+ * since the title alone does not say where a click lands.
+ *
+ * Nothing at all until something is pinned, so a person who never pins sees
+ * the sidebar they had.
+ */
+function PinnedSessions({
+  current,
+  projectId,
+  projects,
+  waiting,
+}: {
+  current?: string;
+  projectId?: string;
+  projects: Project[];
+  waiting: Map<string, 'validation' | 'input'>;
+}) {
+  const pinned = usePinnedSessions();
+  const pin = usePinSession();
+  const sessions = pinned.data ?? [];
+  if (sessions.length === 0) return null;
+
+  const nameOf = (id: string) => projects.find((project) => project.id === id)?.name;
+  return (
+    <section data-tour="pinned" className="space-y-0.5">
+      <p className="text-muted flex items-center gap-1.5 px-2 pb-1 text-xs">
+        <Pin className="size-3" />
+        Pinned
+      </p>
+      <ul>
+        {sessions.map((session) => {
+          const elsewhere = session.projectId !== projectId ? nameOf(session.projectId) : undefined;
+          const title = session.title || 'Untitled session';
+          return (
+            <li key={session.id} className="group relative">
+              <Link
+                to="/sessions/$sessionId"
+                params={{ sessionId: session.id }}
+                title={elsewhere ? `${title} · ${elsewhere}` : title}
+                className={cn(
+                  'hover:bg-surface-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm max-md:min-h-11',
+                  current === session.id && 'bg-surface-2 font-medium',
+                )}
+              >
+                <span className="min-w-0 flex-1 truncate">{title}</span>
+                {elsewhere && (
+                  <span className="text-muted max-w-24 shrink-0 truncate text-xs font-normal">{elsewhere}</span>
+                )}
+                <SessionState state={sessionState(session, waiting)} />
+                {/* Room for the unpin button, which sits over the row's end. */}
+                <span className="w-0 shrink-0 transition-[width] md:group-focus-within:w-5 md:group-hover:w-5" />
+              </Link>
+              <button
+                type="button"
+                title="Unpin"
+                aria-label={`Unpin ${title}`}
+                onClick={() => pin.mutate({ session, pinned: false })}
+                className="text-muted hover:text-text hover:bg-surface absolute top-1/2 right-1 hidden size-6 -translate-y-1/2 items-center justify-center rounded opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100 md:flex"
+              >
+                <PinOff className="size-3.5" />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

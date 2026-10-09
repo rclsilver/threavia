@@ -367,6 +367,26 @@ func (s *Service) RenameSession(ctx context.Context, identity auth.Identity, ses
 	return session, nil
 }
 
+// SetSessionPinned pins a Session, to be reached from any Project, or unpins
+// it. Every client of the person follows, since a pin is a shortcut they
+// expect to find on the other device too.
+func (s *Service) SetSessionPinned(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, pinned bool) (domain.Session, error) {
+	session, err := s.store.SetSessionPinned(ctx, identity.UserID, sessionID, pinned)
+	if err != nil {
+		return domain.Session{}, translate(err)
+	}
+	s.emit(ctx, identity.UserID, events.TypeSessionPinned,
+		domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID},
+		SessionPinnedPayload{Pinned: pinned})
+	return session, nil
+}
+
+// PinnedSessions lists the Sessions the person pinned, across Projects.
+func (s *Service) PinnedSessions(ctx context.Context, identity auth.Identity) ([]domain.Session, error) {
+	sessions, err := s.store.PinnedSessions(ctx, identity.UserID)
+	return sessions, translate(err)
+}
+
 // SetSessionStatus archives or restores a Session.
 func (s *Service) SetSessionStatus(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, status domain.SessionStatus) (domain.Session, error) {
 	current, err := s.store.GetSession(ctx, identity.UserID, sessionID)

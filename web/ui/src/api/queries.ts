@@ -383,6 +383,43 @@ export function useRenameSession(sessionId: string) {
   });
 }
 
+/** The Sessions pinned from every Project, in the order they were pinned. */
+export function usePinnedSessions() {
+  return useQuery({
+    queryKey: keys.pinned(),
+    queryFn: () => api.get<List<Session>>('/api/v1/me/pinned-sessions').then(items),
+  });
+}
+
+/**
+ * Pinning or unpinning a Session. The list moves at once: a pin is a shortcut,
+ * and one that appears a round trip later reads as a click that missed.
+ */
+export function usePinSession() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: ({ session, pinned }: { session: Session; pinned: boolean }) =>
+      api.patch<Session>(`/api/v1/sessions/${session.id}`, { pinned }),
+    onMutate: async ({ session, pinned }) => {
+      await queries.cancelQueries({ queryKey: keys.pinned() });
+      const before = queries.getQueryData<Session[]>(keys.pinned());
+      queries.setQueryData<Session[]>(keys.pinned(), (current = []) =>
+        pinned
+          ? current.some((entry) => entry.id === session.id)
+            ? current
+            : [...current, { ...session, pinnedAt: new Date().toISOString() }]
+          : current.filter((entry) => entry.id !== session.id),
+      );
+      return { before };
+    },
+    onError: (_error, _variables, context) => queries.setQueryData(keys.pinned(), context?.before),
+    onSettled: (_data, _error, { session }) => {
+      void queries.invalidateQueries({ queryKey: ['sessions'] });
+      void queries.invalidateQueries({ queryKey: keys.snapshot(session.id) });
+    },
+  });
+}
+
 /**
  * Deleting a Session.
  *

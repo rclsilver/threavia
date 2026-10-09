@@ -35,6 +35,9 @@ type Session struct {
 	CreatedAt          time.Time  `json:"createdAt"`
 	UpdatedAt          time.Time  `json:"updatedAt"`
 	ArchivedAt         *time.Time `json:"archivedAt,omitempty"`
+	// PinnedAt is when the person pinned the Session, to reach it from any
+	// Project. Absent when it is not pinned.
+	PinnedAt *time.Time `json:"pinnedAt,omitempty"`
 	// ActiveJobStatus is the status of the oldest Job not yet finished, absent
 	// when nothing is running or queued. Filled on lists only, so a sidebar can
 	// say which Session is working without opening each one.

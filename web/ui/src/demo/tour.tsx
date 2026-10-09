@@ -39,7 +39,7 @@ const STEPS: Step[] = [
     path: SESSION(IDS.certManager),
     target: '[data-tour="sessions"]',
     title: 'Sessions, by project',
-    body: 'Each conversation with an agent is a session. The mark on the right says what it is doing — working, waiting for you, or idle — and what waits for you is pinned on top.',
+    body: 'Each conversation with an agent is a session. The mark on the right says what it is doing — working, waiting for you, or idle — and what waits for you comes first.',
   },
   {
     path: SESSION(IDS.certManager),
@@ -52,6 +52,12 @@ const STEPS: Step[] = [
     target: '[data-tour="waiting"]',
     title: 'Everything waiting for you',
     body: 'Every approval and every question, across projects, in one place — and on your phone, with a notification, when you are away from this screen.',
+  },
+  {
+    path: SESSION(IDS.certManager),
+    target: '[data-tour="pinned"]',
+    title: 'Pinned sessions',
+    body: 'The conversations you go back and forth between, one click apart even in different projects. Pin one from the button at the top of the session.',
   },
   {
     path: SESSION(IDS.certManager),

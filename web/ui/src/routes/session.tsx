@@ -1,5 +1,5 @@
 import { Link, useParams } from '@tanstack/react-router';
-import { ArrowUp, Server, Settings2, Square } from 'lucide-react';
+import { ArrowUp, Pin, Server, Settings2, Square } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import {
@@ -8,9 +8,12 @@ import {
   usePostMessage,
   useRenameSession,
   useEarlierEvents,
+  usePinSession,
+  usePinnedSessions,
   useSnapshot,
   type Delivery,
 } from '@/api/queries';
+import type { Session } from '@/api/types';
 import { AttentionPanel } from '@/components/attention';
 import { ActionError } from '@/components/ui/action-error';
 import { Badge } from '@/components/ui/badge';
@@ -148,6 +151,8 @@ export function SessionView() {
             <ActionError error={cancel.error} className="text-xs" />
           </div>
         </div>
+        <div className="flex items-center gap-1">
+        <PinButton session={data.session} />
         {/* Everything about the Session that is not the conversation is a page
             of its own, one step away. */}
         <Button asChild variant="ghost" size="icon" title="Session settings">
@@ -155,6 +160,7 @@ export function SessionView() {
             <Settings2 />
           </Link>
         </Button>
+        </div>
       </header>
 
       <Timeline
@@ -184,6 +190,31 @@ export function SessionView() {
         field={message}
       />
     </div>
+  );
+}
+
+/**
+ * Pins the Session to the sidebar, under what waits, to be one click away
+ * from any Project. Read from the pinned list when it is there, so the button
+ * and the sidebar change together.
+ */
+function PinButton({ session }: { session: Session }) {
+  const pinned = usePinnedSessions();
+  const pin = usePinSession();
+  const isPinned = pinned.data ? pinned.data.some((entry) => entry.id === session.id) : Boolean(session.pinnedAt);
+  const label = isPinned ? 'Unpin from the sidebar' : 'Pin to the sidebar';
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      title={label}
+      aria-label={label}
+      aria-pressed={isPinned}
+      onClick={() => pin.mutate({ session, pinned: !isPinned })}
+      className={cn(isPinned && 'text-accent hover:text-accent')}
+    >
+      <Pin className={cn(isPinned && 'fill-current')} />
+    </Button>
   );
 }
 
