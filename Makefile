@@ -79,6 +79,33 @@ web-lint: $(WEB_DEPS) ## Type-check and lint the web client
 web-demo-check: ## Fail if the client calls an API route the /demo server does not answer
 	cd web/ui && npm run check:demo
 
+# The VS Code extension has its own dependencies, stamped the same way.
+VSCODE_DEPS := clients/vscode/node_modules/.package-lock.json
+
+$(VSCODE_DEPS): clients/vscode/package-lock.json clients/vscode/package.json
+	cd clients/vscode && npm ci --no-audit --no-fund
+
+.PHONY: vscode-deps
+vscode-deps: $(VSCODE_DEPS) ## Install the VS Code extension dependencies from the lockfile
+
+.PHONY: vscode-generate
+vscode-generate: $(VSCODE_DEPS) ## Regenerate the VS Code extension's API types from api/openapi.yaml
+	cd clients/vscode && npm run generate:api
+
+.PHONY: vscode-check
+vscode-check: $(VSCODE_DEPS) ## Check the VS Code extension: API types, type-check, lint and tests
+	@cd clients/vscode && npm run generate:api >/dev/null 2>&1
+	@if ! git diff --quiet -- clients/vscode/src/api/schema.d.ts; then \
+		echo "clients/vscode/src/api/schema.d.ts is stale, run: make vscode-generate"; \
+		git diff --stat -- clients/vscode/src/api/schema.d.ts; \
+		exit 1; \
+	fi
+	cd clients/vscode && npm run typecheck && npm run lint && npm test
+
+.PHONY: vscode-package
+vscode-package: $(VSCODE_DEPS) ## Package the VS Code extension into clients/vscode/threavia.vsix
+	cd clients/vscode && npm run package
+
 .PHONY: dev-web
 dev-web: ## Serve the web client with hot reload on http://localhost:5173
 	docker compose --profile web up -d --build web
@@ -156,7 +183,7 @@ test-db: ## Run the test suite including the database integration tests
 	THREAVIA_TEST_POSTGRES_URL=$(TEST_POSTGRES_URL) go test ./...
 
 .PHONY: verify
-verify: fmt-check tidy-check generate-check web-generate-check web-demo-check lint test ## Run every check CI runs
+verify: fmt-check tidy-check generate-check web-generate-check web-demo-check vscode-check lint test ## Run every check CI runs
 
 .PHONY: fmt-check
 fmt-check: ## Fail if any hand-written Go source is not gofmt-ed
