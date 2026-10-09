@@ -76,6 +76,9 @@ jobs:
       - name: "Type-check and lint the web client"
         run: "make web-lint"
 
+      - name: "Check that the demo answers every call of the client"
+        run: "make web-demo-check"
+
       - name: "Check the protocol for breaking changes"
         # A tag is cut from the default branch, so there is nothing to compare.
         if: "!startsWith(github.ref, 'refs/tags/v')"

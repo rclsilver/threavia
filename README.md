@@ -260,6 +260,8 @@ only additions to the proposed tree; the reasons are recorded in
 - [`docs/protocol.md`](docs/protocol.md) — the Backend ↔ Core control protocol
 - [`docs/api.md`](docs/api.md) — the client HTTP API, and the contract it is
   generated from
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — what a change has to carry with it,
+  the demo included
 
 ## License
 

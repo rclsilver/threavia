@@ -75,6 +75,10 @@ web-generate-check: $(WEB_DEPS) ## Fail if the TypeScript API types are not what
 web-lint: $(WEB_DEPS) ## Type-check and lint the web client
 	cd web/ui && npm run typecheck && npm run lint
 
+.PHONY: web-demo-check
+web-demo-check: ## Fail if the client calls an API route the /demo server does not answer
+	cd web/ui && npm run check:demo
+
 .PHONY: dev-web
 dev-web: ## Serve the web client with hot reload on http://localhost:5173
 	docker compose --profile web up -d --build web
@@ -152,7 +156,7 @@ test-db: ## Run the test suite including the database integration tests
 	THREAVIA_TEST_POSTGRES_URL=$(TEST_POSTGRES_URL) go test ./...
 
 .PHONY: verify
-verify: fmt-check tidy-check generate-check web-generate-check lint test ## Run every check CI runs
+verify: fmt-check tidy-check generate-check web-generate-check web-demo-check lint test ## Run every check CI runs
 
 .PHONY: fmt-check
 fmt-check: ## Fail if any hand-written Go source is not gofmt-ed
