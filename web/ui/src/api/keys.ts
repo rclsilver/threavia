@@ -5,6 +5,7 @@ export const keys = {
   sessions: (projectId: string, includeArchived = false) =>
     ['sessions', projectId, { includeArchived }] as const,
   snapshot: (sessionId: string) => ['snapshot', sessionId] as const,
+  repository: (sessionId: string) => ['repository', sessionId] as const,
   policy: (sessionId: string) => ['policy', sessionId] as const,
   projectPolicy: (projectId: string) => ['project-policy', projectId] as const,
   attention: () => ['attention'] as const,

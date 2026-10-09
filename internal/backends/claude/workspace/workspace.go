@@ -314,12 +314,7 @@ func gitWith(ctx context.Context, directory string, env []string, args ...string
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = directory
-	// A repository the backend account does not own would otherwise make git
-	// refuse, and a refusal here must stay a missing summary, never a failed Job.
-	cmd.Env = append(append(cmd.Environ(), "GIT_OPTIONAL_LOCKS=0"), env...)
-
+	cmd := gitCommand(ctx, directory, env, args...)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = nil
@@ -327,4 +322,15 @@ func gitWith(ctx context.Context, directory string, env []string, args ...string
 		return "", err
 	}
 	return stdout.String(), nil
+}
+
+// gitCommand prepares one git command in a directory, taking no optional lock:
+// reading a repository someone is working in must never get in their way.
+func gitCommand(ctx context.Context, directory string, env []string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = directory
+	// A repository the backend account does not own would otherwise make git
+	// refuse, and a refusal here must stay a missing summary, never a failed Job.
+	cmd.Env = append(append(cmd.Environ(), "GIT_OPTIONAL_LOCKS=0"), env...)
+	return cmd
 }

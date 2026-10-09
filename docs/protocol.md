@@ -30,8 +30,9 @@ provider-specific RPCs, and no provider assumption in any message.
 | `SkillInventory` | `EventAck` |
 | `SkillFetchRequest` | `CoreToolResponse` |
 | `WorkspaceDiff` | `SkillBundle` |
-| | `UpdateJobPolicy` |
+| `RepositoryStatus` | `UpdateJobPolicy` |
 | | `WorkspaceDiffRequest` |
+| | `RepositoryStatusRequest` |
 
 ## Connection
 
@@ -129,6 +130,23 @@ transit.
 backend, as metadata. Core never fetches their content, which is what lets a
 backend expose a Skill that only exists behind a corporate network, and what
 lets a handoff report that another backend cannot run it (section 18).
+
+## Working directory
+
+The working directory stays on the backend. Core asks about it when someone
+looks, and keeps nothing it hears back:
+
+- `WorkspaceDiffRequest` asks for the diff of one file a `WorkspaceChanged`
+  listed, between the two trees it named; the backend answers `WorkspaceDiff`.
+- `RepositoryStatusRequest` asks where a Session's working directory stands in
+  git — branch, distance from its upstream, what is not committed — and the
+  backend answers `RepositoryStatus`. It reads without writing. With `fetch`,
+  it fetches the remote first, never prompting for a credential; only the
+  remote-tracking branches change, and a fetch that fails is said in
+  `fetch_error` while the rest is the state as last known.
+
+Both answers carry the request's `request_id`. They are optional: a backend
+that does not implement them answers with an `UNSUPPORTED` error.
 
 ## Compatibility
 

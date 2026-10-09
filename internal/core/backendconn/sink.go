@@ -51,6 +51,9 @@ type Sink interface {
 
 	// WorkspaceDiff receives the answer to a diff Core asked a backend for.
 	WorkspaceDiff(ctx context.Context, instanceID domain.BackendInstanceID, diff *backendv1.WorkspaceDiff)
+	// RepositoryStatus receives the answer to a repository status Core asked a
+	// backend for.
+	RepositoryStatus(ctx context.Context, instanceID domain.BackendInstanceID, status *backendv1.RepositoryStatus)
 }
 
 // NopSink accepts everything and does nothing. It keeps the control service
@@ -102,3 +105,7 @@ func (NopSink) SkillBundle(context.Context, domain.BackendInstanceID, string) (i
 
 // WorkspaceDiff implements Sink.
 func (NopSink) WorkspaceDiff(context.Context, domain.BackendInstanceID, *backendv1.WorkspaceDiff) {}
+
+// RepositoryStatus implements Sink.
+func (NopSink) RepositoryStatus(context.Context, domain.BackendInstanceID, *backendv1.RepositoryStatus) {
+}

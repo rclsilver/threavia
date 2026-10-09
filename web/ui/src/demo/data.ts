@@ -669,3 +669,24 @@ export const ingressDiff = `--- a/kubernetes/ingress-nginx/values.yaml
      timeoutSeconds: 10
    resources:
 `;
+
+// ---------------------------------------------------------------- repositories
+
+/**
+ * Where each Session's working directory stands in git. The cert-manager one
+ * is behind origin without knowing it: a refresh from origin finds the commit
+ * someone pushed from another machine.
+ */
+const repository = (directory: string, fields: Record<string, unknown>) => ({
+  directory, tracked: true, ahead: 0, behind: 0, upstreamGone: false,
+  staged: 0, unstaged: 0, untracked: 0, conflicted: 0, upstream: 'origin/main', ...fields,
+});
+
+export const repositories: Record<string, Record<string, unknown>> = {
+  [IDS.certManager]: repository('/home/alex/src/homelab', { branch: 'cert-manager-1.16', head: '4f2a9c1', upstream: 'origin/cert-manager-1.16', ahead: 2, unstaged: 3, untracked: 1, fetchedAt: at(60 * 5) }),
+  [IDS.ingress]: repository('/home/alex/src/homelab', { branch: 'main', head: '9be03d7', fetchedAt: at(52) }),
+  [IDS.backups]: repository('/srv/homelab', { branch: 'main', head: '9be03d7', behind: 4, fetchedAt: at(60 * 24 * 2) }),
+  [IDS.grafana]: repository('/home/alex/src/homelab', { branch: 'grafana-ups', head: 'c71d5e0', upstream: undefined, staged: 2, fetchedAt: at(60 * 31) }),
+  [IDS.blog]: repository('/home/alex/src/site', { branch: 'drafts/homelab-rebuild', head: '12ab9f4', upstream: 'origin/drafts/homelab-rebuild', ahead: 1, fetchedAt: at(60 * 26) }),
+  [IDS.oldSession]: { directory: '/home/alex', tracked: false, ahead: 0, behind: 0, upstreamGone: false, staged: 0, unstaged: 0, untracked: 0, conflicted: 0 },
+};

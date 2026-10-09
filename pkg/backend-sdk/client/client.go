@@ -317,6 +317,10 @@ func (c *Client) dispatch(ctx context.Context, msg *backendv1.CoreToBackend) {
 		go c.answerDiff(ctx, body.WorkspaceDiffRequest)
 		return
 
+	case *backendv1.CoreToBackend_RepositoryStatusRequest:
+		go c.answerRepositoryStatus(ctx, body.RepositoryStatusRequest)
+		return
+
 	case *backendv1.CoreToBackend_StartJob:
 		err = c.handler.OnStartJob(ctx, body.StartJob)
 	case *backendv1.CoreToBackend_CancelJob:
@@ -547,6 +551,26 @@ func (c *Client) answerDiff(ctx context.Context, req *backendv1.WorkspaceDiffReq
 		Message: &backendv1.BackendToCore_WorkspaceDiff{WorkspaceDiff: answer},
 	}); err != nil {
 		c.logger.Warn("cannot answer a diff request", slog.String("error", err.Error()))
+	}
+}
+
+// answerRepositoryStatus reads where a working directory stands in git and
+// sends it back under the same request id.
+func (c *Client) answerRepositoryStatus(ctx context.Context, req *backendv1.RepositoryStatusRequest) {
+	var answer *backendv1.RepositoryStatus
+	if reader, ok := c.handler.(RepositoryReader); ok {
+		answer = reader.OnRepositoryStatusRequest(ctx, req)
+	}
+	if answer == nil {
+		answer = &backendv1.RepositoryStatus{Error: &backendv1.Error{
+			Code: "UNSUPPORTED", Message: "this backend cannot tell where a repository stands",
+		}}
+	}
+	answer.RequestId = req.GetRequestId()
+	if err := c.enqueue(ctx, &backendv1.BackendToCore{
+		Message: &backendv1.BackendToCore_RepositoryStatus{RepositoryStatus: answer},
+	}); err != nil {
+		c.logger.Warn("cannot answer a repository status request", slog.String("error", err.Error()))
 	}
 }
 

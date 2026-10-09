@@ -716,6 +716,40 @@ paths:
         "503":
           $ref: "#/components/responses/Error"
 
+  /api/v1/sessions/{sessionId}/repository:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    get:
+      tags: [sessions]
+      summary: Where the Session's working directory stands in git
+      description: |
+        Read by the backend of the Session's current Run, in the working
+        directory bound there, when asked: branch, distance from its upstream,
+        what is not committed. Core keeps none of it. Without fetch, ahead and
+        behind compare with the remote as last fetched, and fetchedAt says
+        when that was. A directory not yet located on that backend answers
+        409; a backend that is offline answers 503.
+      parameters:
+        - name: fetch
+          in: query
+          schema: { type: boolean, default: false }
+          description: |
+            Fetch the remote first. Only the remote-tracking branches change;
+            the files, the index and the branch checked out do not. A fetch
+            that fails is said in fetchError, with the rest as last known.
+      responses:
+        "200":
+          description: The state of the repository
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Repository" }
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+
   /api/v1/sessions/{sessionId}/messages:
     parameters:
       - $ref: "#/components/parameters/SessionID"
@@ -2198,6 +2232,45 @@ components:
         truncated:
           type: boolean
           description: Set when the diff was cut to stay a reasonable answer.
+
+    Repository:
+      type: object
+      required: [directory, tracked, ahead, behind, upstreamGone, staged, unstaged, untracked, conflicted, checkedAt]
+      properties:
+        directory:
+          type: string
+          description: The directory read, as the backend resolved it.
+        tracked:
+          type: boolean
+          description: False for a directory outside any git repository; nothing else is then set.
+        branch:
+          type: string
+          description: Absent when HEAD is detached.
+        head:
+          type: string
+          description: The commit checked out, abbreviated. Absent before the first commit.
+        upstream:
+          type: string
+          description: The branch this one tracks, such as origin/main. Absent when none.
+        ahead: { type: integer, format: int32 }
+        behind: { type: integer, format: int32 }
+        upstreamGone:
+          type: boolean
+          description: The tracked branch no longer exists on the remote.
+        staged: { type: integer, format: int32 }
+        unstaged: { type: integer, format: int32 }
+        untracked: { type: integer, format: int32 }
+        conflicted: { type: integer, format: int32 }
+        fetchedAt:
+          type: string
+          format: date-time
+          description: When the repository last fetched. Absent when it never did.
+        fetchError:
+          type: string
+          description: Why a fetch asked for did not happen.
+        checkedAt:
+          type: string
+          format: date-time
 
     Snapshot:
       type: object

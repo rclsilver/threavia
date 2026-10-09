@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/backends/claude/runner"
@@ -112,6 +113,40 @@ func (a *Adapter) OnWorkspaceDiffRequest(ctx context.Context, req *backendv1.Wor
 		return &backendv1.WorkspaceDiff{Error: &backendv1.Error{Code: "UNAVAILABLE", Message: err.Error()}}
 	}
 	return &backendv1.WorkspaceDiff{Diff: diff.Text, Binary: diff.Binary, Truncated: diff.Truncated}
+}
+
+// OnRepositoryStatusRequest implements client.RepositoryReader: where a
+// Session's working directory stands in git, read when someone looks.
+func (a *Adapter) OnRepositoryStatusRequest(ctx context.Context, req *backendv1.RepositoryStatusRequest) *backendv1.RepositoryStatus {
+	directory := req.GetDirectory()
+	if directory == "" {
+		// A Session with no working directory runs where this backend puts
+		// unscoped work, and that is the directory it is asking about.
+		directory = a.cfg.Claude.DefaultWorkingDirectory
+	}
+	repo, err := workspace.StatusOf(ctx, directory, req.GetFetch())
+	if err != nil {
+		return &backendv1.RepositoryStatus{Directory: directory, Error: &backendv1.Error{Code: "UNAVAILABLE", Message: err.Error()}}
+	}
+	status := &backendv1.RepositoryStatus{
+		Directory:    repo.Directory,
+		Tracked:      repo.Tracked,
+		Branch:       repo.Branch,
+		Head:         repo.Head,
+		Upstream:     repo.Upstream,
+		Ahead:        repo.Ahead,
+		Behind:       repo.Behind,
+		UpstreamGone: repo.UpstreamGone,
+		Staged:       repo.Staged,
+		Unstaged:     repo.Unstaged,
+		Untracked:    repo.Untracked,
+		Conflicted:   repo.Conflicted,
+		FetchError:   repo.FetchError,
+	}
+	if !repo.FetchedAt.IsZero() {
+		status.FetchedAt = timestamppb.New(repo.FetchedAt)
+	}
+	return status
 }
 
 // fileState maps a detected state onto the protocol enum.

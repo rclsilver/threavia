@@ -14,6 +14,7 @@ import {
 import { AttentionPanel } from '@/components/attention';
 import { ActionError } from '@/components/ui/action-error';
 import { Badge } from '@/components/ui/badge';
+import { RepositoryStatus } from '@/components/repository-status';
 import { Timeline, type Pending } from '@/components/timeline';
 import { Button } from '@/components/ui/button';
 import { useStream } from '@/use-stream';
@@ -118,7 +119,7 @@ export function SessionView() {
               start at the same place or the two read as misaligned.
               The badge rides here rather than beside the title, which has to
               keep the whole width for the moment it becomes a rename field. */}
-          <div className="text-muted flex items-center gap-2 pl-1.5 text-xs">
+          <div className="text-muted flex flex-wrap items-center gap-x-2 gap-y-1 pl-1.5 text-xs">
             {active ? (
               <Badge tone={active.status === 'RUNNING' ? 'accent' : 'warn'}>
                 {humanise(active.status)}
@@ -133,6 +134,7 @@ export function SessionView() {
                 {backend.name}
               </span>
             )}
+            <RepositoryStatus sessionId={sessionId} />
             {active && working && (
               // A liveness signal, not history: it says the agent is still
               // there between two things worth remembering. Shown only while a

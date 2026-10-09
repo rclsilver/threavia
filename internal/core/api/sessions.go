@@ -16,6 +16,7 @@ func (h *handler) registerSessions(mux *http.ServeMux) {
 	h.handle(mux, "DELETE /api/v1/sessions/{sessionId}", h.deleteSession)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/events", h.sessionHistory)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/diff", h.workspaceDiff)
+	h.handle(mux, "GET /api/v1/sessions/{sessionId}/repository", h.repository)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/messages", h.postMessage)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/archive", h.archiveSession)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/restore", h.restoreSession)
@@ -233,4 +234,16 @@ func (h *handler) postMessage(w http.ResponseWriter, r *http.Request, identity a
 		status = http.StatusOK
 	}
 	writeJSON(w, status, job)
+}
+
+// repository serves where a Session's working directory stands in git, read
+// by the backend holding it; ?fetch=true fetches the remote first.
+func (h *handler) repository(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	repo, err := h.svc.RepositoryOf(r.Context(), identity,
+		domain.SessionID(r.PathValue("sessionId")), r.URL.Query().Get("fetch") == "true")
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, repo)
 }

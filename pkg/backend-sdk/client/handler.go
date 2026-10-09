@@ -56,6 +56,16 @@ type WorkspaceDiffer interface {
 	OnWorkspaceDiffRequest(ctx context.Context, req *backendv1.WorkspaceDiffRequest) *backendv1.WorkspaceDiff
 }
 
+// RepositoryReader is implemented by a Handler that can tell where a Session's
+// working directory stands in git: branch, distance from its upstream, what is
+// not committed. Optional: a backend without it answers that it cannot.
+//
+// Called on a goroutine of its own: reading a repository, and fetching it when
+// asked, must not hold the control stream.
+type RepositoryReader interface {
+	OnRepositoryStatusRequest(ctx context.Context, req *backendv1.RepositoryStatusRequest) *backendv1.RepositoryStatus
+}
+
 // BaseHandler implements Handler by rejecting every command. Embed it to
 // implement only the commands a backend actually supports.
 type BaseHandler struct{}

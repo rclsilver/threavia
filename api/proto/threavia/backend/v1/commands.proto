@@ -275,3 +275,16 @@ message SkillBundle {
   // Set instead of the chunks when the bundle cannot be served.
   Error error = 8;
 }
+
+// Asks the backend where a Session's working directory stands in git: branch,
+// distance from its upstream, what is not committed. Answered with a
+// RepositoryStatus carrying the same request id. Nothing is written, unless
+// fetch is set: then the remote-tracking branches are fetched first, and only
+// they change.
+message RepositoryStatusRequest {
+  string request_id = 1;
+  // The physical path, as bound for this backend. Empty for a Session with no
+  // working directory: the backend reads the one it runs such work in.
+  string directory = 2;
+  bool fetch = 3;
+}

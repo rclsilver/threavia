@@ -94,6 +94,7 @@ message BackendToCore {
     SkillInventory skill_inventory = 9;
     SkillFetchRequest skill_fetch_request = 10;
     WorkspaceDiff workspace_diff = 11;
+    RepositoryStatus repository_status = 12;
   }
 }
 
@@ -115,6 +116,7 @@ message CoreToBackend {
     SkillBundle skill_bundle = 12;
     UpdateJobPolicy update_job_policy = 13;
     WorkspaceDiffRequest workspace_diff_request = 14;
+    RepositoryStatusRequest repository_status_request = 15;
   }
 }
 
@@ -154,4 +156,35 @@ message WorkspaceDiff {
   // Set instead of the diff when it cannot be computed, for instance once the
   // trees were collected by git.
   Error error = 5;
+}
+
+// Where a working directory stands in git, in answer to a
+// RepositoryStatusRequest.
+message RepositoryStatus {
+  string request_id = 1;
+  // The directory read, as this backend resolved it.
+  string directory = 2;
+  // False for a directory outside any git repository; nothing below is set.
+  bool tracked = 3;
+  // Empty when HEAD is detached.
+  string branch = 4;
+  // The commit checked out, abbreviated. Empty before the first commit.
+  string head = 5;
+  // The branch this one tracks, such as origin/main. Empty when none.
+  string upstream = 6;
+  // Commits only here, and only there, as of the last fetch.
+  int32 ahead = 7;
+  int32 behind = 8;
+  // The tracked branch no longer exists on the remote.
+  bool upstream_gone = 9;
+  int32 staged = 10;
+  int32 unstaged = 11;
+  int32 untracked = 12;
+  int32 conflicted = 13;
+  // When the repository last fetched. Unset when it never did.
+  google.protobuf.Timestamp fetched_at = 14;
+  // Why a fetch asked for did not happen; the rest is the state as last known.
+  string fetch_error = 15;
+  // Set instead of the rest when the directory cannot be read at all.
+  Error error = 16;
 }

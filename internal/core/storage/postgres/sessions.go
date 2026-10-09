@@ -125,3 +125,37 @@ func scanSession(row scanner) (domain.Session, error) {
 		&session.WorkingDirectoryID, &session.CreatedAt, &session.UpdatedAt, &session.ArchivedAt)
 	return session, classify(err, "read session")
 }
+
+// SessionPlace is where a Session's work happens: the backend of its current
+// Run, and its working directory as bound on that backend.
+type SessionPlace struct {
+	BackendInstanceID domain.BackendInstanceID
+	// KnownDirectoryName is set when the Session has a working directory, and
+	// Path when that directory is located on the backend. A Session with
+	// neither runs wherever the backend puts unscoped work.
+	KnownDirectoryName *string
+	Path               *string
+}
+
+// SessionPlace finds where a Session of this owner works now.
+func (s *Store) SessionPlace(ctx context.Context, ownerID domain.UserID, id domain.SessionID) (SessionPlace, error) {
+	var place SessionPlace
+	err := s.q.QueryRow(ctx, `
+		SELECT r.backend_instance_id, d.name, b.path
+		FROM sessions s
+		JOIN projects p ON p.id = s.project_id
+		JOIN LATERAL (
+			SELECT backend_instance_id FROM runs
+			WHERE session_id = s.id ORDER BY created_at DESC LIMIT 1
+		) r ON true
+		LEFT JOIN known_directories d ON d.id = s.working_directory_id
+		LEFT JOIN known_directory_bindings b
+		       ON b.known_directory_id = s.working_directory_id
+		      AND b.backend_instance_id = r.backend_instance_id
+		WHERE s.id = $1 AND p.owner_id = $2`, id, ownerID).Scan(
+		&place.BackendInstanceID, &place.KnownDirectoryName, &place.Path)
+	if err != nil {
+		return place, classify(err, "find where a session works")
+	}
+	return place, nil
+}

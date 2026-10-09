@@ -1280,6 +1280,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{sessionId}/repository": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["SessionID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Where the Session's working directory stands in git
+         * @description Read by the backend of the Session's current Run, in the working
+         *     directory bound there, when asked: branch, distance from its upstream,
+         *     what is not committed. Core keeps none of it. Without fetch, ahead and
+         *     behind compare with the remote as last fetched, and fetchedAt says
+         *     when that was. A directory not yet located on that backend answers
+         *     409; a backend that is offline answers 503.
+         *
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Fetch the remote first. Only the remote-tracking branches change;
+                     *     the files, the index and the branch checked out do not. A fetch
+                     *     that fails is said in fetchError, with the rest as last known.
+                     *      */
+                    fetch?: boolean;
+                };
+                header?: never;
+                path: {
+                    sessionId: components["parameters"]["SessionID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The state of the repository */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Repository"];
+                    };
+                };
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+                503: components["responses"]["Error"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{sessionId}/messages": {
         parameters: {
             query?: never;
@@ -3674,6 +3732,41 @@ export interface components {
             binary: boolean;
             /** @description Set when the diff was cut to stay a reasonable answer. */
             truncated: boolean;
+        };
+        Repository: {
+            /** @description The directory read, as the backend resolved it. */
+            directory: string;
+            /** @description False for a directory outside any git repository; nothing else is then set. */
+            tracked: boolean;
+            /** @description Absent when HEAD is detached. */
+            branch?: string;
+            /** @description The commit checked out, abbreviated. Absent before the first commit. */
+            head?: string;
+            /** @description The branch this one tracks, such as origin/main. Absent when none. */
+            upstream?: string;
+            /** Format: int32 */
+            ahead: number;
+            /** Format: int32 */
+            behind: number;
+            /** @description The tracked branch no longer exists on the remote. */
+            upstreamGone: boolean;
+            /** Format: int32 */
+            staged: number;
+            /** Format: int32 */
+            unstaged: number;
+            /** Format: int32 */
+            untracked: number;
+            /** Format: int32 */
+            conflicted: number;
+            /**
+             * Format: date-time
+             * @description When the repository last fetched. Absent when it never did.
+             */
+            fetchedAt?: string;
+            /** @description Why a fetch asked for did not happen. */
+            fetchError?: string;
+            /** Format: date-time */
+            checkedAt: string;
         };
         Snapshot: {
             session: components["schemas"]["Session"];

@@ -321,6 +321,16 @@ const routes: [string, RegExp, Handler][] = [
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/events$/, () => list([])],
   ['POST', /^\/api\/v1\/sessions\/([^/]+)\/messages$/, (m, body) => answer(m[1], text(body.message), body.delivery as string | undefined)],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/diff$/, (_m, _b, query) => ({ path: query.get('path'), diff: data.ingressDiff, binary: false, truncated: false })],
+  ['GET', /^\/api\/v1\/sessions\/([^/]+)\/repository$/, (m, _b, query) => {
+    const repo = data.repositories[m[1]];
+    if (!repo) throw notFound('This session');
+    if (query.get('fetch') === 'true' && repo.tracked) {
+      // Origin heard from now: the cert-manager branch learns of a push.
+      repo.fetchedAt = new Date().toISOString();
+      if (m[1] === data.IDS.certManager) repo.behind = 1;
+    }
+    return { ...repo, checkedAt: new Date().toISOString() };
+  }],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/policy$/, (m) => effectivePolicy(m[1])],
   ['PUT', /^\/api\/v1\/sessions\/([^/]+)\/policy$/, (m, body) => {
     state.sessionPolicies[m[1]] = body && Object.keys(body).length ? body : null;

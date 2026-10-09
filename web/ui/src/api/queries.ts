@@ -23,6 +23,7 @@ import type {
   List,
   Me,
   Project,
+  Repository,
   Schedule,
   Session,
   Skill,
@@ -244,6 +245,32 @@ export function useFileDiff(sessionId: string, event: number, path: string, enab
     enabled,
     staleTime: Infinity,
     retry: false,
+  });
+}
+
+/**
+ * Where the Session's working directory stands in git, read by its backend.
+ *
+ * Read again when the window comes back and when work ends, since both are
+ * when it may have changed; never fetched from the remote unless asked, with
+ * useFetchRepository.
+ */
+export function useRepository(sessionId: string) {
+  return useQuery({
+    queryKey: keys.repository(sessionId),
+    queryFn: () => api.get<Repository>(`/api/v1/sessions/${sessionId}/repository`),
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+}
+
+/** Fetches the remote first, so ahead and behind are true as of now. */
+export function useFetchRepository(sessionId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.get<Repository>(`/api/v1/sessions/${sessionId}/repository?fetch=true`),
+    onSuccess: (repository) => queries.setQueryData(keys.repository(sessionId), repository),
   });
 }
 
