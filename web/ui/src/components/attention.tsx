@@ -254,6 +254,7 @@ function UserInputCard({ request, showSession }: { request: UserInputRequest; sh
   return (
     <section
       aria-label="Question from the agent"
+      data-field-scope
       className="bg-surface border-border rounded-(--radius-card) border p-3 shadow-sm"
     >
       <div className="flex items-center gap-2">

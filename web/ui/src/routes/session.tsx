@@ -43,7 +43,10 @@ export function SessionView() {
     if ((event.nativeEvent as PointerEvent).pointerType === 'touch') return;
     if (target.closest('a, button, input, textarea, select, label, summary, [role], [contenteditable="true"]')) return;
     if (window.getSelection()?.toString()) return;
-    message.current?.focus({ preventScroll: true });
+    // A card with a field of its own — a question waiting for an answer —
+    // takes the click for that field: it is what the person came to fill.
+    const own = target.closest('[data-field-scope]')?.querySelector<HTMLElement>('input, textarea');
+    (own ?? message.current)?.focus({ preventScroll: true });
   };
 
   // The snapshot is a point the stream has already passed, so a reconnection
