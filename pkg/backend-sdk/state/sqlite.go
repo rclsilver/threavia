@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -66,8 +67,9 @@ type SQLiteStore struct {
 
 // OpenSQLite opens, creating the file and its parent directory if needed. On a
 // laptop this is ~/.threavia/backend.db; a Kubernetes backend points it at a
-// small persistent volume.
-func OpenSQLite(path string) (*SQLiteStore, error) {
+// small persistent volume. The logger hears about permissions that could not be
+// tightened, which is worth knowing but not worth refusing to start over.
+func OpenSQLite(path string, logger *slog.Logger) (*SQLiteStore, error) {
 	if path == "" {
 		return nil, errors.New("a state path is required")
 	}
@@ -75,7 +77,20 @@ func OpenSQLite(path string) (*SQLiteStore, error) {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, fmt.Errorf("create the state directory: %w", err)
 		}
+		// MkdirAll leaves an existing directory as it was, and one made by an
+		// earlier version or by a service manager is commonly 0755.
+		tightenDirectory(dir, logger)
 	}
+
+	// The file holds the backend credential, which lets whoever reads it act as
+	// this backend towards Core. Made before SQLite opens it, because SQLite
+	// would create it with the process umask, and its -wal and -shm files take
+	// the mode of the database they belong to.
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("create the local state: %w", err)
+	}
+	_ = file.Close()
 
 	// WAL keeps a reader from blocking the writer, and the busy timeout absorbs
 	// the brief contention between the event writer and the replay reader.
@@ -88,7 +103,41 @@ func OpenSQLite(path string) (*SQLiteStore, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("initialise the local state: %w", err)
 	}
+	// After the first write, so the -wal and -shm files exist: a state left by
+	// an earlier version is still 0644, and its companions with it.
+	for _, file := range []string{path, path + "-wal", path + "-shm"} {
+		tightenFile(file, logger)
+	}
 	return &SQLiteStore{db: db}, nil
+}
+
+// tightenFile makes a state file readable by this account only.
+func tightenFile(path string, logger *slog.Logger) {
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() == 0o600 {
+		return
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		logger.Warn("cannot make the local state private to this account",
+			slog.String("path", path), slog.String("error", err.Error()))
+	}
+}
+
+// tightenDirectory closes the state directory to other accounts, if it is ours.
+//
+// Only if it is ours: a state path can name a file in a directory this account
+// merely writes to, and closing someone else's directory is not this backend's
+// call. As root every directory is ours, including shared ones such as
+// /var/lib that a careless state path could name, so root leaves it alone.
+func tightenDirectory(dir string, logger *slog.Logger) {
+	info, err := os.Stat(dir)
+	if err != nil || info.Mode().Perm()&0o077 == 0 || os.Getuid() == 0 || !ownedByUs(info) {
+		return
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		logger.Warn("cannot make the state directory private to this account",
+			slog.String("path", dir), slog.String("error", err.Error()))
+	}
 }
 
 // LoadIdentity implements Store.

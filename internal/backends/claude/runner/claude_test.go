@@ -267,6 +267,84 @@ func TestRunResumesTheNativeSession(t *testing.T) {
 	}
 }
 
+// TestTheEndpointTokenStaysOffTheCommandLine pins that the token guarding a
+// Job's endpoint reaches the provider through a file only this account can
+// read. A command line is readable by every account on the machine, and the
+// token is what keeps another local process away from the Job's prompts and
+// project knowledge.
+func TestTheEndpointTokenStaysOffTheCommandLine(t *testing.T) {
+	t.Parallel()
+
+	for _, scratch := range []string{"", t.TempDir()} {
+		// What the provider saw is recorded while it runs, since the file is
+		// meant to be gone afterwards.
+		seen := t.TempDir()
+		binary, argsFile := fakeClaude(t, `
+prev=""
+for arg in "$@"; do
+  [ "$prev" = "--mcp-config" ] && config="$arg"
+  prev="$arg"
+done
+stat -c %a "$config" > `+filepath.Join(seen, "mode")+`
+cat "$config" > `+filepath.Join(seen, "config")+`
+echo '{"type":"result","subtype":"success","is_error":false,"result":"ok"}'
+`)
+		tools := mcp.New(slog.New(slog.NewTextHandler(io.Discard, nil)))
+		tools.SetAsker(nil)
+		if err := tools.Start(); err != nil {
+			t.Fatalf("starting the tool endpoint: %v", err)
+		}
+		t.Cleanup(func() { _ = tools.Close(context.Background()) })
+		claude := runner.NewClaude(binary, tools, runner.Options{Scratch: scratch},
+			slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+		if err := claude.Run(context.Background(), runner.StartParams{
+			RunID: "run-1", JobID: "job-1", Prompt: "Bonjour", WorkingDirectory: t.TempDir(),
+		}, &recordingSink{}); err != nil {
+			t.Fatalf("scratch %q: running the job: %v", scratch, err)
+		}
+
+		args := readArgs(t, argsFile)
+		path := ""
+		for i, arg := range args {
+			if arg == "--mcp-config" && i+1 < len(args) {
+				path = args[i+1]
+			}
+		}
+		config, err := os.ReadFile(filepath.Join(seen, "config"))
+		if err != nil {
+			t.Fatalf("scratch %q: reading what the provider was configured with: %v", scratch, err)
+		}
+		_, token, found := strings.Cut(strings.TrimSpace(string(config)), "/mcp/")
+		token, _, _ = strings.Cut(token, `"`)
+		if !found || token == "" {
+			t.Fatalf("scratch %q: the provider read %q from --mcp-config %q, not a tool configuration",
+				scratch, config, path)
+		}
+		for _, arg := range args {
+			if strings.Contains(arg, token) {
+				t.Errorf("scratch %q: the endpoint token is on the command line: %q", scratch, arg)
+			}
+		}
+
+		mode, err := os.ReadFile(filepath.Join(seen, "mode"))
+		if err != nil || strings.TrimSpace(string(mode)) != "600" {
+			t.Errorf("scratch %q: the configuration was mode %q (%v), want 600", scratch, mode, err)
+		}
+		if scratch != "" && filepath.Dir(path) != filepath.Join(scratch, "run-1") {
+			t.Errorf("the configuration was written at %s, want the Run's scratch directory", path)
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("scratch %q: the configuration %s outlived the job: %v", scratch, path, err)
+		}
+		if scratch == "" {
+			if _, err := os.Stat(filepath.Dir(path)); !os.IsNotExist(err) {
+				t.Errorf("the private directory %s outlived the job: %v", filepath.Dir(path), err)
+			}
+		}
+	}
+}
+
 // TestProviderErrorBecomesAFailedJob pins that a provider error is reported as
 // a failure rather than as a completion.
 func TestProviderErrorBecomesAFailedJob(t *testing.T) {

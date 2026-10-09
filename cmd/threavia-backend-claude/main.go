@@ -71,7 +71,7 @@ func run() error {
 
 	// Durable local execution state: it is what lets this backend keep working
 	// through a Core outage and replay afterwards.
-	store, err := state.OpenSQLite(cfg.StatePath)
+	store, err := state.OpenSQLite(cfg.StatePath, logger)
 	if err != nil {
 		return err
 	}

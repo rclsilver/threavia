@@ -2,6 +2,9 @@ package state_test
 
 import (
 	"context"
+	"io"
+	"log/slog"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -9,10 +12,12 @@ import (
 	"github.com/rclsilver/threavia/pkg/backend-sdk/state"
 )
 
+var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
+
 func openStore(t *testing.T) (*state.SQLiteStore, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "nested", "backend.db")
-	store, err := state.OpenSQLite(path)
+	store, err := state.OpenSQLite(path, quiet)
 	if err != nil {
 		t.Fatalf("opening the local state: %v", err)
 	}
@@ -56,7 +61,7 @@ func TestSQLiteSurvivesARestart(t *testing.T) {
 	}
 
 	// The process restarts.
-	reopened, err := state.OpenSQLite(path)
+	reopened, err := state.OpenSQLite(path, quiet)
 	if err != nil {
 		t.Fatalf("reopening the local state: %v", err)
 	}
@@ -169,4 +174,86 @@ func TestSQLiteSatisfiesTheStoreContract(t *testing.T) {
 	store, _ := openStore(t)
 	var _ state.Store = store
 	var _ state.Store = state.NewMemoryStore()
+}
+
+// permissions reads the mode of each path, failing the test on one missing.
+func permissions(t *testing.T, paths ...string) map[string]os.FileMode {
+	t.Helper()
+	modes := make(map[string]os.FileMode, len(paths))
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("reading the mode of %s: %v", path, err)
+		}
+		modes[filepath.Base(path)] = info.Mode().Perm()
+	}
+	return modes
+}
+
+// TestSQLiteStateIsPrivateToTheAccount pins that the local state, which holds
+// the backend credential, is readable by the account running the backend only:
+// whoever reads the credential can act as this backend towards Core.
+func TestSQLiteStateIsPrivateToTheAccount(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store, path := openStore(t)
+	if err := store.SaveIdentity(ctx, state.Identity{
+		BackendInstanceID: "backend-1", Token: "credential", Name: "laptop",
+	}); err != nil {
+		t.Fatalf("saving the identity: %v", err)
+	}
+
+	for name, mode := range permissions(t, path, path+"-wal", path+"-shm") {
+		if mode != 0o600 {
+			t.Errorf("%s is %o, want 0600", name, mode)
+		}
+	}
+	if mode := permissions(t, filepath.Dir(path))["nested"]; mode != 0o700 {
+		t.Errorf("the state directory is %o, want 0700", mode)
+	}
+}
+
+// TestSQLiteTightensAStateLeftOpen pins that a state written before the
+// backend cared, or laid out by a service manager, is closed at the next start
+// rather than staying readable by every account on the machine.
+func TestSQLiteTightensAStateLeftOpen(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store, path := openStore(t)
+	if err := store.SaveIdentity(ctx, state.Identity{
+		BackendInstanceID: "backend-1", Token: "credential", Name: "laptop",
+	}); err != nil {
+		t.Fatalf("saving the identity: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("closing the store: %v", err)
+	}
+	dir := filepath.Dir(path)
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatalf("opening the state directory: %v", err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatalf("opening the state file: %v", err)
+	}
+
+	// The process restarts.
+	reopened, err := state.OpenSQLite(path, quiet)
+	if err != nil {
+		t.Fatalf("reopening the local state: %v", err)
+	}
+	defer func() { _ = reopened.Close() }()
+	if _, found, err := reopened.LoadIdentity(ctx); err != nil || !found {
+		t.Fatalf("the identity must survive tightening: found=%v err=%v", found, err)
+	}
+
+	for name, mode := range permissions(t, path, path+"-wal", path+"-shm") {
+		if mode != 0o600 {
+			t.Errorf("%s is %o after a restart, want 0600", name, mode)
+		}
+	}
+	if mode := permissions(t, dir)["nested"]; mode != 0o700 {
+		t.Errorf("the state directory is %o after a restart, want 0700", mode)
+	}
 }

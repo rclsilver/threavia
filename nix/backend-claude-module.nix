@@ -206,9 +206,10 @@ in
 
     # StateDirectory makes the default path and nothing else; a path chosen
     # elsewhere has to be made, or the first start fails on a missing database.
+    # Private to the account, like the default: it holds the backend credential.
     systemd.tmpfiles.rules = lib.optional (
       cfg.stateDir != "/var/lib/threavia-backend-claude"
-    ) "d ${cfg.stateDir} 0750 ${cfg.user} - -";
+    ) "d ${cfg.stateDir} 0700 ${cfg.user} - -";
 
     systemd.services.threavia-backend-claude = {
       description = "Threavia backend for Claude Code";
@@ -276,6 +277,9 @@ in
         StateDirectory = lib.mkIf (
           cfg.stateDir == "/var/lib/threavia-backend-claude"
         ) "threavia-backend-claude";
+        # systemd makes it 0755 otherwise, and it holds the backend credential:
+        # whoever reads that can act as this backend towards Core.
+        StateDirectoryMode = "0700";
         EnvironmentFile = lib.mkIf (cfg.environmentFile != null) cfg.environmentFile;
 
         # A backend that cannot reach Core keeps its queue and waits, so a

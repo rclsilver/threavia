@@ -332,6 +332,12 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	if err != nil {
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "INTERNAL", err.Error(), nil)
 	}
+	scratch := c.scratchFor(params.RunID)
+	mcpConfigPath, removeConfig, err := writeMCPConfig(scratch, mcpConfig)
+	if err != nil {
+		return sink.JobFailed(ctx, params.RunID, params.JobID, "INTERNAL", err.Error(), nil)
+	}
+	defer removeConfig()
 
 	// The backend mints the native session id rather than discovering it, so a
 	// Run is resumable from its very first message.
@@ -363,7 +369,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	// apart from what was already dirty in the working directory.
 	before := workspace.Observe(ctx, params.WorkingDirectory)
 
-	cmd := c.command(runCtx, params, nativeSessionID, resuming, mcpConfig)
+	cmd := c.command(runCtx, params, scratch, nativeSessionID, resuming, mcpConfigPath)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "INTERNAL", err.Error(), nil)
@@ -475,8 +481,47 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	}
 }
 
+// writeMCPConfig puts the --mcp-config value in a file only this account can
+// read, and returns its path and what removes it once the Job is over.
+//
+// A file rather than the argument itself, because the configuration carries
+// the Job's endpoint token and a command line is readable by every account on
+// the machine, in /proc and in ps. The token is what keeps another local
+// process away from this Job's prompts and project knowledge.
+//
+// In the Run's scratch directory when there is one, which is private already;
+// otherwise in a private directory of its own.
+func writeMCPConfig(scratch, config string) (string, func(), error) {
+	dir, cleanup := scratch, func() {}
+	if dir == "" {
+		temp, err := os.MkdirTemp("", "threavia-mcp-")
+		if err != nil {
+			return "", nil, fmt.Errorf("make a private directory for the tool configuration: %w", err)
+		}
+		dir, cleanup = temp, func() { _ = os.RemoveAll(temp) }
+	}
+	// CreateTemp makes the file 0600 whatever the umask, and a name of its own
+	// keeps two Jobs of one Run apart.
+	file, err := os.CreateTemp(dir, ".mcp-*.json")
+	if err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("write the tool configuration: %w", err)
+	}
+	path := file.Name()
+	_, err = file.WriteString(config)
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(path)
+		cleanup()
+		return "", nil, fmt.Errorf("write the tool configuration: %w", err)
+	}
+	return path, func() { _ = os.Remove(path); cleanup() }, nil
+}
+
 // command builds the provider invocation.
-func (c *Claude) command(ctx context.Context, params StartParams, nativeSessionID string, resuming bool, mcpConfig string) *exec.Cmd {
+func (c *Claude) command(ctx context.Context, params StartParams, scratch, nativeSessionID string, resuming bool, mcpConfigPath string) *exec.Cmd {
 	native := params.Policy.Native()
 	// A tool Core says needs validation is asked about whatever the mode. The
 	// permission tool asks it, but only if the provider calls it: in SUPERVISED
@@ -489,7 +534,6 @@ func (c *Claude) command(ctx context.Context, params StartParams, nativeSessionI
 	}
 	// A FILE_READ refusal in the policy still wins: deny is answered first.
 	native.AdditionalDirectories = c.readable
-	scratch := c.scratchFor(params.RunID)
 	if scratch != "" {
 		native.AdditionalDirectories = append(native.AdditionalDirectories, scratch)
 	}
@@ -505,7 +549,7 @@ func (c *Claude) command(ctx context.Context, params StartParams, nativeSessionI
 		"--verbose",
 		// Permission prompts travel to Threavia instead of blocking a terminal.
 		"--permission-prompt-tool", mcp.PermissionTool,
-		"--mcp-config", mcpConfig,
+		"--mcp-config", mcpConfigPath,
 		"--strict-mcp-config",
 		"--append-system-prompt", systemPrompt(params, c.available, scratch),
 		// The policy, in the provider's own vocabulary. What it can settle from
