@@ -3,6 +3,9 @@
 # Core requires PostgreSQL and S3-compatible object storage
 # (THREAVIA_SPEC_V1.md section 19). Garage is used here because it is small and
 # convenient locally; nothing in Core or in the Helm chart assumes it.
+#
+# Every port is published on loopback only: the credentials below are fixed and
+# public, and the rest of the network has no business reaching them.
 services:
   postgres:
     image: postgres:17-alpine
@@ -11,7 +14,7 @@ services:
       POSTGRES_PASSWORD: threavia
       POSTGRES_DB: threavia
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -27,8 +30,8 @@ services:
     profiles: ["objectstore"]
     image: dxflrs/garage:v2.1.0
     ports:
-      - "3900:3900"   # S3 API
-      - "3903:3903"   # admin API
+      - "127.0.0.1:3900:3900"   # S3 API
+      - "127.0.0.1:3903:3903"   # admin API
     volumes:
       - ./deploy/dev/garage.toml:/etc/garage.toml:ro
       - objectstore-meta:/var/lib/garage/meta
