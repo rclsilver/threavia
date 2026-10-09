@@ -109,6 +109,12 @@
         "category": "Threavia"
       },
       {
+        "command": "threavia.ask",
+        "title": "Ask Threavia About This…",
+        "category": "Threavia",
+        "icon": "$(comment-discussion)"
+      },
+      {
         "command": "threavia.pinSession",
         "title": "Pin",
         "category": "Threavia",
@@ -202,6 +208,10 @@
         {
           "command": "threavia.answer",
           "when": "false"
+        },
+        {
+          "command": "threavia.ask",
+          "when": "editorIsOpen && threavia.state == ready"
         }
       ],
       "view/title": [
@@ -303,6 +313,20 @@
           "command": "threavia.openInBrowser",
           "when": "activeWebviewPanelId == 'threavia.conversation'",
           "group": "navigation@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "threavia.ask",
+          "when": "threavia.state == ready",
+          "group": "threavia@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "threavia.ask",
+          "when": "threavia.state == ready && !explorerResourceIsFolder",
+          "group": "threavia@1"
         }
       ]
     },

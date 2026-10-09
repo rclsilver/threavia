@@ -10,6 +10,7 @@ import { coreUrl, promptCoreUrl } from './config';
 import { Connection } from './connection';
 import { createIdentity } from './identity';
 import { Presence } from './presence';
+import { askAboutThis } from './ask/ask';
 import type { BackendInstance } from './api/types';
 import { Artifacts } from './conversation/artifacts';
 import { ConversationPanels } from './conversation/panel';
@@ -173,6 +174,17 @@ export function activate(context: vscode.ExtensionContext): Threavia {
   });
 
   command('threavia.openSession', (target: unknown) => runOpenSession(target));
+
+  command('threavia.ask', async (uri?: vscode.Uri) => {
+    if (!(await ensureCore())) return;
+    if (connection.status !== 'ready') {
+      void vscode.window.showInformationMessage('Sign in to Threavia first.', 'Sign In').then(
+        (choice) => choice && vscode.commands.executeCommand('threavia.signIn'),
+      );
+      return;
+    }
+    await askAboutThis(client, uri instanceof vscode.Uri ? uri : undefined);
+  });
 
   // From a sidebar row, or from the title bar of the conversation in front,
   // which hands the command nothing that names the Session.

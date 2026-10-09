@@ -40,6 +40,11 @@ is doing, kept live from Core's event stream.
   - **Artifacts.** Open shows an image or a page in a tab of its own, and text
     as a read-only document; Save as… downloads it.
   - Panels come back after a reload of the window.
+- **Ask Threavia about this.** Right-click in an editor (or a file in the
+  Explorer), or run **Threavia: Ask Threavia About This…**: the selection, or
+  the whole file, is sent with its path and lines and what you ask, to a new
+  session (choose the Project, the backend, the working directory) or to a
+  recent one, whose conversation then opens.
 
 The extension tells Core when the editor has the focus, so your phone does not
 ring for what you are already looking at.
@@ -117,6 +122,6 @@ The code is split so that what can be tested without an editor is: `src/api`
 `src/tree/model.ts` and `src/attention/ledger.ts` import nothing from `vscode`
 and are covered by `test/`, as are the conversation's rules
 (`src/conversation/timeline.ts` and `state.ts`, ported from the web client's
-timeline), the diff reconstruction (`src/diff/unified.ts`) and the path
-matching (`src/workspace/paths.ts`). The
+timeline), the diff reconstruction (`src/diff/unified.ts`), the "Ask" message
+(`src/ask/message.ts`) and the path matching (`src/workspace/paths.ts`). The
 rest turns them into views and commands; `src/webview` is the page.
