@@ -342,3 +342,56 @@ func TestADispatchOutlivesTheRequestThatAskedForIt(t *testing.T) {
 		t.Error("the re-dispatched job carries no execution policy")
 	}
 }
+
+// TestABackendOnlyBindsItsOwnRuns is a regression test.
+//
+// A reconnecting backend reports the native session of each Run it knows, and
+// Core recorded every one of them. A backend could name a Run of another
+// backend, another person's included, and choose the session its next Job
+// would resume.
+func TestABackendOnlyBindsItsOwnRuns(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	laptop := backendInstance(t, c)
+	c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
+	start := receive(t, "the dispatched job", backend.starts)
+	alices, _ := c.asUser("alice").registerBackend("alice-laptop")
+
+	ctx := context.Background()
+	report := func(native string) *backendv1.ReconcileState {
+		return &backendv1.ReconcileState{Runs: []*backendv1.RunState{{
+			RunId:           start.GetRunId(),
+			NativeSessionId: native,
+			Jobs: []*backendv1.JobState{{
+				JobId:  start.GetJobId(),
+				Status: backendv1.JobStatus_JOB_STATUS_RUNNING,
+			}},
+		}}}
+	}
+	nativeSession := func() string {
+		run, err := c.store.RunByID(ctx, domain.RunID(start.GetRunId()))
+		if err != nil {
+			t.Fatalf("reading the run: %v", err)
+		}
+		if run.NativeSessionID == nil {
+			return ""
+		}
+		return *run.NativeSessionID
+	}
+
+	c.svc.ReconcileState(ctx, domain.BackendInstanceID(alices), report("chosen-by-alice"))
+	if got := nativeSession(); got != "" {
+		t.Fatalf("another user's backend bound the run to %q", got)
+	}
+
+	// An id that would read as an option on the provider's command line is
+	// refused even from the Run's own backend.
+	c.svc.ReconcileState(ctx, laptop, report("--dangerously-skip-permissions"))
+	if got := nativeSession(); got != "" {
+		t.Fatalf("a malformed native session was bound: %q", got)
+	}
+
+	c.svc.ReconcileState(ctx, laptop, report("native-1"))
+	if got := nativeSession(); got != "native-1" {
+		t.Fatalf("native session = %q, want the one its own backend reported", got)
+	}
+}

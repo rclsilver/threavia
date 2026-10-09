@@ -149,10 +149,7 @@ func (s *Service) ReconcileState(ctx context.Context, instanceID domain.BackendI
 	known := make(map[domain.JobID]*backendv1.JobState)
 	for _, run := range state.GetRuns() {
 		if native := run.GetNativeSessionId(); native != "" {
-			if err := s.store.BindNativeSession(ctx, domain.RunID(run.GetRunId()), native); err != nil {
-				s.logger.Error("cannot record a native session",
-					slog.String("runId", run.GetRunId()), slog.String("error", err.Error()))
-			}
+			s.bindReportedNativeSession(ctx, instanceID, domain.RunID(run.GetRunId()), native)
 		}
 		for _, job := range run.GetJobs() {
 			known[domain.JobID(job.GetJobId())] = job
@@ -243,6 +240,41 @@ func (s *Service) ReconcileState(ctx context.Context, instanceID domain.BackendI
 		if !terminalJobStatus(reported.GetStatus()) {
 			s.replayResolutions(ctx, conn, job)
 		}
+	}
+}
+
+// bindReportedNativeSession records the native session a reconnecting backend
+// reports for one of its Runs.
+//
+// The report is the backend's word, so it is held to what JobEvent holds an
+// event to: a backend only speaks about the Runs it executes. Otherwise a
+// backend owned by one person could set the native session of another
+// person's Run, and the next Job there would resume it. The id also ends up on
+// the provider's command line, so it passes the check a first send applies to
+// an adopted session.
+func (s *Service) bindReportedNativeSession(ctx context.Context, instanceID domain.BackendInstanceID, runID domain.RunID, native string) {
+	logger := s.logger.With(slog.String("backendInstanceId", string(instanceID)), slog.String("runId", string(runID)))
+
+	run, err := s.store.RunByID(ctx, runID)
+	if errors.Is(err, postgres.ErrNotFound) {
+		logger.Warn("ignoring a native session reported for a run that does not exist")
+		return
+	}
+	if err != nil {
+		logger.Error("cannot read a run reported by its backend", slog.String("error", err.Error()))
+		return
+	}
+	if run.BackendInstanceID != instanceID {
+		logger.Warn("ignoring a native session reported for a run of another backend")
+		return
+	}
+	if _, err := adoptedSession(native); err != nil {
+		logger.Warn("ignoring a malformed native session", slog.String("error", err.Error()))
+		return
+	}
+
+	if err := s.store.BindNativeSession(ctx, runID, native); err != nil {
+		logger.Error("cannot record a native session", slog.String("error", err.Error()))
 	}
 }
 

@@ -102,6 +102,12 @@ events from a sequence, reissue a cancellation, or abandon a Job. The rule is
 the one of section 9: Core is the source of truth for desired logical state, the
 backend is the source of truth for what actually happened locally.
 
+A `ReconcileState` only speaks for the backend's own Runs: Core records the
+`native_session_id` of a Run this BackendInstance executes, and ignores one
+reported for any other Run. The id must also be a short token, without
+whitespace and not starting with `-`, since it reaches the provider's command
+line when the Run resumes; anything else is ignored too.
+
 ## Core Tools
 
 An agent tool call travels as `CoreToolRequest` and is answered by
