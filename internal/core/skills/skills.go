@@ -151,6 +151,11 @@ func (a *Acquirer) fetchGit(ctx context.Context, source domain.SkillSource, root
 	if err := validateRemoteURL(source.URL, schemes...); err != nil {
 		return "", err
 	}
+	// A revision is a person's input on git's command line: one that starts
+	// with a dash would be read as an option. No branch, tag or commit does.
+	if strings.HasPrefix(source.Revision, "-") {
+		return "", fmt.Errorf("%w: a revision cannot start with a dash", ErrInvalidSkill)
+	}
 
 	args := []string{"clone", "--quiet", "--no-tags", "--depth", "1"}
 	if source.Revision != "" {
@@ -168,7 +173,8 @@ func (a *Acquirer) fetchGit(ctx context.Context, source domain.SkillSource, root
 		if err := runGit(ctx, "", "clone", "--quiet", "--no-tags", "--", source.URL, root); err != nil {
 			return "", fmt.Errorf("clone %s: %w", source.URL, err)
 		}
-		if err := runGit(ctx, root, "checkout", "--quiet", "--detach", source.Revision); err != nil {
+		// Not "--": after it git reads a path, not a revision.
+		if err := runGit(ctx, root, "checkout", "--quiet", "--detach", "--end-of-options", source.Revision); err != nil {
 			return "", fmt.Errorf("checkout %s: %w", source.Revision, err)
 		}
 	}

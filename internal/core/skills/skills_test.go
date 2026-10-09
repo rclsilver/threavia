@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -297,6 +298,22 @@ func TestAcquireFromGit(t *testing.T) {
 		if strings.HasPrefix(name, ".git/") {
 			t.Fatalf("bundle carries repository metadata: %s", name)
 		}
+	}
+
+	// A raw commit takes the checkout path, which must still read it as a
+	// revision and not as a path.
+	pinned, err := NewAcquirer(limits).Acquire(context.Background(),
+		domain.SkillSource{Type: domain.SkillSourceGit, URL: "file://" + repository, Revision: bundle.InstalledRevision}, nil)
+	if err != nil || pinned.InstalledRevision != bundle.InstalledRevision {
+		t.Fatalf("acquiring a commit: %v, revision %q", err, pinned.InstalledRevision)
+	}
+
+	// A revision is a person's input on git's command line: one that reads as
+	// an option is refused before git sees it.
+	_, err = NewAcquirer(limits).Acquire(context.Background(),
+		domain.SkillSource{Type: domain.SkillSourceGit, URL: "file://" + repository, Revision: "--orphan=x"}, nil)
+	if !errors.Is(err, ErrInvalidSkill) || !strings.Contains(fmt.Sprint(err), "dash") {
+		t.Fatalf("a revision starting with a dash: got %v, want it refused as one", err)
 	}
 }
 

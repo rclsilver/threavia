@@ -423,6 +423,17 @@ content always yields the same checksum. That is what lets a backend tell a
 cached copy from a stale one without asking, and what makes re-acquiring an
 unchanged Skill visibly a no-op.
 
+Core fetches a git or archive source itself, from wherever its URL points, with
+Core's own network position and identities. Only `file://` is refused by
+default. A private address is not: whoever can install a Skill can therefore
+make Core reach a host on its network, a service inside the cluster included.
+That is accepted while the people who sign in to Core are trusted as much as
+whoever runs it, which is the single-owner model of V1. Once Core has users
+who are not, the fetch needs an allow-list of hosts, or a refusal of private
+and link-local addresses checked after DNS resolution. A revision, on the other
+hand, is never handed to git as it was typed: one that starts with a dash is
+refused, and the checkout marks where its options end.
+
 A bundle travels to a backend over the control stream rather than through a
 presigned URL, because a backend holds a gRPC credential and nothing else: it
 has no user identity with which to call the HTTP API, and giving it one would
