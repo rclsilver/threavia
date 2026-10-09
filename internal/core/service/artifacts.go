@@ -11,9 +11,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
 	"github.com/rclsilver/threavia/internal/core/events"
+	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 	"github.com/rclsilver/threavia/internal/core/storage/s3"
 )
 
@@ -38,13 +41,18 @@ func (s *Service) MaxArtifactBytes() int64 { return s.maxArtifactBytes }
 // The checksum is computed from what was actually written, so a truncated
 // upload cannot be recorded as a good one, and the object key is derived from
 // identifiers rather than from the filename a caller supplied (spec
-// section 24).
+// section 24). The Session and the Job it is attached to are checked like the
+// Project, before any byte is written.
 func (s *Service) UploadArtifact(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, filename, mimeType string, body io.Reader, scope domain.Scope) (domain.Artifact, error) {
 	if s.objects == nil {
 		return domain.Artifact{}, ErrStorageUnavailable
 	}
 	if _, err := s.store.GetProject(ctx, identity.UserID, projectID); err != nil {
 		return domain.Artifact{}, translate(err)
+	}
+	scope, err := s.artifactScope(ctx, identity, projectID, scope)
+	if err != nil {
+		return domain.Artifact{}, err
 	}
 
 	filename = sanitiseFilename(filename)
@@ -85,6 +93,69 @@ func (s *Service) UploadArtifact(ctx context.Context, identity auth.Identity, pr
 		return domain.Artifact{}, translate(err)
 	}
 	return artifact, nil
+}
+
+// errArtifactScope is the one answer to a Session or Job an upload cannot be
+// attached to. It does not say whether the id exists: a missing one and
+// another user's must read the same, or the upload becomes a way to probe for
+// identifiers.
+var errArtifactScope = fmt.Errorf("%w: the session or job given is not one of this project", ErrInvalid)
+
+// artifactScope checks the Session and the Job an upload names against the
+// caller and the Project, and returns the scope to record.
+//
+// A Job given without its Session gets it filled in from the Job: the Session
+// is how Artifacts are listed, and one recorded against a Job alone would be
+// missing from the Session it was made in.
+func (s *Service) artifactScope(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, scope domain.Scope) (domain.Scope, error) {
+	if scope.JobID != "" {
+		if !isUUID(string(scope.JobID)) {
+			return domain.Scope{}, errArtifactScope
+		}
+		job, err := s.store.GetJob(ctx, identity.UserID, scope.JobID)
+		if err != nil {
+			return domain.Scope{}, scopeError(err)
+		}
+		run, err := s.store.GetRun(ctx, identity.UserID, job.RunID)
+		if err != nil {
+			return domain.Scope{}, scopeError(err)
+		}
+		if scope.SessionID == "" {
+			scope.SessionID = run.SessionID
+		} else if scope.SessionID != run.SessionID {
+			return domain.Scope{}, errArtifactScope
+		}
+	}
+
+	if scope.SessionID != "" {
+		if !isUUID(string(scope.SessionID)) {
+			return domain.Scope{}, errArtifactScope
+		}
+		session, err := s.store.GetSession(ctx, identity.UserID, scope.SessionID)
+		if err != nil {
+			return domain.Scope{}, scopeError(err)
+		}
+		if session.ProjectID != projectID {
+			return domain.Scope{}, errArtifactScope
+		}
+	}
+	return scope, nil
+}
+
+// scopeError keeps a missing Session or Job indistinguishable from a foreign
+// one, and anything else a failure of Core rather than of the request.
+func scopeError(err error) error {
+	if errors.Is(err, postgres.ErrNotFound) {
+		return errArtifactScope
+	}
+	return translate(err)
+}
+
+// isUUID tells an identifier the database can look up from one it would fail
+// to parse, which would otherwise surface as an internal error.
+func isUUID(value string) bool {
+	_, err := uuid.Parse(value)
+	return err == nil
 }
 
 // OpenArtifact returns the metadata and the bytes of an Artifact.

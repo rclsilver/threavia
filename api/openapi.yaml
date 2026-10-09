@@ -1611,6 +1611,11 @@ paths:
         what a script sends. The checksum is computed from what was actually
         written and the object key is derived from identifiers, never from the
         filename (spec section 24).
+
+        A sessionId must name a Session of this Project, and a jobId a Job of
+        that Session; anything else is refused with 400, the same answer
+        whether the id exists or not. A jobId given alone attaches the
+        Artifact to the Job's Session too.
       parameters:
         - name: filename
           in: query
@@ -1640,6 +1645,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Artifact" }
+        "400":
+          $ref: "#/components/responses/Error"
         "503":
           $ref: "#/components/responses/Error"
 

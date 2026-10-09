@@ -313,3 +313,66 @@ func TestMalformedIdentifierIsNotFound(t *testing.T) {
 		}
 	}
 }
+
+// TestArtifactScopeIsChecked is a regression test.
+//
+// An upload recorded the Session and the Job it named after checking only the
+// Project, so it could be attached to another user's Session; and a Session
+// that did not exist failed on the foreign key with a 409, which told the
+// caller which identifiers were real.
+func TestArtifactScopeIsChecked(t *testing.T) {
+	c, _, projectID, dirID := setup(t)
+	objects := newMemoryObjects()
+	c.svc.SetObjectStore(objects, 1<<20)
+
+	session := c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
+	job := c.snapshot(session).Jobs[0].ID
+	elsewhere := c.startSession(c.createProject("garden"), c.backendID, "", "Arrose les tomates")
+	jobElsewhere := c.snapshot(elsewhere).Jobs[0].ID
+
+	alice := c.asUser("alice")
+	aliceBackend, _ := alice.registerBackend("alice-laptop")
+	hers := alice.startSession(alice.createProject("garden"), aliceBackend, "", "Et les courgettes ?")
+
+	upload := "/api/v1/projects/" + projectID + "/artifacts?filename=a.txt"
+	var refusal string
+	for name, query := range map[string]string{
+		"another user's session":               "&sessionId=" + hers,
+		"a session of another project":         "&sessionId=" + elsewhere,
+		"a session that does not exist":        "&sessionId=" + domain.NewUUID(),
+		"a malformed session":                  "&sessionId=not-a-uuid",
+		"a job of another project":             "&jobId=" + jobElsewhere,
+		"a job of another session":             "&sessionId=" + session + "&jobId=" + jobElsewhere,
+		"a job that does not exist":            "&jobId=" + domain.NewUUID(),
+		"a job with a session that is not its": "&sessionId=" + elsewhere + "&jobId=" + job,
+	} {
+		if got := c.doRaw(http.MethodPost, upload+query, "text/plain", "x", nil); got != http.StatusBadRequest {
+			t.Fatalf("upload with %s = %d, want 400: %s", name, got, c.lastBody)
+		}
+		// Whether the id exists must not show in the answer.
+		if refusal == "" {
+			refusal = c.lastBody
+		} else if c.lastBody != refusal {
+			t.Fatalf("upload with %s answered %s, unlike %s", name, c.lastBody, refusal)
+		}
+	}
+	if objects.count() != 0 {
+		t.Fatal("a refused upload must not store anything")
+	}
+
+	var unscoped, scoped, byJob artifactResponse
+	c.mustUpload(upload, "text/plain", "x", &unscoped)
+	if unscoped.SessionID != "" || unscoped.JobID != "" {
+		t.Fatalf("an upload without scope was attached to %+v", unscoped)
+	}
+	c.mustUpload(upload+"&sessionId="+session+"&jobId="+job, "text/plain", "x", &scoped)
+	if scoped.SessionID != session || scoped.JobID != job {
+		t.Fatalf("scope = %s/%s, want %s/%s", scoped.SessionID, scoped.JobID, session, job)
+	}
+	// A Job alone is filed under its Session, where the Session's Artifacts
+	// are listed.
+	c.mustUpload(upload+"&jobId="+job, "text/plain", "x", &byJob)
+	if byJob.SessionID != session || byJob.JobID != job {
+		t.Fatalf("scope = %s/%s, want %s/%s", byJob.SessionID, byJob.JobID, session, job)
+	}
+}

@@ -3076,6 +3076,11 @@ export interface paths {
          *     written and the object key is derived from identifiers, never from the
          *     filename (spec section 24).
          *
+         *     A sessionId must name a Session of this Project, and a jobId a Job of
+         *     that Session; anything else is refused with 400, the same answer
+         *     whether the id exists or not. A jobId given alone attaches the
+         *     Artifact to the Job's Session too.
+         *
          */
         post: {
             parameters: {
@@ -3111,6 +3116,7 @@ export interface paths {
                         "application/json": components["schemas"]["Artifact"];
                     };
                 };
+                400: components["responses"]["Error"];
                 503: components["responses"]["Error"];
             };
         };
