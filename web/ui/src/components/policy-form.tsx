@@ -1,4 +1,4 @@
-import { Bot, Eye, Hand, Plus, ShieldCheck, Trash2, type LucideIcon } from 'lucide-react';
+import { Bot, Eye, Hand, Info, Plus, ShieldCheck, Trash2, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type {
@@ -134,6 +134,20 @@ export function PolicyForm({
             );
           })}
         </div>
+
+        {/* Said under every mode, and for good, because the page otherwise
+            reads as a boundary it is not: the gate judges a command by what it
+            says, so `bash -c 'git push'` gets through. Where it stops is the
+            backend's account, and that is worth knowing before choosing.
+            Autonomous gets one more sentence, since there nothing asks first. */}
+        <p className="text-muted flex items-start gap-1.5 pt-1 text-xs">
+          <Info className="mt-px size-3.5 shrink-0" aria-hidden />
+          <span>
+            A guard rail, not a sandbox: it reads each command as written, so an agent set on getting
+            around it can. The real limit is the account and the machine the backend runs as.
+            {value.mode === 'AUTONOMOUS' && " In this mode, the agent acts with all of that account's rights, without asking."}
+          </span>
+        </p>
 
         {/* Only under a reviewer, because only there does anyone read it. The
             other modes answer from the rules below, and a box nobody reads is

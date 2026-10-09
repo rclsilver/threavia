@@ -2413,6 +2413,12 @@ components:
         modes: a policy that has to be loosened on purpose is a policy someone
         thought about. It is a guard rail, not a sandbox: filesystem and process
         access stay the real permissions of the backend account.
+
+        The gate reads a command as written, so an agent determined to evade it
+        can, and in AUTONOMOUS mode the agent acts with that account's full
+        rights without asking. Where the real boundary lies, the ways around the
+        gate and how to run a backend for AUTONOMOUS work are in "What the
+        policy does not do" in docs/architecture.md.
       required: [mode, allowFilesystemWrite, allowGitCommit, allowGitPush, allowNetwork]
       properties:
         mode: { $ref: "#/components/schemas/ExecutionMode" }

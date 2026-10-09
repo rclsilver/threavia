@@ -83,6 +83,15 @@ Discovery roots constrain where the backend looks. They are not a sandbox:
 filesystem access is the real OS permissions of the backend account
 (sections 11 and 28).
 
+## Execution policy
+
+An `ExecutionPolicy`, set on a Project and inherited by its Sessions, says what an agent may do, and the backend enforces it rather than asking the
+model to comply. It is still a guard rail, not a sandbox: the gate reads a
+command as written, so an agent determined to evade it can, and in AUTONOMOUS
+mode the agent acts with the full rights of the backend account without asking.
+[What the policy does not do](architecture.md#what-the-policy-does-not-do)
+gives the ways around it and how to run a backend meant for AUTONOMOUS work.
+
 
 Moving a Session to another backend is explicit and answered on its own: the
 timeline stays continuous, a new Run starts there, and the response names the

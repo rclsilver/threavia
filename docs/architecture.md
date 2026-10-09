@@ -342,6 +342,41 @@ and process access are the real permissions of the account the backend runs as,
 and section 28 says in as many words not to mistake Threavia metadata for a
 security boundary.
 
+### What the policy does not do
+
+The policy is a guard rail enforced by reading commands, not a sandbox. It
+stops an agent from doing by accident, or because a conversation drifted, what
+it was told not to do. It does not stop an agent determined to get around it,
+because the gate judges a command by what it says rather than by what it ends
+up doing. A few of the ways through, all of them ordinary commands:
+
+- `bash -c 'git push'`: the gate sees a shell starting, not a push.
+- `env git push`, or any other wrapper that runs the command it is given.
+- `python3 -c 'import urllib.request; …'` or `node -e 'fetch(…)'`: a one-liner
+  in an interpreter reaches the network without anything that reads as network
+  access.
+
+The real boundary is the account the backend runs as and the machine it runs
+on: whatever that account may read, write, run or reach, the agent may too. In
+AUTONOMOUS mode the agent acts with those rights in full, without asking; the
+capability switches and rules still refuse what they recognise, but nothing
+asks a person about what they do not.
+
+So a backend that will be used in AUTONOMOUS mode should run as a dedicated
+account, in a container or a virtual machine, with the network egress its work
+needs and nothing else: the Git remotes, the package registries, Core and the
+provider's API. Two places configure that account:
+
+- the Helm chart, [`deploy/helm/threavia-backend-claude`](../deploy/helm/threavia-backend-claude),
+  through `securityContext` and `podSecurityContext` in its `values.yaml`
+  (a non-root user with every capability dropped by default). The chart sets
+  no network policy, so limiting egress is a `NetworkPolicy` the cluster
+  operator adds next to it;
+- the NixOS module, [`nix/backend-claude-module.nix`](../nix/backend-claude-module.nix),
+  through its `user` option. On a laptop that is the person's own account,
+  which is the right choice for INTERACTIVE and GUARDED work and the wrong one
+  for an agent left to act on its own.
+
 ### The audit trail
 
 Validation receipts are already events, but an event belongs to a timeline that
