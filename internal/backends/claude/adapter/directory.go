@@ -167,7 +167,7 @@ func (a *Adapter) bindDirectory(ctx context.Context, jobID, directoryID, path st
 	_, err := a.CallCoreTool(ctx, jobID, string(tools.NameKnownDirectoryBind), map[string]any{
 		"knownDirectoryId": directoryID,
 		"path":             path,
-	})
+	}, "")
 	if err != nil {
 		a.logger.Error("cannot record the working directory binding",
 			slog.String("knownDirectoryId", directoryID),

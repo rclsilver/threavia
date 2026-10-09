@@ -253,6 +253,11 @@ export class EventStream {
         void this.queries.invalidateQueries({ queryKey: ['tasks'] });
         break;
 
+      // An agent published a file: the project's list has one more.
+      case 'artifact.created':
+        void this.queries.invalidateQueries({ queryKey: ['artifacts'] });
+        break;
+
       case 'decision.created':
       case 'decision.superseded':
       case 'decision.updated':

@@ -27,6 +27,9 @@ type Call struct {
 	JobID string
 	Name  string
 	Input *structpb.Struct
+	// File is the content of the file a tool's file_input named, read by the
+	// backend. Empty for a tool that takes no file.
+	File []byte
 }
 
 // Invoker executes a Core Tool call and waits for the Core response.

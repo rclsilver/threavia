@@ -214,6 +214,7 @@ func coreToolSpecs() []*backendv1.CoreToolSpec {
 		encoded := &backendv1.CoreToolSpec{
 			Name:        spec.Name.String(),
 			Description: spec.Description,
+			FileInput:   spec.FileInput,
 		}
 		if len(spec.InputSchema) > 0 {
 			var schema map[string]any

@@ -424,6 +424,7 @@ func (c *Client) Invoke(ctx context.Context, call sdktools.Call) (*structpb.Stru
 				JobId:     call.JobID,
 				Name:      call.Name,
 				Input:     call.Input,
+				File:      call.File,
 			},
 		},
 	}); err != nil {

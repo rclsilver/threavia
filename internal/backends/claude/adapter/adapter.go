@@ -53,6 +53,9 @@ type jobState struct {
 	// before anything reaches the user, so a forbidden action is refused rather
 	// than offered as a choice.
 	policy policy.Policy
+	// workingDirectory is where the Job runs, once resolved. A file the agent
+	// publishes has to be in it, or in the Job's scratch directory.
+	workingDirectory string
 }
 
 // waiter is a pending question, blocked until Core brings an answer back.
@@ -220,6 +223,11 @@ func (a *Adapter) execute(ctx context.Context, params runner.StartParams, pc *ba
 		return
 	}
 	params.WorkingDirectory = workingDirectory
+	a.mu.Lock()
+	if job, ok := a.jobs[params.JobID]; ok {
+		job.workingDirectory = workingDirectory
+	}
+	a.mu.Unlock()
 
 	if err := a.runner.Run(ctx, params, a); err != nil {
 		a.logger.Error("job failed to run",
@@ -452,7 +460,7 @@ func coreTools(pc *backendv1.ProjectContext) []mcp.CoreTool {
 	specs := pc.GetTools()
 	out := make([]mcp.CoreTool, 0, len(specs))
 	for _, spec := range specs {
-		tool := mcp.CoreTool{Name: spec.GetName(), Description: spec.GetDescription()}
+		tool := mcp.CoreTool{Name: spec.GetName(), Description: spec.GetDescription(), FileInput: spec.GetFileInput()}
 		if schema := spec.GetInputSchema(); schema != nil {
 			tool.InputSchema = schema.AsMap()
 		}

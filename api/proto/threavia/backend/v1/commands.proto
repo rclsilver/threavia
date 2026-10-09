@@ -119,6 +119,12 @@ message CoreToolSpec {
   string name = 1;
   string description = 2;
   google.protobuf.Struct input_schema = 3;
+  // When set, the input property that names a file on the backend machine.
+  // The backend reads that file — within the Job's directories, and only if
+  // the Job's policy lets it be read — and sends its bytes as
+  // CoreToolRequest.file. Core never reaches a backend's disk itself, so this
+  // is how an agent hands Core something it made: a report, an image, a page.
+  string file_input = 4;
 }
 
 // Compact structured context built by Core at Run start (spec section 12).

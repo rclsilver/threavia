@@ -43,7 +43,7 @@ func (s *Service) CoreToolRequest(ctx context.Context, instanceID domain.Backend
 		slog.String("jobId", request.GetJobId()),
 		slog.String("projectId", string(jc.ProjectID)))
 
-	result, err := s.invokeTool(ctx, identity, scope, tools.Name(request.GetName()), input)
+	result, err := s.invokeTool(ctx, identity, scope, tools.Name(request.GetName()), input, request.GetFile())
 	if err != nil {
 		return nil, err
 	}
@@ -51,8 +51,11 @@ func (s *Service) CoreToolRequest(ctx context.Context, instanceID domain.Backend
 }
 
 // invokeTool dispatches one Core Tool call.
-func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc jobScope, name tools.Name, input map[string]any) (map[string]any, error) {
+func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc jobScope, name tools.Name, input map[string]any, file []byte) (map[string]any, error) {
 	switch name {
+	case tools.NameArtifactPublish:
+		return s.publishArtifact(ctx, identity, jc, input, file)
+
 	case tools.NameProjectHistorySearch:
 		hits, err := s.SearchHistory(ctx, identity, jc.ProjectID, text(input, "query"), 0)
 		if err != nil {

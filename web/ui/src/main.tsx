@@ -38,7 +38,7 @@ async function demo(mount: HTMLElement) {
   setTransport({
     request: server.demoRequest,
     upload: server.demoUpload,
-    href: server.demoHref,
+    blob: server.demoBlob,
     changed: () => void queries.invalidateQueries(),
   });
   createRoot(mount).render(

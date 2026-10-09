@@ -78,6 +78,12 @@ const STEPS: Step[] = [
     body: 'A job ends with the files it touched. Open one to read its diff, asked of the machine that made it.',
   },
   {
+    path: SESSION(IDS.grafana),
+    target: '[data-tour="artifact"]',
+    title: 'What the agent made, shown',
+    body: 'A page, a chart, a screenshot: the agent publishes it and it appears here, live — this preview runs its own script, safely apart. It stays with the project’s files.',
+  },
+  {
     path: `${SESSION(IDS.ingress)}/settings/permissions`,
     target: '[aria-label="Settings"]',
     title: 'A session’s settings',

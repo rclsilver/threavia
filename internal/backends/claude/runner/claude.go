@@ -599,6 +599,24 @@ func systemPrompt(params StartParams, available []string, scratch string) string
 		b.WriteString("in another session or on another machine. The mcp__" + mcp.ServerName)
 		b.WriteString("__ tools read and write it. Search it before assuming work is new, ")
 		b.WriteString("and record what a later session would otherwise have to rediscover.\n")
+
+		// The person reads the conversation, not this machine: a page or a
+		// chart left in a directory is one they never see. The tool that
+		// carries a file is found by what it declares, not by its name.
+		for _, tool := range params.CoreTools {
+			if tool.FileInput == "" {
+				continue
+			}
+			b.WriteString("\nThe user cannot open files on this machine. When you make something for ")
+			b.WriteString("them to look at — a page, a chart, an image, a report — write it to a file, ")
+			b.WriteString("then publish it with mcp__" + mcp.ServerName + "__" + tool.Name + ": it appears ")
+			b.WriteString("in the conversation, where they can open it. This is the only way to show them ")
+			b.WriteString("a file. Do not give them a local path to open, do not start a web server or ")
+			b.WriteString("open a browser on this machine, do not paste the file into your answer, and ")
+			b.WriteString("do not upload it anywhere else (a gist, a paste service, a bucket): none of ")
+			b.WriteString("that reaches them, or it reaches others.\n")
+			break
+		}
 	}
 
 	if params.ProjectName != "" {

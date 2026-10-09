@@ -6,6 +6,8 @@
  * the demo is shown. The people, machines and clusters are made up.
  */
 
+import { upsChartSvg, upsPreviewHtml } from './published';
+
 /** A fixed identifier, readable in a URL and stable between visits. */
 const id = (prefix: string, n: number) => `${prefix}-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
@@ -362,12 +364,37 @@ function quiet(sessionId: string, n: number, backend: string, minutesAgo: number
   return { runs: [r], jobs: t.jobs, events: t.events };
 }
 
+/** A finished job that published what it made: a page and a chart. */
+function grafana(): SessionState {
+  const r = run(IDS.grafana, 4, IDS.laptop, 60 * 30);
+  const t = new Timeline(IDS.grafana, IDS.homelab, r.id, 4400);
+  const j = id('d0000006', 14);
+  const minutes = 60 * 30;
+  t.push('session.created', minutes, {});
+  t.push('job.created', minutes, { runId: r.id }, j);
+  t.push('user.message', minutes, { text: 'Make a Grafana dashboard for the UPS: load, battery and runtime left. Show me what it will look like before I import it.' }, j);
+  t.push('job.started', minutes - 0.1, {}, j);
+  t.tool(j, minutes - 1, 'Bash', { command: 'upsc ups@nas | grep -E "load|charge|runtime"' }, 'battery.charge: 100\nbattery.runtime: 2460\nups.load: 53');
+  t.tool(j, minutes - 3, 'Write', { file_path: 'grafana/ups.json', content: '{ "title": "UPS", … }' }, 'File created successfully at: grafana/ups.json');
+  t.tool(j, minutes - 5, 'Write', { file_path: 'preview/ups-dashboard-preview.html', content: '<!doctype html>…' }, 'File created successfully at: preview/ups-dashboard-preview.html');
+  t.tool(j, minutes - 6, 'mcp__threavia__artifact_publish', { path: 'preview/ups-dashboard-preview.html', title: 'UPS dashboard — preview' }, '{"artifactId":"…","published":"It is in the conversation now."}');
+  t.push('artifact.created', minutes - 6, { artifactId: artifacts[3].id, filename: artifacts[3].filename, mimeType: artifacts[3].mimeType, size: artifacts[3].size, title: 'UPS dashboard — preview' }, j);
+  t.tool(j, minutes - 7, 'mcp__threavia__artifact_publish', { path: 'preview/ups-load-24h.svg', title: 'UPS load, last 24 hours' }, '{"artifactId":"…","published":"It is in the conversation now."}');
+  t.push('artifact.created', minutes - 7, { artifactId: artifacts[4].id, filename: artifacts[4].filename, mimeType: artifacts[4].mimeType, size: artifacts[4].size, title: 'UPS load, last 24 hours' }, j);
+  t.push('agent.message', minutes - 8, {
+    text: 'The dashboard is in `grafana/ups.json`, provisioned from the ConfigMap: load, battery charge and runtime left, with an alert under 10 minutes of runtime. The preview above is rendered from last week’s data — try the 24 hours / 7 days toggle — and the chart is the load over the last day.',
+  }, j);
+  t.push('job.completed', minutes - 8, { summary: 'Done', usage: { costUsd: 0.47, inputTokens: 600, outputTokens: 2100, cacheReadTokens: 140000, cacheWriteTokens: 6000 } }, j);
+  t.job(j, 'COMPLETED', minutes, minutes - 8);
+  return { runs: [r], jobs: t.jobs, events: t.events };
+}
+
 export function timelines(): Record<string, SessionState> {
   return {
     [IDS.ingress]: ingress(),
     [IDS.certManager]: certManager(),
     [IDS.backups]: backups(),
-    [IDS.grafana]: quiet(IDS.grafana, 4, IDS.laptop, 60 * 30, 'Make a Grafana dashboard for the UPS: load, battery and runtime left.', 'The dashboard is in `grafana/ups.json`, provisioned from the ConfigMap. Three panels: load (%), battery charge and the runtime left, with an alert under 10 minutes.'),
+    [IDS.grafana]: grafana(),
     [IDS.oldSession]: quiet(IDS.oldSession, 5, IDS.laptop, 60 * 24 * 12, 'Move Puppet to the new CA.', 'Every agent now trusts the new CA and the old one is revoked.'),
     [IDS.blog]: quiet(IDS.blog, 6, IDS.laptop, 60 * 27, 'Draft a post about rebuilding the homelab: why, what changed, what I would do again.', 'The draft is in `content/posts/homelab-rebuild.md`: the why, the three changes that mattered, and what I would do again.', IDS.website),
   };
@@ -476,6 +503,8 @@ export const artifacts = [
   { id: id('d000000c', 1), ownerId: 'alex', projectId: IDS.homelab, filename: 'ingress-incident-report.md', mimeType: 'text/markdown', size: 2481, sha256: '5e2b7c9a1f0d3e4b6a8c2d1f9e7b5a3c1d0e8f6a4b2c9d7e5f3a1b0c8d6e4f2a', sessionId: IDS.ingress, createdAt: at(61) },
   { id: id('d000000c', 2), ownerId: 'alex', projectId: IDS.homelab, filename: 'ups-dashboard.json', mimeType: 'application/json', size: 18342, sha256: '9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b', sessionId: IDS.grafana, createdAt: at(60 * 28) },
   { id: id('d000000c', 3), ownerId: 'alex', projectId: IDS.homelab, filename: 'node-inventory.csv', mimeType: 'text/csv', size: 412, sha256: 'c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2', createdAt: at(60 * 24 * 5) },
+  { id: id('d000000c', 4), ownerId: 'alex', projectId: IDS.homelab, filename: 'ups-dashboard-preview.html', mimeType: 'text/html; charset=utf-8', size: upsPreviewHtml.length, sha256: '3b1f9c7e5a2d8f4c6e0a9b7d5f3c1e8a6d4b2f0c9e7a5d3b1f8c6e4a2d0b9f7e', sessionId: IDS.grafana, createdAt: at(60 * 30 - 6) },
+  { id: id('d000000c', 5), ownerId: 'alex', projectId: IDS.homelab, filename: 'ups-load-24h.svg', mimeType: 'image/svg+xml', size: upsChartSvg.length, sha256: '7e5c3a1f9d7b5e3c1a8f6d4b2e0c8a6f4d2b0e9c7a5f3d1b8e6c4a2f0d9b7e5c', sessionId: IDS.grafana, createdAt: at(60 * 30 - 7) },
 ];
 
 /** What a download of each demo file gives, made up like the rest. */
@@ -483,6 +512,8 @@ export const artifactContent: Record<string, string> = {
   [artifacts[0].id]: '# Ingress incident — node-3\n\nThe second controller replica crashed because traefik held host port 443.\n',
   [artifacts[1].id]: '{ "title": "UPS", "panels": [] }\n',
   [artifacts[2].id]: 'node,role,gpu\nnode-1,control-plane,no\nnode-2,worker,no\nnode-3,worker,yes\n',
+  [artifacts[3].id]: upsPreviewHtml,
+  [artifacts[4].id]: upsChartSvg,
 };
 
 export const skills = [

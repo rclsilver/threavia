@@ -2079,6 +2079,8 @@ components:
             - `workspace.changed`: `{ knownDirectoryId, files, additions,
               deletions, directory?, baseTree?, headTree? }`, the last three
               present when the diff of a file can be asked for
+            - `artifact.created`: `{ artifactId, filename, mimeType, size,
+              title? }`, a file the agent published for the person to open
             - `validation.resolved`: `{ validationId, approved, note, title }`, title
               naming what was decided
             - `user_input.resolved`: `{ requestId, value }`

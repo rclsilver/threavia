@@ -27,6 +27,7 @@ package policy
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -591,4 +592,35 @@ func scanCommand(cmd string) (parts []string, escapes bool) {
 func command(input map[string]any) string {
 	value, _ := input["command"].(string)
 	return value
+}
+
+// RefusesReading reports whether a FILE_READ refusal covers a file, and why.
+//
+// The provider applies those rules to its own Read; this is for a file the
+// backend reads on the agent's behalf — one it publishes — which no provider
+// rule sees. The path is matched as written relative to the working directory,
+// the way a rule such as `secrets/**` is written, and as an absolute path.
+func (p Policy) RefusesReading(path, workingDirectory string) (string, bool) {
+	candidates := []string{path}
+	if workingDirectory != "" {
+		if rel, err := filepath.Rel(workingDirectory, path); err == nil && !strings.HasPrefix(rel, "..") {
+			candidates = append(candidates, rel, "./"+rel)
+		}
+	}
+	for _, rule := range p.Rules {
+		if rule.Effect != backendv1.PermissionEffect_PERMISSION_EFFECT_DENY ||
+			rule.Capability != backendv1.PermissionCapability_PERMISSION_CAPABILITY_FILE_READ {
+			continue
+		}
+		for _, candidate := range candidates {
+			if rule.Match == "" || matches(rule.Match, candidate) {
+				reason := "The execution policy of this session refuses reading " + path + "."
+				if rule.Note != "" {
+					reason += " " + rule.Note
+				}
+				return reason, true
+			}
+		}
+	}
+	return "", false
 }

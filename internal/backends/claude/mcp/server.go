@@ -55,6 +55,9 @@ type CoreTool struct {
 	Name        string
 	Description string
 	InputSchema map[string]any
+	// FileInput names the input property that is a file on this machine,
+	// whose content goes to Core with the call.
+	FileInput string
 }
 
 // Asker is what the server needs from the backend: a way to turn a local tool
@@ -73,8 +76,10 @@ type Asker interface {
 	// is none of them, and a request that offers a choice while asking for a
 	// path contradicts itself.
 	AskUser(ctx context.Context, jobID, prompt string, choices []string, freeText bool) (string, error)
-	// CallCoreTool runs a Core Tool through Core and returns its result.
-	CallCoreTool(ctx context.Context, jobID, name string, input map[string]any) (map[string]any, error)
+	// CallCoreTool runs a Core Tool through Core and returns its result. When
+	// fileInput is set, the file that input property names is read here and
+	// sent with the call.
+	CallCoreTool(ctx context.Context, jobID, name string, input map[string]any, fileInput string) (map[string]any, error)
 }
 
 // Server is the loopback MCP endpoint.
@@ -274,7 +279,7 @@ func (s *Server) call(ctx context.Context, sess *session, raw json.RawMessage) (
 	// keeps the endpoint from becoming a general proxy into Core.
 	for _, tool := range sess.coreTools {
 		if tool.Name == params.Name {
-			return s.coreTool(ctx, sess.jobID, params.Name, params.Arguments)
+			return s.coreTool(ctx, sess.jobID, tool, params.Arguments)
 		}
 	}
 	return nil, &rpcError{Code: codeMethodNotFound, Message: "unknown tool " + params.Name}
@@ -362,14 +367,14 @@ func toolText(payload map[string]any) (any, *rpcError) {
 //
 // The round trip can be slow and can fail; an explicit error reaches the agent
 // rather than an empty result it would read as "nothing found".
-func (s *Server) coreTool(ctx context.Context, jobID, name string, args map[string]any) (any, *rpcError) {
+func (s *Server) coreTool(ctx context.Context, jobID string, tool CoreTool, args map[string]any) (any, *rpcError) {
 	if args == nil {
 		args = map[string]any{}
 	}
 	s.logger.Info("core tool called",
-		slog.String("jobId", jobID), slog.String("tool", name))
+		slog.String("jobId", jobID), slog.String("tool", tool.Name))
 
-	result, err := s.asker.CallCoreTool(ctx, jobID, name, args)
+	result, err := s.asker.CallCoreTool(ctx, jobID, tool.Name, args, tool.FileInput)
 	if err != nil {
 		return nil, &rpcError{Code: codeInternalError, Message: err.Error()}
 	}

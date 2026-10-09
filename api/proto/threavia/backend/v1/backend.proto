@@ -76,6 +76,9 @@ message CoreToolRequest {
   string job_id = 3;
   string name = 4;
   google.protobuf.Struct input = 5;
+  // The content of the file named by the tool's file_input, read by the
+  // backend. Empty for a tool that takes no file.
+  bytes file = 6;
 }
 
 message BackendToCore {

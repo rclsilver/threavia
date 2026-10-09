@@ -34,7 +34,7 @@ const state = {
   projectPolicies: clone(data.projectPolicies),
   sessionPolicies: {} as Record<string, Json | null>,
   pushSubscriptions: clone(data.pushConfig.subscriptions) as Json[],
-  blobs: {} as Record<string, string>,
+  files: {} as Record<string, Blob>,
 };
 
 let sequence = 9000;
@@ -406,12 +406,16 @@ export async function demoRequest(method: string, path: string, body: unknown): 
   throw unavailable(`${method} ${url.pathname}`);
 }
 
-/** Where a demo file downloads from: the browser itself. */
-export function demoHref(path: string): string {
+/** The content of a demo file, from memory: what data.ts made up, or what was dropped. */
+export async function demoBlob(path: string): Promise<Blob> {
+  await new Promise((resolve) => setTimeout(resolve, 120));
   const match = path.match(/^\/api\/v1\/artifacts\/([^/]+)\/content$/);
-  if (!match) return path;
-  state.blobs[match[1]] ??= URL.createObjectURL(new Blob([data.artifactContent[match[1]] ?? 'Demo file.\n'], { type: 'text/plain' }));
-  return state.blobs[match[1]];
+  if (!match) throw notFound('That file');
+  const uploaded = state.files[match[1]];
+  if (uploaded) return uploaded;
+  const content = data.artifactContent[match[1]];
+  if (content === undefined) throw notFound('That file');
+  return new Blob([content]);
 }
 
 /** An upload, kept in memory: a file, or a refusal for what cannot be faked. */
@@ -430,6 +434,6 @@ export async function demoUpload(path: string, file: File): Promise<unknown> {
     createdAt: nowIso(),
   };
   state.artifacts.unshift(artifact);
-  state.blobs[artifact.id] = URL.createObjectURL(file);
+  state.files[artifact.id] = file;
   return artifact;
 }

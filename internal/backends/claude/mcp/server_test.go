@@ -28,6 +28,7 @@ type stubAsker struct {
 	prompt   string
 	choices  []string
 	freeText bool
+	file     string
 }
 
 func (s *stubAsker) AskPermission(_ context.Context, jobID, toolName string, input map[string]any) (mcp.Decision, error) {
@@ -40,8 +41,8 @@ func (s *stubAsker) AskUser(_ context.Context, jobID, prompt string, choices []s
 	return s.answer, s.err
 }
 
-func (s *stubAsker) CallCoreTool(_ context.Context, jobID, name string, input map[string]any) (map[string]any, error) {
-	s.jobID, s.toolName, s.input = jobID, name, input
+func (s *stubAsker) CallCoreTool(_ context.Context, jobID, name string, input map[string]any, fileInput string) (map[string]any, error) {
+	s.jobID, s.toolName, s.input, s.file = jobID, name, input, fileInput
 	return s.toolResult, s.err
 }
 
@@ -487,5 +488,24 @@ func TestProviderToolsStillNeedPermission(t *testing.T) {
 	}
 	if got := toolText(t, result); !strings.Contains(got, `"behavior":"deny"`) {
 		t.Fatalf("the refusal did not reach the provider: %s", got)
+	}
+}
+
+// TestAFileToolNamesItsFile keeps the backend from guessing which input is a
+// path to read: Core says so in the tool's spec, and the endpoint passes it on.
+func TestAFileToolNamesItsFile(t *testing.T) {
+	t.Parallel()
+
+	asker := &stubAsker{toolResult: map[string]any{"artifactId": "a-1"}}
+	_, endpoint := newServer(t, asker, mcp.CoreTool{Name: "artifact_publish", FileInput: "path"})
+
+	if _, rpcErr := rpc(t, endpoint, "tools/call", map[string]any{
+		"name":      "artifact_publish",
+		"arguments": map[string]any{"path": "report.html"},
+	}); rpcErr != nil {
+		t.Fatalf("tools/call failed: %v", rpcErr)
+	}
+	if asker.toolName != "artifact_publish" || asker.file != "path" {
+		t.Fatalf("forwarded %q with file input %q, want artifact_publish with path", asker.toolName, asker.file)
 	}
 }

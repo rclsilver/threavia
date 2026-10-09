@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
+	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
 	"github.com/rclsilver/threavia/internal/backends/claude/policy"
 )
 
@@ -153,5 +154,23 @@ func TestTheReviewerIsToldBeforeEveryMessage(t *testing.T) {
 	bare.Policy.Supervision = "   "
 	if sent := withSupervision(bare); sent != bare.Prompt {
 		t.Errorf("an empty statement still prefixed the message:\n%s", sent)
+	}
+}
+
+// TestThePromptSaysHowToShowAFile names the tool that carries a file to the
+// person — found by what it declares — and stays silent when there is none.
+func TestThePromptSaysHowToShowAFile(t *testing.T) {
+	with := StartParams{CoreTools: []mcp.CoreTool{{Name: "task_create"}, {Name: "artifact_publish", FileInput: "path"}}}
+	prompt := systemPrompt(with, nil, "")
+	if !strings.Contains(prompt, "mcp__"+mcp.ServerName+"__artifact_publish") {
+		t.Fatalf("the prompt must name the tool that publishes a file:\n%s", prompt)
+	}
+	// As with schedules: Threavia's way, and nothing else.
+	if !strings.Contains(prompt, "only way to show them") || !strings.Contains(prompt, "web server") {
+		t.Fatalf("the prompt must rule out the other ways of showing a file:\n%s", prompt)
+	}
+	without := StartParams{CoreTools: []mcp.CoreTool{{Name: "task_create"}}}
+	if prompt := systemPrompt(without, nil, ""); strings.Contains(prompt, "publish") {
+		t.Fatalf("no file tool, nothing to say about publishing:\n%s", prompt)
 	}
 }

@@ -3,9 +3,12 @@ package api_test
 import (
 	"context"
 	"strings"
+	"testing"
+
+	"google.golang.org/protobuf/types/known/structpb"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
-	"testing"
+	sdktools "github.com/rclsilver/threavia/pkg/backend-sdk/tools"
 )
 
 // TestAgentRecordsProjectKnowledge covers what the Core Tools exist for: an
@@ -272,5 +275,64 @@ func TestPolicyChangesAreAudited(t *testing.T) {
 	}
 	if audit.Items[0].SubjectID != session {
 		t.Errorf("subject = %q, want the session", audit.Items[0].SubjectID)
+	}
+}
+
+// TestAnAgentPublishesWhatItMade pins the way an agent hands a person a file it
+// made: the backend sends the bytes with the call, Core keeps them as an
+// Artifact of the session, and the conversation says so.
+func TestAnAgentPublishesWhatItMade(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	c.svc.SetObjectStore(newMemoryObjects(), 8<<20)
+	session := c.startSession(projectID, c.backendID, dirID, "Make me a report")
+	start := receive(t, "the dispatched job", backend.starts)
+	ctx := context.Background()
+
+	encoded, _ := structpb.NewStruct(map[string]any{"path": "out/report.html", "filename": "report.html", "title": "Weekly report"})
+	result, err := backend.sdk.Invoke(ctx, sdktools.Call{
+		RunID: start.GetRunId(), JobID: start.GetJobId(), Name: "artifact_publish",
+		Input: encoded, File: []byte("<h1>Report</h1>"),
+	})
+	if err != nil {
+		t.Fatalf("artifact_publish: %v", err)
+	}
+	artifactID, _ := result.AsMap()["artifactId"].(string)
+	if artifactID == "" {
+		t.Fatalf("artifact_publish returned %v, want an identifier", result.AsMap())
+	}
+
+	var artifacts struct {
+		Items []struct {
+			ID        string `json:"id"`
+			Filename  string `json:"filename"`
+			MimeType  string `json:"mimeType"`
+			SessionID string `json:"sessionId"`
+		} `json:"items"`
+	}
+	c.mustDo("GET", "/api/v1/projects/"+projectID+"/artifacts", nil, &artifacts, 200)
+	if len(artifacts.Items) != 1 || artifacts.Items[0].ID != artifactID || artifacts.Items[0].SessionID != session {
+		t.Fatalf("artifacts = %+v, want the published one, in its session", artifacts.Items)
+	}
+	if got := artifacts.Items[0].MimeType; !strings.HasPrefix(got, "text/html") || artifacts.Items[0].Filename != "report.html" {
+		t.Fatalf("published as %q %q, want report.html as text/html", artifacts.Items[0].Filename, got)
+	}
+	waitUntil(t, "the conversation to say so", func() bool {
+		return c.countEvents(session, "artifact.created") == 1
+	})
+
+	// A tool that names a file but arrives without one is refused, not stored
+	// empty.
+	backend.callCoreToolExpectingFailure(t, ctx, start.GetRunId(), start.GetJobId(),
+		"artifact_publish", map[string]any{"path": "missing.png"})
+
+	// The tool tells the backend which input is the file to send.
+	var declared bool
+	for _, tool := range start.GetProjectContext().GetTools() {
+		if tool.GetName() == "artifact_publish" && tool.GetFileInput() == "path" {
+			declared = true
+		}
+	}
+	if !declared {
+		t.Fatal("artifact_publish must declare path as its file input")
 	}
 }

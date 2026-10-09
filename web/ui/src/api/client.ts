@@ -72,7 +72,7 @@ export function authorize(headers: Headers): Headers {
 export interface Transport {
   request: (method: string, path: string, body: unknown) => Promise<unknown>;
   upload: (path: string, file: File) => Promise<unknown>;
-  href: (path: string) => string;
+  blob: (path: string) => Promise<Blob>;
   /** Told after every change, so the views reread what changed. */
   changed: () => void;
 }
@@ -83,11 +83,36 @@ export function setTransport(next: Transport) {
   transport = next;
 }
 
-/** The address of something to download, wherever requests go. */
-export function hrefFor(path: string): string {
-  return transport ? transport.href(path) : path;
+/**
+ * The bytes behind a path, fetched with the client's credential.
+ *
+ * A link or an image cannot carry the token a signed-in deployment asks for,
+ * so an artifact is fetched like any other request and handed to the page as
+ * a Blob, whether it is shown or saved.
+ */
+export async function fetchBlob(path: string): Promise<Blob> {
+  if (transport) return transport.blob(path);
+  const response = await fetch(path, { headers: authorize(new Headers()) });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as ErrorBody | null;
+    throw new ApiError(
+      response.status,
+      body?.error?.code ?? 'unknown',
+      body?.error?.message ?? `GET ${path} failed (${response.status})`,
+    );
+  }
+  return response.blob();
 }
 
+/** Saves an artifact under its own name, the way a download link would. */
+export async function saveBlob(path: string, filename: string): Promise<void> {
+  const url = URL.createObjectURL(await fetchBlob(path));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
 async function request<T>(method: string, path: string, init: RequestInit = {}): Promise<T> {
   if (transport) {
     const body = typeof init.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined;

@@ -2,8 +2,12 @@ package adapter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -152,9 +156,20 @@ func permissionTitle(toolName string, input map[string]any) string {
 // Unlike a permission or a question, nothing human is involved: this is Core
 // answering Core. It still goes over the same stream, because the backend holds
 // no project knowledge of its own and must not pretend to.
-func (a *Adapter) CallCoreTool(ctx context.Context, jobID, name string, input map[string]any) (map[string]any, error) {
+func (a *Adapter) CallCoreTool(ctx context.Context, jobID, name string, input map[string]any, fileInput string) (map[string]any, error) {
 	if !a.knows(jobID) {
 		return nil, fmt.Errorf("job %s is not running here", jobID)
+	}
+
+	var file []byte
+	if fileInput != "" {
+		path, _ := input[fileInput].(string)
+		content, filename, err := a.readPublishable(jobID, path)
+		if err != nil {
+			return nil, err
+		}
+		file = content
+		input["filename"] = filename
 	}
 
 	encoded, err := structpb.NewStruct(input)
@@ -167,6 +182,7 @@ func (a *Adapter) CallCoreTool(ctx context.Context, jobID, name string, input ma
 		JobID: jobID,
 		Name:  name,
 		Input: encoded,
+		File:  file,
 	})
 	if err != nil {
 		return nil, err
@@ -194,4 +210,83 @@ func (a *Adapter) policyOf(jobID string) policy.Policy {
 		return job.policy
 	}
 	return policy.From(nil)
+}
+
+// maxPublishBytes is the largest file the backend sends Core for an agent. Core
+// refuses more anyway; checking here saves reading and sending it.
+const maxPublishBytes = 10 << 20
+
+// readPublishable reads a file an agent asked to hand to Core.
+//
+// Only from the Job's own directories — where it runs, and its scratch
+// directory — after resolving links, so that a path cannot lead out of them;
+// and never a file the Job's policy refuses to read. Publishing is reading on
+// the agent's behalf, and it must not reach what the agent could not.
+func (a *Adapter) readPublishable(jobID, path string) ([]byte, string, error) {
+	a.mu.Lock()
+	job, ok := a.jobs[jobID]
+	var workingDirectory string
+	var p policy.Policy
+	if ok {
+		workingDirectory, p = job.workingDirectory, job.policy
+	}
+	a.mu.Unlock()
+	if !ok {
+		return nil, "", fmt.Errorf("job %s is not running here", jobID)
+	}
+
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil, "", errors.New("say which file to publish: path is empty")
+	}
+	if !filepath.IsAbs(path) {
+		if workingDirectory == "" {
+			return nil, "", fmt.Errorf("%s is relative and this job has no working directory; give an absolute path", path)
+		}
+		path = filepath.Join(workingDirectory, path)
+	}
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return nil, "", fmt.Errorf("cannot read %s: %w", path, err)
+	}
+
+	var roots []string
+	for _, root := range []string{workingDirectory, p.Scratch} {
+		if root == "" {
+			continue
+		}
+		if real, err := filepath.EvalSymlinks(root); err == nil {
+			roots = append(roots, real)
+		}
+	}
+	inside := false
+	for _, root := range roots {
+		if rel, err := filepath.Rel(root, resolved); err == nil && rel != ".." && !strings.HasPrefix(rel, "../") {
+			inside = true
+			break
+		}
+	}
+	if !inside {
+		return nil, "", fmt.Errorf("only a file in the working directory (%s) or the scratch directory (%s) can be published; "+
+			"write or copy it there first", workingDirectory, p.Scratch)
+	}
+	if reason, refused := p.RefusesReading(resolved, workingDirectory); refused {
+		return nil, "", errors.New(reason)
+	}
+
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return nil, "", fmt.Errorf("cannot read %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, "", fmt.Errorf("%s is not a file", path)
+	}
+	if info.Size() > maxPublishBytes {
+		return nil, "", fmt.Errorf("%s is %d bytes; a published file may be up to %d", path, info.Size(), maxPublishBytes)
+	}
+	content, err := os.ReadFile(resolved)
+	if err != nil {
+		return nil, "", fmt.Errorf("cannot read %s: %w", path, err)
+	}
+	return content, filepath.Base(resolved), nil
 }

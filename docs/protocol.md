@@ -108,6 +108,14 @@ An agent tool call travels as `CoreToolRequest` and is answered by
 described in the `ProjectContext` of `StartJob`, so a backend never hardcodes a
 tool name.
 
+A tool whose `CoreToolSpec.file_input` is set takes a file: that input property
+is a path on the backend machine. The backend reads the file and sends its
+content as `CoreToolRequest.file`, because Core never reaches a backend's disk.
+It reads only within the Job's working directory and scratch directory, after
+resolving links, never a file the Job's policy refuses to read, and up to
+10 MiB. `artifact_publish` is such a tool: what an agent publishes becomes an
+Artifact of its Session and an `artifact.created` event in the conversation.
+
 ## Skills
 
 `ProjectContext` names the Core-managed Project Skills of a Run — identity,

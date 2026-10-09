@@ -71,6 +71,7 @@ export interface EventPayloads {
   'job.failed': { error?: string; usage?: Usage };
   'validation.resolved': { validationId: string; approved: boolean; note?: string; title?: string };
   'user_input.resolved': { requestId: string; value: string };
+  'artifact.created': { artifactId: string; filename: string; mimeType: string; size: number; title?: string };
   'workspace.changed': {
     knownDirectoryId?: string;
     files?: { path: string; state: 'ADDED' | 'MODIFIED' | 'DELETED' | 'RENAMED' }[];

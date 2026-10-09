@@ -23,6 +23,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Markdown } from '@/components/markdown';
+import { ArtifactCard } from '@/components/artifact-preview';
 import { Diff } from '@/components/file-change';
 import { ToolCallEntry, type ToolCall } from '@/components/tool-call';
 import { useFileDiff } from '@/api/queries';
@@ -44,6 +45,7 @@ const RENDERED = new Set([
   'user.message',
   'agent.message',
   'workspace.changed',
+  'artifact.created',
   'schedule.skipped',
   'validation.resolved',
   'user_input.resolved',
@@ -232,9 +234,15 @@ function foldFinished(rows: Row[], opened: ReadonlySet<number>): Row[] {
     if (!job || !finished.has(job) || row.kind === 'day' || row.kind === 'steps') return false;
     if (row.kind === 'tool') return true;
     const type = row.event.type;
-    // What the job changed in the files is part of its result, not of how it
-    // got there, so it stays out with the answer.
-    return !(type === 'user.message' || type === 'workspace.changed' || ENDINGS.has(type) || row.key === answer.get(job));
+    // What the job changed in the files, and what it published, are part of
+    // its result, not of how it got there, so they stay out with the answer.
+    return !(
+      type === 'user.message' ||
+      type === 'workspace.changed' ||
+      type === 'artifact.created' ||
+      ENDINGS.has(type) ||
+      row.key === answer.get(job)
+    );
   };
 
   const out: Row[] = [];
@@ -246,12 +254,29 @@ function foldFinished(rows: Row[], opened: ReadonlySet<number>): Row[] {
       continue;
     }
     const job = jobOf(row);
+    // A result — a file changed, a file published — does not break the run of
+    // steps around it: the steps fold into one line, and the results follow it
+    // in their order, so publishing a chart does not leave one stray step
+    // between two pictures.
+    const result = (candidate: Row) =>
+      candidate.kind === 'event' &&
+      jobOf(candidate) === job &&
+      (candidate.event.type === 'workspace.changed' || candidate.event.type === 'artifact.created');
+    const group: Row[] = [];
+    const results: Row[] = [];
     let end = index;
-    while (end < rows.length && folds(rows[end]) && jobOf(rows[end]) === job) end++;
-    const group = rows.slice(index, end);
+    while (end < rows.length && ((folds(rows[end]) && jobOf(rows[end]) === job) || result(rows[end]))) {
+      (result(rows[end]) ? results : group).push(rows[end]);
+      end++;
+    }
+    // A result closing the run belongs after whatever follows it, not before.
+    while (results.length > 0 && rows[end - 1] === results.at(-1) && !group.includes(rows[end - 1])) {
+      end--;
+      results.pop();
+    }
     index = end;
     if (group.length < 2) {
-      out.push(...group);
+      out.push(...rows.slice(index - group.length - results.length, index));
       continue;
     }
     const steps: Steps = { tools: 0, failed: 0, notes: 0 };
@@ -271,6 +296,7 @@ function foldFinished(rows: Row[], opened: ReadonlySet<number>): Row[] {
     const open = opened.has(key);
     out.push({ kind: 'steps', key, at, steps, open });
     if (open) out.push(...group);
+    out.push(...results);
   }
   return out;
 }
@@ -658,6 +684,21 @@ function Entry({
   const changed = payloadOf(event, 'workspace.changed');
   if (changed) {
     return <WorkspaceChange change={changed} sessionId={event.sessionId} sequence={event.sequence} />;
+  }
+
+  // Something the agent made for the person to look at, shown where it said
+  // so.
+  const published = payloadOf(event, 'artifact.created');
+  if (published) {
+    return (
+      <ArtifactCard
+        artifactId={published.artifactId}
+        filename={published.filename}
+        mimeType={published.mimeType}
+        size={published.size}
+        title={published.title}
+      />
+    );
   }
 
   // Everything else is the log running between the messages: a mark, the time

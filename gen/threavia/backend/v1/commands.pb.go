@@ -722,10 +722,16 @@ func (x *ProjectSkill) GetBundleSha256() string {
 // to the provider-specific tool mechanism; tool names are not hardcoded in the
 // backend (spec section 12).
 type CoreToolSpec struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	InputSchema   *structpb.Struct       `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	InputSchema *structpb.Struct       `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
+	// When set, the input property that names a file on the backend machine.
+	// The backend reads that file — within the Job's directories, and only if
+	// the Job's policy lets it be read — and sends its bytes as
+	// CoreToolRequest.file. Core never reaches a backend's disk itself, so this
+	// is how an agent hands Core something it made: a report, an image, a page.
+	FileInput     string `protobuf:"bytes,4,opt,name=file_input,json=fileInput,proto3" json:"file_input,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -779,6 +785,13 @@ func (x *CoreToolSpec) GetInputSchema() *structpb.Struct {
 		return x.InputSchema
 	}
 	return nil
+}
+
+func (x *CoreToolSpec) GetFileInput() string {
+	if x != nil {
+		return x.FileInput
+	}
+	return ""
 }
 
 // Compact structured context built by Core at Run start (spec section 12).
@@ -1870,11 +1883,13 @@ const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12-\n" +
 	"\x12installed_revision\x18\x04 \x01(\tR\x11installedRevision\x12#\n" +
-	"\rbundle_sha256\x18\x05 \x01(\tR\fbundleSha256\"\x80\x01\n" +
+	"\rbundle_sha256\x18\x05 \x01(\tR\fbundleSha256\"\x9f\x01\n" +
 	"\fCoreToolSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
-	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\"\xf9\x04\n" +
+	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\x12\x1d\n" +
+	"\n" +
+	"file_input\x18\x04 \x01(\tR\tfileInput\"\xf9\x04\n" +
 	"\x0eProjectContext\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12!\n" +

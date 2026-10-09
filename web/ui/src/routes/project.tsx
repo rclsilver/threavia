@@ -3,7 +3,6 @@ import {
   BookText,
   Check,
   Copy,
-  Download,
   Eye,
   Pencil,
   File as FileIcon,
@@ -11,6 +10,7 @@ import {
   FileCode,
   FileImage,
   FileText,
+  Maximize2,
   Pin,
   PinOff,
   Sparkles,
@@ -38,7 +38,8 @@ import {
 import type { Artifact, Decision, ExecutionPolicy, Skill, SkillSourceType } from '@/api/types';
 import { AuditTimeline } from '@/components/audit-timeline';
 import { Markdown } from '@/components/markdown';
-import { hrefFor } from '@/api/client';
+import { ArtifactViewer, DownloadButton } from '@/components/artifact-preview';
+import { kindOf } from '@/lib/artifact';
 import { PolicyForm, RulesEditor } from '@/components/policy-form';
 import { SkillViewer } from '@/components/skill-viewer';
 import {
@@ -453,7 +454,7 @@ function fileIcon(artifact: Artifact) {
   const type = `${artifact.mimeType} ${artifact.filename.split('.').pop() ?? ''}`.toLowerCase();
   if (/image\/|\b(png|jpe?g|gif|svg|webp)$/.test(type)) return FileImage;
   if (/zip|tar|gzip|compressed|\b(tgz|gz|7z)$/.test(type)) return FileArchive;
-  if (/json|yaml|xml|javascript|x-sh|x-python|\b(ya?ml|tf|sh|py|go|ts|js|toml)$/.test(type)) return FileCode;
+  if (/json|yaml|xml|html|javascript|x-sh|x-python|\b(ya?ml|tf|sh|py|go|ts|js|toml|htm)$/.test(type)) return FileCode;
   if (/text\/|\b(md|txt|csv|log)$/.test(type)) return FileText;
   return FileIcon;
 }
@@ -507,7 +508,8 @@ function ArtifactsPane({
 function ArtifactRow({ artifact, projectId }: { artifact: Artifact; projectId: string }) {
   const remove = useDeleteArtifact(projectId);
   const [asking, setAsking] = useState(false);
-  const href = hrefFor(`/api/v1/artifacts/${artifact.id}/content`);
+  const [viewing, setViewing] = useState(false);
+  const viewable = kindOf(artifact.mimeType, artifact.filename) !== 'other';
 
   return (
     <RecordRow
@@ -532,12 +534,29 @@ function ArtifactRow({ artifact, projectId }: { artifact: Artifact; projectId: s
         </>
       }
       action={
-        <Button asChild size="sm" className="max-sm:size-11 max-sm:p-0">
-          <a href={href} download aria-label={`Download ${artifact.filename}`}>
-            <Download />
-            <span className="max-sm:sr-only">Download</span>
-          </a>
-        </Button>
+        <>
+          {viewable && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="max-sm:size-11 max-sm:p-0"
+              aria-label={`Open ${artifact.filename}`}
+              onClick={() => setViewing(true)}
+            >
+              <Maximize2 />
+              <span className="max-sm:sr-only">Open</span>
+            </Button>
+          )}
+          <DownloadButton artifactId={artifact.id} filename={artifact.filename} compact />
+          <ArtifactViewer
+            artifactId={artifact.id}
+            filename={artifact.filename}
+            mimeType={artifact.mimeType}
+            size={artifact.size}
+            open={viewing}
+            onOpenChange={setViewing}
+          />
+        </>
       }
       menuLabel={`More for ${artifact.filename}`}
       menu={

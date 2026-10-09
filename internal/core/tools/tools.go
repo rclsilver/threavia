@@ -27,6 +27,7 @@ const (
 	NameKnownDirectoryRegister Name = "known_directory_register"
 	NameKnownDirectoryBind     Name = "known_directory_bind"
 	NameWorkingDirectorySet    Name = "working_directory_set"
+	NameArtifactPublish        Name = "artifact_publish"
 )
 
 func (n Name) String() string { return string(n) }
@@ -36,6 +37,10 @@ type Spec struct {
 	Name        Name            `json:"name"`
 	Description string          `json:"description"`
 	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
+	// FileInput names the input property that is a path on the backend
+	// machine. The backend reads that file and sends its content with the call:
+	// Core never reaches a backend's disk itself.
+	FileInput string `json:"fileInput,omitempty"`
 }
 
 // object builds a JSON Schema for a tool input.
@@ -151,6 +156,21 @@ func Specs() []Spec {
 				"knownDirectoryId": str("Identifier of the known directory."),
 				"path":             str("Its absolute path on this machine."),
 			}, "knownDirectoryId", "path"),
+		},
+		{
+			Name:      NameArtifactPublish,
+			FileInput: "path",
+			Description: "Publish a file you made for the person you work with — an HTML report, " +
+				"a chart, a screenshot, a diagram, an export — so that it appears in this " +
+				"conversation, where they can open it, and stays with the project afterwards. " +
+				"It is the only way they can see a file: they cannot reach this machine. " +
+				"Write the file in your working directory or your scratch directory first, then " +
+				"publish it. Use it for what is meant to be looked at, not for every file you " +
+				"change: the code you edit is already shown as the job's changes.",
+			InputSchema: object(map[string]any{
+				"path":  str("The file to publish, absolute or relative to the working directory. Up to 10 MiB."),
+				"title": str("What it is, in a few words, as the person should read it."),
+			}, "path"),
 		},
 		{
 			Name: NameWorkingDirectorySet,

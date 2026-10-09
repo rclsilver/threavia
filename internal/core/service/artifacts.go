@@ -1,15 +1,19 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
+	"net/http"
 	"path/filepath"
 	"strings"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
+	"github.com/rclsilver/threavia/internal/core/events"
 	"github.com/rclsilver/threavia/internal/core/storage/s3"
 )
 
@@ -147,4 +151,61 @@ func sanitiseFilename(name string) string {
 		return ""
 	}
 	return name
+}
+
+// maxPublishedBytes bounds a file an agent publishes. It travels inside one
+// message of the control stream, whose limit is larger; anything bigger than a
+// report or a screenshot belongs in the repository the agent works in.
+const maxPublishedBytes = 10 << 20
+
+// ArtifactPayload is what an artifact.created event says in a Session.
+type ArtifactPayload struct {
+	ArtifactID string `json:"artifactId"`
+	Filename   string `json:"filename"`
+	MimeType   string `json:"mimeType"`
+	Size       int64  `json:"size"`
+	Title      string `json:"title,omitempty"`
+}
+
+// publishArtifact stores a file an agent made and says so in its Session.
+//
+// The bytes come from the backend, which read the file the agent named on its
+// own machine, within the Job's directories and the Job's policy. Core only
+// sees the content: where the file was is the backend's business.
+func (s *Service) publishArtifact(ctx context.Context, identity auth.Identity, jc jobScope, input map[string]any, file []byte) (map[string]any, error) {
+	if len(file) == 0 {
+		return nil, fmt.Errorf("%w: no file content arrived; the file is empty, or this backend cannot send files", ErrInvalid)
+	}
+	if len(file) > maxPublishedBytes {
+		return nil, fmt.Errorf("%w: the file is %d bytes, more than the %d a published artifact may be", ErrInvalid, len(file), maxPublishedBytes)
+	}
+
+	filename := text(input, "filename")
+	if filename == "" {
+		filename = filepath.Base(text(input, "path"))
+	}
+	mimeType := mime.TypeByExtension(strings.ToLower(filepath.Ext(filename)))
+	if mimeType == "" {
+		mimeType = http.DetectContentType(file)
+	}
+
+	scope := domain.Scope{ProjectID: jc.ProjectID, SessionID: jc.SessionID, JobID: jc.JobID}
+	artifact, err := s.UploadArtifact(ctx, identity, jc.ProjectID, filename, mimeType, bytes.NewReader(file), scope)
+	if err != nil {
+		return nil, err
+	}
+
+	s.emit(ctx, identity.UserID, events.TypeArtifactCreated, scope, ArtifactPayload{
+		ArtifactID: string(artifact.ID),
+		Filename:   artifact.Filename,
+		MimeType:   artifact.MimeType,
+		Size:       artifact.Size,
+		Title:      text(input, "title"),
+	})
+	return map[string]any{
+		"artifactId": string(artifact.ID),
+		"filename":   artifact.Filename,
+		"size":       artifact.Size,
+		"published":  "It is in the conversation now, and kept with the project's artifacts.",
+	}, nil
 }

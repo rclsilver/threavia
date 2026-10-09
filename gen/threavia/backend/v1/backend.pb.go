@@ -480,12 +480,15 @@ func (x *CommandResult) GetError() *Error {
 
 // Agent-issued Core Tool call, proxied by the backend (spec section 12).
 type CoreToolRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	RunId         string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	JobId         string                 `protobuf:"bytes,3,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
-	Input         *structpb.Struct       `protobuf:"bytes,5,opt,name=input,proto3" json:"input,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	RunId     string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	JobId     string                 `protobuf:"bytes,3,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	Name      string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	Input     *structpb.Struct       `protobuf:"bytes,5,opt,name=input,proto3" json:"input,omitempty"`
+	// The content of the file named by the tool's file_input, read by the
+	// backend. Empty for a tool that takes no file.
+	File          []byte `protobuf:"bytes,6,opt,name=file,proto3" json:"file,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -551,6 +554,13 @@ func (x *CoreToolRequest) GetName() string {
 func (x *CoreToolRequest) GetInput() *structpb.Struct {
 	if x != nil {
 		return x.Input
+	}
+	return nil
+}
+
+func (x *CoreToolRequest) GetFile() []byte {
+	if x != nil {
+		return x.File
 	}
 	return nil
 }
@@ -1340,14 +1350,15 @@ const file_threavia_backend_v1_backend_proto_rawDesc = "" +
 	"\n" +
 	"command_id\x18\x01 \x01(\tR\tcommandId\x12\x1a\n" +
 	"\baccepted\x18\x02 \x01(\bR\baccepted\x120\n" +
-	"\x05error\x18\x03 \x01(\v2\x1a.threavia.backend.v1.ErrorR\x05error\"\xa1\x01\n" +
+	"\x05error\x18\x03 \x01(\v2\x1a.threavia.backend.v1.ErrorR\x05error\"\xb5\x01\n" +
 	"\x0fCoreToolRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x15\n" +
 	"\x06job_id\x18\x03 \x01(\tR\x05jobId\x12\x12\n" +
 	"\x04name\x18\x04 \x01(\tR\x04name\x12-\n" +
-	"\x05input\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x05input\"\xd8\x06\n" +
+	"\x05input\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x05input\x12\x12\n" +
+	"\x04file\x18\x06 \x01(\fR\x04file\"\xd8\x06\n" +
 	"\rBackendToCore\x122\n" +
 	"\x05hello\x18\x01 \x01(\v2\x1a.threavia.backend.v1.HelloH\x00R\x05hello\x12>\n" +
 	"\theartbeat\x18\x02 \x01(\v2\x1e.threavia.backend.v1.HeartbeatH\x00R\theartbeat\x12H\n" +
