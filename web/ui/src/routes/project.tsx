@@ -367,6 +367,11 @@ function DecisionRow({ decision }: { decision: Decision }) {
         />
       }
       title={decision.title}
+      // An important decision travels into every later run, so one an agent
+      // recorded on its own has to read as such, not as the person's ruling.
+      badges={
+        decision.createdByJobId && <Badge title="Recorded by an agent during a job, not by a person">agent</Badge>
+      }
       body={decision.content}
       meta={when(decision.createdAt)}
       menuLabel={`More for ${decision.title}`}

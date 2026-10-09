@@ -1,0 +1,11 @@
+-- The Job that recorded a Decision through decision_create, when an agent did.
+--
+-- An IMPORTANT Decision travels into every later run on every machine, so one
+-- an agent wrote has to read as one an agent wrote: the column is what lets a
+-- client say so. It is NULL for a Decision a person recorded.
+--
+-- There is deliberately no foreign key. Deleting a Session deletes its Jobs,
+-- and ON DELETE SET NULL would then rewrite an agent's Decision as a person's
+-- one. The identifier is provenance, not a link: it may outlive its Job, and
+-- nothing joins on it.
+ALTER TABLE decisions ADD COLUMN created_by_job_id UUID;

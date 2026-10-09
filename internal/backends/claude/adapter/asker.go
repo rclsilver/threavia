@@ -38,7 +38,14 @@ func (a *Adapter) AskPermission(ctx context.Context, jobID, toolName string, inp
 	case policy.Allow:
 		return mcp.Decision{Approved: true}, nil
 	}
+	return a.AskValidation(ctx, jobID, toolName, input)
+}
 
+// AskValidation raises a ValidationRequest and blocks until it is resolved,
+// without consulting the execution policy first. It is how a tool that widens
+// what future runs may reach is asked even in AUTONOMOUS, where the policy
+// allows whatever it does not know.
+func (a *Adapter) AskValidation(ctx context.Context, jobID, toolName string, input map[string]any) (mcp.Decision, error) {
 	requestID := uuid.NewString()
 	w, err := a.registerWaiter(jobID, requestID)
 	if err != nil {
@@ -141,8 +148,11 @@ func (a *Adapter) runOf(jobID string) string {
 
 // permissionTitle renders a short, human-readable summary of what is being
 // asked. The structured payload remains the technical reference.
+//
+// knownDirectoryId comes last: it is all working_directory_set carries, and
+// the title of that request has to say which directory is being granted.
 func permissionTitle(toolName string, input map[string]any) string {
-	for _, key := range []string{"file_path", "path", "command", "url", "pattern"} {
+	for _, key := range []string{"file_path", "path", "command", "url", "pattern", "knownDirectoryId"} {
 		if value, ok := input[key].(string); ok && value != "" {
 			return fmt.Sprintf("%s: %s", toolName, value)
 		}

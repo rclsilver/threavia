@@ -77,9 +77,13 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 			id := domain.DecisionID(raw)
 			supersedes = &id
 		}
+		// Recording the Job marks the Decision as an agent's: an IMPORTANT one
+		// reaches every later run, so whoever reads it must be able to tell it
+		// was not a person who decided.
+		jobID := jc.JobID
 		decision, err := s.CreateDecision(ctx, identity, jc.ProjectID,
 			text(input, "title"), text(input, "content"),
-			domain.DecisionImportance(strings.ToUpper(text(input, "importance"))), supersedes)
+			domain.DecisionImportance(strings.ToUpper(text(input, "importance"))), supersedes, &jobID)
 		if err != nil {
 			return nil, err
 		}

@@ -29,10 +29,17 @@ type stubAsker struct {
 	choices  []string
 	freeText bool
 	file     string
+	// validated records that the request went past the execution policy.
+	validated bool
 }
 
 func (s *stubAsker) AskPermission(_ context.Context, jobID, toolName string, input map[string]any) (mcp.Decision, error) {
 	s.jobID, s.toolName, s.input = jobID, toolName, input
+	return s.decision, s.err
+}
+
+func (s *stubAsker) AskValidation(_ context.Context, jobID, toolName string, input map[string]any) (mcp.Decision, error) {
+	s.jobID, s.toolName, s.input, s.validated = jobID, toolName, input, true
 	return s.decision, s.err
 }
 
@@ -488,6 +495,72 @@ func TestProviderToolsStillNeedPermission(t *testing.T) {
 	}
 	if got := toolText(t, result); !strings.Contains(got, `"behavior":"deny"`) {
 		t.Fatalf("the refusal did not reach the provider: %s", got)
+	}
+}
+
+// TestAToolThatWidensTheScopeIsValidated pins the exception to the rule above:
+// a Core Tool whose spec requires validation is asked of the user, past the
+// policy, and the answer is what reaches the provider.
+func TestAToolThatWidensTheScopeIsValidated(t *testing.T) {
+	t.Parallel()
+
+	for _, approved := range []bool{false, true} {
+		asker := &stubAsker{decision: mcp.Decision{Approved: approved}}
+		_, endpoint := newServer(t, asker,
+			mcp.CoreTool{Name: "task_create"},
+			mcp.CoreTool{Name: "working_directory_set", RequiresValidation: true})
+
+		result, rpcErr := rpc(t, endpoint, "tools/call", map[string]any{
+			"name": mcp.ToolApprovalPrompt,
+			"arguments": map[string]any{
+				"tool_name": "mcp__threavia__working_directory_set",
+				"input":     map[string]any{"knownDirectoryId": "kd-home"},
+			},
+		})
+		if rpcErr != nil {
+			t.Fatalf("the approval prompt failed: %v", rpcErr)
+		}
+		if !asker.validated || asker.toolName != "working_directory_set" || asker.input["knownDirectoryId"] != "kd-home" {
+			t.Fatalf("the request reached the user as validated=%t %q %v, want a validation of working_directory_set",
+				asker.validated, asker.toolName, asker.input)
+		}
+
+		want := `"behavior":"deny"`
+		if approved {
+			want = `"behavior":"allow"`
+		}
+		if got := toolText(t, result); !strings.Contains(got, want) {
+			t.Fatalf("approved=%t answered %s, want %s", approved, got, want)
+		}
+	}
+}
+
+// TestTaskCreateNeedsNoValidation keeps the exception narrow: a Core Tool that
+// only writes project metadata is still allowed without asking anyone, next
+// to one that is asked.
+func TestTaskCreateNeedsNoValidation(t *testing.T) {
+	t.Parallel()
+
+	asker := &stubAsker{decision: mcp.Decision{Approved: false}}
+	_, endpoint := newServer(t, asker,
+		mcp.CoreTool{Name: "task_create"},
+		mcp.CoreTool{Name: "working_directory_set", RequiresValidation: true})
+
+	result, rpcErr := rpc(t, endpoint, "tools/call", map[string]any{
+		"name": mcp.ToolApprovalPrompt,
+		"arguments": map[string]any{
+			"tool_name": "mcp__threavia__task_create",
+			"input":     map[string]any{"title": "Écrire la doc"},
+		},
+	})
+	if rpcErr != nil {
+		t.Fatalf("the approval prompt failed: %v", rpcErr)
+	}
+	if got := toolText(t, result); !strings.Contains(got, `"behavior":"allow"`) {
+		t.Fatalf("task_create was not allowed outright: %s", got)
+	}
+	if asker.toolName != "" {
+		t.Fatalf("task_create reached the user as %q", asker.toolName)
 	}
 }
 

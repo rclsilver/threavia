@@ -117,6 +117,18 @@ resolving links, never a file the Job's policy refuses to read, and up to
 10 MiB. `artifact_publish` is such a tool: what an agent publishes becomes an
 Artifact of its Session and an `artifact.created` event in the conversation.
 
+A tool whose `CoreToolSpec.requires_validation` is set changes where future
+Runs execute, and so what they may read without asking: `known_directory_register`,
+`known_directory_bind` and `working_directory_set`. A backend that lets the
+other Core Tools run without asking anyone still raises a `ValidationRequested`
+before one of these, in every execution mode, `AUTONOMOUS` included, and runs it
+only if the person approves: an agent must not be able to hand the next Run the
+user's home directory on its own. A backend that does not know the field keeps
+allowing these tools like the others, so the guarantee holds only from a backend
+that reads it. What a backend does on its own behalf, such as recording where it
+found a directory the person pointed it to, is not an agent's call and needs no
+validation.
+
 ## Skills
 
 `ProjectContext` names the Core-managed Project Skills of a Run — identity,

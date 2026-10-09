@@ -7,16 +7,16 @@ import (
 )
 
 const decisionColumns = `d.id, d.project_id, d.title, d.content, d.importance,
-	d.status, d.supersedes, d.created_at, d.updated_at`
+	d.status, d.supersedes, d.created_by_job_id, d.created_at, d.updated_at`
 
 // CreateDecision inserts a Decision.
 func (s *Store) CreateDecision(ctx context.Context, decision *domain.Decision) error {
 	err := s.q.QueryRow(ctx, `
-		INSERT INTO decisions (id, project_id, title, content, importance, status, supersedes)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO decisions (id, project_id, title, content, importance, status, supersedes, created_by_job_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING created_at, updated_at`,
 		decision.ID, decision.ProjectID, decision.Title, decision.Content,
-		decision.Importance, decision.Status, decision.Supersedes,
+		decision.Importance, decision.Status, decision.Supersedes, decision.CreatedByJobID,
 	).Scan(&decision.CreatedAt, &decision.UpdatedAt)
 	return classify(err, "create decision")
 }
@@ -135,6 +135,6 @@ func (s *Store) SearchDecisions(ctx context.Context, projectID domain.ProjectID,
 func scanDecision(row scanner) (domain.Decision, error) {
 	var d domain.Decision
 	err := row.Scan(&d.ID, &d.ProjectID, &d.Title, &d.Content, &d.Importance,
-		&d.Status, &d.Supersedes, &d.CreatedAt, &d.UpdatedAt)
+		&d.Status, &d.Supersedes, &d.CreatedByJobID, &d.CreatedAt, &d.UpdatedAt)
 	return d, classify(err, "read decision")
 }

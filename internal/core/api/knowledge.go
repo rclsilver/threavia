@@ -178,7 +178,7 @@ func (h *handler) createDecision(w http.ResponseWriter, r *http.Request, identit
 
 	decision, err := h.svc.CreateDecision(r.Context(), identity,
 		domain.ProjectID(r.PathValue("projectId")), body.Title, body.Content,
-		domain.DecisionImportance(body.Importance), supersedes)
+		domain.DecisionImportance(body.Importance), supersedes, nil)
 	if err != nil {
 		h.fail(w, err)
 		return

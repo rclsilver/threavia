@@ -125,6 +125,12 @@ message CoreToolSpec {
   // CoreToolRequest.file. Core never reaches a backend's disk itself, so this
   // is how an agent hands Core something it made: a report, an image, a page.
   string file_input = 4;
+  // When true, the tool changes where future Runs execute, and so what they
+  // may read without asking. The backend asks the person before running it,
+  // in every execution mode, where it allows the other Core Tools on its own:
+  // an agent must not widen its own scope. A backend that does not know this
+  // field keeps allowing the tool.
+  bool requires_validation = 5;
 }
 
 // Compact structured context built by Core at Run start (spec section 12).

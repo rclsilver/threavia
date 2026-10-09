@@ -195,7 +195,8 @@ func (s *Service) SearchTasks(ctx context.Context, identity auth.Identity, proje
 }
 
 // CreateDecision records a Decision, superseding an earlier one when asked.
-func (s *Service) CreateDecision(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, title, content string, importance domain.DecisionImportance, supersedes *domain.DecisionID) (domain.Decision, error) {
+// createdBy is the Job whose agent recorded it, and nil when a person did.
+func (s *Service) CreateDecision(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, title, content string, importance domain.DecisionImportance, supersedes *domain.DecisionID, createdBy *domain.JobID) (domain.Decision, error) {
 	if _, err := s.store.GetProject(ctx, identity.UserID, projectID); err != nil {
 		return domain.Decision{}, translate(err)
 	}
@@ -211,13 +212,14 @@ func (s *Service) CreateDecision(ctx context.Context, identity auth.Identity, pr
 	}
 
 	decision := domain.Decision{
-		ID:         domain.NewDecisionID(),
-		ProjectID:  projectID,
-		Title:      title,
-		Content:    strings.TrimSpace(content),
-		Importance: importance,
-		Status:     domain.DecisionActive,
-		Supersedes: supersedes,
+		ID:             domain.NewDecisionID(),
+		ProjectID:      projectID,
+		Title:          title,
+		Content:        strings.TrimSpace(content),
+		Importance:     importance,
+		Status:         domain.DecisionActive,
+		Supersedes:     supersedes,
+		CreatedByJobID: createdBy,
 	}
 
 	var superseded *domain.Decision

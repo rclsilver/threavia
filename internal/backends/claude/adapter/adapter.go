@@ -460,7 +460,12 @@ func coreTools(pc *backendv1.ProjectContext) []mcp.CoreTool {
 	specs := pc.GetTools()
 	out := make([]mcp.CoreTool, 0, len(specs))
 	for _, spec := range specs {
-		tool := mcp.CoreTool{Name: spec.GetName(), Description: spec.GetDescription(), FileInput: spec.GetFileInput()}
+		tool := mcp.CoreTool{
+			Name:               spec.GetName(),
+			Description:        spec.GetDescription(),
+			FileInput:          spec.GetFileInput(),
+			RequiresValidation: spec.GetRequiresValidation(),
+		}
 		if schema := spec.GetInputSchema(); schema != nil {
 			tool.InputSchema = schema.AsMap()
 		}

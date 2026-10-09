@@ -212,9 +212,10 @@ func coreToolSpecs() []*backendv1.CoreToolSpec {
 	out := make([]*backendv1.CoreToolSpec, 0, len(specs))
 	for _, spec := range specs {
 		encoded := &backendv1.CoreToolSpec{
-			Name:        spec.Name.String(),
-			Description: spec.Description,
-			FileInput:   spec.FileInput,
+			Name:               spec.Name.String(),
+			Description:        spec.Description,
+			FileInput:          spec.FileInput,
+			RequiresValidation: spec.RequiresValidation,
 		}
 		if len(spec.InputSchema) > 0 {
 			var schema map[string]any

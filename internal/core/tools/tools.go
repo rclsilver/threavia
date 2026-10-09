@@ -41,6 +41,11 @@ type Spec struct {
 	// machine. The backend reads that file and sends its content with the call:
 	// Core never reaches a backend's disk itself.
 	FileInput string `json:"fileInput,omitempty"`
+	// RequiresValidation marks a tool that changes where future runs execute,
+	// and so what they may read without asking. The backend asks the person
+	// before running it, as it would before a Write, while it allows the other
+	// Core Tools on its own: an agent must not widen its own scope.
+	RequiresValidation bool `json:"requiresValidation,omitempty"`
 }
 
 // object builds a JSON Schema for a tool input.
@@ -138,7 +143,8 @@ func Specs() []Spec {
 			}, "taskId"),
 		},
 		{
-			Name: NameKnownDirectoryRegister,
+			Name:               NameKnownDirectoryRegister,
+			RequiresValidation: true,
 			Description: "Register a directory worth remembering across machines, and bind " +
 				"it to its path here. Use it for a directory this project will come back " +
 				"to, not for every directory you happen to touch.",
@@ -150,8 +156,9 @@ func Specs() []Spec {
 			}, "name", "path"),
 		},
 		{
-			Name:        NameKnownDirectoryBind,
-			Description: "Bind an already known directory to its path on this machine.",
+			Name:               NameKnownDirectoryBind,
+			RequiresValidation: true,
+			Description:        "Bind an already known directory to its path on this machine.",
 			InputSchema: object(map[string]any{
 				"knownDirectoryId": str("Identifier of the known directory."),
 				"path":             str("Its absolute path on this machine."),
@@ -173,7 +180,8 @@ func Specs() []Spec {
 			}, "path"),
 		},
 		{
-			Name: NameWorkingDirectorySet,
+			Name:               NameWorkingDirectorySet,
+			RequiresValidation: true,
 			Description: "Change the working directory of this session, durably. This is the " +
 				"initial directory of future runs, not a temporary cd.",
 			InputSchema: object(map[string]any{

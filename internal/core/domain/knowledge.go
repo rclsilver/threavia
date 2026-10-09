@@ -85,8 +85,12 @@ type Decision struct {
 	Status     DecisionStatus     `json:"status"`
 	// Supersedes is the Decision this one replaced, if any.
 	Supersedes *DecisionID `json:"supersedes,omitempty"`
-	CreatedAt  time.Time   `json:"createdAt"`
-	UpdatedAt  time.Time   `json:"updatedAt"`
+	// CreatedByJobID is the Job whose agent recorded this Decision through
+	// decision_create, and nil when a person did. It outlives the Job, so a
+	// Decision an agent wrote keeps saying so after its Session is deleted.
+	CreatedByJobID *JobID    `json:"createdByJobId,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 // TaskStatus is the lifecycle of a Task (spec section 14).

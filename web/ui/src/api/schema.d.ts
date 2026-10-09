@@ -4058,6 +4058,8 @@ export interface components {
             importance: components["schemas"]["DecisionImportance"];
             status: components["schemas"]["DecisionStatus"];
             supersedes?: components["schemas"]["UUID"];
+            /** @description The Job whose agent recorded this Decision through the decision_create Core Tool; absent when a person recorded it. An IMPORTANT Decision is carried into every later run, so a client shows which ones an agent wrote. The identifier is kept when the Job is deleted with its Session, and may then name no Job. */
+            createdByJobId?: components["schemas"]["UUID"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */

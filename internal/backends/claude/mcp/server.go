@@ -58,17 +58,27 @@ type CoreTool struct {
 	// FileInput names the input property that is a file on this machine,
 	// whose content goes to Core with the call.
 	FileInput string
+	// RequiresValidation marks a tool that changes where future runs execute.
+	// It is asked of the user like a Write, where every other Core Tool is
+	// allowed on its own.
+	RequiresValidation bool
 }
 
 // Asker is what the server needs from the backend: a way to turn a local tool
 // call into a Threavia request and wait for the answer.
 //
-// The first two block until the user answers, the Job ends or the context is
+// The ones that ask block until the user answers, the Job ends or the context is
 // cancelled. Waiting indefinitely is the specified behaviour: validation and
 // input requests never time out.
 type Asker interface {
 	// AskPermission raises a ValidationRequest for a tool invocation.
 	AskPermission(ctx context.Context, jobID, toolName string, input map[string]any) (Decision, error)
+	// AskValidation raises a ValidationRequest for a tool invocation whatever
+	// the execution policy says. It is for the Core Tools that widen what
+	// future runs may reach: the policy allows anything it does not know in
+	// AUTONOMOUS, and an agent must not be able to grant itself a wider scope
+	// in any mode.
+	AskValidation(ctx context.Context, jobID, toolName string, input map[string]any) (Decision, error)
 	// AskUser raises a UserInputRequest.
 	//
 	// freeText is explicit rather than derived from the absence of choices: a
@@ -157,6 +167,19 @@ func (s *session) provides(toolName string) bool {
 		}
 	}
 	return false
+}
+
+// needsValidation reports whether a tool is a Core Tool whose spec requires the
+// user's validation, and returns its bare name, which is what the user should
+// read in the request.
+func (s *session) needsValidation(toolName string) (string, bool) {
+	name := strings.TrimPrefix(toolName, "mcp__"+ServerName+"__")
+	for _, tool := range s.coreTools {
+		if tool.Name == name {
+			return name, tool.RequiresValidation
+		}
+	}
+	return "", false
 }
 
 // Register gives a Job its own endpoint and returns the URL to configure Claude
@@ -299,14 +322,28 @@ func (s *Server) approvalPrompt(ctx context.Context, sess *session, args map[str
 	// Threavia. A Core Tool reads or writes the project's own memory through
 	// Core — no filesystem, no network, no git — so a prompt would say nothing
 	// a user could act on, and would stall the agent until someone answered it.
-	if sess.provides(toolName) {
+	//
+	// Except for the tools whose spec says otherwise. Registering a directory
+	// or making it the working directory decides where the next run starts,
+	// and the provider reads anything under its working directory without
+	// asking: an agent allowed to do that on its own could hand the next run
+	// the user's home. Those are asked like a Write, in every mode, since no
+	// execution policy is meant to let an agent widen its own scope.
+	var (
+		decision Decision
+		err      error
+	)
+	if name, validated := sess.needsValidation(toolName); validated {
+		s.logger.Info("validation required by the tool",
+			slog.String("jobId", jobID), slog.String("tool", name))
+		decision, err = s.asker.AskValidation(ctx, jobID, name, input)
+	} else if sess.provides(toolName) {
 		return toolText(map[string]any{"behavior": "allow", "updatedInput": input})
+	} else {
+		s.logger.Info("permission requested",
+			slog.String("jobId", jobID), slog.String("tool", toolName))
+		decision, err = s.asker.AskPermission(ctx, jobID, toolName, input)
 	}
-
-	s.logger.Info("permission requested",
-		slog.String("jobId", jobID), slog.String("tool", toolName))
-
-	decision, err := s.asker.AskPermission(ctx, jobID, toolName, input)
 	if err != nil {
 		// Failing closed is the only safe default: an unanswered permission
 		// request must never become an approval.

@@ -390,3 +390,88 @@ func TestDeletingASessionAsksAboutItsFiles(t *testing.T) {
 		t.Fatalf("%d objects stored, want the dropped file's bytes gone", objects.count())
 	}
 }
+
+// TestOnlyTheDirectoryToolsRequireValidation pins what Core declares to
+// backends: the three tools that change where future runs execute are asked of
+// the user, and every other Core Tool is not. Adding a tool to either side is a
+// decision, so the list is spelled out.
+func TestOnlyTheDirectoryToolsRequireValidation(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
+	start := receive(t, "the dispatched job", backend.starts)
+
+	want := map[string]bool{
+		"known_directory_register": true,
+		"known_directory_bind":     true,
+		"working_directory_set":    true,
+	}
+	declared := start.GetProjectContext().GetTools()
+	if len(declared) <= len(want) {
+		t.Fatalf("%d core tools declared, want more than the directory ones", len(declared))
+	}
+	for _, tool := range declared {
+		if tool.GetRequiresValidation() != want[tool.GetName()] {
+			t.Errorf("%s requires validation = %t, want %t",
+				tool.GetName(), tool.GetRequiresValidation(), want[tool.GetName()])
+		}
+		delete(want, tool.GetName())
+	}
+	if len(want) != 0 {
+		t.Fatalf("directory tools missing from the declaration: %v", want)
+	}
+}
+
+// TestADecisionAnAgentRecordedSaysSo pins the provenance of project memory: a
+// Decision recorded through decision_create names the Job that recorded it,
+// one recorded through the API names none, and the mark survives the deletion
+// of the Session the Job belonged to.
+func TestADecisionAnAgentRecordedSaysSo(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	session := c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
+	start := receive(t, "the dispatched job", backend.starts)
+	ctx := context.Background()
+
+	created := backend.callCoreTool(t, ctx, start.GetRunId(), start.GetJobId(),
+		"decision_create", map[string]any{"title": "Always deploy on Fridays", "importance": "IMPORTANT"})
+	agentID, _ := created["decisionId"].(string)
+
+	var byHand map[string]any
+	c.mustDo("POST", "/api/v1/projects/"+projectID+"/decisions",
+		map[string]any{"title": "Never deploy on Fridays", "importance": "IMPORTANT"}, &byHand, 201)
+	if _, marked := byHand["createdByJobId"]; marked {
+		t.Fatalf("a decision recorded through the API names a job: %v", byHand)
+	}
+	handID, _ := byHand["id"].(string)
+
+	authors := func() map[string]any {
+		var list struct {
+			Items []map[string]any `json:"items"`
+		}
+		c.mustDo("GET", "/api/v1/projects/"+projectID+"/decisions", nil, &list, 200)
+		found := map[string]any{}
+		for _, item := range list.Items {
+			id, _ := item["id"].(string)
+			found[id] = item["createdByJobId"]
+		}
+		return found
+	}
+	listed := authors()
+	if listed[agentID] != start.GetJobId() {
+		t.Fatalf("the agent's decision names job %v, want %s", listed[agentID], start.GetJobId())
+	}
+	if listed[handID] != nil {
+		t.Fatalf("the person's decision names job %v, want none", listed[handID])
+	}
+
+	// Deleting the Session deletes its Jobs; the decision stays an agent's.
+	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
+		return backend.events.JobCompleted(ctx, start.GetRunId(), start.GetJobId(), "done", nil)
+	}))
+	waitUntil(t, "the job to end", func() bool { return c.jobStatus(session, start.GetJobId()) == "COMPLETED" })
+	c.mustDo("DELETE", "/api/v1/sessions/"+session, nil, nil, 204)
+
+	if after := authors(); after[agentID] != start.GetJobId() {
+		t.Fatalf("after the session was deleted the agent's decision names job %v, want %s",
+			after[agentID], start.GetJobId())
+	}
+}

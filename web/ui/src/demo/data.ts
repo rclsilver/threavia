@@ -279,6 +279,11 @@ function ingress(): SessionState {
   t.tool(j1, 63.4, 'Bash', { command: upgrade }, 'Release "ingress-nginx" has been upgraded. Happy Helming!\nREVISION: 18');
   t.tool(j1, 62.5, 'Bash', { command: 'kubectl -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=180s' }, 'deployment "ingress-nginx-controller" successfully rolled out');
   t.tool(j1, 62, 'Bash', { command: 'curl -sk -o /dev/null -w "%{http_code}" https://grafana.home.example' }, '200');
+  t.tool(j1, 61.9, 'mcp__threavia__decision_create', {
+    title: 'Ingress goes through MetalLB, never the host network',
+    content: 'Two ingress controllers cannot both hold host port 443 on one node. Every ingress is a LoadBalancer service on the 192.168.1.240–250 pool.',
+    importance: 'IMPORTANT',
+  }, JSON.stringify({ decisionId: id('d000000b', 1), status: 'ACTIVE' }));
   t.push('workspace.changed', 61.8, {
     knownDirectoryId: directories[0].id,
     files: [{ path: 'kubernetes/ingress-nginx/values.yaml', state: 'MODIFIED' }],
@@ -480,19 +485,22 @@ export const tasks = [
   task(8, IDS.website, 'Publish the homelab rebuild post', 'Draft in content/posts/homelab-rebuild.md.', 'TODO', 60 * 26),
 ];
 
-const decision = (n: number, projectId: string, title: string, content: string, importance: string, minutesAgo: number) => ({
+// createdByJobId marks a decision an agent recorded through decision_create.
+const decision = (n: number, projectId: string, title: string, content: string, importance: string, minutesAgo: number, createdByJobId?: string) => ({
   id: id('d000000b', n),
   projectId,
   title,
   content,
   importance,
   status: 'ACTIVE',
+  ...(createdByJobId ? { createdByJobId } : {}),
   createdAt: at(minutesAgo),
   updatedAt: at(minutesAgo),
 });
 
 export const decisions = [
-  decision(1, IDS.homelab, 'Ingress goes through MetalLB, never the host network', 'Two ingress controllers cannot both hold host port 443 on one node. Every ingress is a LoadBalancer service on the 192.168.1.240–250 pool.', 'IMPORTANT', 61),
+  // Recorded by the agent of the ingress session, at the end of its first job.
+  decision(1, IDS.homelab, 'Ingress goes through MetalLB, never the host network', 'Two ingress controllers cannot both hold host port 443 on one node. Every ingress is a LoadBalancer service on the 192.168.1.240–250 pool.', 'IMPORTANT', 61.9, id('d0000006', 1)),
   decision(2, IDS.homelab, 'Helm charts are pinned to an exact version', 'A floating chart version broke the ingress rollout once. Upgrades are a commit, never a side effect of a sync.', 'IMPORTANT', 60 * 24 * 2),
   decision(3, IDS.homelab, 'Backups go to the NAS, restore-tested monthly', '', 'NORMAL', 60 * 24 * 9),
   decision(4, IDS.homelab, 'Grafana stays behind the ingress, no NodePort', 'Exposing it on a NodePort skipped the auth proxy.', 'NORMAL', 60 * 24 * 6),
