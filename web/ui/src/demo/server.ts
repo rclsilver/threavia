@@ -1,4 +1,5 @@
 import { ApiError } from '@/api/client';
+import { announceJobEnded } from '@/lib/job-ended';
 
 import * as data from './data';
 
@@ -74,6 +75,12 @@ function pushEvent(sessionId: string, type: string, payload: Json, jobId?: strin
     payload,
   });
   session.updatedAt = nowIso();
+  // The demo has no stream to say a Job ended, so it says it itself, once the
+  // request that ended it has been answered.
+  if (type === 'job.completed' || type === 'job.failed') {
+    const said = type === 'job.failed' ? text(payload.error) : text(payload.summary);
+    setTimeout(() => announceJobEnded({ sessionId, failed: type === 'job.failed', text: said }), 300);
+  }
 }
 
 function attentionFor(sessionId?: string) {
@@ -112,7 +119,7 @@ function answer(sessionId: string, text: string, delivery?: string) {
     },
     jobId,
   );
-  pushEvent(sessionId, 'job.completed', { summary: 'Demo', usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 } }, jobId);
+  pushEvent(sessionId, 'job.completed', { summary: 'Answered (the demo agent).', usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 } }, jobId);
   settle(sessionId);
   return job;
 }
@@ -375,7 +382,7 @@ const routes: [string, RegExp, Handler][] = [
       } else {
         pushEvent(String(scope.sessionId), 'agent.message', { text: 'Understood, I will not apply it. The kustomization stays bumped locally, for you to apply when you choose.' }, String(job.id));
       }
-      pushEvent(String(scope.sessionId), 'job.completed', { summary: 'Done', usage: { costUsd: 0.62, inputTokens: 900, outputTokens: 1400, cacheReadTokens: 210000, cacheWriteTokens: 9000 } }, String(job.id));
+      pushEvent(String(scope.sessionId), 'job.completed', { summary: body.approved ? 'cert-manager runs 1.16.1 and both ClusterIssuers are Ready.' : 'Not applied, as you asked.', usage: { costUsd: 0.62, inputTokens: 900, outputTokens: 1400, cacheReadTokens: 210000, cacheWriteTokens: 9000 } }, String(job.id));
       Object.assign(job, { status: 'COMPLETED', endedAt: nowIso() });
       settle(String(scope.sessionId));
     }
@@ -390,7 +397,7 @@ const routes: [string, RegExp, Handler][] = [
     pushEvent(String(scope.sessionId), 'agent.message', { text: `Noted: “${String(body.value)}”. (In the demo the agent stops here; for real it would carry on from your answer.)` }, String(scope.jobId));
     const job = timelineOf(String(scope.sessionId)).jobs.find((entry) => entry.id === scope.jobId);
     if (job) Object.assign(job, { status: 'COMPLETED', endedAt: nowIso() });
-    pushEvent(String(scope.sessionId), 'job.completed', { summary: 'Answered' }, String(scope.jobId));
+    pushEvent(String(scope.sessionId), 'job.completed', { summary: `Carrying on with “${text(body.value)}”.` }, String(scope.jobId));
     settle(String(scope.sessionId));
     return request;
   }],

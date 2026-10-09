@@ -41,6 +41,7 @@ import type { BackendInstance, Project, Session } from '@/api/types';
 import { DEMO } from '@/demo/mode';
 import { SelectedProject } from '@/use-project';
 import { useStream } from '@/use-stream';
+import { JobEndedNotices } from '@/components/job-ended-notices';
 import { Logo } from '@/components/logo';
 import { ActionError } from '@/components/ui/action-error';
 import { Avatar } from '@/components/ui/avatar';
@@ -334,6 +335,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             Project in their own URL. */}
         <SelectedProject.Provider value={projectId}>{children}</SelectedProject.Provider>
       </main>
+      <JobEndedNotices />
     </div>
   );
 }

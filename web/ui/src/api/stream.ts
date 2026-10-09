@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { dropResolvedAttention } from './attention-cache';
+import { announceJobEnded } from '@/lib/job-ended';
 import { isActive, presenceSentWithStream } from '@/lib/presence';
 
 import { authorize, CHANNEL } from './client';
@@ -233,6 +234,18 @@ export class EventStream {
         // A Job may be a Schedule's doing, which changes what it last did.
         if (event.type === 'job.created') {
           void this.queries.invalidateQueries({ queryKey: keys.schedules(event.sessionId ?? '') });
+        }
+        // Told as it happens, not as it is replayed: a reconnection resends
+        // what was missed, and work that ended an hour ago is not news.
+        if ((event.type === 'job.completed' || event.type === 'job.failed') && event.sessionId &&
+          Date.now() - Date.parse(event.timestamp) < 2 * 60_000) {
+          const completed = payloadOf(event, 'job.completed');
+          const failed = payloadOf(event, 'job.failed');
+          announceJobEnded({
+            sessionId: event.sessionId,
+            failed: Boolean(failed),
+            text: completed?.summary ?? failed?.error ?? '',
+          });
         }
         break;
 
