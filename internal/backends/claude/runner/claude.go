@@ -478,6 +478,15 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 // command builds the provider invocation.
 func (c *Claude) command(ctx context.Context, params StartParams, nativeSessionID string, resuming bool, mcpConfig string) *exec.Cmd {
 	native := params.Policy.Native()
+	// A tool Core says needs validation is asked about whatever the mode. The
+	// permission tool asks it, but only if the provider calls it: in SUPERVISED
+	// its own reviewer settles a call first, and an allow rule would settle it
+	// in any mode. An ask rule is answered before either.
+	for _, tool := range params.CoreTools {
+		if tool.RequiresValidation {
+			native.Ask = append(native.Ask, "mcp__"+mcp.ServerName+"__"+tool.Name)
+		}
+	}
 	// A FILE_READ refusal in the policy still wins: deny is answered first.
 	native.AdditionalDirectories = c.readable
 	scratch := c.scratchFor(params.RunID)

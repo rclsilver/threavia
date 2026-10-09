@@ -652,3 +652,43 @@ if IFS= read -r more; then echo '{"type":"result","subtype":"success","is_error"
 		t.Errorf("usage = %v, want the tokens of both turns and the process cost so far", sink.usage)
 	}
 }
+
+// TestAToolThatNeedsValidationIsAskedInEveryMode pins that a Core Tool which
+// widens where future runs execute reaches the permission tool even in
+// SUPERVISED, where the provider's own reviewer would otherwise settle the
+// call: an ask rule is answered before the reviewer and before any allow.
+func TestAToolThatNeedsValidationIsAskedInEveryMode(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []backendv1.ExecutionMode{
+		backendv1.ExecutionMode_EXECUTION_MODE_INTERACTIVE,
+		backendv1.ExecutionMode_EXECUTION_MODE_SUPERVISED,
+		backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS,
+	} {
+		binary, argsFile := fakeClaude(t, `echo '{"type":"result","subtype":"success","is_error":false,"result":"ok"}'`)
+		if err := newRunner(t, binary).Run(context.Background(), runner.StartParams{
+			RunID: "run-1", JobID: "job-1", WorkingDirectory: t.TempDir(),
+			Policy: policy.Policy{Mode: mode},
+			CoreTools: []mcp.CoreTool{
+				{Name: "working_directory_set", RequiresValidation: true},
+				{Name: "task_create"},
+			},
+		}, &recordingSink{}); err != nil {
+			t.Fatalf("%s: running the job: %v", mode, err)
+		}
+
+		args := readArgs(t, argsFile)
+		settings := ""
+		for i, arg := range args {
+			if arg == "--settings" && i+1 < len(args) {
+				settings = args[i+1]
+			}
+		}
+		if !strings.Contains(settings, `"mcp__threavia__working_directory_set"`) {
+			t.Errorf("%s: settings %s must ask about working_directory_set", mode, settings)
+		}
+		if strings.Contains(settings, "task_create") {
+			t.Errorf("%s: settings %s must not ask about task_create", mode, settings)
+		}
+	}
+}
