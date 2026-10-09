@@ -18,7 +18,8 @@ import { VirtualDocuments } from './diff/documents';
 import { PathResolver } from './workspace/resolve';
 import { openInBrowser, runOpenSession, sessionIdOf, setSessionOpener } from './sessions';
 import { UNTITLED, titleOf } from './tree/model';
-import { SidebarProvider, type RequestNode, type SessionNode } from './tree/provider';
+import { chooseNewSession } from './start/new';
+import { SidebarProvider, type Node, type RequestNode, type SessionNode } from './tree/provider';
 
 /**
  * What the extension exposes to the code that builds on it: the conversation
@@ -175,15 +176,27 @@ export function activate(context: vscode.ExtensionContext): Threavia {
 
   command('threavia.openSession', (target: unknown) => runOpenSession(target));
 
+  /** Whether Core can be asked now, offering the sign-in when it cannot. */
+  const ensureReady = async (): Promise<boolean> => {
+    if (!(await ensureCore())) return false;
+    if (connection.status === 'ready') return true;
+    void vscode.window.showInformationMessage('Sign in to Threavia first.', 'Sign In').then(
+      (choice) => choice && vscode.commands.executeCommand('threavia.signIn'),
+    );
+    return false;
+  };
+
   command('threavia.ask', async (uri?: vscode.Uri) => {
-    if (!(await ensureCore())) return;
-    if (connection.status !== 'ready') {
-      void vscode.window.showInformationMessage('Sign in to Threavia first.', 'Sign In').then(
-        (choice) => choice && vscode.commands.executeCommand('threavia.signIn'),
-      );
-      return;
-    }
+    if (!(await ensureReady())) return;
     await askAboutThis(client, uri instanceof vscode.Uri ? uri : undefined);
+  });
+
+  // From a Project's row the Project is known; from the view's title bar or
+  // the command palette it is asked first.
+  command('threavia.newSession', async (node?: Node) => {
+    if (!(await ensureReady())) return;
+    const start = await chooseNewSession(client, node?.type === 'project' ? node.project : undefined);
+    if (start) panels.openDraft(start);
   });
 
   // From a sidebar row, or from the title bar of the conversation in front,

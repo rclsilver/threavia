@@ -1,4 +1,5 @@
 import type { Delivery, Event, JobStatus, UserInputRequest, ValidationRequest } from '../api/types';
+import type { DraftStart } from './draft';
 import type { StateTone } from './state';
 
 /**
@@ -33,6 +34,13 @@ export interface SessionView {
 
 export type HostMessage =
   | { type: 'session'; view: SessionView }
+  /**
+   * A new Session not created yet: what was chosen for it, so the page says
+   * where the first message goes and keeps it across a reload.
+   */
+  | { type: 'draft'; start: DraftStart }
+  /** The first message created the Session: the page is that Session's now. */
+  | { type: 'started'; sessionId: string }
   /** The timeline: replaced when `reset`, otherwise merged by sequence. */
   | { type: 'events'; events: Event[]; reset?: boolean }
   | { type: 'loadingEarlier'; loading: boolean }
@@ -61,7 +69,10 @@ export type WebviewMessage =
 
 /** What the webview keeps across a reload, through the editor's webview state. */
 export interface PersistedState {
+  /** Empty while the panel is a draft. */
   sessionId: string;
+  /** What a draft starts its Session with, until the first message is sent. */
+  start?: DraftStart;
   draft?: string;
   delivery?: Delivery;
   /** The folds and tool calls the reader opened. */

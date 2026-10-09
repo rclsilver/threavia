@@ -115,6 +115,12 @@
         "icon": "$(comment-discussion)"
       },
       {
+        "command": "threavia.newSession",
+        "title": "New Session",
+        "category": "Threavia",
+        "icon": "$(add)"
+      },
+      {
         "command": "threavia.pinSession",
         "title": "Pin",
         "category": "Threavia",
@@ -175,11 +181,11 @@
         },
         {
           "command": "threavia.pinSession",
-          "when": "activeWebviewPanelId == 'threavia.conversation' && !threavia.conversationPinned"
+          "when": "activeWebviewPanelId == 'threavia.conversation' && !threavia.conversationPinned && !threavia.conversationDraft"
         },
         {
           "command": "threavia.unpinSession",
-          "when": "activeWebviewPanelId == 'threavia.conversation' && threavia.conversationPinned"
+          "when": "activeWebviewPanelId == 'threavia.conversation' && threavia.conversationPinned && !threavia.conversationDraft"
         },
         {
           "command": "threavia.renameSession",
@@ -191,7 +197,7 @@
         },
         {
           "command": "threavia.openInBrowser",
-          "when": "activeWebviewPanelId == 'threavia.conversation'"
+          "when": "activeWebviewPanelId == 'threavia.conversation' && !threavia.conversationDraft"
         },
         {
           "command": "threavia.refreshRepository",
@@ -212,13 +218,22 @@
         {
           "command": "threavia.ask",
           "when": "editorIsOpen && threavia.state == ready"
+        },
+        {
+          "command": "threavia.newSession",
+          "when": "threavia.state == ready"
         }
       ],
       "view/title": [
         {
+          "command": "threavia.newSession",
+          "when": "view == threavia.sidebar && threavia.state == ready",
+          "group": "navigation@1"
+        },
+        {
           "command": "threavia.refresh",
           "when": "view == threavia.sidebar",
-          "group": "navigation"
+          "group": "navigation@2"
         },
         {
           "command": "threavia.signOut",
@@ -296,22 +311,32 @@
           "command": "threavia.openInBrowser",
           "when": "view == threavia.sidebar && viewItem =~ /^session/",
           "group": "4_browser"
+        },
+        {
+          "command": "threavia.newSession",
+          "when": "view == threavia.sidebar && viewItem == project",
+          "group": "inline"
+        },
+        {
+          "command": "threavia.newSession",
+          "when": "view == threavia.sidebar && viewItem == project",
+          "group": "1_project"
         }
       ],
       "editor/title": [
         {
           "command": "threavia.pinSession",
-          "when": "activeWebviewPanelId == 'threavia.conversation' && !threavia.conversationPinned",
+          "when": "activeWebviewPanelId == 'threavia.conversation' && !threavia.conversationPinned && !threavia.conversationDraft",
           "group": "navigation@1"
         },
         {
           "command": "threavia.unpinSession",
-          "when": "activeWebviewPanelId == 'threavia.conversation' && threavia.conversationPinned",
+          "when": "activeWebviewPanelId == 'threavia.conversation' && threavia.conversationPinned && !threavia.conversationDraft",
           "group": "navigation@1"
         },
         {
           "command": "threavia.openInBrowser",
-          "when": "activeWebviewPanelId == 'threavia.conversation'",
+          "when": "activeWebviewPanelId == 'threavia.conversation' && !threavia.conversationDraft",
           "group": "navigation@2"
         }
       ],

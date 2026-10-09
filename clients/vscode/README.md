@@ -40,6 +40,15 @@ is doing, kept live from Core's event stream.
   - **Artifacts.** Open shows an image or a page in a tab of its own, and text
     as a read-only document; Save as… downloads it.
   - Panels come back after a reload of the window.
+- **New session.** The **+** on a Project in the sidebar, in the view's title
+  bar, or **Threavia: New Session** asks for the Project (unless you started
+  from one), the backend and the working directory, the likely answer first
+  each time, then opens a new session's conversation with the field ready.
+  Nothing is created until you send the first message: that message starts
+  the session, and the same tab becomes its conversation. Until then what you
+  write is kept, one draft per Project, and comes back after a reload with
+  its backend and directory; if Core refuses the start, it says why and the
+  draft stays.
 - **Ask Threavia about this.** Right-click in an editor (or a file in the
   Explorer), or run **Threavia: Ask Threavia About This…**: the selection, or
   the whole file, is sent with its path and lines and what you ask, to a new
@@ -122,6 +131,7 @@ The code is split so that what can be tested without an editor is: `src/api`
 `src/tree/model.ts` and `src/attention/ledger.ts` import nothing from `vscode`
 and are covered by `test/`, as are the conversation's rules
 (`src/conversation/timeline.ts` and `state.ts`, ported from the web client's
-timeline), the diff reconstruction (`src/diff/unified.ts`), the "Ask" message
+timeline), a new session's draft and how it becomes the session
+(`src/conversation/draft.ts`), the diff reconstruction (`src/diff/unified.ts`), the "Ask" message
 (`src/ask/message.ts`) and the path matching (`src/workspace/paths.ts`). The
 rest turns them into views and commands; `src/webview` is the page.

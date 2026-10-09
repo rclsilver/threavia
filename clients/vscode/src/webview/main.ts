@@ -1,5 +1,6 @@
 import { payloadOf, type Delivery, type Event, type UserInputRequest, type ValidationRequest } from '../api/types';
 import { artifactKind, bytes, clock, cost, duration, humanise, tokens } from '../conversation/format';
+import type { DraftStart } from '../conversation/draft';
 import type { HostMessage, PersistedState, SessionView, WebviewMessage } from '../conversation/protocol';
 import { riskOf } from '../conversation/risk';
 import {
@@ -36,8 +37,11 @@ interface VsCodeApi {
 declare function acquireVsCodeApi(): VsCodeApi;
 
 const vscode = acquireVsCodeApi();
-const sessionId = document.body.dataset.sessionId ?? '';
-const saved: PersistedState = vscode.getState() ?? { sessionId };
+const saved: PersistedState = vscode.getState() ?? { sessionId: document.body.dataset.sessionId ?? '' };
+// Both change once, when a draft's first message creates its Session: the
+// page stays, and what it keeps for a reload says which Session it shows.
+let sessionId = saved.sessionId || (document.body.dataset.sessionId ?? '');
+let start: DraftStart | undefined = sessionId ? undefined : saved.start;
 
 const post = (message: WebviewMessage) => vscode.postMessage(message);
 
@@ -53,10 +57,16 @@ const expanded = new Set<string>(saved.expanded ?? []);
 /** Which paths the agent wrote exist in the workspace, as the editor answered. */
 const resolved = new Map<string, boolean>();
 const asked = new Set<string>();
+/**
+ * Whether a draft's first message is on its way. Until Core answers there is
+ * no Session to add to, and a second message must not start a second one.
+ */
+let starting = false;
 
 function persist() {
   vscode.setState({
     sessionId,
+    start,
     draft: field.value,
     delivery,
     opened: [...opened],
@@ -119,6 +129,21 @@ window.addEventListener('message', (message: MessageEvent<HostMessage>) => {
       renderComposer();
       renderTimeline();
       break;
+    case 'draft':
+      start = data.start;
+      persist();
+      renderHeader();
+      renderComposer();
+      renderTimeline();
+      field.focus();
+      break;
+    case 'started':
+      if (sessionId === data.sessionId) break;
+      sessionId = data.sessionId;
+      start = undefined;
+      persist();
+      renderTimeline();
+      break;
     case 'events':
       if (data.reset) {
         events = data.events;
@@ -146,6 +171,7 @@ window.addEventListener('message', (message: MessageEvent<HostMessage>) => {
       linkPaths(document.body);
       break;
     case 'sent':
+      starting = false;
       delivery = 'QUEUE';
       sendError.hidden = true;
       send.disabled = !field.value.trim();
@@ -153,6 +179,7 @@ window.addEventListener('message', (message: MessageEvent<HostMessage>) => {
       persist();
       break;
     case 'sendFailed':
+      starting = false;
       // The text goes back in the field, so nothing typed is lost.
       if (!field.value.trim()) field.value = data.text;
       sendError.textContent = `Not sent: ${data.error} Your message is still in the field; send it again.`;
@@ -176,6 +203,7 @@ window.addEventListener('message', (message: MessageEvent<HostMessage>) => {
 // ------------------------------------------------------------------ header
 
 function renderHeader() {
+  if (!view && start) return renderDraftHeader(start);
   if (!view) return;
   title.textContent = view.title;
   const stateIcon = view.status.tone === 'running' ? 'loading' : view.status.tone === 'waiting' ? 'bell-dot' : 'circle-outline';
@@ -193,6 +221,18 @@ function renderHeader() {
       ? [h('span', { class: 'meta-item', title: view.repository.tooltip }, icon('git-branch'), view.repository.text)]
       : []),
     ...(view.active && view.activity ? [h('span', { class: 'activity' }, `${view.activity}…`)] : []),
+  );
+}
+
+/** A draft's header: where the first message will go, chosen before it opened. */
+function renderDraftHeader(draft: DraftStart) {
+  title.textContent = 'New session';
+  meta.replaceChildren(
+    h('span', { class: 'meta-item', title: 'The Project the session works in' }, icon('project'), draft.projectName),
+    h('span', { class: 'meta-item', title: 'The backend that will run this session' }, icon('server'), draft.backendName),
+    ...(draft.directoryName
+      ? [h('span', { class: 'meta-item', title: 'The working directory the agent starts in' }, icon('folder'), draft.directoryName)]
+      : []),
   );
 }
 
@@ -243,6 +283,9 @@ function renderTimeline() {
   }
   list.querySelector(':scope > .empty')?.remove();
   if (rows.length === 0 && view) list.append(h('p', { class: 'empty' }, 'Nothing yet.'));
+  else if (rows.length === 0 && start) {
+    list.append(h('p', { class: 'empty' }, 'Nothing is created until you send the first message.'));
+  }
   linkPaths(list);
   follower.settle();
 }
@@ -830,7 +873,7 @@ function chosen(): Delivery {
 
 function renderComposer() {
   const active = view?.active;
-  field.placeholder = PLACEHOLDERS[active ? chosen() : 'IDLE'];
+  field.placeholder = !view && start ? 'First message…' : PLACEHOLDERS[active ? chosen() : 'IDLE'];
   hint.textContent = `Enter sends · Shift+Enter for a newline${active ? ' · Esc stops' : ''}`;
   if (!active) {
     toolbar.hidden = true;
@@ -892,7 +935,8 @@ function stop() {
 
 function submit() {
   const text = field.value.trim();
-  if (!text) return;
+  if (!text || starting) return;
+  starting = Boolean(start);
   post({ type: 'send', text, delivery: view?.active ? chosen() : 'QUEUE' });
   field.value = '';
   sendError.hidden = true;
@@ -947,5 +991,12 @@ function focusComposer(event: MouseEvent) {
 autosize();
 send.disabled = !field.value.trim();
 renderComposer();
-append(list, [h('p', { class: 'empty' }, 'Loading…')]);
+// A draft restored after a reload is drawn from its own state at once; a
+// Session waits for the extension to read it.
+if (start) {
+  renderHeader();
+  renderTimeline();
+} else {
+  append(list, [h('p', { class: 'empty' }, 'Loading…')]);
+}
 post({ type: 'ready' });
