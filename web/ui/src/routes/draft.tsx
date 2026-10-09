@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input, Label, Textarea } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useDraft } from '@/lib/draft';
 import { humanise } from '@/lib/utils';
 
 const NONE = '__none__';
@@ -28,7 +29,7 @@ export function DraftView() {
 
   const [backendId, setBackendId] = useState('');
   const [directoryId, setDirectoryId] = useState(NONE);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useDraft(`new.${projectId}`);
   const [adopting, setAdopting] = useState(false);
   const [nativeSessionId, setNativeSessionId] = useState('');
 
@@ -47,9 +48,10 @@ export function DraftView() {
         message: text,
         nativeSessionId: (adopting && nativeSessionId.trim()) || null,
       })
-      .then((result) =>
-        navigate({ to: '/sessions/$sessionId', params: { sessionId: result.session.id } }),
-      );
+      .then((result) => {
+        setMessage('');
+        return navigate({ to: '/sessions/$sessionId', params: { sessionId: result.session.id } });
+      });
   };
 
   return (

@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Timeline, type Pending } from '@/components/timeline';
 import { Button } from '@/components/ui/button';
 import { useStream } from '@/use-stream';
+import { useDraft } from '@/lib/draft';
 import { cn, humanise } from '@/lib/utils';
 
 const FINISHED = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
@@ -170,6 +171,7 @@ export function SessionView() {
       />
 
       <Composer
+        key={sessionId}
         sessionId={sessionId}
         active={active}
         deliveries={deliveries}
@@ -322,7 +324,7 @@ function Composer({
   field: React.RefObject<HTMLTextAreaElement | null>;
 }) {
   const send = usePostMessage(sessionId);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useDraft(sessionId);
 
   useLayoutEffect(() => {
     const element = field.current;
