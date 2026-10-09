@@ -1491,6 +1491,13 @@ paths:
     get:
       tags: [knowledge]
       summary: The Decisions of a Project
+      parameters:
+        - name: includeSuperseded
+          in: query
+          schema: { type: boolean, default: false }
+          description: |
+            Also list the Decisions that a later one replaced. Without it only
+            the active ones are listed.
       responses:
         "200":
           description: The Decisions

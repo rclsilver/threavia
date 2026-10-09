@@ -2885,7 +2885,12 @@ export interface paths {
         /** The Decisions of a Project */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Also list the Decisions that a later one replaced. Without it only
+                     *     the active ones are listed.
+                     *      */
+                    includeSuperseded?: boolean;
+                };
                 header?: never;
                 path: {
                     projectId: components["parameters"]["ProjectID"];
