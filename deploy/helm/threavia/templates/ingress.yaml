@@ -1,4 +1,9 @@
 {{- if .Values.ingress.http.enabled }}
+{{- /* In mode none every request acts as the single local user: publishing
+the client API would hand the owner's backends to whoever finds the host. */}}
+{{- if eq .Values.auth.mode "none" }}
+{{- fail "ingress.http.enabled needs authentication: set auth.mode to basic or oidc, since in mode none anyone who reaches the ingress acts as the local user" }}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

@@ -8,6 +8,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
@@ -20,6 +21,17 @@ import (
 
 // EnvPrefix is the common prefix of every Core environment variable.
 const EnvPrefix = "THREAVIA_"
+
+const (
+	// DefaultHTTPAddr is where the client API listens when requests are
+	// authenticated: every interface, so a container or a host is reachable.
+	DefaultHTTPAddr = ":8080"
+	// LoopbackHTTPAddr is where it listens by default without authentication.
+	// In mode none every request acts as the single local user, so anyone who
+	// reaches the port could start sessions on the owner's backends and answer
+	// their validations; on a laptop, every interface is the whole LAN.
+	LoopbackHTTPAddr = "127.0.0.1:8080"
+)
 
 // Config is the complete Core configuration.
 type Config struct {
@@ -86,7 +98,7 @@ func Default() Config {
 	return Config{
 		Log: LogConfig{Level: "info", Format: "text"},
 		HTTP: HTTPConfig{
-			Addr:              ":8080",
+			Addr:              LoopbackHTTPAddr, // the default mode is none
 			ReadTimeout:       30 * time.Second,
 			ReadHeaderTimeout: 10 * time.Second,
 			WriteTimeout:      0,
@@ -121,7 +133,16 @@ func Load() (Config, error) {
 	cfg.Log.Level = l.String("LOG_LEVEL", cfg.Log.Level)
 	cfg.Log.Format = l.String("LOG_FORMAT", cfg.Log.Format)
 
-	cfg.HTTP.Addr = l.String("HTTP_ADDR", cfg.HTTP.Addr)
+	// The authentication mode decides where the client API listens when no
+	// address is named, so it is read first. Without authentication it stays
+	// on loopback; only an explicit THREAVIA_HTTP_ADDR widens it, even one equal
+	// to the default of the other modes.
+	cfg.Auth.Mode = auth.Mode(l.String("AUTH_MODE", cfg.Auth.Mode.String()))
+	httpAddr := DefaultHTTPAddr
+	if cfg.Auth.Mode == auth.ModeNone {
+		httpAddr = LoopbackHTTPAddr
+	}
+	cfg.HTTP.Addr = l.String("HTTP_ADDR", httpAddr)
 	cfg.HTTP.ReadTimeout = l.Duration("HTTP_READ_TIMEOUT", cfg.HTTP.ReadTimeout)
 	cfg.HTTP.ReadHeaderTimeout = l.Duration("HTTP_READ_HEADER_TIMEOUT", cfg.HTTP.ReadHeaderTimeout)
 	cfg.HTTP.WriteTimeout = l.Duration("HTTP_WRITE_TIMEOUT", cfg.HTTP.WriteTimeout)
@@ -162,7 +183,6 @@ func Load() (Config, error) {
 	cfg.Skills.FetchTimeout = l.Duration("SKILLS_FETCH_TIMEOUT", cfg.Skills.FetchTimeout)
 	cfg.Skills.AllowLocalSources = l.Bool("SKILLS_ALLOW_LOCAL_SOURCES", cfg.Skills.AllowLocalSources)
 
-	cfg.Auth.Mode = auth.Mode(l.String("AUTH_MODE", cfg.Auth.Mode.String()))
 	cfg.Auth.DevUserID = l.String("AUTH_DEV_USER_ID", cfg.Auth.DevUserID)
 	cfg.Auth.BasicUsername = l.String("AUTH_BASIC_USERNAME", cfg.Auth.BasicUsername)
 	cfg.Auth.BasicPassword = l.String("AUTH_BASIC_PASSWORD", cfg.Auth.BasicPassword)
@@ -220,4 +240,26 @@ func (c Config) Validate() error {
 		return fmt.Errorf("auth: %w", err)
 	}
 	return nil
+}
+
+// UnauthenticatedBeyondLoopback reports whether the client API accepts
+// unauthenticated requests on an address other machines can reach. Validate
+// lets it through, since an operator may bind a trusted interface on purpose,
+// and Core says so at startup instead.
+func (c Config) UnauthenticatedBeyondLoopback() bool {
+	return c.Auth.Mode == auth.ModeNone && !IsLoopbackAddr(c.HTTP.Addr)
+}
+
+// IsLoopbackAddr reports whether a listen address only accepts connections from
+// the machine itself. An empty host, as in ":8080", means every interface.
+func IsLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

@@ -116,6 +116,13 @@ make run-backend
 
 Then open <http://localhost:8080>, create a project and send a first message.
 
+Without `THREAVIA_AUTH_MODE`, Core runs with no authentication: every request
+acts as a single local user. That is why it then listens on `127.0.0.1:8080`
+only, so nobody else on the network can start sessions on your backends. Set
+`THREAVIA_HTTP_ADDR` to reach it from another machine, preferably with `basic`
+or `oidc` authentication; Core warns at startup when it listens beyond loopback
+without it.
+
 A known directory is optional. Give it a name such as `puppet` and the backend
 locates it under its configured discovery roots when the Job starts, asking you
 where it is only if it cannot (section 11):

@@ -100,6 +100,23 @@ register anew.
 A backend stores its identity locally once registered, which is why registration
 material is never needed at a later start.
 
+### Core without authentication
+
+`THREAVIA_AUTH_MODE=none` is the default, because it is what makes `make
+run-core` work with nothing to configure. In that mode every request is
+attributed to the single development user, so whoever reaches the client API
+can start sessions on the owner's backends, answer their validations and create
+registration tokens. Listening on every interface would offer that to the whole
+LAN a laptop sits on.
+
+So in mode none the client API listens on `127.0.0.1:8080` unless
+`THREAVIA_HTTP_ADDR` names an address; the other modes keep `:8080`. Naming a
+non-loopback address is honoured, since an operator may bind a trusted interface
+on purpose, but Core warns at startup. The gRPC listener keeps `:9090` in every
+mode: a backend authenticates with its credential, so reaching the port grants
+nothing. The Helm chart goes further and refuses to render an HTTP ingress with
+`auth.mode: none`, because an ingress exists to publish the API.
+
 ### Job state machine
 
 The transitions of section 3.5 leave a few cases implicit; the implemented table

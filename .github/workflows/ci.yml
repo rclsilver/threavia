@@ -349,6 +349,15 @@ jobs:
               exit 1
             fi
 
+            # Core without authentication attributes every request to one
+            # user, so its chart must refuse to publish the client API.
+            if [ "${chart}" = threavia ] &&
+                 helm template check "deploy/helm/${chart}" \
+                   --set auth.mode=none --set ingress.http.enabled=true >/dev/null 2>&1; then
+              echo "::error::${chart} renders an HTTP ingress with auth.mode none"
+              exit 1
+            fi
+
             helm package "deploy/helm/${chart}" \
               --version "${version}" --app-version "${version}" --destination dist
           done

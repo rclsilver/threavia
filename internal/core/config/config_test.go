@@ -14,7 +14,9 @@ func TestLoadDefaults(t *testing.T) {
 		t.Fatalf("loading the default configuration: %v", err)
 	}
 
-	if cfg.HTTP.Addr != ":8080" || cfg.GRPC.Addr != ":9090" {
+	// The default mode is none, so the client API stays on loopback; backends
+	// authenticate with a credential, so gRPC listens everywhere.
+	if cfg.HTTP.Addr != "127.0.0.1:8080" || cfg.GRPC.Addr != ":9090" {
 		t.Errorf("listen addresses = %q and %q", cfg.HTTP.Addr, cfg.GRPC.Addr)
 	}
 	// SSE responses are long-lived: a write timeout would cut them.
@@ -76,6 +78,77 @@ func TestLoadFromEnvironment(t *testing.T) {
 	}
 	if cfg.Backend.HeartbeatInterval != 5*time.Second || cfg.Backend.OfflineAfter != 20*time.Second {
 		t.Errorf("backend timings = %+v", cfg.Backend)
+	}
+}
+
+// Without authentication every request acts as the local user, so the client
+// API must not be reachable from the network unless the operator says so.
+func TestLoadKeepsAnUnauthenticatedCoreOnLoopback(t *testing.T) {
+	cases := []struct {
+		name     string
+		env      map[string]string
+		wantAddr string
+	}{
+		{"mode none, no address", map[string]string{"THREAVIA_AUTH_MODE": "none"}, "127.0.0.1:8080"},
+		{
+			"mode none, address named",
+			map[string]string{"THREAVIA_AUTH_MODE": "none", "THREAVIA_HTTP_ADDR": ":8080"},
+			":8080",
+		},
+		{
+			"mode basic, no address",
+			map[string]string{
+				"THREAVIA_AUTH_MODE":           "basic",
+				"THREAVIA_AUTH_BASIC_USERNAME": "thomas",
+				"THREAVIA_AUTH_BASIC_PASSWORD": "s3cr3t",
+			},
+			":8080",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("loading the configuration: %v", err)
+			}
+			if cfg.HTTP.Addr != tc.wantAddr {
+				t.Errorf("HTTP address = %q, want %q", cfg.HTTP.Addr, tc.wantAddr)
+			}
+			if cfg.GRPC.Addr != ":9090" {
+				t.Errorf("gRPC address = %q, want :9090 whatever the mode", cfg.GRPC.Addr)
+			}
+		})
+	}
+}
+
+func TestUnauthenticatedBeyondLoopback(t *testing.T) {
+	cases := []struct {
+		mode auth.Mode
+		addr string
+		want bool
+	}{
+		{auth.ModeNone, "127.0.0.1:8080", false},
+		{auth.ModeNone, "127.0.0.2:8080", false},
+		{auth.ModeNone, "localhost:8080", false},
+		{auth.ModeNone, "[::1]:8080", false},
+		{auth.ModeNone, ":8080", true},
+		{auth.ModeNone, "0.0.0.0:8080", true},
+		{auth.ModeNone, "[::]:8080", true},
+		{auth.ModeNone, "192.168.1.10:8080", true},
+		{auth.ModeBasic, ":8080", false},
+	}
+
+	for _, tc := range cases {
+		cfg := Default()
+		cfg.Auth.Mode = tc.mode
+		cfg.HTTP.Addr = tc.addr
+		if got := cfg.UnauthenticatedBeyondLoopback(); got != tc.want {
+			t.Errorf("mode %s on %q: UnauthenticatedBeyondLoopback() = %v, want %v", tc.mode, tc.addr, got, tc.want)
+		}
 	}
 }
 

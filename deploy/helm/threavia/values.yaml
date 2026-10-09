@@ -49,7 +49,8 @@ service:
   annotations: {}
 
 ingress:
-  # Client API. TLS is required for remote access.
+  # Client API. TLS is required for remote access, and so is authentication:
+  # the chart refuses to render this ingress with auth.mode none.
   http:
     enabled: false
     className: ""
@@ -121,6 +122,8 @@ skills:
 
 auth:
   # none | basic | oidc
+  # none attributes every request to devUserId: fit for trying the chart
+  # through a port-forward, not for ingress.http.
   mode: none
   # mode none
   devUserId: dev

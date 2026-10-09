@@ -100,6 +100,13 @@ func run() error {
 		logger.Warn("authentication is disabled, every request is attributed to a single local user",
 			slog.String("user", cfg.Auth.DevUserID))
 	}
+	if cfg.UnauthenticatedBeyondLoopback() {
+		// Not refused: an operator may bind a trusted interface on purpose. But
+		// whoever reaches it acts as the local user, so it must not go unnoticed.
+		logger.Warn("authentication is disabled and the client API listens beyond loopback, anyone who reaches it acts as the local user",
+			slog.String("addr", cfg.HTTP.Addr),
+			slog.String("configure", config.EnvPrefix+"AUTH_MODE"))
+	}
 
 	registry := backendconn.NewRegistry()
 	svc := service.New(postgres.NewStore(db), events.NewBroker(), registry, logger)
