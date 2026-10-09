@@ -387,9 +387,14 @@ func (s *Service) SetSessionStatus(ctx context.Context, identity auth.Identity, 
 // somewhere, reporting to a Session that no longer exists. Stopping it first is
 // an act someone has to take deliberately, and the message says so.
 //
+// The files made in it are the person's call, asked when they delete: kept,
+// they stay with the Project, no longer attached to anything; or they go with
+// the Session. Keeping is the default, because a file someone downloaded a
+// link to should not vanish as a side effect.
+//
 // The event goes out before the rows are gone, because afterwards there is no
 // Session left to attribute it to.
-func (s *Service) DeleteSession(ctx context.Context, identity auth.Identity, sessionID domain.SessionID) error {
+func (s *Service) DeleteSession(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, withArtifacts bool) error {
 	session, err := s.store.GetSession(ctx, identity.UserID, sessionID)
 	if err != nil {
 		return translate(err)
@@ -403,6 +408,18 @@ func (s *Service) DeleteSession(ctx context.Context, identity auth.Identity, ses
 		if !job.Status.Terminal() {
 			return fmt.Errorf("%w: this session has a job that is still %s; stop it first",
 				ErrConflict, strings.ToLower(job.Status.String()))
+		}
+	}
+
+	if withArtifacts {
+		ids, err := s.store.SessionArtifactIDs(ctx, identity.UserID, sessionID)
+		if err != nil {
+			return translate(err)
+		}
+		for _, id := range ids {
+			if err := s.DeleteArtifact(ctx, identity, id); err != nil && !errors.Is(err, ErrNotFound) {
+				return err
+			}
 		}
 	}
 

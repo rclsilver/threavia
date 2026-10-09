@@ -25,8 +25,13 @@ func (h *handler) registerArtifacts(mux *http.ServeMux) {
 }
 
 func (h *handler) listArtifacts(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	var sessionID *domain.SessionID
+	if raw := r.URL.Query().Get("sessionId"); raw != "" {
+		id := domain.SessionID(raw)
+		sessionID = &id
+	}
 	artifacts, err := h.svc.ListArtifacts(r.Context(), identity,
-		domain.ProjectID(r.PathValue("projectId")), queryInt(r, "limit", 0))
+		domain.ProjectID(r.PathValue("projectId")), sessionID, queryInt(r, "limit", 0))
 	if err != nil {
 		h.fail(w, err)
 		return

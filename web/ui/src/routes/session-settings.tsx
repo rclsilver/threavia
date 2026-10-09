@@ -7,6 +7,7 @@ import {
   useBackends,
   useDeleteSession,
   useMoveSession,
+  useSessionArtifacts,
   useSnapshot,
 } from '@/api/queries';
 import { PolicyPanel } from '@/components/policy-panel';
@@ -116,7 +117,11 @@ export function SessionSettingsView() {
           {current.tab === 'schedules' && <SchedulesPanel sessionId={sessionId} />}
           {current.tab === 'backend' && <MoveSession sessionId={sessionId} />}
           {current.tab === 'session' && (
-            <ArchiveAndDelete sessionId={sessionId} archived={session?.status === 'ARCHIVED'} />
+            <ArchiveAndDelete
+              sessionId={sessionId}
+              projectId={session?.projectId}
+              archived={session?.status === 'ARCHIVED'}
+            />
           )}
         </div>
       </div>
@@ -195,11 +200,22 @@ function MoveSession({ sessionId }: { sessionId: string }) {
 }
 
 /** The two ways out of the list: one that keeps everything, one that keeps nothing. */
-function ArchiveAndDelete({ sessionId, archived }: { sessionId: string; archived: boolean }) {
+function ArchiveAndDelete({
+  sessionId,
+  projectId,
+  archived,
+}: {
+  sessionId: string;
+  projectId?: string;
+  archived: boolean;
+}) {
   const archive = useArchiveSession();
   const remove = useDeleteSession();
+  const files = useSessionArtifacts(projectId, sessionId);
   const navigate = useNavigate();
   const [asking, setAsking] = useState(false);
+  const [artifacts, setArtifacts] = useState<'keep' | 'delete'>('keep');
+  const made = files.data ?? [];
 
   return (
     <ul className="border-border divide-border divide-y rounded-(--radius-card) border">
@@ -224,8 +240,10 @@ function ArchiveAndDelete({ sessionId, archived }: { sessionId: string; archived
         <div className="min-w-0 flex-1 basis-64">
           <p className="text-danger text-sm font-medium">Delete</p>
           <p className="text-muted text-sm">
-            The timeline, what it cost and what was asked go with it. Files the work produced stay
-            with the project. Archiving is the move that keeps all of it.
+            The timeline, what it cost and what was asked go with it. Archiving is the move that keeps
+            all of it.
+            {made.length > 0 &&
+              ` It made ${made.length} ${made.length === 1 ? 'file' : 'files'}; you choose what becomes of ${made.length === 1 ? 'it' : 'them'}.`}
           </p>
         </div>
         {!asking && (
@@ -234,17 +252,62 @@ function ArchiveAndDelete({ sessionId, archived }: { sessionId: string; archived
           </Button>
         )}
         {asking && (
-          <div className="basis-full">
+          <div className="basis-full space-y-3">
+            {/* The files are the one thing that may outlive the session, so
+                what becomes of them is asked, named, before anything goes. */}
+            {made.length > 0 && (
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">
+                  Its {made.length === 1 ? 'file' : `${made.length} files`}:{' '}
+                  <span className="text-muted figures font-mono text-xs font-normal">
+                    {made.slice(0, 3).map((file) => file.filename).join(', ')}
+                    {made.length > 3 && ` and ${made.length - 3} more`}
+                  </span>
+                </legend>
+                <div role="radiogroup" aria-label="Its files" className="grid gap-2 sm:grid-cols-2">
+                  {(
+                    [
+                      { value: 'keep', label: 'Keep them', detail: 'They stay in the project’s artifacts.' },
+                      { value: 'delete', label: 'Delete them too', detail: 'They are gone for good, with the session.' },
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={artifacts === option.value}
+                      onClick={() => setArtifacts(option.value)}
+                      className={cn(
+                        'rounded-(--radius-card) border p-3 text-left',
+                        artifacts === option.value
+                          ? 'border-accent bg-accent/5 ring-accent/30 ring-1'
+                          : 'border-border hover:bg-surface-2',
+                      )}
+                    >
+                      <span className="block text-sm font-medium">{option.label}</span>
+                      <span className="text-muted block text-sm">{option.detail}</span>
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            )}
             <ConfirmLine
-              question="Delete this session for good?"
+              question={
+                made.length > 0 && artifacts === 'delete'
+                  ? `Delete this session and its ${made.length === 1 ? 'file' : `${made.length} files`} for good?`
+                  : 'Delete this session for good?'
+              }
               confirm="Delete"
               pending={remove.isPending}
               onCancel={() => setAsking(false)}
               onConfirm={() =>
-                remove.mutate(sessionId, {
-                  // Nothing is left to look at, so the view goes with it.
-                  onSuccess: () => void navigate({ to: '/' }),
-                })
+                remove.mutate(
+                  { sessionId, artifacts: made.length > 0 ? artifacts : 'keep' },
+                  {
+                    // Nothing is left to look at, so the view goes with it.
+                    onSuccess: () => void navigate({ to: '/' }),
+                  },
+                )
               }
             />
           </div>

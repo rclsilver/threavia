@@ -170,7 +170,9 @@ func (h *handler) setSessionStatus(w http.ResponseWriter, r *http.Request, ident
 // sessionHistory pages backwards through the timeline. Older history is loaded
 // by scrolling; a client never replays the whole log.
 func (h *handler) deleteSession(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
-	if err := h.svc.DeleteSession(r.Context(), identity, domain.SessionID(r.PathValue("sessionId"))); err != nil {
+	// Its files are kept unless the request says to take them too.
+	withArtifacts := r.URL.Query().Get("artifacts") == "delete"
+	if err := h.svc.DeleteSession(r.Context(), identity, domain.SessionID(r.PathValue("sessionId")), withArtifacts); err != nil {
 		h.fail(w, err)
 		return
 	}

@@ -1086,12 +1086,15 @@ export interface paths {
         post?: never;
         /**
          * Delete a Session
-         * @description Takes the Session and everything that only existed inside it — its Runs, Jobs, timeline and pending requests. Artifacts stay: a file the work produced belongs to the Project. A Session with a Job still running is refused, because deleting it would leave that Job going on a machine with nowhere to report. Archiving is the reversible move.
+         * @description Takes the Session and everything that only existed inside it — its Runs, Jobs, timeline and pending requests. Its Artifacts stay with the Project, no longer attached to a Session, unless `artifacts=delete` asks for them to go too. A Session with a Job still running is refused, because deleting it would leave that Job going on a machine with nowhere to report. Archiving is the reversible move.
          *
          */
         delete: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description What becomes of the files made in the Session. */
+                    artifacts?: "keep" | "delete";
+                };
                 header?: never;
                 path: {
                     sessionId: components["parameters"]["SessionID"];
@@ -2975,6 +2978,8 @@ export interface paths {
             parameters: {
                 query?: {
                     limit?: number;
+                    /** @description Only the Artifacts made in this Session. */
+                    sessionId?: components["schemas"]["UUID"];
                 };
                 header?: never;
                 path: {

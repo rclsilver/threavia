@@ -336,3 +336,57 @@ func TestAnAgentPublishesWhatItMade(t *testing.T) {
 		t.Fatal("artifact_publish must declare path as its file input")
 	}
 }
+
+// TestDeletingASessionAsksAboutItsFiles pins both answers to "what of the files
+// made here?": kept, they stay with the project, attached to nothing; deleted,
+// they go, bytes included. Keeping is what happens when nothing is said.
+func TestDeletingASessionAsksAboutItsFiles(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	objects := newMemoryObjects()
+	c.svc.SetObjectStore(objects, 8<<20)
+	ctx := context.Background()
+
+	publish := func(message string) string {
+		session := c.startSession(projectID, c.backendID, dirID, message)
+		start := receive(t, "the dispatched job", backend.starts)
+		encoded, _ := structpb.NewStruct(map[string]any{"path": "chart.svg", "filename": "chart.svg"})
+		if _, err := backend.sdk.Invoke(ctx, sdktools.Call{
+			RunID: start.GetRunId(), JobID: start.GetJobId(), Name: "artifact_publish",
+			Input: encoded, File: []byte("<svg/>"),
+		}); err != nil {
+			t.Fatalf("artifact_publish: %v", err)
+		}
+		backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
+			return backend.events.JobCompleted(ctx, start.GetRunId(), start.GetJobId(), "done", nil)
+		}))
+		waitUntil(t, "the job to end", func() bool { return c.jobStatus(session, start.GetJobId()) == "COMPLETED" })
+		return session
+	}
+	kept := publish("Make a chart to keep")
+	dropped := publish("Make a chart to drop")
+
+	listed := func(query string) []map[string]any {
+		var list struct {
+			Items []map[string]any `json:"items"`
+		}
+		c.mustDo("GET", "/api/v1/projects/"+projectID+"/artifacts"+query, nil, &list, 200)
+		return list.Items
+	}
+	if got := listed("?sessionId=" + kept); len(got) != 1 {
+		t.Fatalf("the session's own files: %d, want 1", len(got))
+	}
+
+	c.mustDo("DELETE", "/api/v1/sessions/"+kept, nil, nil, 204)
+	c.mustDo("DELETE", "/api/v1/sessions/"+dropped+"?artifacts=delete", nil, nil, 204)
+
+	remaining := listed("")
+	if len(remaining) != 1 {
+		t.Fatalf("%d files left, want only the one kept", len(remaining))
+	}
+	if _, attached := remaining[0]["sessionId"]; attached {
+		t.Fatalf("a kept file must no longer point at a deleted session: %v", remaining[0])
+	}
+	if objects.count() != 1 {
+		t.Fatalf("%d objects stored, want the dropped file's bytes gone", objects.count())
+	}
+}

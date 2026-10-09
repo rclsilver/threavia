@@ -365,8 +365,15 @@ export function useRenameSession(sessionId: string) {
 export function useDeleteSession() {
   const queries = useQueryClient();
   return useMutation({
-    mutationFn: (sessionId: string) => api.delete(`/api/v1/sessions/${sessionId}`),
-    onSuccess: () => queries.invalidateQueries({ queryKey: ['sessions'] }),
+    // Its files stay with the project unless asked to go with it.
+    mutationFn: ({ sessionId, artifacts = 'keep' }: { sessionId: string; artifacts?: 'keep' | 'delete' }) => {
+      const query = artifacts === 'delete' ? '?artifacts=delete' : '';
+      return api.delete(`/api/v1/sessions/${sessionId}${query}`);
+    },
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: ['sessions'] });
+      void queries.invalidateQueries({ queryKey: ['artifacts'] });
+    },
   });
 }
 
@@ -639,6 +646,18 @@ export function useProjectSearch(projectId: string | undefined, query: string) {
 }
 
 // ----------------------------------------------------------------- artifacts
+
+/** The files made in one Session, for the person deciding what becomes of them. */
+export function useSessionArtifacts(projectId: string | undefined, sessionId: string) {
+  return useQuery({
+    queryKey: [...keys.artifacts(projectId ?? ''), sessionId],
+    queryFn: () =>
+      api
+        .get<List<Artifact>>(`/api/v1/projects/${projectId}/artifacts?sessionId=${sessionId}&limit=200`)
+        .then(items),
+    enabled: Boolean(projectId),
+  });
+}
 
 export function useArtifacts(projectId: string | undefined) {
   return useQuery({

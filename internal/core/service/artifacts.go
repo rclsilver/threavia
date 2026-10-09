@@ -115,12 +115,13 @@ func (s *Service) GetArtifact(ctx context.Context, identity auth.Identity, id do
 	return artifact, translate(err)
 }
 
-// ListArtifacts returns the Artifacts of a Project.
-func (s *Service) ListArtifacts(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, limit int) ([]domain.Artifact, error) {
+// ListArtifacts returns the Artifacts of a Project, or of one of its Sessions
+// when sessionID is set.
+func (s *Service) ListArtifacts(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, sessionID *domain.SessionID, limit int) ([]domain.Artifact, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	artifacts, err := s.store.ListArtifacts(ctx, identity.UserID, projectID, limit)
+	artifacts, err := s.store.ListArtifacts(ctx, identity.UserID, projectID, sessionID, limit)
 	return artifacts, translate(err)
 }
 

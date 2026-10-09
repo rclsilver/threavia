@@ -251,7 +251,8 @@ const routes: [string, RegExp, Handler][] = [
   }],
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/search$/, () => ({ tasks: [], decisions: [], history: [] })],
 
-  ['GET', /^\/api\/v1\/projects\/([^/]+)\/artifacts$/, (m) => list(state.artifacts.filter((entry) => entry.projectId === m[1]))],
+  ['GET', /^\/api\/v1\/projects\/([^/]+)\/artifacts$/, (m, _b, query) =>
+    list(state.artifacts.filter((entry) => entry.projectId === m[1] && (!query.get('sessionId') || entry.sessionId === query.get('sessionId'))))],
   ['DELETE', /^\/api\/v1\/artifacts\/([^/]+)$/, (m) => {
     state.artifacts = state.artifacts.filter((entry) => entry.id !== m[1]);
   }],
@@ -304,8 +305,11 @@ const routes: [string, RegExp, Handler][] = [
     session.status = m[2] === 'archive' ? 'ARCHIVED' : 'ACTIVE';
     return session;
   }],
-  ['DELETE', /^\/api\/v1\/sessions\/([^/]+)$/, (m) => {
+  ['DELETE', /^\/api\/v1\/sessions\/([^/]+)$/, (m, _b, query) => {
     state.sessions = state.sessions.filter((session) => session.id !== m[1]);
+    // Its files go with it when asked; otherwise they stay, attached to nothing.
+    if (query.get('artifacts') === 'delete') state.artifacts = state.artifacts.filter((entry) => entry.sessionId !== m[1]);
+    else for (const entry of state.artifacts) if (entry.sessionId === m[1]) delete entry.sessionId;
   }],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/events$/, () => list([])],
   ['POST', /^\/api\/v1\/sessions\/([^/]+)\/messages$/, (m, body) => answer(m[1], text(body.message), body.delivery as string | undefined)],

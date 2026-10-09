@@ -35,20 +35,44 @@ func (s *Store) GetArtifact(ctx context.Context, ownerID domain.UserID, id domai
 // Skill bundles are left out: they are the content of an installed Skill, not
 // something a user uploaded, and offering to delete one would only produce a
 // conflict with the Skill that points at it.
-func (s *Store) ListArtifacts(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID, limit int) ([]domain.Artifact, error) {
+//
+// A non-nil sessionID keeps only what was made in that Session.
+func (s *Store) ListArtifacts(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID, sessionID *domain.SessionID, limit int) ([]domain.Artifact, error) {
 	rows, err := s.q.Query(ctx, `
 		SELECT `+artifactColumns+`
 		FROM artifacts a JOIN projects p ON p.id = a.project_id
 		WHERE a.project_id = $1 AND p.owner_id = $2
+		  AND ($4::uuid IS NULL OR a.session_id = $4::uuid)
 		  AND NOT EXISTS (SELECT 1 FROM skills s WHERE s.artifact_id = a.id)
 		ORDER BY a.created_at DESC
-		LIMIT $3`, projectID, ownerID, limit)
+		LIMIT $3`, projectID, ownerID, limit, sessionID)
 	if err != nil {
 		return nil, classify(err, "list artifacts")
 	}
 	defer rows.Close()
 
 	return collect(rows, scanArtifact, "list artifacts")
+}
+
+// SessionArtifactIDs lists every Artifact made in a Session, however many.
+func (s *Store) SessionArtifactIDs(ctx context.Context, ownerID domain.UserID, sessionID domain.SessionID) ([]domain.ArtifactID, error) {
+	rows, err := s.q.Query(ctx, `
+		SELECT a.id FROM artifacts a
+		WHERE a.session_id = $1 AND a.owner_id = $2
+		  AND NOT EXISTS (SELECT 1 FROM skills s WHERE s.artifact_id = a.id)`, sessionID, ownerID)
+	if err != nil {
+		return nil, classify(err, "list the artifacts of a session")
+	}
+	defer rows.Close()
+	var ids []domain.ArtifactID
+	for rows.Next() {
+		var id domain.ArtifactID
+		if err := rows.Scan(&id); err != nil {
+			return nil, classify(err, "list the artifacts of a session")
+		}
+		ids = append(ids, id)
+	}
+	return ids, classify(rows.Err(), "list the artifacts of a session")
 }
 
 // DeleteArtifact removes the metadata and returns the object key, so the caller
