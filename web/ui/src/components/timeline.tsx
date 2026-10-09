@@ -2,6 +2,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   AlertTriangle,
   ArrowDown,
+  ArrowUpToLine,
   Ban,
   CalendarClock,
   CalendarX,
@@ -356,6 +357,36 @@ export function Timeline({
   const stick = useRef(true);
   const lastIntent = useRef(0);
   const [away, setAway] = useState(false);
+  // The message the reader is under, once it has scrolled out of sight. A
+  // long Job is a screenful of steps and answers below one prompt, and
+  // reading the end of it without what was asked meant scrolling back up to
+  // find it. It is the last message sent above the top of the view, so a
+  // message added to a running Job takes over from the one that started it.
+  const [prompt, setPrompt] = useState(-1);
+  const findPrompt = useRef<() => void>(() => {});
+  findPrompt.current = () => {
+    const element = parentRef.current;
+    const top = element?.scrollTop ?? 0;
+    const first = element ? virtualizer.getVirtualItemForOffset(top) : undefined;
+    let found = -1;
+    for (let index = first?.index ?? -1; index >= 0; index--) {
+      const row = rows[index];
+      if (row.kind === 'event' && row.event.type === 'user.message') {
+        found = index;
+        break;
+      }
+    }
+    // Only once it is gone: a prompt still on screen needs no copy of itself.
+    const measured = found >= 0 ? virtualizer.measurementsCache[found] : undefined;
+    setPrompt(measured && measured.end <= top + 4 ? found : -1);
+  };
+  useEffect(() => findPrompt.current(), [rows]);
+  const promptRow = prompt >= 0 ? rows[prompt] : undefined;
+  const toPrompt = () => {
+    holdStill();
+    virtualizer.scrollToIndex(prompt, { align: 'start' });
+  };
+
   // Reaching the top asks for what came before. Read through a ref so the
   // listener is attached once and still sees the current state.
   const reachTop = useRef<() => void>(() => {});
@@ -398,6 +429,7 @@ export function Timeline({
         stick.current = false;
       }
       setAway(!stick.current && below(element));
+      findPrompt.current();
       if (element.scrollTop < 400) reachTop.current();
     };
     element.addEventListener('wheel', onWheel, { passive: true });
@@ -570,6 +602,11 @@ export function Timeline({
         {rows.length === 0 && <p className="text-muted p-4 text-sm">Nothing yet.</p>}
         {/* No height of its own, so the rows below keep the offsets the
             virtualiser computed for them. */}
+        {promptRow?.kind === 'event' && (
+          <div className="sticky top-0 z-10 h-0">
+            <StickyPrompt key={promptRow.key} event={promptRow.event} onJump={toPrompt} />
+          </div>
+        )}
         {earlier?.loading && (
           <div className="sticky top-0 z-10 h-0">
             <p className="text-muted bg-surface border-border mx-auto mt-2 w-fit rounded-full border px-3 py-1 text-xs">
@@ -712,6 +749,51 @@ function Entry({
         {text}
         <JobCost event={event} startedAt={startedAt} />
       </span>
+    </div>
+  );
+}
+
+/**
+ * The prompt a long Job answers, held at the top of the view while what
+ * follows it is read. It sits in the message column, over the rows, with the
+ * look of the message it copies, cut to two lines; a click shows the rest, and
+ * the arrow goes back to where it was sent.
+ */
+function StickyPrompt({ event, onJump }: { event: Event; onJump: () => void }) {
+  const [open, setOpen] = useState(false);
+  const user = payloadOf(event, 'user.message');
+  if (!user) return null;
+  return (
+    // The canvas fades in behind it, so the rows scrolling under the card do
+    // not show through the gap above it.
+    <div className="from-canvas mx-auto w-full max-w-reading bg-linear-to-b from-75% to-transparent px-3 pt-2 pb-3 sm:px-6">
+      <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-x-2 sm:grid-cols-[3.25rem_minmax(0,1fr)]">
+        <div className="bg-surface-2 border-border col-start-2 flex items-start gap-1 rounded-(--radius-card) border py-1.5 pr-1 pl-3 shadow-md">
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            title={open ? 'Show less' : 'Show all of it'}
+            className="min-w-0 flex-1 py-0.5 text-left"
+          >
+            <span className="text-muted flex items-center gap-1.5 text-xs">
+              <span className="text-text font-medium">{user.scheduleId ? 'Schedule' : 'You'}</span>
+              {clock(event.timestamp)}
+            </span>
+            <span
+              className={cn(
+                'block text-sm whitespace-pre-wrap',
+                open ? 'max-h-[40vh] overflow-y-auto' : 'line-clamp-2',
+              )}
+            >
+              {user.text}
+            </span>
+          </button>
+          <Button variant="ghost" size="icon" title="Go to this message" aria-label="Go to this message" onClick={onJump} className="shrink-0">
+            <ArrowUpToLine />
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
