@@ -200,7 +200,7 @@ Rejected by the build and the brief: the ChatGPT clone (pill composer, gradient 
 
 ## Colors
 
-A cool, near-colourless neutral system (hue 265, chroma under 0.01) with one saturated indigo and three state hues; both schemes are defined token for token and follow the operating system.
+A cool, near-colourless neutral system (hue 265, chroma under 0.01) with one saturated indigo and three state hues; both schemes are defined token for token. They follow the operating system unless the person picks one in Settings › Appearance; the choice is the `data-scheme` attribute on the document, set before the first paint.
 
 ### Primary
 - **Working Indigo** (`accent`, light `oklch(52% 0.19 275)`, dark `oklch(70% 0.15 275)`): the primary action (Approve on a non-dangerous request, Send, Answer), the focus ring, the selection tint, the caret, the active tab underline, links in agent prose and the "running" status. It is the only colour that means "act here".

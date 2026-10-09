@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Bell, Copy, KeyRound, Monitor, Server, Trash2, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Bell, Copy, KeyRound, Monitor, Moon, Server, Sun, Trash2, type LucideIcon } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
 import { useBackends, useClaimBackend, useIssueBackendToken, useMe, useRevokeBackend } from '@/api/queries';
@@ -16,12 +16,13 @@ import { Input } from '@/components/ui/input';
 import { MenuItem } from '@/components/ui/menu';
 import { cn, humanise, when } from '@/lib/utils';
 import { useWideLayout } from '@/use-layout';
+import { useTheme, type Theme } from '@/use-theme';
 import { useShortcut } from '@/use-shortcut';
 
 export type AccountTab = 'appearance' | 'notifications' | 'backends';
 
 const TABS: { tab: AccountTab; label: string; Icon: LucideIcon; detail: string }[] = [
-  { tab: 'appearance', label: 'Appearance', Icon: Monitor, detail: 'How this client lays itself out, on this device.' },
+  { tab: 'appearance', label: 'Appearance', Icon: Monitor, detail: 'How this client looks and lays itself out, on this device.' },
   {
     tab: 'notifications',
     label: 'Notifications',
@@ -109,10 +110,44 @@ export function SettingsView() {
 }
 
 
+const THEMES: { value: Theme; label: string; Icon: LucideIcon }[] = [
+  { value: 'system', label: 'System', Icon: Monitor },
+  { value: 'light', label: 'Light', Icon: Sun },
+  { value: 'dark', label: 'Dark', Icon: Moon },
+];
+
 function AppearancePane() {
   const [wide, setWide] = useWideLayout();
+  const [theme, setTheme] = useTheme();
   return (
     <ul className="border-border divide-border divide-y rounded-(--radius-card) border">
+      <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 p-4">
+        <div className="min-w-0 flex-1 basis-64">
+          <p className="font-medium">Theme</p>
+          <p className="text-muted mt-1 text-sm">
+            System follows this device and changes when it does. Light and Dark stay put, whatever the
+            device says.
+          </p>
+        </div>
+        <div role="radiogroup" aria-label="Theme" className="border-border bg-surface-2 flex rounded-md border p-0.5 text-sm">
+          {THEMES.map(({ value, label, Icon }) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={theme === value}
+              onClick={() => setTheme(value)}
+              className={cn(
+                'text-muted hover:text-text flex min-h-11 items-center gap-1.5 rounded px-3 transition-colors sm:min-h-8',
+                theme === value && 'bg-surface text-text shadow-sm',
+              )}
+            >
+              <Icon className="size-3.5" />
+              {label}
+            </button>
+          ))}
+        </div>
+      </li>
       <li className="p-4">
         <CheckboxField checked={wide} onCheckedChange={setWide}>
           <span className="text-text font-medium">Use the full width of the window</span>

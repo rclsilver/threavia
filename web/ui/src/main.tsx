@@ -11,6 +11,7 @@ import { StreamProvider } from './stream-provider';
 import './styles.css';
 // Applies the stored layout before anything is laid out.
 import './use-layout';
+import './use-theme';
 
 const queries = new QueryClient({
   defaultOptions: {

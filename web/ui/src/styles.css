@@ -52,24 +52,31 @@
  * silently overwrites the light one and the page has one scheme for everyone.
  * The utilities emit var(--color-…), so redefining the variables here is what
  * actually switches the palette.
+ *
+ * Keyed on an attribute rather than on the media query, so the person can pick
+ * a scheme as well as follow the system's (src/use-theme.ts sets it). The
+ * browser's own surfaces — scrollbars, form controls, the caret — follow
+ * color-scheme, which moves with it.
  */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-canvas: oklch(15.5% 0.003 265);
-    --color-surface: oklch(19.5% 0.004 265);
-    --color-surface-2: oklch(24% 0.005 265);
-    --color-border: oklch(29% 0.006 265);
-    --color-text: oklch(94% 0.004 265);
-    --color-muted: oklch(66% 0.008 265);
-    --color-accent: oklch(70% 0.15 275);
-    --color-accent-text: oklch(17% 0.012 265);
-    --color-accent-2: oklch(72% 0.17 310);
-    --color-ok: oklch(72% 0.16 155);
-    --color-warn: oklch(80% 0.14 80);
-    --color-warn-text: oklch(80% 0.14 80);
-    --color-danger: oklch(68% 0.18 22);
-    --color-danger-solid: oklch(50% 0.19 25);
-  }
+:root {
+  color-scheme: light;
+}
+:root[data-scheme='dark'] {
+  color-scheme: dark;
+  --color-canvas: oklch(15.5% 0.003 265);
+  --color-surface: oklch(19.5% 0.004 265);
+  --color-surface-2: oklch(24% 0.005 265);
+  --color-border: oklch(29% 0.006 265);
+  --color-text: oklch(94% 0.004 265);
+  --color-muted: oklch(66% 0.008 265);
+  --color-accent: oklch(70% 0.15 275);
+  --color-accent-text: oklch(17% 0.012 265);
+  --color-accent-2: oklch(72% 0.17 310);
+  --color-ok: oklch(72% 0.16 155);
+  --color-warn: oklch(80% 0.14 80);
+  --color-warn-text: oklch(80% 0.14 80);
+  --color-danger: oklch(68% 0.18 22);
+  --color-danger-solid: oklch(50% 0.19 25);
 }
 
 /*
@@ -212,9 +219,7 @@
   .shiki-block span {
     color: var(--shiki-light);
   }
-  @media (prefers-color-scheme: dark) {
-    .shiki-block span {
-      color: var(--shiki-dark);
-    }
+  :root[data-scheme='dark'] .shiki-block span {
+    color: var(--shiki-dark);
   }
 }
