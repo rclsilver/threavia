@@ -19,8 +19,8 @@ in
 
     instanceName = lib.mkOption {
       type = lib.types.str;
-      default = config.networking.hostName;
-      defaultText = lib.literalExpression "config.networking.hostName";
+      default = "${config.networking.hostName}-claude";
+      defaultText = lib.literalExpression ''"''${config.networking.hostName}-claude"'';
       description = ''
         How this machine names itself to Core. It is what a person picks from
         when starting a Session, so it should read like the machine. Changing
