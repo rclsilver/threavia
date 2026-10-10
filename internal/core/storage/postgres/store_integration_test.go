@@ -492,3 +492,36 @@ func TestDisconnectionIsScopedToItsConnection(t *testing.T) {
 		t.Error("a disconnected backend must hold no connection lease")
 	}
 }
+
+// TestRenamingABackendKeepsNamesUnique pins that a backend can be renamed, but
+// not to a name another live backend of the same owner already holds.
+func TestRenamingABackendKeepsNamesUnique(t *testing.T) {
+	store, ctx := newTestStore(t)
+	f := newFixture(t, store, ctx)
+
+	if err := store.RenameBackendInstance(ctx, f.backend.ID, "zenbook-claude"); err != nil {
+		t.Fatalf("renaming the backend: %v", err)
+	}
+	// Renaming to the current name is not a conflict with itself.
+	if err := store.RenameBackendInstance(ctx, f.backend.ID, "zenbook-claude"); err != nil {
+		t.Fatalf("renaming the backend to its own name: %v", err)
+	}
+	instance, err := store.GetBackendInstance(ctx, f.owner, f.backend.ID)
+	if err != nil {
+		t.Fatalf("reading the backend instance: %v", err)
+	}
+	if instance.Name != "zenbook-claude" {
+		t.Fatalf("name = %q, want the new one", instance.Name)
+	}
+
+	other := domain.BackendInstance{
+		ID: domain.NewBackendInstanceID(), OwnerID: &f.owner, Name: "desktop",
+		OwnershipStatus: domain.BackendClaimed,
+	}
+	if err := store.CreateBackendInstance(ctx, &other, "hash-"+domain.NewUUID(), nil, nil); err != nil {
+		t.Fatalf("creating the second backend: %v", err)
+	}
+	if err := store.RenameBackendInstance(ctx, other.ID, "zenbook-claude"); !errors.Is(err, postgres.ErrConflict) {
+		t.Fatalf("renaming to a taken name: got %v, want ErrConflict", err)
+	}
+}

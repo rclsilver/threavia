@@ -23,7 +23,8 @@ in
       defaultText = lib.literalExpression "config.networking.hostName";
       description = ''
         How this machine names itself to Core. It is what a person picks from
-        when starting a Session, so it should read like the machine.
+        when starting a Session, so it should read like the machine. Changing
+        it renames the backend at its next connection.
       '';
     };
 

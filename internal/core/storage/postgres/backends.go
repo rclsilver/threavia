@@ -90,6 +90,15 @@ func (s *Store) MarkBackendConnected(ctx context.Context, id domain.BackendInsta
 	return classify(err, "mark backend connected")
 }
 
+// RenameBackendInstance sets the name of an instance. A name another live
+// instance of the same owner already holds is an ErrConflict.
+func (s *Store) RenameBackendInstance(ctx context.Context, id domain.BackendInstanceID, name string) error {
+	_, err := s.q.Exec(ctx, `
+		UPDATE backend_instances SET name = $2, updated_at = now()
+		WHERE id = $1 AND name <> $2`, id, name)
+	return classify(err, "rename backend instance")
+}
+
 // MarkBackendDisconnected clears the lease and infers OFFLINE. A backend never
 // reports OFFLINE itself.
 func (s *Store) MarkBackendDisconnected(ctx context.Context, id domain.BackendInstanceID, connectionID string) error {

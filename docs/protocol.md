@@ -61,6 +61,11 @@ stream at all.
 
 A `Hello` sent again mid-stream is rejected with `InvalidArgument`.
 
+The instance name in `Hello` replaces the stored one, so renaming a backend is a
+change to its configuration and a restart, not a new registration. A name
+another live backend of the same owner holds is logged and ignored: the old
+name stays and the connection goes on.
+
 ## Connection lease
 
 Only one connection is active per BackendInstance. A newly authenticated

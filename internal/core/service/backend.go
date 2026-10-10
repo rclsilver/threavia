@@ -52,6 +52,17 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 		return err
 	}
 
+	// The name follows the backend's configuration, the only place a person
+	// can rename it. It is cosmetic, so a name another of the owner's backends
+	// already holds keeps the old one rather than refusing the connection.
+	if name := strings.TrimSpace(hello.GetInstanceName()); name != "" {
+		if err := s.store.RenameBackendInstance(ctx, instanceID, name); err != nil {
+			s.logger.Warn("cannot rename the backend instance",
+				slog.String("backendInstanceId", string(instanceID)),
+				slog.String("name", name), slog.String("error", err.Error()))
+		}
+	}
+
 	// Only work that has never been dispatched is released here. Anything this
 	// backend may already have run waits for the reconciliation report it sends
 	// next, so Core never runs a Job twice.
