@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -393,5 +394,51 @@ func TestABackendOnlyBindsItsOwnRuns(t *testing.T) {
 	c.svc.ReconcileState(ctx, laptop, report("native-1"))
 	if got := nativeSession(); got != "native-1" {
 		t.Fatalf("native session = %q, want the one its own backend reported", got)
+	}
+}
+
+// TestAJobBindsOnlyAWellFormedNativeSession pins the other way a native
+// session is recorded: the event a backend sends as a Job starts. Its id is
+// passed to the provider's command line on the next Job, so one that would
+// read as an option is not bound; the event is still kept, or the backend
+// would replay it forever.
+func TestAJobBindsOnlyAWellFormedNativeSession(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	laptop := backendInstance(t, c)
+	c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
+	start := receive(t, "the dispatched job", backend.starts)
+
+	ctx := context.Background()
+	sequence := uint64(0)
+	bound := func(native string) string {
+		t.Helper()
+		sequence++
+		_, err := c.svc.JobEvent(ctx, laptop, &backendv1.JobEvent{
+			BackendEventId:  fmt.Sprintf("native-%d", sequence),
+			BackendSequence: sequence,
+			RunId:           start.GetRunId(),
+			JobId:           start.GetJobId(),
+			Body: &backendv1.JobEvent_NativeSessionBound{
+				NativeSessionBound: &backendv1.NativeSessionBound{NativeSessionId: native},
+			},
+		})
+		if err != nil {
+			t.Fatalf("the event was refused: %v", err)
+		}
+		run, err := c.store.RunByID(ctx, domain.RunID(start.GetRunId()))
+		if err != nil {
+			t.Fatalf("reading the run: %v", err)
+		}
+		if run.NativeSessionID == nil {
+			return ""
+		}
+		return *run.NativeSessionID
+	}
+
+	if got := bound("--dangerously-skip-permissions"); got != "" {
+		t.Fatalf("a malformed native session was bound: %q", got)
+	}
+	if got := bound("native-1"); got != "native-1" {
+		t.Fatalf("native session = %q, want the well-formed one", got)
 	}
 }

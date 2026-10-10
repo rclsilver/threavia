@@ -473,7 +473,19 @@ func (s *Service) applyEvent(ctx context.Context, tx *postgres.Store, b *batch, 
 		return transitionTo(ctx, tx, scope.JobID, domain.JobRunning, nil)
 
 	case *backendv1.JobEvent_NativeSessionBound:
-		return tx.BindNativeSession(ctx, scope.RunID, body.NativeSessionBound.GetNativeSessionId())
+		// The id ends up on the provider's command line for the next Job, so it
+		// is held to what a reconnecting backend's report is held to. One that
+		// fails is not bound, but the event is still kept and acknowledged:
+		// refusing it would only have the backend replay it forever.
+		native := body.NativeSessionBound.GetNativeSessionId()
+		if _, err := adoptedSession(native); err != nil {
+			s.logger.Warn("ignoring a malformed native session reported for a run",
+				slog.String("backendInstanceId", string(jc.BackendInstanceID)),
+				slog.String("runId", string(scope.RunID)),
+				slog.String("error", err.Error()))
+			return nil
+		}
+		return tx.BindNativeSession(ctx, scope.RunID, native)
 
 	case *backendv1.JobEvent_ValidationRequested:
 		payload, sum, err := canonicalJSON(body.ValidationRequested.GetRequestPayload())
