@@ -14,11 +14,11 @@ import { isCurrentProject, orderProjects } from '../tree/model';
 // -------------------------------------------------------------- the Project
 
 /**
- * The Project both views show.
+ * The Project both views show, among the Projects of one Core.
  *
  * The one last followed (a Session or a Project chosen in the Sessions view,
  * the conversation in front, or Switch Project…) wins, because it is what the
- * person is looking at now; then the one the `threavia.project` setting
+ * person is looking at now; then the one the Core's `project` setting
  * names; then the first active one, so a person with a single Project never
  * has to choose it. A followed Project that is gone falls back the same way.
  */
@@ -32,6 +32,54 @@ export function resolveCurrentProject(
   const named = projects.find((project) => isCurrentProject(project, setting));
   if (named) return named;
   return orderProjects(projects, setting)[0];
+}
+
+/** A Project and the Core that holds it: what the views show, and what is followed. */
+export interface ProjectRef {
+  coreId: string;
+  projectId: string;
+}
+
+/** One Core's Projects, with the Project its setting names. */
+export interface CoreProjects {
+  coreId: string;
+  projects: Project[];
+  setting: string;
+}
+
+/**
+ * The Project both views show, across every Core that can be asked, in the
+ * order the Cores are configured: the one last followed, wherever it is; then
+ * the first a Core's setting names; then the first Project of the first Core
+ * that has one.
+ */
+export function resolveCurrentAcross(
+  cores: readonly CoreProjects[],
+  followed: ProjectRef | undefined,
+): { coreId: string; project: Project } | undefined {
+  if (followed) {
+    const core = cores.find((entry) => entry.coreId === followed.coreId);
+    const project = core?.projects.find((candidate) => candidate.id === followed.projectId);
+    if (core && project) return { coreId: core.coreId, project };
+  }
+  for (const core of cores) {
+    const named = core.projects.find((project) => isCurrentProject(project, core.setting));
+    if (named) return { coreId: core.coreId, project: named };
+  }
+  for (const core of cores) {
+    const first = resolveCurrentProject(core.projects, core.setting, undefined);
+    if (first) return { coreId: core.coreId, project: first };
+  }
+  return undefined;
+}
+
+/** A followed Project as it was saved, or nothing for anything else. */
+export function readProjectRef(value: unknown): ProjectRef | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const { coreId, projectId } = value as { coreId?: unknown; projectId?: unknown };
+  return typeof coreId === 'string' && coreId && typeof projectId === 'string' && projectId
+    ? { coreId, projectId }
+    : undefined;
 }
 
 // ------------------------------------------------------------------- tasks

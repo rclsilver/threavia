@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 
 import type { CoreClient } from '../api/client';
 import type { BackendInstance, KnownDirectory, Project } from '../api/types';
-import { currentProjectSetting } from '../config';
 import { humanise } from '../conversation/format';
 import { isCurrentProject, orderProjects } from '../tree/model';
 
@@ -20,9 +19,13 @@ export async function pick<T>(title: string, placeHolder: string, items: Item<T>
   return picked?.value;
 }
 
-/** The Projects, the one this workspace works in first. */
-export async function pickProject(client: CoreClient, title: string, placeHolder: string): Promise<Project | undefined> {
-  const setting = currentProjectSetting();
+/** The Projects of a Core, the one its setting names first. */
+export async function pickProject(
+  client: CoreClient,
+  setting: string,
+  title: string,
+  placeHolder: string,
+): Promise<Project | undefined> {
   const projects = orderProjects(await client.projects(), setting);
   if (projects.length === 0) {
     void vscode.window.showInformationMessage('There is no Project yet. Create one in Threavia first.');
@@ -33,7 +36,7 @@ export async function pickProject(client: CoreClient, title: string, placeHolder
     placeHolder,
     projects.map((project) => ({
       label: project.name,
-      description: isCurrentProject(project, setting) ? 'this workspace' : undefined,
+      description: isCurrentProject(project, setting) ? 'default' : undefined,
       value: project,
     })),
   );

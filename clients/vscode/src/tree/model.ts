@@ -123,6 +123,110 @@ export function pinnedDescription(session: Session, projects: Project[], setting
   return project.name;
 }
 
+// -------------------------------------------------------------------- Cores
+
+/** Where the extension stands with one Core. */
+export type CoreState = 'connecting' | 'unreachable' | 'signedOut' | 'ready';
+
+/**
+ * Whether the sidebar has a row per Core. With one Core it does not: the tree
+ * is the one it always was, and a person who never adds a second Core never
+ * sees the extra level.
+ */
+export function showsCores(count: number): boolean {
+  return count > 1;
+}
+
+/**
+ * What the top of the sidebar is. Nothing with no Core, or with one that
+ * cannot be asked, so the view's welcome says what to do; one Core's sections
+ * directly; a row per Core when there are several, each saying for itself
+ * whether it can be asked.
+ */
+export function sidebarRoots(
+  cores: readonly { id: string; state: CoreState }[],
+): { kind: 'empty' } | { kind: 'flat'; coreId: string } | { kind: 'cores'; coreIds: string[] } {
+  if (showsCores(cores.length)) return { kind: 'cores', coreIds: cores.map((core) => core.id) };
+  const only = cores[0];
+  return only?.state === 'ready' ? { kind: 'flat', coreId: only.id } : { kind: 'empty' };
+}
+
+/** One Core's part of the sidebar: what waits, what is pinned, its Projects. */
+export type Section = { type: 'waiting' } | { type: 'pinned' } | { type: 'project'; project: Project };
+
+export function coreSections(pinned: number, projects: Project[], setting: string): Section[] {
+  return [
+    { type: 'waiting' },
+    // Nothing at all until something is pinned, so a person who never pins
+    // sees the sidebar they had.
+    ...(pinned > 0 ? [{ type: 'pinned' } as const] : []),
+    ...orderProjects(projects, setting).map((project): Section => ({ type: 'project', project })),
+  ];
+}
+
+/** The icon of a Core's row: whether it is connected, on its way, or needs the person. */
+export function coreIcon(state: CoreState): IconSpec {
+  switch (state) {
+    case 'ready':
+      return { id: 'vm-active', color: 'testing.iconPassed', label: 'Connected' };
+    case 'connecting':
+      return { id: 'loading~spin', label: 'Connecting' };
+    case 'signedOut':
+      return { id: 'account', color: 'list.warningForeground', label: 'Signed out' };
+    case 'unreachable':
+      return { id: 'error', color: 'errorForeground', label: 'Does not answer' };
+  }
+}
+
+/** What a Core's row says under it while it cannot show its sessions. */
+export function coreMessage(state: CoreState): { text: string; icon?: string; command?: 'signIn' | 'refresh' } | undefined {
+  switch (state) {
+    case 'ready':
+      return undefined;
+    case 'connecting':
+      return { text: 'Connecting…' };
+    case 'signedOut':
+      return { text: 'Sign in to see its sessions.', icon: 'account', command: 'signIn' };
+    case 'unreachable':
+      return { text: 'It does not answer. Click to try again.', icon: 'error', command: 'refresh' };
+  }
+}
+
+/**
+ * Where the extension stands overall, for the welcome views and the commands
+ * that need a Core: ready as soon as one Core is, since every command then
+ * has somewhere to go.
+ */
+export function overallState(states: readonly CoreState[]): CoreState | 'unconfigured' {
+  if (states.length === 0) return 'unconfigured';
+  for (const state of ['ready', 'connecting', 'signedOut', 'unreachable'] as const) {
+    if (states.includes(state)) return state;
+  }
+  return 'unreachable';
+}
+
+/** One Core's share of what waits. */
+export interface CoreWaiting {
+  name: string;
+  count: number;
+}
+
+/**
+ * The status bar's count, the sum over every Core, and its tooltip, which
+ * says where they wait when there is more than one Core to wait in.
+ */
+export function waitingSummary(cores: readonly CoreWaiting[]): { count: number; tooltip: string } {
+  const count = cores.reduce((sum, core) => sum + core.count, 0);
+  if (cores.length <= 1) return { count, tooltip: `${count} waiting for you in Threavia` };
+  const lines = cores.filter((core) => core.count > 0).map((core) => `${core.name}: ${core.count}`);
+  return { count, tooltip: [`${count} waiting for you in Threavia`, ...lines].join('\n') };
+}
+
+/** A notification names its Core only when it could have come from another. */
+export function withCore(text: string, coreName: string, several: boolean): string {
+  return several ? `${coreName} · ${text}` : text;
+}
+
 // ------------------------------------------------------------------ waiting
 
 /** One row of the Waiting node: a request and what it asks. */

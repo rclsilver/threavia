@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 
-import { ApiError, EARLIER_PAGE, type CoreClient } from '../api/client';
-import type { EventBus } from '../api/events';
+import { ApiError, EARLIER_PAGE } from '../api/client';
 import type {
   BackendInstance,
   Delivery,
@@ -13,23 +12,23 @@ import type {
   UserInputRequest,
   ValidationRequest,
 } from '../api/types';
-import type { Answers } from '../attention/answer';
-import type { AttentionStore } from '../attention/store';
+import type { Core } from '../cores/core';
+import type { SessionRef } from '../cores/refs';
+import type { Cores } from '../cores/registry';
 import type { VirtualDocuments } from '../diff/documents';
 import { openFileDiff } from '../diff/open';
 import { markSessionOpen } from '../sessions';
 import { repositoryDescription, repositoryLines, titleOf, waitingBySession } from '../tree/model';
 import type { PathResolver } from '../workspace/resolve';
-import type { Artifacts } from './artifacts';
 import { humanise } from './format';
 import {
-  draftKey,
   onSend,
   restoredTarget,
   sending,
   startBody,
   startFailed,
   started,
+  targetCore,
   targetKey,
   type DraftStart,
   type Target,
@@ -64,46 +63,55 @@ const NEW_SESSION = 'New session';
 /** How long a liveness signal says something: past it, the agent is just working. */
 const ACTIVITY_FOR = 30_000;
 
-/** What every panel shares. */
+/** What every panel shares, whichever Core it shows. */
 export interface Services {
   extensionUri: vscode.Uri;
-  client: CoreClient;
-  bus: EventBus;
-  attention: AttentionStore;
-  answers: Answers;
+  cores: Cores;
   documents: VirtualDocuments;
   paths: PathResolver;
-  artifacts: Artifacts;
-  backends: () => Promise<BackendInstance[]>;
 }
 
 /**
- * The conversation panels: one per Session, found again rather than opened
- * twice, and restored after a reload by the editor through the serializer.
+ * The conversation panels: one per Session of each Core, found again rather
+ * than opened twice, and restored after a reload by the editor through the
+ * serializer.
  */
 export class ConversationPanels implements vscode.WebviewPanelSerializer<PersistedState>, vscode.Disposable {
   private readonly panels = new Map<string, ConversationPanel>();
   private active: ConversationPanel | undefined;
-  private readonly registration: vscode.Disposable;
+  private readonly disposables: vscode.Disposable[];
   /**
    * Told the Project of the conversation in front when it comes forward, or
    * once its Session is read: the Tasks and Memory views follow it.
    */
-  onActiveProject: (projectId: string) => void = () => undefined;
+  onActiveProject: (coreId: string, projectId: string) => void = () => undefined;
 
   constructor(private readonly services: Services) {
-    this.registration = vscode.window.registerWebviewPanelSerializer(VIEW_TYPE, this);
+    this.disposables = [
+      vscode.window.registerWebviewPanelSerializer(VIEW_TYPE, this),
+      // A Core removed takes its conversations with it: nothing in them can
+      // be read or answered any more.
+      services.cores.onDidRemove((coreId) => {
+        for (const panel of [...this.panels.values()]) if (panel.core.id === coreId) panel.panel.dispose();
+      }),
+    ];
   }
 
   /** Opens a Session's conversation, or brings its panel forward. */
-  open(sessionId: string): void {
-    const existing = this.panels.get(sessionId);
+  open(ref: SessionRef): void {
+    const core = this.services.cores.get(ref.coreId);
+    if (!core) {
+      void vscode.window.showWarningMessage('That session is on a Core that is no longer configured.');
+      return;
+    }
+    const target: Target = { kind: 'session', coreId: ref.coreId, sessionId: ref.sessionId };
+    const existing = this.panels.get(targetKey(target));
     if (existing) {
       existing.panel.reveal();
       return;
     }
     const panel = vscode.window.createWebviewPanel(VIEW_TYPE, 'Threavia', vscode.ViewColumn.Active, options(this.services));
-    this.adopt(panel, { kind: 'session', sessionId });
+    this.adopt(panel, core, target);
   }
 
   /**
@@ -113,41 +121,47 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
    * what was written in it stays.
    */
   openDraft(start: DraftStart): void {
-    const existing = this.panels.get(draftKey(start.projectId));
+    const core = this.services.cores.get(start.coreId);
+    if (!core) return;
+    const target: Target = { kind: 'draft', start };
+    const existing = this.panels.get(targetKey(target));
     if (existing) {
       existing.redraft(start);
       existing.panel.reveal();
       return;
     }
     const panel = vscode.window.createWebviewPanel(VIEW_TYPE, NEW_SESSION, vscode.ViewColumn.Active, options(this.services));
-    this.adopt(panel, { kind: 'draft', start });
+    this.adopt(panel, core, target);
   }
 
   async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: PersistedState | undefined): Promise<void> {
-    // A panel with nothing to show — a state from an older version — is
-    // closed rather than left blank.
-    const target = restoredTarget(state);
-    if (!target || this.panels.has(targetKey(target))) {
+    // A panel with nothing to show — a state from an older version, a Core
+    // removed since — is closed rather than left blank. The Cores are read
+    // first: the editor may restore panels before the extension read them.
+    await this.services.cores.started;
+    const target = restoredTarget(state, this.services.cores.ids[0]);
+    const core = target && this.services.cores.get(targetCore(target));
+    if (!target || !core || this.panels.has(targetKey(target))) {
       panel.dispose();
       return;
     }
     panel.webview.options = options(this.services);
-    this.adopt(panel, target);
-    return Promise.resolve();
+    this.adopt(panel, core, target);
   }
 
   /** The Session of the conversation in front, for the commands of its title bar. */
-  get activeSessionId(): string | undefined {
-    return this.active?.panel.active ? this.active.sessionId : undefined;
+  get activeSession(): SessionRef | undefined {
+    const active = this.active;
+    return active?.panel.active && active.sessionId ? { coreId: active.core.id, sessionId: active.sessionId } : undefined;
   }
 
-  /** Reads the active panel's Session again, after an action changed it from here. */
-  refresh(sessionId: string) {
-    void this.panels.get(sessionId)?.reload();
+  /** Reads a Session's panel again, after an action changed it from here. */
+  refresh(ref: SessionRef) {
+    void this.panels.get(targetKey({ kind: 'session', ...ref }))?.reload();
   }
 
-  private adopt(panel: vscode.WebviewPanel, target: Target) {
-    const conversation = new ConversationPanel(panel, target, this.services, () => {
+  private adopt(panel: vscode.WebviewPanel, core: Core, target: Target) {
+    const conversation = new ConversationPanel(panel, core, target, this.services, () => {
       if (this.active === conversation) void this.setActive(undefined);
     });
     this.panels.set(conversation.key, conversation);
@@ -164,7 +178,9 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
       if (this.active === conversation) void this.setActive(conversation);
     };
     conversation.onLoaded = () => {
-      if (this.active === conversation && conversation.projectId) this.onActiveProject(conversation.projectId);
+      if (this.active === conversation && conversation.projectId) {
+        this.onActiveProject(conversation.core.id, conversation.projectId);
+      }
     };
     // The draft became a Session: found by its id from now on, and the title
     // bar offers what a Session's offers.
@@ -179,7 +195,7 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
   private async setActive(conversation: ConversationPanel | undefined) {
     const changed = conversation !== this.active;
     this.active = conversation;
-    if (changed && conversation?.projectId) this.onActiveProject(conversation.projectId);
+    if (changed && conversation?.projectId) this.onActiveProject(conversation.core.id, conversation.projectId);
     await Promise.all([
       vscode.commands.executeCommand('setContext', PINNED_KEY, Boolean(conversation?.pinned)),
       vscode.commands.executeCommand('setContext', DRAFT_KEY, Boolean(conversation && !conversation.sessionId)),
@@ -187,7 +203,7 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
   }
 
   dispose() {
-    this.registration.dispose();
+    for (const disposable of this.disposables) disposable.dispose();
     for (const panel of this.panels.values()) panel.panel.dispose();
   }
 }
@@ -202,6 +218,7 @@ function options(services: Services): vscode.WebviewPanelOptions & vscode.Webvie
     localResourceRoots: [vscode.Uri.joinPath(services.extensionUri, 'dist')],
   };
 }
+
 
 /**
  * One Session's conversation, or a new Session's draft until its first
@@ -242,6 +259,7 @@ class ConversationPanel {
 
   constructor(
     readonly panel: vscode.WebviewPanel,
+    readonly core: Core,
     target: Target,
     private readonly services: Services,
     onClosed: () => void,
@@ -255,17 +273,18 @@ class ConversationPanel {
       cspSource: webview.cspSource,
       scriptUri: webview.asWebviewUri(vscode.Uri.joinPath(dist, 'webview.js')).toString(),
       styleUri: webview.asWebviewUri(vscode.Uri.joinPath(dist, 'webview-style.css')).toString(),
+      coreId: core.id,
       sessionId: this.sessionId ?? '',
       nonce: nonce(),
     });
 
     // Every listener reads the Session id when it fires: a draft has none,
     // and gets one without the panel being opened again.
-    const { bus, attention } = services;
+    const { bus, attention } = core;
     this.disposables.push(
       webview.onDidReceiveMessage((message: WebviewMessage) => void this.receive(message)),
       panel.onDidChangeViewState(() => {
-        if (this.sessionId) markSessionOpen(this.sessionId, panel.visible);
+        if (this.sessionId) markSessionOpen(this.ref(this.sessionId), panel.visible);
       }),
       bus.on('event', (event) => this.onEvent(event)),
       bus.on('effect', (effect) => {
@@ -288,19 +307,23 @@ class ConversationPanel {
       attention.onChange(() => this.postView()),
     );
     panel.onDidDispose(() => {
-      if (this.sessionId) markSessionOpen(this.sessionId, false);
+      if (this.sessionId) markSessionOpen(this.ref(this.sessionId), false);
       clearTimeout(this.reloadTimer);
       clearTimeout(this.activityTimer);
       for (const disposable of this.disposables) disposable.dispose();
       onClosed();
     });
-    if (this.sessionId) markSessionOpen(this.sessionId, panel.visible);
+    if (this.sessionId) markSessionOpen(this.ref(this.sessionId), panel.visible);
     void this.reload();
   }
 
   /** The Session shown, or nothing while the panel is a draft. */
   get sessionId(): string | undefined {
     return this.target.kind === 'session' ? this.target.sessionId : undefined;
+  }
+
+  private ref(sessionId: string): SessionRef {
+    return { coreId: this.core.id, sessionId };
   }
 
   /** The Project it works in: chosen for a draft, read with the Session otherwise. */
@@ -336,7 +359,7 @@ class ConversationPanel {
   }
 
   async reload(): Promise<void> {
-    const { client } = this.services;
+    const { client } = this.core;
     const sessionId = this.sessionId;
     // A draft has nothing in Core to read.
     if (!sessionId) return;
@@ -375,7 +398,7 @@ class ConversationPanel {
     const run = currentRun(this.runs);
     if (!run) return;
     try {
-      const backend = (await this.services.backends()).find((candidate) => candidate.id === run.backendInstanceId);
+      const backend = (await this.core.backends()).find((candidate) => candidate.id === run.backendInstanceId);
       if (backend?.id !== this.backend?.id || backend?.features?.length !== this.backend?.features?.length) {
         this.backend = backend;
         this.postView();
@@ -388,7 +411,7 @@ class ConversationPanel {
   private async loadRepository() {
     if (!this.sessionId) return;
     try {
-      this.repository = await this.services.client.repository(this.sessionId);
+      this.repository = await this.core.client.repository(this.sessionId);
     } catch {
       this.repository = undefined;
     }
@@ -408,7 +431,7 @@ class ConversationPanel {
   // ---------------------------------------------------------------- view
 
   private requests() {
-    const { attention } = this.services;
+    const { attention } = this.core;
     // The shared store is the one current copy, which drops a request the
     // moment it is answered anywhere; until it has answered once, the
     // snapshot's own copy stands in.
@@ -455,7 +478,8 @@ class ConversationPanel {
   }
 
   private async receive(message: WebviewMessage) {
-    const { client, answers, paths, artifacts, documents } = this.services;
+    const { client, answers, artifacts } = this.core;
+    const { paths, documents } = this.services;
     switch (message.type) {
       case 'ready':
         this.ready = true;
@@ -526,6 +550,7 @@ class ConversationPanel {
       case 'openDiff':
         if (!this.sessionId) return;
         await openFileDiff(client, documents, paths, {
+          coreId: this.core.id,
           sessionId: this.sessionId,
           sequence: message.sequence,
           path: message.path,
@@ -554,7 +579,7 @@ class ConversationPanel {
       return;
     }
     try {
-      await this.services.client.postMessage(sessionId, text, delivery);
+      await this.core.client.postMessage(sessionId, text, delivery);
       this.post({ type: 'sent' });
       this.scheduleReload();
     } catch (error) {
@@ -573,7 +598,7 @@ class ConversationPanel {
     this.target = sending(this.target);
     this.starting = (async () => {
       try {
-        const created = await this.services.client.startSession(body);
+        const created = await this.core.client.startSession(body);
         this.become(created.session.id);
         this.post({ type: 'sent' });
       } catch (error) {
@@ -590,7 +615,7 @@ class ConversationPanel {
     const draft = this.key;
     this.target = started(this.target, sessionId);
     this.post({ type: 'started', sessionId });
-    markSessionOpen(sessionId, this.panel.visible);
+    markSessionOpen(this.ref(sessionId), this.panel.visible);
     this.onStarted(draft);
     void this.reload();
   }
@@ -614,7 +639,7 @@ class ConversationPanel {
     this.loadingEarlier = true;
     this.post({ type: 'loadingEarlier', loading: true });
     try {
-      const page = await this.services.client.earlierEvents(sessionId, oldest.sequence);
+      const page = await this.core.client.earlierEvents(sessionId, oldest.sequence);
       if (page.length < EARLIER_PAGE) this.exhausted = true;
       this.events = mergeEvents(this.events, page);
       this.post({ type: 'events', events: page });

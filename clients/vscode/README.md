@@ -2,7 +2,8 @@
 
 Follow and answer your Threavia agents without leaving the editor: what waits
 for you, your pinned sessions, every Project's sessions with what each one is
-doing, and a Project's tasks and decisions, kept live from Core's event stream.
+doing, and a Project's tasks and decisions, kept live from Core's event stream;
+from one Threavia Core or from several at once.
 
 - **Sidebar.** The Threavia view in the activity bar lists what waits for you
   (approvals and questions, across every Project), your pinned sessions, and
@@ -14,7 +15,8 @@ doing, and a Project's tasks and decisions, kept live from Core's event stream.
 - **Notifications.** An approval or a question pops up once, with Approve and
   Deny, or its choices and Answer…, right there. Work that ends in a session
   you are not looking at says so quietly.
-- **Status bar.** `$(inbox) N` while something waits; click it to see what.
+- **Status bar.** `$(inbox) N` while something waits, on every Core together;
+  click it to see what.
 - **Conversation.** Opening a session shows its conversation in an editor tab,
   in the colours of your theme: what you asked, what the agent said
   (markdown), its tool calls (one line each, click for the input and output),
@@ -73,11 +75,13 @@ doing, and a Project's tasks and decisions, kept live from Core's event stream.
   the why of a decision is a sentence or two, and a document to write it in
   would be one more tab to find and close. Clicking a decision opens it as a
   markdown preview.
-- **Which Project.** Both views show one Project, named next to their title:
-  the one of the session or Project last selected in the Sessions view, or of
-  the conversation in front; until then the one `threavia.project` names, or
-  your first. **Switch Project…** in their title bar chooses another. Both
-  are kept live from the event stream, whoever made the change.
+- **Which Project.** Both views show one Project, named next to their title
+  (with its Core's name when there are several): the one of the session or
+  Project last selected in the Sessions view, or of the conversation in front,
+  kept with the workspace across a reload; until then the one a Core's
+  `project` names, or your first. **Switch Project…** in their title bar
+  chooses another, among the Projects of every Core. Both are kept live from
+  the event stream, whoever made the change.
 
 The extension tells Core when the editor has the focus, so your phone does not
 ring for what you are already looking at.
@@ -94,26 +98,57 @@ code --install-extension threavia-<version>.vsix
 
 ## Sign in
 
-1. Open the Threavia view and choose **Set Core URL**, such as
-   `https://threavia.example.com`, or `http://localhost:8080` for a local Core.
-2. Choose **Sign In**. The extension asks Core how it authenticates:
+1. Open the Threavia view and choose **Add a Core**: its URL, such as
+   `https://threavia.example.com`, or `http://localhost:8080` for a local Core,
+   then the name it goes by (its host unless you say otherwise).
+2. The extension asks that Core how it authenticates, and signs you in:
    - **OIDC**: your browser opens on your provider's sign-in page, then hands
      you back to the editor. The provider's client must allow the redirect
      `vscode://rclsilver.threavia/auth/callback` (and
-     `vscode-insiders://rclsilver.threavia/auth/callback` for Insiders).
+     `vscode-insiders://rclsilver.threavia/auth/callback` for Insiders). Each
+     Core names its own issuer and client, so this holds for the Keycloak
+     client of every Core you add; Threavia's own deployment already allows it.
    - **Basic**: the editor asks for your username and password.
    - **None**: there is nothing to sign in to.
 
 Tokens and passwords are kept in the editor's secret storage, one sign-in per
-Core URL, and access tokens are renewed before they expire. **Threavia: Sign
-Out** forgets them.
+Core, and access tokens are renewed before they expire. **Threavia: Sign Out**
+forgets them; each Core's account also shows in the editor's Accounts menu,
+and signs out from there.
+
+## Several Cores
+
+Every Core you add is connected at the same time: a Core at work and one on
+your laptop, say. **Threavia: Add Core…** adds one (also in the view's `…`
+menu); **Rename Core…**, **Set Core URL…** (its address), **Remove Core**,
+**Sign In** and **Sign Out** act on one, from the command palette (which asks
+which) or from the Core's row in the sidebar.
+
+- **Sidebar.** With one Core, the sidebar is as described above. With several,
+  each Core has a row (its name, its host, and whether it is connected,
+  connecting, signed out, or not answering), and its own Waiting, Pinned and
+  Projects under it. A Core that cannot be asked says so under its row, with
+  Sign In or Try Again, and the others carry on.
+- **Status bar.** The count is the sum over every Core; its tooltip says how
+  many wait where.
+- **Notifications** come from every Core, and start with the Core's name.
+- **New Session** and **Ask Threavia About This…** ask for the Core first,
+  unless only one can be asked or you started from a Core's row.
+- Conversations, drafts, diffs and documents each belong to their Core: two
+  Cores can never mix up two sessions that happen to share an id.
+- **Remove Core** asks first, then forgets its sign-in and closes its
+  conversations. Nothing changes on the Core itself.
+
+An earlier version's `threavia.coreUrl` (and `threavia.project`) becomes the
+first entry of `threavia.cores` on the first start, sign-in included, and is
+not read after that.
 
 ## Settings
 
 | Setting | What it does |
 | --- | --- |
-| `threavia.coreUrl` | Where Core answers. Empty until set. |
-| `threavia.project` | The Project this workspace works in, by name or id. It is listed first and expanded, pinned sessions from other Projects name theirs, and Tasks and Memory show it until you turn to another. |
+| `threavia.cores` | The Cores to connect to, each `{ id, name, url, project? }`. `id` is generated; `project` names the Project of that Core you work in (by name or id): listed first and expanded, pinned sessions from other Projects name theirs, and Tasks and Memory show it until you turn to another. Edited by the commands above, or by hand. |
+| `threavia.coreUrl`, `threavia.project` | Deprecated: moved into `threavia.cores` on the first start. |
 | `threavia.clientName` | How this editor appears in your list of devices. Defaults to `VS Code — <hostname>`. |
 | `threavia.notifications.attention` | Notify when an agent asks for an approval or an answer. |
 | `threavia.notifications.jobEnded` | Notify when work ends in a session that is not open. |
@@ -147,12 +182,14 @@ the type check, lint and tests (it is part of `make verify`), and
 
 To run it, open `clients/vscode` in VS Code and press **F5**: a second window
 starts with the extension loaded, rebuilt first. Point it at a local Core with
-**Threavia: Set Core URL** (`http://localhost:8080`, mode `none`, needs no
-sign-in).
+**Threavia: Add Core…** (`http://localhost:8080`, mode `none`, needs no
+sign-in); add a second one on another port to see the several-Core sidebar.
 
 The code is split so that what can be tested without an editor is: `src/api`
 (HTTP client, SSE stream, event effects), `src/auth/oidc.ts` and `pkce.ts`,
-`src/tree/model.ts` and `src/attention/ledger.ts` import nothing from `vscode`
+`src/tree/model.ts`, `src/attention/ledger.ts` and `src/cores/settings.ts` and
+`refs.ts` (the Core list, its migration, and Core-qualified ids and URIs)
+import nothing from `vscode`
 and are covered by `test/`, as are the conversation's rules
 (`src/conversation/timeline.ts` and `state.ts`, ported from the web client's
 timeline), a new session's draft and how it becomes the session

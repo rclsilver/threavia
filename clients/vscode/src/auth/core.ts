@@ -2,25 +2,23 @@ import * as vscode from 'vscode';
 
 import { ApiError, type CoreClient } from '../api/client';
 import type { AuthPublic } from '../api/types';
+import { credentialKey } from '../cores/settings';
 import {
-  CALLBACK_PATH,
   RefusedError,
   accountLabelOf,
   authorizeUrl,
   discover,
   exchangeCode,
   isExpiring,
-  readCallback,
   redirectUri,
+  readCallback,
   refreshTokens,
   renewalDelay,
   type Tokens,
 } from './oidc';
 import { challengeOf, createState, createVerifier } from './pkce';
 
-export const PROVIDER_ID = 'threavia';
-
-/** What is kept in SecretStorage, one entry per Core URL. */
+/** What is kept in SecretStorage, one entry per Core. */
 type Credential =
   | { type: 'oidc'; tokens: Tokens; label: string }
   | { type: 'basic'; username: string; password: string };
@@ -29,39 +27,58 @@ type Credential =
 const SIGN_IN_TIMEOUT = 5 * 60_000;
 
 /**
- * Signing in to Core, in whichever mode it runs.
+ * Where the browser's way back is waited for. There is one URI handler per
+ * extension, so every Core's sign-in comes back through the same one; the
+ * OIDC state a sign-in started with says which Core it was.
+ */
+export interface Callbacks {
+  expect(state: string): Promise<string>;
+  cancel(state: string): void;
+}
+
+/** Which Core a sign-in is for, as the auth layer names it to the person. */
+export interface CoreName {
+  id: string;
+  /** What the person calls it. */
+  name: () => string;
+  /** Whether there is more than one Core, so a message has to say which. */
+  several: () => boolean;
+}
+
+/**
+ * Signing in to one Core, in whichever mode it runs.
  *
  * - `none` asks for nothing: Core attributes every request to one configured
  *   user. It is how a laptop Core runs, so it costs nothing here either.
  * - `basic` asks for a username and password once and keeps them.
  * - `oidc` runs Authorization Code + PKCE in the system browser against the
- *   provider Core names, and keeps the access and refresh tokens.
+ *   provider this Core names, and keeps the access and refresh tokens.
  *
- * Credentials live in SecretStorage, keyed by Core URL so a local Core and a
- * deployed one each keep their own. It is also a vscode.AuthenticationProvider,
- * so the account shows in the editor's Accounts menu and signs out from there.
+ * Credentials live in SecretStorage keyed by the Core's id, so each Core keeps
+ * its own and each discovers its own provider and client from its public auth
+ * route. The editor's Accounts menu reaches them through one
+ * AuthenticationProvider for the whole extension (see accounts.ts).
  */
-export class ThreaviaAuth implements vscode.AuthenticationProvider, vscode.UriHandler, vscode.Disposable {
+export class CoreAuth implements vscode.Disposable {
   private config: AuthPublic | undefined;
   private credential: Credential | undefined;
   private renewal: ReturnType<typeof setTimeout> | undefined;
   private refreshing: Promise<boolean> | null = null;
-  private pending: { state: string; resolve: (query: string) => void } | undefined;
-
-  private readonly sessionsChanged =
-    new vscode.EventEmitter<vscode.AuthenticationProviderAuthenticationSessionsChangeEvent>();
-  readonly onDidChangeSessions = this.sessionsChanged.event;
 
   /** Fired whenever whether requests carry a credential changes. */
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changed.event;
 
+  /** Told the account before and after, for the editor's Accounts menu. */
+  onAccount: (before: string | undefined, after: string | undefined) => void = () => undefined;
+
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
     private readonly secrets: vscode.SecretStorage,
+    private readonly core: CoreName,
     private readonly client: () => CoreClient,
-    private readonly url: () => string,
+    private readonly callbacks: Callbacks,
   ) {
     // Another window signed in, out, or renewed the tokens: follow it rather
     // than sending a refresh token that window may already have spent.
@@ -87,8 +104,12 @@ export class ThreaviaAuth implements vscode.AuthenticationProvider, vscode.UriHa
   }
 
   get accountLabel(): string | undefined {
-    if (!this.credential) return undefined;
-    return this.credential.type === 'basic' ? this.credential.username : this.credential.label;
+    return labelOf(this.credential);
+  }
+
+  /** The access token, for the Accounts menu's session; none for basic. */
+  get accessToken(): string {
+    return this.credential?.type === 'oidc' ? this.credential.tokens.accessToken : '';
   }
 
   /** Learns how this Core authenticates, and loads what is stored for it. */
@@ -97,15 +118,19 @@ export class ThreaviaAuth implements vscode.AuthenticationProvider, vscode.UriHa
     await this.reload();
   }
 
-  /** Forgets the Core, for an unset or changed URL. */
+  /** Forgets how the Core authenticates, for one that does not answer. */
   forget() {
     this.config = undefined;
-    this.credential = undefined;
     clearTimeout(this.renewal);
   }
 
   private key(): string {
-    return `threavia.credential:${this.url()}`;
+    return credentialKey(this.core.id);
+  }
+
+  /** "Threavia", or the Core's name when there are several to tell apart. */
+  private get who(): string {
+    return this.core.several() ? this.core.name() : 'Threavia';
   }
 
   private async reload() {
@@ -119,7 +144,7 @@ export class ThreaviaAuth implements vscode.AuthenticationProvider, vscode.UriHa
     }
     // A credential of another mode is from before Core changed mode; it would
     // only earn a 401.
-    if (credential && credential.type !== this.config?.mode) credential = undefined;
+    if (credential && this.config && credential.type !== this.config.mode) credential = undefined;
     this.credential = credential;
     this.arm();
     if (JSON.stringify(before) !== JSON.stringify(credential)) this.announce(before, credential);
@@ -135,13 +160,7 @@ export class ThreaviaAuth implements vscode.AuthenticationProvider, vscode.UriHa
   }
 
   private announce(before: Credential | undefined, after: Credential | undefined) {
-    const was = before ? this.sessionOf(before) : undefined;
-    const is = after ? this.sessionOf(after) : undefined;
-    this.sessionsChanged.fire({
-      added: !was && is ? [is] : [],
-      removed: was && !is ? [was] : [],
-      changed: was && is ? [is] : [],
-    });
+    this.onAccount(labelOf(before), labelOf(after));
     this.changed.fire();
   }
 
@@ -168,11 +187,15 @@ export class ThreaviaAuth implements vscode.AuthenticationProvider, vscode.UriHa
     if (this.credential?.type === 'oidc' && (await this.refresh())) return true;
     if (this.credential) {
       await this.store(undefined);
-      void vscode.window
-        .showWarningMessage('Threavia no longer accepts your sign-in.', 'Sign In')
-        .then((choice) => choice && vscode.commands.executeCommand('threavia.signIn'));
+      this.offerSignIn(`${this.who} no longer accepts your sign-in.`);
     }
     return false;
+  }
+
+  private offerSignIn(text: string) {
+    void vscode.window
+      .showWarningMessage(text, 'Sign In')
+      .then((choice) => choice && vscode.commands.executeCommand('threavia.signIn', this.core.id));
   }
 
   /** Renews the tokens. Concurrent callers share one exchange. */
@@ -201,9 +224,7 @@ export class ThreaviaAuth implements vscode.AuthenticationProvider, vscode.UriHa
         // answer, but only when the person asks: a browser tab opening by itself
         // is not something an editor should do.
         await this.store(undefined);
-        void vscode.window
-          .showWarningMessage('Your Threavia sign-in has expired.', 'Sign In')
-          .then((choice) => choice && vscode.commands.executeCommand('threavia.signIn'));
+        this.offerSignIn(`Your ${this.who} sign-in has expired.`);
         return false;
       }
       // The provider is unreachable: keep the tokens and try again shortly.
@@ -229,7 +250,7 @@ export class ThreaviaAuth implements vscode.AuthenticationProvider, vscode.UriHa
       case undefined:
         return false;
       case 'none':
-        void vscode.window.showInformationMessage('This Core asks for no sign-in.');
+        void vscode.window.showInformationMessage(`${this.core.name()} asks for no sign-in.`);
         return true;
       case 'basic':
         return this.signInBasic();
@@ -243,15 +264,16 @@ export class ThreaviaAuth implements vscode.AuthenticationProvider, vscode.UriHa
   }
 
   private async signInBasic(): Promise<boolean> {
+    const title = `Sign in to ${this.who}`;
     const username = await vscode.window.showInputBox({
-      title: 'Sign in to Threavia',
+      title,
       prompt: 'Your Threavia username',
       ignoreFocusOut: true,
       validateInput: (value) => (value.trim() ? undefined : 'Enter your username.'),
     });
     if (!username) return false;
     const password = await vscode.window.showInputBox({
-      title: 'Sign in to Threavia',
+      title,
       prompt: `The password of ${username.trim()}`,
       password: true,
       ignoreFocusOut: true,
@@ -269,7 +291,7 @@ export class ThreaviaAuth implements vscode.AuthenticationProvider, vscode.UriHa
       this.credential = before;
       const refused = error instanceof ApiError && error.isUnauthorized;
       void vscode.window.showErrorMessage(
-        refused ? 'Core refused that username and password.' : `Not signed in: ${message(error)}`,
+        refused ? `${this.core.name()} refused that username and password.` : `Not signed in: ${message(error)}`,
       );
       return false;
     }
@@ -280,19 +302,17 @@ export class ThreaviaAuth implements vscode.AuthenticationProvider, vscode.UriHa
   private async signInOidc(): Promise<boolean> {
     const config = this.config;
     if (!config?.issuer || !config.clientId) {
-      void vscode.window.showErrorMessage('Core asks for OIDC but names no issuer or client id.');
+      void vscode.window.showErrorMessage(`${this.core.name()} asks for OIDC but names no issuer or client id.`);
       return false;
     }
 
+    const state = createState();
     try {
       const endpoints = await discover(config.issuer);
       const verifier = createVerifier();
-      const state = createState();
       const redirect = redirectUri(vscode.env.uriScheme);
 
-      const callback = new Promise<string>((resolve) => {
-        this.pending = { state, resolve };
-      });
+      const callback = this.callbacks.expect(state);
       const opened = await vscode.env.openExternal(
         vscode.Uri.parse(
           authorizeUrl(endpoints.authorization_endpoint, {
@@ -308,7 +328,7 @@ export class ThreaviaAuth implements vscode.AuthenticationProvider, vscode.UriHa
       const query = await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: 'Signing in to Threavia: finish in your browser…',
+          title: `Signing in to ${this.who}: finish in your browser…`,
           cancellable: true,
         },
         (_progress, cancelled) =>
@@ -320,7 +340,6 @@ export class ThreaviaAuth implements vscode.AuthenticationProvider, vscode.UriHa
             }),
           ]),
       );
-      this.pending = undefined;
       if (query === undefined) return false;
 
       const { code } = readCallback(query, state);
@@ -333,54 +352,23 @@ export class ThreaviaAuth implements vscode.AuthenticationProvider, vscode.UriHa
       await this.store({ type: 'oidc', tokens, label: accountLabelOf(tokens) });
       return true;
     } catch (error) {
-      this.pending = undefined;
       void vscode.window.showErrorMessage(`Not signed in: ${message(error)}`);
       return false;
+    } finally {
+      this.callbacks.cancel(state);
     }
-  }
-
-  /** The browser coming back with the code, through the editor's URI scheme. */
-  handleUri(uri: vscode.Uri) {
-    if (uri.path !== CALLBACK_PATH) return;
-    if (!this.pending) {
-      void vscode.window.showWarningMessage('This sign-in did not start here, or took too long. Sign in again.');
-      return;
-    }
-    this.pending.resolve(uri.query);
-  }
-
-  // ------------------------------------------- vscode.AuthenticationProvider
-
-  private sessionOf(credential: Credential): vscode.AuthenticationSession {
-    const label = credential.type === 'basic' ? credential.username : credential.label;
-    return {
-      id: `${this.url()}#${label}`,
-      accessToken: credential.type === 'oidc' ? credential.tokens.accessToken : '',
-      account: { id: label, label },
-      scopes: [],
-    };
-  }
-
-  getSessions(): Promise<vscode.AuthenticationSession[]> {
-    return Promise.resolve(this.credential ? [this.sessionOf(this.credential)] : []);
-  }
-
-  async createSession(): Promise<vscode.AuthenticationSession> {
-    if (this.config?.mode === 'none') throw new Error('This Core asks for no sign-in.');
-    if (!(await this.signIn()) || !this.credential) throw new Error('Not signed in.');
-    return this.sessionOf(this.credential);
-  }
-
-  async removeSession(): Promise<void> {
-    await this.signOut();
   }
 
   dispose() {
     clearTimeout(this.renewal);
-    this.sessionsChanged.dispose();
     this.changed.dispose();
     for (const disposable of this.disposables) disposable.dispose();
   }
+}
+
+function labelOf(credential: Credential | undefined): string | undefined {
+  if (!credential) return undefined;
+  return credential.type === 'basic' ? credential.username : credential.label;
 }
 
 function message(error: unknown): string {

@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 
-import type { CoreClient } from '../api/client';
-import type { EventBus } from '../api/events';
+import type { Core } from '../cores/core';
+import { recordRefOf } from '../cores/refs';
+import type { Cores } from '../cores/registry';
 import type { Decision, DecisionImportance } from '../api/types';
 import { ago, oneLine } from '../tree/model';
 import type { CurrentProject } from './current';
@@ -24,7 +25,7 @@ import { ProjectView, type MessageNode } from './view';
 
 export type DecisionNode =
   | { type: 'group'; group: DecisionGroup }
-  | { type: 'decision'; decision: Decision; kind: DecisionGroupKind };
+  | { type: 'decision'; coreId: string; decision: Decision; kind: DecisionGroupKind };
 type DecisionRow = Extract<DecisionNode, { type: 'decision' }>;
 
 /** The row's context value, which the menus in package.json match on. */
@@ -56,26 +57,24 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
     'threavia-decision',
     'This decision is no longer recorded. Open it again from the Memory view.\n',
   );
-  private known: { projectId: string; ids: Set<string> } | undefined;
+  /** The Decisions last read, of a Project named `<core>/<project>`. */
+  private known: { project: string; ids: Set<string> } | undefined;
 
-  constructor(
-    private readonly client: CoreClient,
-    current: CurrentProject,
-    bus: EventBus,
-  ) {
-    super('threavia.memory', current, bus, 'decisions');
+  constructor(current: CurrentProject, cores: Cores) {
+    super('threavia.memory', current, cores, 'decisions');
   }
 
-  protected fetch(projectId: string): Promise<Decision[]> {
-    return this.client.decisions(projectId, true);
+  protected fetch(core: Core, projectId: string): Promise<Decision[]> {
+    return core.client.decisions(projectId, true);
   }
 
-  protected loaded(projectId: string, decisions: Decision[]) {
+  protected loaded(core: Core, projectId: string, decisions: Decision[]) {
     const texts = new Map<string, string | undefined>();
-    if (this.known?.projectId === projectId) for (const id of this.known.ids) texts.set(id, undefined);
+    const project = `${core.id}/${projectId}`;
+    if (this.known?.project === project) for (const id of this.known.ids) texts.set(id, undefined);
     for (const decision of decisions) texts.set(decision.id, decisionMarkdown(decision, decisions));
-    this.known = { projectId, ids: new Set(decisions.map((decision) => decision.id)) };
-    this.documents.update(texts);
+    this.known = { project, ids: new Set(decisions.map((decision) => decision.id)) };
+    this.documents.update(core.id, texts);
   }
 
   protected children(decisions: Decision[], node: DecisionNode | undefined): (DecisionNode | MessageNode)[] {
@@ -84,7 +83,7 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
     if (node?.type === 'group') {
       const { kind } = node.group;
       const group = groups.find((entry) => entry.kind === kind);
-      return (group?.decisions ?? []).map((decision): DecisionNode => ({ type: 'decision', decision, kind }));
+      return (group?.decisions ?? []).map((decision): DecisionNode => ({ type: 'decision', coreId: this.current.core?.id ?? '', decision, kind }));
     }
     if (groups.length === 0) {
       return [
@@ -128,7 +127,7 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
         .filter(Boolean)
         .join(' · ') || undefined;
     item.tooltip = tooltip(decision, kind);
-    item.command = { command: 'threavia.openDecision', title: 'Open Decision', arguments: [decision.id] };
+    item.command = { command: 'threavia.openDecision', title: 'Open Decision', arguments: [{ coreId: node.coreId, id: decision.id }] };
     return item;
   }
 
@@ -136,23 +135,27 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
 
   register(command: (name: string, run: (...args: never[]) => unknown) => void, disposables: vscode.Disposable[]) {
     disposables.push(this.documents);
-    command('threavia.openDecision', (id: string) => this.open(id));
+    command('threavia.openDecision', (target: unknown) => this.open(target));
     command('threavia.recordDecision', () => this.record());
-    command('threavia.pinDecision', (node: DecisionRow) => this.pin(node.decision));
-    command('threavia.unpinDecision', (node: DecisionRow) => this.pin(node.decision));
-    command('threavia.supersedeDecision', (node: DecisionRow) => this.record(node.decision));
-    command('threavia.deleteDecision', (node: DecisionRow) => this.remove(node.decision));
+    command('threavia.pinDecision', (node: DecisionRow) => this.pin(node.coreId, node.decision));
+    command('threavia.unpinDecision', (node: DecisionRow) => this.pin(node.coreId, node.decision));
+    command('threavia.supersedeDecision', (node: DecisionRow) => this.record(node.decision, node.coreId));
+    command('threavia.deleteDecision', (node: DecisionRow) => this.remove(node.coreId, node.decision));
   }
 
-  private async open(id: string) {
-    const decision = (await this.dataNow())?.find((entry) => entry.id === id);
-    await this.documents.open(id, documentName(decision?.title ?? 'Decision'));
+  /** Opens a Decision: `{ coreId, id }` from a row, or an id alone from an earlier version. */
+  private async open(target: unknown) {
+    const ref = recordRefOf(target, this.current.core?.id);
+    if (!ref) return;
+    const decision =
+      ref.coreId === this.current.core?.id ? (await this.dataNow())?.find((entry) => entry.id === ref.id) : undefined;
+    await this.documents.open(ref.coreId, ref.id, documentName(decision?.title ?? 'Decision'));
   }
 
-  private pin(decision: Decision) {
+  private pin(coreId: string, decision: Decision) {
     const importance = toggledImportance(decision);
     return this.act(importance === 'IMPORTANT' ? 'Not pinned' : 'Not unpinned', () =>
-      this.client.setDecisionImportance(decision.id, importance),
+      this.clientOf(coreId).setDecisionImportance(decision.id, importance),
     );
   }
 
@@ -162,9 +165,9 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
    * other. Each answer is a line: the why of a decision is a sentence or two,
    * and a document to write it in would be one more tab to find and close.
    */
-  private async record(replaced?: Decision) {
-    const project = this.current.project;
-    if (!project) {
+  private async record(replaced?: Decision, coreId?: string) {
+    const { project, core } = this.current;
+    if (!project || !core) {
       void vscode.window.showInformationMessage('Choose a Project first, with Switch Project….');
       return;
     }
@@ -188,12 +191,12 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
     if (importance === undefined) return;
 
     const body = newDecisionBody(title, content, importance, replaced?.id);
-    if (await this.act(replaced ? 'Not superseded' : 'Not recorded', () => this.client.createDecision(project.id, body), true)) {
+    if (await this.act(replaced ? 'Not superseded' : 'Not recorded', () => this.clientOf(coreId ?? core.id).createDecision(project.id, body), true)) {
       vscode.window.setStatusBarMessage(`Recorded: ${body.title}.`, 4000);
     }
   }
 
-  private async remove(decision: Decision) {
+  private async remove(coreId: string, decision: Decision) {
     const choice = await vscode.window.showWarningMessage(
       'Delete this decision?',
       {
@@ -202,7 +205,7 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
       },
       'Delete',
     );
-    if (choice === 'Delete') await this.act('Not deleted', () => this.client.deleteDecision(decision.id));
+    if (choice === 'Delete') await this.act('Not deleted', () => this.clientOf(coreId).deleteDecision(decision.id));
   }
 }
 

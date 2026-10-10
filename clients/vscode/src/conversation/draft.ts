@@ -9,6 +9,10 @@
 
 /** What the pickers chose: the ids Core needs, and the names the header shows. */
 export interface DraftStart {
+  /** The Core the Session will be created on. */
+  coreId: string;
+  /** Said in the draft's header only when there is more than one Core. */
+  coreName?: string;
   projectId: string;
   projectName: string;
   backendInstanceId: string;
@@ -41,7 +45,7 @@ export function startBody(start: DraftStart, text: string): StartBody {
 export type Target =
   | { kind: 'draft'; start: DraftStart }
   | { kind: 'starting'; start: DraftStart }
-  | { kind: 'session'; sessionId: string };
+  | { kind: 'session'; coreId: string; sessionId: string };
 
 /**
  * What a message typed in the panel does. A draft starts the Session; a
@@ -60,7 +64,7 @@ export function sending(target: Target): Target {
 
 /** Core created the Session: the panel is that Session's from now on. */
 export function started(target: Target, sessionId: string): Target {
-  return target.kind === 'starting' ? { kind: 'session', sessionId } : target;
+  return target.kind === 'starting' ? { kind: 'session', coreId: target.start.coreId, sessionId } : target;
 }
 
 /** The start was refused: the draft stays as it was, to be sent again. */
@@ -68,19 +72,41 @@ export function startFailed(target: Target): Target {
   return target.kind === 'starting' ? { kind: 'draft', start: target.start } : target;
 }
 
-/** The key a panel is found again by: its Session, or its Project for a draft. */
+/**
+ * The key a panel is found again by: its Session, or its Project for a
+ * draft, each with its Core, since ids are only unique within one.
+ */
 export function targetKey(target: Target): string {
-  return target.kind === 'session' ? target.sessionId : draftKey(target.start.projectId);
+  return target.kind === 'session'
+    ? `${target.coreId}/${target.sessionId}`
+    : draftKey(target.start.coreId, target.start.projectId);
 }
 
-/** One draft per Project, as the web client keeps one first message per Project. */
-export function draftKey(projectId: string): string {
-  return `new:${projectId}`;
+/** One draft per Project and Core, as the web client keeps one first message per Project. */
+export function draftKey(coreId: string, projectId: string): string {
+  return `${coreId}/new:${projectId}`;
 }
 
-/** What a panel restored after a reload shows, from the state its page kept. */
-export function restoredTarget(state: { sessionId?: string; start?: DraftStart } | undefined): Target | undefined {
-  if (state?.sessionId) return { kind: 'session', sessionId: state.sessionId };
-  if (state?.start?.projectId && state.start.backendInstanceId) return { kind: 'draft', start: state.start };
+/** The Core a panel's Session or draft belongs to. */
+export function targetCore(target: Target): string {
+  return target.kind === 'session' ? target.coreId : target.start.coreId;
+}
+
+/**
+ * What a panel restored after a reload shows, from the state its page kept.
+ * A state saved before there were several Cores names none: it is the first
+ * Core's, the one that version was connected to.
+ */
+export function restoredTarget(
+  state: { coreId?: string; sessionId?: string; start?: Partial<DraftStart> } | undefined,
+  firstCoreId: string | undefined,
+): Target | undefined {
+  const coreId = state?.coreId || state?.start?.coreId || firstCoreId;
+  if (!coreId) return undefined;
+  if (state?.sessionId) return { kind: 'session', coreId, sessionId: state.sessionId };
+  const start = state?.start;
+  if (start?.projectId && start.backendInstanceId) {
+    return { kind: 'draft', start: { ...(start as DraftStart), coreId } };
+  }
   return undefined;
 }

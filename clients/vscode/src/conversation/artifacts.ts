@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 import type { CoreClient } from '../api/client';
 import type { VirtualDocuments } from '../diff/documents';
+import { artifactPath } from '../cores/refs';
 import { artifactKind } from './format';
 import type { ArtifactRef } from './protocol';
 
@@ -17,6 +18,7 @@ export class Artifacts {
   constructor(
     private readonly client: CoreClient,
     private readonly documents: VirtualDocuments,
+    private readonly coreId: string,
   ) {}
 
   async open(artifact: ArtifactRef, column: vscode.ViewColumn): Promise<void> {
@@ -26,7 +28,10 @@ export class Artifacts {
     const title = artifact.title || artifact.filename;
 
     if (kind === 'text' || kind === 'other') {
-      const uri = this.documents.put(`/${artifact.artifactId}/${artifact.filename}`, new TextDecoder().decode(bytes));
+      const uri = this.documents.put(
+        artifactPath(this.coreId, artifact.artifactId, artifact.filename),
+        new TextDecoder().decode(bytes),
+      );
       await vscode.window.showTextDocument(uri, { viewColumn: column, preview: true });
       return;
     }

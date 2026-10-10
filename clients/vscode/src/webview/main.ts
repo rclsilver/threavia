@@ -42,6 +42,9 @@ const saved: PersistedState = vscode.getState() ?? { sessionId: document.body.da
 // page stays, and what it keeps for a reload says which Session it shows.
 let sessionId = saved.sessionId || (document.body.dataset.sessionId ?? '');
 let start: DraftStart | undefined = sessionId ? undefined : saved.start;
+// The Core never changes: it is kept so a panel restored after a reload
+// opens the same Session on the same Core.
+const coreId = saved.coreId || document.body.dataset.coreId || undefined;
 
 const post = (message: WebviewMessage) => vscode.postMessage(message);
 
@@ -65,6 +68,7 @@ let starting = false;
 
 function persist() {
   vscode.setState({
+    coreId,
     sessionId,
     start,
     draft: field.value,
@@ -228,6 +232,9 @@ function renderHeader() {
 function renderDraftHeader(draft: DraftStart) {
   title.textContent = 'New session';
   meta.replaceChildren(
+    ...(draft.coreName
+      ? [h('span', { class: 'meta-item', title: 'The Core the session will be created on' }, icon('cloud'), draft.coreName)]
+      : []),
     h('span', { class: 'meta-item', title: 'The Project the session works in' }, icon('project'), draft.projectName),
     h('span', { class: 'meta-item', title: 'The backend that will run this session' }, icon('server'), draft.backendName),
     ...(draft.directoryName

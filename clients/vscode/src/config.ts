@@ -1,50 +1,57 @@
 import * as vscode from 'vscode';
 
+import { hostOf, normaliseUrl, readCores, validateUrl, type CoreSetting, type LegacySettings } from './cores/settings';
+
+export { normaliseUrl, validateUrl } from './cores/settings';
+
+const CORES = 'cores';
+
+/** The Cores the settings list, made usable (see readCores). */
+export function coreSettings(): { cores: CoreSetting[]; changed: boolean } {
+  return readCores(vscode.workspace.getConfiguration('threavia').get<unknown>(CORES));
+}
+
 /**
- * Where Core is. Empty until the person says: there is no sensible default, a
- * laptop Core and a deployed one being equally likely.
+ * Saves the list of Cores, in the user settings: a Core and its sign-in are
+ * the person's, whichever folder is open.
  */
-export function coreUrl(): string {
-  return normaliseUrl(vscode.workspace.getConfiguration('threavia').get<string>('coreUrl', ''));
+export async function saveCores(cores: CoreSetting[]): Promise<void> {
+  await vscode.workspace.getConfiguration('threavia').update(CORES, cores, vscode.ConfigurationTarget.Global);
 }
 
-/** The URL as requests are built from it: trimmed, without a trailing slash. */
-export function normaliseUrl(raw: string): string {
-  return raw.trim().replace(/\/+$/, '');
+/** What an earlier version kept, for the one migration to `threavia.cores`. */
+export function legacySettings(): LegacySettings {
+  const config = vscode.workspace.getConfiguration('threavia');
+  return {
+    cores: config.inspect<unknown>(CORES)?.globalValue,
+    coreUrl: config.get<string>('coreUrl', ''),
+    project: config.get<string>('project', ''),
+  };
 }
 
-/** Says what is wrong with a URL, or nothing when it will do. */
-export function validateUrl(raw: string): string | undefined {
-  const value = normaliseUrl(raw);
-  if (!value) return 'Enter the address Core answers on.';
-  try {
-    const url = new URL(value);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return 'Use an http:// or https:// address.';
-  } catch {
-    return 'That is not an address, such as https://threavia.example.com.';
-  }
-  return undefined;
-}
-
-/** Asks for the Core URL and saves it. Resolves to the URL, or undefined when cancelled. */
-export async function promptCoreUrl(): Promise<string | undefined> {
-  const value = await vscode.window.showInputBox({
-    title: 'Threavia Core URL',
+/** Asks for a Core's address. Resolves to it normalised, or undefined when cancelled. */
+export async function promptUrl(title: string, value = ''): Promise<string | undefined> {
+  const input = await vscode.window.showInputBox({
+    title,
     prompt: 'Where Threavia Core answers. http://localhost:8080 for a local Core.',
     placeHolder: 'https://threavia.example.com',
-    value: coreUrl(),
+    value,
     ignoreFocusOut: true,
     validateInput: validateUrl,
   });
-  if (value === undefined) return undefined;
-  const url = normaliseUrl(value);
-  await vscode.workspace.getConfiguration('threavia').update('coreUrl', url, vscode.ConfigurationTarget.Global);
-  return url;
+  return input === undefined ? undefined : normaliseUrl(input);
 }
 
-/** The Project this workspace works in, by name or id; empty when none is named. */
-export function currentProjectSetting(): string {
-  return vscode.workspace.getConfiguration('threavia').get<string>('project', '');
+/** Asks what a Core is called, its host being the answer that needs no typing. */
+export async function promptName(title: string, url: string, value?: string): Promise<string | undefined> {
+  const input = await vscode.window.showInputBox({
+    title,
+    prompt: 'What the sidebar and the notifications call this Core.',
+    value: value ?? hostOf(url),
+    ignoreFocusOut: true,
+    validateInput: (text) => (text.trim() ? undefined : 'A Core needs a name.'),
+  });
+  return input === undefined ? undefined : input.trim();
 }
 
 export function notifyAttention(): boolean {

@@ -1,13 +1,16 @@
 import * as vscode from 'vscode';
 
+import { parseRecordPath, recordPath } from '../cores/refs';
+
 /**
  * The read-only markdown a Task or a Decision opens as, kept current.
  *
- * Each record has one URI, `<scheme>:/<id>/<Title>.md`: the file name gives
- * the preview its title and its language, and the id finds the text. The
- * views hand their records over every time they read them, and a document
- * whose text changed says so, so a preview left open follows what agents do
- * to the record.
+ * Each record has one URI, `<scheme>:/<core>/<id>/<Title>.md`: the Core first,
+ * since two Cores may hold the same id; the file name gives the preview its
+ * title and its language, and the Core and id find the text. The views hand
+ * their records over every time they read them, and a document whose text
+ * changed says so, so a preview left open follows what agents do to the
+ * record.
  */
 export class LiveDocuments implements vscode.TextDocumentContentProvider, vscode.Disposable {
   private readonly texts = new Map<string, string>();
@@ -25,38 +28,40 @@ export class LiveDocuments implements vscode.TextDocumentContentProvider, vscode
   }
 
   /** The URI of a record, the same one each time it is asked for. */
-  uri(id: string, name: string): vscode.Uri {
-    let uri = this.uris.get(id);
+  uri(coreId: string, id: string, name: string): vscode.Uri {
+    const key = `${coreId}/${id}`;
+    let uri = this.uris.get(key);
     if (!uri) {
-      uri = vscode.Uri.from({ scheme: this.scheme, path: `/${id}/${name}` });
-      this.uris.set(id, uri);
+      uri = vscode.Uri.from({ scheme: this.scheme, path: recordPath(coreId, id, name) });
+      this.uris.set(key, uri);
     }
     return uri;
   }
 
   /**
-   * Records as just read, an undefined text for one that is gone. A document
-   * open on one that changed is told; records of another Project, not in
-   * `texts`, keep what they said.
+   * Records of a Core as just read, an undefined text for one that is gone. A
+   * document open on one that changed is told; records of another Project,
+   * not in `texts`, keep what they said.
    */
-  update(texts: Map<string, string | undefined>) {
+  update(coreId: string, texts: Map<string, string | undefined>) {
     for (const [id, text] of texts) {
-      if (this.texts.get(id) === text) continue;
-      if (text === undefined) this.texts.delete(id);
-      else this.texts.set(id, text);
-      const uri = this.uris.get(id);
+      const key = `${coreId}/${id}`;
+      if (this.texts.get(key) === text) continue;
+      if (text === undefined) this.texts.delete(key);
+      else this.texts.set(key, text);
+      const uri = this.uris.get(key);
       if (uri) this.changed.fire(uri);
     }
   }
 
   provideTextDocumentContent(uri: vscode.Uri): string {
-    const id = uri.path.split('/')[1] ?? '';
-    return this.texts.get(id) ?? this.gone;
+    const record = parseRecordPath(uri.path);
+    return (record && this.texts.get(`${record.coreId}/${record.id}`)) ?? this.gone;
   }
 
   /** Opens a record as a rendered preview, or as plain text if previews are off. */
-  async open(id: string, name: string): Promise<void> {
-    const uri = this.uri(id, name);
+  async open(coreId: string, id: string, name: string): Promise<void> {
+    const uri = this.uri(coreId, id, name);
     try {
       await vscode.commands.executeCommand('markdown.showPreview', uri);
     } catch {

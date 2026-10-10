@@ -4,69 +4,74 @@ import type { CoreClient } from './api/client';
 import type { EventBus } from './api/events';
 import { EventStream } from './api/stream';
 import type { AttentionStore } from './attention/store';
-import type { ThreaviaAuth } from './auth/provider';
-import { coreUrl } from './config';
+import type { CoreAuth } from './auth/core';
+import { cursorKey } from './cores/settings';
 import { isActive, type Presence } from './presence';
-/** A view that shows Core's data only while Core can be asked. */
-export interface Switchable {
-  setEnabled(enabled: boolean): void;
-}
-
-export type State = 'unconfigured' | 'unreachable' | 'signedOut' | 'ready';
+import type { CoreState } from './tree/model';
 
 /** How often a Core that did not answer is asked again. */
 const RETRY_AFTER = 30_000;
 
 /**
- * Where the extension stands with Core, and what follows from it.
+ * Where the extension stands with one Core, and what follows from it.
  *
- * Unconfigured, unreachable and signed out each have their own welcome in the
- * sidebar (the `threavia.state` context key); ready is the only state with a
- * stream, a sidebar full of Sessions and notifications.
+ * Connecting, unreachable and signed out each say so in the sidebar; ready is
+ * the only state with a stream, Sessions to list and notifications. Every
+ * Core has its own, so one that does not answer leaves the others alone.
  */
 export class Connection implements vscode.Disposable {
-  private current: State = 'unconfigured';
+  private current: CoreState = 'connecting';
   private stream: EventStream | null = null;
   private retry: ReturnType<typeof setTimeout> | undefined;
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
   private wasReady = false;
   private generation = 0;
+  private starting: Promise<void> = Promise.resolve();
   private readonly subscription: vscode.Disposable;
+  private readonly changed = new vscode.EventEmitter<CoreState>();
+  /** Fired on every change of state, and when the sign-in changed within one. */
+  readonly onDidChange = this.changed.event;
 
   constructor(
+    private readonly coreId: string,
     private readonly state: vscode.Memento,
     private readonly client: CoreClient,
-    private readonly auth: ThreaviaAuth,
+    private readonly auth: CoreAuth,
     private readonly bus: EventBus,
     private readonly attention: AttentionStore,
-    private readonly views: Switchable[],
     private readonly presence: Presence,
   ) {
     // Only a change of whether requests can be sent matters here: a renewed
     // token changes nothing for the stream already open.
     this.subscription = auth.onDidChange(() => {
       if (this.auth.ready !== this.wasReady) this.apply();
-      else void this.publish(this.current);
+      else this.publish(this.current);
     });
   }
 
-  get status(): State {
+  get status(): CoreState {
     return this.current;
   }
 
-  /** (Re)connects to the Core the settings name, from scratch. */
-  async start(): Promise<void> {
+  /** The start under way, for a command that needs to know how it ended. */
+  get settled(): Promise<void> {
+    return this.starting;
+  }
+
+  /** (Re)connects from scratch. */
+  start(): Promise<void> {
+    this.starting = this.doStart();
+    return this.starting;
+  }
+
+  private async doStart(): Promise<void> {
     const generation = ++this.generation;
     clearTimeout(this.retry);
     this.closeStream();
     this.wasReady = false;
     this.attention.reset();
-    for (const view of this.views) view.setEnabled(false);
+    this.publish('connecting');
 
-    if (!coreUrl()) {
-      this.auth.forget();
-      return this.publish('unconfigured');
-    }
     try {
       const config = await this.client.authConfig();
       if (generation !== this.generation) return;
@@ -80,18 +85,25 @@ export class Connection implements vscode.Disposable {
     if (generation === this.generation) this.apply();
   }
 
-  /** Follows whether there is a credential: views and stream on, or off. */
+  /**
+   * Forgets where the stream was: the Core moved to another address, whose
+   * sequence has nothing to do with the old one's.
+   */
+  async forgetCursor() {
+    clearTimeout(this.saveTimer);
+    await this.state.update(cursorKey(this.coreId), undefined);
+  }
+
+  /** Follows whether there is a credential: stream on, or off. */
   private apply() {
     this.wasReady = this.auth.ready;
     if (!this.auth.ready) {
       this.closeStream();
       this.attention.reset();
-      for (const view of this.views) view.setEnabled(false);
-      void this.publish('signedOut');
+      this.publish('signedOut');
       return;
     }
-    void this.publish('ready');
-    for (const view of this.views) view.setEnabled(true);
+    this.publish('ready');
     void this.attention.refresh();
     this.openStream();
   }
@@ -99,7 +111,7 @@ export class Connection implements vscode.Disposable {
   /** Opens the stream from the saved cursor, or from where a refused one stopped. */
   private openStream(from?: number) {
     this.closeStream();
-    const key = `threavia.cursor:${coreUrl()}`;
+    const key = cursorKey(this.coreId);
     const stream = new EventStream({
       client: this.client,
       isActive,
@@ -133,16 +145,18 @@ export class Connection implements vscode.Disposable {
     this.presence.stop();
   }
 
-  private async publish(state: State) {
+  private publish(state: CoreState) {
     this.current = state;
-    await vscode.commands.executeCommand('setContext', 'threavia.state', state);
-    await vscode.commands.executeCommand('setContext', 'threavia.signedIn', this.auth.signedIn);
+    this.changed.fire(state);
   }
 
   dispose() {
+    // Stops reconnecting for good: a removed Core must not come back by itself.
+    this.generation++;
     clearTimeout(this.retry);
     clearTimeout(this.saveTimer);
     this.closeStream();
     this.subscription.dispose();
+    this.changed.dispose();
   }
 }

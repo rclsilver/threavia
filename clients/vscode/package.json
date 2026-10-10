@@ -67,7 +67,7 @@
     "viewsWelcome": [
       {
         "view": "threavia.sidebar",
-        "contents": "Threavia shows your agents' sessions here, and what waits for you.\n[Set Core URL](command:threavia.setCoreUrl)",
+        "contents": "Threavia shows your agents' sessions here, and what waits for you.\n[Add a Core](command:threavia.addCore)",
         "when": "threavia.state == unconfigured"
       },
       {
@@ -82,7 +82,7 @@
       },
       {
         "view": "threavia.tasks",
-        "contents": "Threavia shows what a Project still owes here.\n[Set Core URL](command:threavia.setCoreUrl)",
+        "contents": "Threavia shows what a Project still owes here.\n[Add a Core](command:threavia.addCore)",
         "when": "threavia.state == unconfigured"
       },
       {
@@ -97,7 +97,7 @@
       },
       {
         "view": "threavia.memory",
-        "contents": "Threavia shows what a Project decided here.\n[Set Core URL](command:threavia.setCoreUrl)",
+        "contents": "Threavia shows what a Project decided here.\n[Add a Core](command:threavia.addCore)",
         "when": "threavia.state == unconfigured"
       },
       {
@@ -130,7 +130,23 @@
       },
       {
         "command": "threavia.setCoreUrl",
-        "title": "Set Core URL",
+        "title": "Set Core URL…",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.addCore",
+        "title": "Add Core…",
+        "category": "Threavia",
+        "icon": "$(add)"
+      },
+      {
+        "command": "threavia.renameCore",
+        "title": "Rename Core…",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.removeCore",
+        "title": "Remove Core",
         "category": "Threavia"
       },
       {
@@ -449,6 +465,18 @@
         {
           "command": "threavia.recordDecision",
           "when": "threavia.state == ready && threavia.hasProject"
+        },
+        {
+          "command": "threavia.renameCore",
+          "when": "threavia.state != unconfigured"
+        },
+        {
+          "command": "threavia.removeCore",
+          "when": "threavia.state != unconfigured"
+        },
+        {
+          "command": "threavia.signOut",
+          "when": "threavia.signedIn"
         }
       ],
       "view/title": [
@@ -469,6 +497,11 @@
         },
         {
           "command": "threavia.setCoreUrl",
+          "when": "view == threavia.sidebar",
+          "group": "settings"
+        },
+        {
+          "command": "threavia.addCore",
           "when": "view == threavia.sidebar",
           "group": "settings"
         },
@@ -504,6 +537,46 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "threavia.newSession",
+          "when": "view == threavia.sidebar && viewItem =~ /^core\\.ready/",
+          "group": "inline@1"
+        },
+        {
+          "command": "threavia.refresh",
+          "when": "view == threavia.sidebar && viewItem =~ /^core\\./",
+          "group": "inline@2"
+        },
+        {
+          "command": "threavia.signIn",
+          "when": "view == threavia.sidebar && viewItem =~ /^core\\.(signedOut|unreachable)/",
+          "group": "1_auth@1"
+        },
+        {
+          "command": "threavia.signOut",
+          "when": "view == threavia.sidebar && viewItem =~ /^core\\..*\\.signedIn$/",
+          "group": "1_auth@2"
+        },
+        {
+          "command": "threavia.newSession",
+          "when": "view == threavia.sidebar && viewItem =~ /^core\\.ready/",
+          "group": "2_session"
+        },
+        {
+          "command": "threavia.renameCore",
+          "when": "view == threavia.sidebar && viewItem =~ /^core\\./",
+          "group": "3_core@1"
+        },
+        {
+          "command": "threavia.setCoreUrl",
+          "when": "view == threavia.sidebar && viewItem =~ /^core\\./",
+          "group": "3_core@2"
+        },
+        {
+          "command": "threavia.removeCore",
+          "when": "view == threavia.sidebar && viewItem =~ /^core\\./",
+          "group": "4_remove"
+        },
         {
           "command": "threavia.approve",
           "when": "view == threavia.sidebar && viewItem == validation",
@@ -702,17 +775,50 @@
     "configuration": {
       "title": "Threavia",
       "properties": {
+        "threavia.cores": {
+          "type": "array",
+          "default": [],
+          "scope": "application",
+          "markdownDescription": "The Threavia Cores this editor connects to, all at once. Add, rename and remove them with **Threavia: Add Core…**, **Rename Core…** and **Remove Core**; `id` is generated and keeps a Core the same Core when its name or address changes.",
+          "items": {
+            "type": "object",
+            "required": [
+              "url"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Generated; leave it as it is."
+              },
+              "name": {
+                "type": "string",
+                "description": "What the sidebar and the notifications call this Core."
+              },
+              "url": {
+                "type": "string",
+                "markdownDescription": "Where it answers, such as `https://threavia.example.com`, or `http://localhost:8080` for a local Core."
+              },
+              "project": {
+                "type": "string",
+                "description": "The Project of this Core you work in, by name or id: listed first and expanded, and shown by Tasks and Memory until you turn to another."
+              }
+            }
+          }
+        },
         "threavia.coreUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Where Threavia Core answers, such as `https://threavia.example.com`, or `http://localhost:8080` for a local Core.",
-          "scope": "application"
+          "scope": "application",
+          "markdownDeprecationMessage": "Replaced by `#threavia.cores#`, where it moved on the first start of this version.",
+          "description": "Where Threavia Core answered, before there could be several Cores."
         },
         "threavia.project": {
           "type": "string",
           "default": "",
-          "markdownDescription": "The Project this workspace works in, by name or id. It is listed first and expanded, pinned sessions from other Projects say which one they belong to, and the Tasks and Memory views show it until you turn to another.",
-          "scope": "resource"
+          "scope": "resource",
+          "markdownDeprecationMessage": "Replaced by the `project` of each Core in `#threavia.cores#`, where it moved on the first start of this version.",
+          "description": "The Project this workspace worked in, before there could be several Cores."
         },
         "threavia.clientName": {
           "type": "string",

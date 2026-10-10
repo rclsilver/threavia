@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 
 import { ApiError } from '../api/client';
-import type { EventBus } from '../api/events';
 import type { Project } from '../api/types';
+import type { Core } from '../cores/core';
+import type { Cores } from '../cores/registry';
 import type { CurrentProject } from './current';
 
 /** A row that only says something: an empty list, an error. */
@@ -10,9 +11,10 @@ export type MessageNode = { type: 'message'; text: string; icon?: string };
 
 /**
  * What the Tasks and Memory views share: one Project at a time, the one
- * CurrentProject names, its name in the view's description; a list read when
- * first shown and read again when the stream says it changed; nothing at all
- * while Core cannot be asked, so the view's welcome asks to sign in.
+ * CurrentProject names, its name (and its Core's, when there are several) in
+ * the view's description; a list read when first shown and read again when
+ * that Core's stream says it changed; nothing at all while no Core can be
+ * asked, so the view's welcome asks to sign in.
  */
 export abstract class ProjectView<Data, Node extends { type: string }> implements vscode.TreeDataProvider<Node | MessageNode>, vscode.Disposable {
   private readonly changed = new vscode.EventEmitter<undefined>();
@@ -21,46 +23,47 @@ export abstract class ProjectView<Data, Node extends { type: string }> implement
 
   /** The list of the Project shown, once read; replaced as a whole on each read. */
   protected data: Data | undefined;
+  /** Which Project `data` is, as `<core>/<project>`. */
   private dataFor: string | undefined;
   private error: string | undefined;
   private loading: Promise<void> | undefined;
   private generation = 0;
-  private enabled = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
     viewId: string,
     protected readonly current: CurrentProject,
-    bus: EventBus,
+    protected readonly cores: Cores,
     effect: 'tasks' | 'decisions',
   ) {
     this.view = vscode.window.createTreeView(viewId, { treeDataProvider: this, showCollapseAll: true });
-    this.view.description = current.project?.name;
+    this.describe();
     this.disposables.push(
       this.view,
-      current.onChange((project) => {
-        this.view.description = project?.name;
+      current.onChange(() => {
+        this.describe();
         this.forget();
         this.changed.fire(undefined);
       }),
-      bus.on('effect', (change) => {
-        if (change.kind !== effect) return;
+      cores.on('effect', (core, change) => {
+        if (change.kind !== effect || core.id !== this.current.core?.id) return;
         // An event without a Project could be about any of them.
         if (change.projectId && change.projectId !== this.current.project?.id) return;
         this.invalidate();
       }),
       // A stream that came back may have missed changes it does not replay.
-      bus.on('connection', (connected) => {
-        if (connected) this.invalidate();
+      cores.on('connection', (core, connected) => {
+        if (connected && core.id === this.current.core?.id) this.invalidate();
       }),
+      // No Core to ask, or one again: the welcome shows, or goes.
+      cores.onDidChange(() => this.changed.fire(undefined)),
     );
   }
 
-  /** Shows Core's data, or nothing while there is no Core to ask. */
-  setEnabled(enabled: boolean) {
-    this.enabled = enabled;
-    this.reload();
+  private describe() {
+    const { project, core } = this.current;
+    this.view.description = project && core ? (this.cores.several ? `${project.name} · ${core.name}` : project.name) : undefined;
   }
 
   /** Drops what was read and draws again. */
@@ -77,11 +80,12 @@ export abstract class ProjectView<Data, Node extends { type: string }> implement
   invalidate() {
     clearTimeout(this.timer);
     this.timer = setTimeout(() => {
-      if (!this.enabled || !this.current.project) return;
+      const { core, project } = this.current;
+      if (!core?.ready || !project) return;
       // A read already under way may have started before the change.
       this.generation++;
       this.loading = undefined;
-      void this.load(this.current.project).then(() => this.changed.fire(undefined));
+      void this.load(core, project).then(() => this.changed.fire(undefined));
     }, 150);
   }
 
@@ -93,15 +97,15 @@ export abstract class ProjectView<Data, Node extends { type: string }> implement
     this.loading = undefined;
   }
 
-  private load(project: Project): Promise<void> {
+  private load(core: Core, project: Project): Promise<void> {
     const generation = this.generation;
-    this.loading ??= this.fetch(project.id)
+    this.loading ??= this.fetch(core, project.id)
       .then((data) => {
         if (generation !== this.generation) return;
         this.data = data;
-        this.dataFor = project.id;
+        this.dataFor = keyOf(core, project);
         this.error = undefined;
-        this.loaded(project.id, data);
+        this.loaded(core, project.id, data);
       })
       .catch((error: unknown) => {
         if (generation !== this.generation) return;
@@ -114,14 +118,15 @@ export abstract class ProjectView<Data, Node extends { type: string }> implement
   }
 
   async getChildren(node?: Node | MessageNode): Promise<(Node | MessageNode)[]> {
-    if (!this.enabled) return [];
-    const project = this.current.project;
-    if (!project) {
+    if (this.cores.ready().length === 0) return [];
+    const { project, core } = this.current;
+    if (!project || !core) {
       // Until the Projects are read, there is nothing to say yet.
       return node || !this.current.settled ? [] : [{ type: 'message', text: 'Create a project to begin.' }];
     }
-    if (this.dataFor !== project.id) await this.load(project);
-    if (this.data === undefined || this.dataFor !== project.id) {
+    const key = keyOf(core, project);
+    if (this.dataFor !== key) await this.load(core, project);
+    if (this.data === undefined || this.dataFor !== key) {
       return node ? [] : [{ type: 'message', text: this.error ?? 'Core did not answer.', icon: 'error' }];
     }
     if (node && isMessage(node)) return [];
@@ -142,10 +147,21 @@ export abstract class ProjectView<Data, Node extends { type: string }> implement
    * from the palette may come before the view was ever opened.
    */
   protected async dataNow(): Promise<Data | undefined> {
-    const project = this.current.project;
-    if (!project) return undefined;
-    if (this.dataFor !== project.id) await this.load(project);
-    return this.dataFor === project.id ? this.data : undefined;
+    const { project, core } = this.current;
+    if (!project || !core) return undefined;
+    const key = keyOf(core, project);
+    if (this.dataFor !== key) await this.load(core, project);
+    return this.dataFor === key ? this.data : undefined;
+  }
+
+  /**
+   * The client of the Core a row came from. Throws when that Core was
+   * removed meanwhile, which `act` says as the reason nothing changed.
+   */
+  protected clientOf(coreId: string) {
+    const core = this.cores.get(coreId);
+    if (!core) throw new Error('That Core is no longer configured.');
+    return core.client;
   }
 
   /**
@@ -172,9 +188,9 @@ export abstract class ProjectView<Data, Node extends { type: string }> implement
     }
   }
 
-  protected abstract fetch(projectId: string): Promise<Data>;
+  protected abstract fetch(core: Core, projectId: string): Promise<Data>;
   /** Told each time the list is read, for the documents open on its records. */
-  protected abstract loaded(projectId: string, data: Data): void;
+  protected abstract loaded(core: Core, projectId: string, data: Data): void;
   protected abstract children(data: Data, node: Node | undefined): (Node | MessageNode)[];
   protected abstract item(node: Node): vscode.TreeItem;
 
@@ -187,4 +203,8 @@ export abstract class ProjectView<Data, Node extends { type: string }> implement
 
 function isMessage(node: { type: string }): node is MessageNode {
   return node.type === 'message';
+}
+
+function keyOf(core: Core, project: Project): string {
+  return `${core.id}/${project.id}`;
 }

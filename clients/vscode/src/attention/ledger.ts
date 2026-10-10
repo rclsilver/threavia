@@ -37,3 +37,48 @@ export class AttentionLedger {
     return [...this.announced];
   }
 }
+
+/** What the ledgers save: what was announced, by Core id. */
+export type SavedLedgers = Record<string, string[]>;
+
+/**
+ * One ledger per Core. Request ids are only unique within a Core, and what
+ * waits is read from each Core on its own, so a read of one must never make
+ * another forget what it announced.
+ */
+export class AttentionLedgers {
+  private readonly ledgers = new Map<string, AttentionLedger>();
+
+  constructor(saved: SavedLedgers = {}) {
+    for (const [coreId, known] of Object.entries(saved)) {
+      if (Array.isArray(known)) this.ledgers.set(coreId, new AttentionLedger(known));
+    }
+  }
+
+  /** The ledger's `take`, for one Core. */
+  take(coreId: string, pending: readonly string[]): string[] {
+    let ledger = this.ledgers.get(coreId);
+    if (!ledger) {
+      ledger = new AttentionLedger();
+      this.ledgers.set(coreId, ledger);
+    }
+    return ledger.take(pending);
+  }
+
+  /** Forgets a Core that was removed, or moved to another address. */
+  forget(coreId: string) {
+    this.ledgers.delete(coreId);
+  }
+
+  /**
+   * The ledger an earlier version saved, which knew one Core, handed to the
+   * Core it became. Ignored when that Core already has one.
+   */
+  adopt(coreId: string, known: readonly string[]) {
+    if (!this.ledgers.has(coreId)) this.ledgers.set(coreId, new AttentionLedger(known));
+  }
+
+  get saved(): SavedLedgers {
+    return Object.fromEntries([...this.ledgers].map(([coreId, ledger]) => [coreId, ledger.known]));
+  }
+}

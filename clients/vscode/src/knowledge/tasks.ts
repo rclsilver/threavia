@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 
-import type { CoreClient } from '../api/client';
-import type { EventBus } from '../api/events';
+import type { Core } from '../cores/core';
+import { recordRefOf } from '../cores/refs';
+import type { Cores } from '../cores/registry';
 import type { Task, TaskStatus } from '../api/types';
 import { oneLine } from '../tree/model';
 import type { CurrentProject } from './current';
@@ -29,7 +30,9 @@ interface TaskData {
   ready: Set<string>;
 }
 
-export type TaskNode = { type: 'group'; group: TaskGroup } | { type: 'task'; task: Task; standing: Standing };
+export type TaskNode =
+  | { type: 'group'; group: TaskGroup }
+  | { type: 'task'; coreId: string; task: Task; standing: Standing };
 type TaskRow = Extract<TaskNode, { type: 'task' }>;
 
 /** A Task's row says where it stands by shape, as the web page's marks do. */
@@ -62,32 +65,30 @@ export class TasksView extends ProjectView<TaskData, TaskNode> {
     'threavia-task',
     'This task is no longer in the list. Open it again from the Tasks view.\n',
   );
-  private known: { projectId: string; ids: Set<string> } | undefined;
+  /** The Tasks last read, of a Project named `<core>/<project>`. */
+  private known: { project: string; ids: Set<string> } | undefined;
 
-  constructor(
-    private readonly client: CoreClient,
-    current: CurrentProject,
-    bus: EventBus,
-  ) {
-    super('threavia.tasks', current, bus, 'tasks');
+  constructor(current: CurrentProject, cores: Cores) {
+    super('threavia.tasks', current, cores, 'tasks');
   }
 
-  protected async fetch(projectId: string): Promise<TaskData> {
+  protected async fetch(core: Core, projectId: string): Promise<TaskData> {
     // One list with finished work included: a Task waiting on one that is done
     // is the normal way of being ready, and the Done group counts them.
     const [tasks, ready] = await Promise.all([
-      this.client.tasks(projectId, true),
-      this.client.readyTasks(projectId),
+      core.client.tasks(projectId, true),
+      core.client.readyTasks(projectId),
     ]);
     return { tasks, ready: new Set(ready.map((task) => task.id)) };
   }
 
-  protected loaded(projectId: string, data: TaskData) {
+  protected loaded(core: Core, projectId: string, data: TaskData) {
     const texts = new Map<string, string | undefined>();
-    if (this.known?.projectId === projectId) for (const id of this.known.ids) texts.set(id, undefined);
+    const project = `${core.id}/${projectId}`;
+    if (this.known?.project === project) for (const id of this.known.ids) texts.set(id, undefined);
     for (const task of data.tasks) texts.set(task.id, taskMarkdown(task, data.tasks, data.ready));
-    this.known = { projectId, ids: new Set(data.tasks.map((task) => task.id)) };
-    this.documents.update(texts);
+    this.known = { project, ids: new Set(data.tasks.map((task) => task.id)) };
+    this.documents.update(core.id, texts);
   }
 
   protected children(data: TaskData, node: TaskNode | undefined): (TaskNode | MessageNode)[] {
@@ -96,7 +97,7 @@ export class TasksView extends ProjectView<TaskData, TaskNode> {
     if (node?.type === 'group') {
       const { standing } = node.group;
       const group = groups.find((entry) => entry.standing === standing);
-      return (group?.tasks ?? []).map((task): TaskNode => ({ type: 'task', task, standing }));
+      return (group?.tasks ?? []).map((task): TaskNode => ({ type: 'task', coreId: this.current.core?.id ?? '', task, standing }));
     }
     const open = groups.filter((group) => group.standing !== 'DONE');
     return [
@@ -137,7 +138,7 @@ export class TasksView extends ProjectView<TaskData, TaskNode> {
     item.description =
       blockers.length > 0 ? `waits on ${blockers.join(', ')}` : task.description ? oneLine(task.description, 80) : undefined;
     item.tooltip = tooltip(task, standing, all);
-    item.command = { command: 'threavia.openTask', title: 'Open Task', arguments: [task.id] };
+    item.command = { command: 'threavia.openTask', title: 'Open Task', arguments: [{ coreId: node.coreId, id: task.id }] };
     return item;
   }
 
@@ -145,7 +146,7 @@ export class TasksView extends ProjectView<TaskData, TaskNode> {
 
   register(command: (name: string, run: (...args: never[]) => unknown) => void, disposables: vscode.Disposable[]) {
     disposables.push(this.documents);
-    command('threavia.openTask', (id: string) => this.open(id));
+    command('threavia.openTask', (target: unknown) => this.open(target));
     command('threavia.newTask', () => this.create());
     // Start, Mark done and Reopen are one move each, shown inline on the rows
     // whose standing they follow.
@@ -159,20 +160,24 @@ export class TasksView extends ProjectView<TaskData, TaskNode> {
     command('threavia.setTaskTodo', (node: TaskRow) => this.setStatus(node, 'TODO'));
     command('threavia.setTaskInProgress', (node: TaskRow) => this.setStatus(node, 'IN_PROGRESS'));
     command('threavia.setTaskDone', (node: TaskRow) => this.setStatus(node, 'DONE'));
-    command('threavia.editTaskTitle', (node: TaskRow) => this.editTitle(node.task));
-    command('threavia.editTaskDetails', (node: TaskRow) => this.editDetails(node.task));
-    command('threavia.taskDependencies', (node: TaskRow) => this.dependencies(node.task));
-    command('threavia.deleteTask', (node: TaskRow) => this.remove(node.task));
+    command('threavia.editTaskTitle', (node: TaskRow) => this.editTitle(node.coreId, node.task));
+    command('threavia.editTaskDetails', (node: TaskRow) => this.editDetails(node.coreId, node.task));
+    command('threavia.taskDependencies', (node: TaskRow) => this.dependencies(node.coreId, node.task));
+    command('threavia.deleteTask', (node: TaskRow) => this.remove(node.coreId, node.task));
   }
 
-  private async open(id: string) {
-    const task = (await this.dataNow())?.tasks.find((entry) => entry.id === id);
-    await this.documents.open(id, documentName(task?.title ?? 'Task'));
+  /** Opens a Task: `{ coreId, id }` from a row, or an id alone from an earlier version. */
+  private async open(target: unknown) {
+    const ref = recordRefOf(target, this.current.core?.id);
+    if (!ref) return;
+    const task =
+      ref.coreId === this.current.core?.id ? (await this.dataNow())?.tasks.find((entry) => entry.id === ref.id) : undefined;
+    await this.documents.open(ref.coreId, ref.id, documentName(task?.title ?? 'Task'));
   }
 
   private setStatus(node: TaskRow, status: TaskStatus) {
     if (node.task.status === status) return;
-    return this.act('The task is unchanged', () => this.client.updateTask(node.task.id, { status }));
+    return this.act('The task is unchanged', () => this.clientOf(node.coreId).updateTask(node.task.id, { status }));
   }
 
   /**
@@ -181,8 +186,8 @@ export class TasksView extends ProjectView<TaskData, TaskNode> {
    * knows what it waits on, not after hunting for the row it landed in.
    */
   private async create() {
-    const project = this.current.project;
-    if (!project) {
+    const { project, core } = this.current;
+    if (!project || !core) {
       void vscode.window.showInformationMessage('Choose a Project first, with Switch Project….');
       return;
     }
@@ -221,12 +226,12 @@ export class TasksView extends ProjectView<TaskData, TaskNode> {
     }
 
     const body = newTaskBody(title, details, dependsOn);
-    if (await this.act('Not filed', () => this.client.createTask(project.id, body), true)) {
+    if (await this.act('Not filed', () => core.client.createTask(project.id, body), true)) {
       vscode.window.setStatusBarMessage(`Filed: ${body.title}.`, 4000);
     }
   }
 
-  private async editTitle(task: Task) {
+  private async editTitle(coreId: string, task: Task) {
     const value = await vscode.window.showInputBox({
       title: 'Edit the title',
       value: task.title,
@@ -234,10 +239,10 @@ export class TasksView extends ProjectView<TaskData, TaskNode> {
       validateInput: (input) => (input.trim() ? undefined : 'A task needs a title.'),
     });
     const patch = value === undefined ? undefined : taskEdit(task, 'title', value);
-    if (patch) await this.act('The task is unchanged', () => this.client.updateTask(task.id, patch));
+    if (patch) await this.act('The task is unchanged', () => this.clientOf(coreId).updateTask(task.id, patch));
   }
 
-  private async editDetails(task: Task) {
+  private async editDetails(coreId: string, task: Task) {
     const current = task.description ?? '';
     const value = await vscode.window.showInputBox({
       title: `Edit the details: ${task.title}`,
@@ -255,14 +260,14 @@ export class TasksView extends ProjectView<TaskData, TaskNode> {
     // they would lose their breaks for nothing.
     if (value.trim() === current.replace(/\r?\n/g, '').trim()) return;
     const patch = taskEdit(task, 'description', value);
-    if (patch) await this.act('The task is unchanged', () => this.client.updateTask(task.id, patch));
+    if (patch) await this.act('The task is unchanged', () => this.clientOf(coreId).updateTask(task.id, patch));
   }
 
   /**
    * What a Task waits on, ticked and unticked in one go: a Task often waits on
    * several others, and one trip through a menu per edge made that tedious.
    */
-  private async dependencies(task: Task) {
+  private async dependencies(coreId: string, task: Task) {
     const all = (await this.dataNow())?.tasks ?? [];
     const options = dependencyOptions(all, task);
     if (options.length === 0) {
@@ -292,18 +297,18 @@ export class TasksView extends ProjectView<TaskData, TaskNode> {
     );
     if (add.length === 0 && remove.length === 0) return;
     await this.act('Its dependencies are unchanged', async () => {
-      for (const id of add) await this.client.addTaskDependency(task.id, id);
-      for (const id of remove) await this.client.removeTaskDependency(task.id, id);
+      for (const id of add) await this.clientOf(coreId).addTaskDependency(task.id, id);
+      for (const id of remove) await this.clientOf(coreId).removeTaskDependency(task.id, id);
     });
   }
 
-  private async remove(task: Task) {
+  private async remove(coreId: string, task: Task) {
     const choice = await vscode.window.showWarningMessage(
       'Delete this task?',
       { modal: true, detail: `“${task.title}” leaves the list. What was done about it stays in the timeline.` },
       'Delete',
     );
-    if (choice === 'Delete') await this.act('Not deleted', () => this.client.deleteTask(task.id));
+    if (choice === 'Delete') await this.act('Not deleted', () => this.clientOf(coreId).deleteTask(task.id));
   }
 }
 

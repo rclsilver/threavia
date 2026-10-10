@@ -20,6 +20,7 @@ export interface PageOptions {
   cspSource: string;
   scriptUri: string;
   styleUri: string;
+  coreId: string;
   sessionId: string;
   nonce: string;
 }
@@ -43,7 +44,7 @@ export function conversationPage(options: PageOptions): string {
 <link rel="stylesheet" href="${attribute(options.styleUri)}">
 <title>Threavia</title>
 </head>
-<body data-session-id="${attribute(options.sessionId)}">
+<body data-core-id="${attribute(options.coreId)}" data-session-id="${attribute(options.sessionId)}">
 <script nonce="${attribute(options.nonce)}" src="${attribute(options.scriptUri)}"></script>
 </body>
 </html>`;

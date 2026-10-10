@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import { ApiError, type CoreClient } from '../api/client';
+import type { Core } from '../cores/core';
 import type { BackendInstance, KnownDirectory, Project, Session } from '../api/types';
 import { humanise } from '../conversation/format';
 import { openSession } from '../sessions';
@@ -17,7 +18,9 @@ const TITLE = 'Ask Threavia';
  * Every choice is asked in the editor's own pickers, each with the likely
  * answer first, so the usual path is Enter, Enter, Enter, type, Enter.
  */
-export async function askAboutThis(client: CoreClient, uri?: vscode.Uri): Promise<void> {
+export async function askAboutThis(core: Core, several: boolean, uri?: vscode.Uri): Promise<void> {
+  const { client } = core;
+  const title = several ? `${TITLE} on ${core.name}` : TITLE;
   const editor = vscode.window.activeTextEditor;
   const document = uri && editor?.document.uri.toString() !== uri.toString()
     ? await vscode.workspace.openTextDocument(uri)
@@ -33,22 +36,22 @@ export async function askAboutThis(client: CoreClient, uri?: vscode.Uri): Promis
   }
 
   try {
-    const project = await pickProject(client, TITLE, 'Which Project is this about?');
+    const project = await pickProject(client, core.projectSetting, title, 'Which Project is this about?');
     if (!project) return;
-    const target = await pickSession(client, project);
+    const target = await pickSession(client, project, title);
     if (!target) return;
 
     let start: { backend: BackendInstance; directory: KnownDirectory | null } | undefined;
     if (target === 'new') {
-      const backend = await pickBackend(client, TITLE);
+      const backend = await pickBackend(client, title);
       if (!backend) return;
-      const directory = await pickDirectory(client, project, TITLE);
+      const directory = await pickDirectory(client, project, title);
       if (directory === undefined) return;
       start = { backend, directory };
     }
 
     const instruction = await vscode.window.showInputBox({
-      title: TITLE,
+      title,
       prompt: `About ${excerpt.wholeFile ? excerpt.path : `${excerpt.path}:${excerpt.startLine}-${excerpt.endLine}`}`,
       placeHolder: 'What should the agent do with this code?',
       ignoreFocusOut: true,
@@ -72,7 +75,7 @@ export async function askAboutThis(client: CoreClient, uri?: vscode.Uri): Promis
       // reaching into what it is doing.
       await client.postMessage(sessionId, message, 'QUEUE');
     }
-    await openSession(sessionId);
+    await openSession({ coreId: core.id, sessionId });
   } catch (error) {
     const reason = error instanceof ApiError || error instanceof Error ? error.message : String(error);
     void vscode.window.showErrorMessage(`Not sent: ${reason}`);
@@ -96,9 +99,9 @@ function excerptOf(document: vscode.TextDocument, selection: vscode.Selection | 
   };
 }
 
-async function pickSession(client: CoreClient, project: Project): Promise<Session | 'new' | undefined> {
+async function pickSession(client: CoreClient, project: Project, title: string): Promise<Session | 'new' | undefined> {
   const sessions = orderSessions(await client.sessions(project.id), new Map()).slice(0, 15);
-  return pick<Session | 'new'>(`${TITLE}: Session`, 'Start a new session, or add to one', [
+  return pick<Session | 'new'>(`${title}: Session`, 'Start a new session, or add to one', [
     { label: '$(add) New session', value: 'new' },
     ...(sessions.length > 0 ? [{ label: 'Recent sessions', kind: vscode.QuickPickItemKind.Separator, value: 'new' as const }] : []),
     ...sessions.map((session) => ({

@@ -69,6 +69,8 @@ export type WebviewMessage =
 
 /** What the webview keeps across a reload, through the editor's webview state. */
 export interface PersistedState {
+  /** The Core the Session or draft belongs to; missing in a state from before there were several. */
+  coreId?: string;
   /** Empty while the panel is a draft. */
   sessionId: string;
   /** What a draft starts its Session with, until the first message is sent. */
