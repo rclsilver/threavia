@@ -403,6 +403,15 @@ func TestJobContextResolvesTheBackendPath(t *testing.T) {
 func TestDeletingAProjectKeepsTheBackend(t *testing.T) {
 	store, ctx := newTestStore(t)
 	f := newFixture(t, store, ctx)
+	if err := store.DeleteProject(ctx, f.owner, f.project.ID); !errors.Is(err, postgres.ErrConflict) {
+		t.Fatalf("queued work must prevent deletion: %v", err)
+	}
+	if _, err := store.GetSession(ctx, f.owner, f.session.ID); err != nil {
+		t.Fatalf("refused deletion must keep the session: %v", err)
+	}
+	if _, err := store.TransitionJob(ctx, f.job.ID, domain.JobQueued, domain.JobCancelled, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := store.DeleteProject(ctx, f.owner, f.project.ID); err != nil {
 		t.Fatalf("deleting the project: %v", err)

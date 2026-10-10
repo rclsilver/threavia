@@ -124,6 +124,8 @@
       }
     ],
     "commands": [
+      { "command": "threavia.renameProject", "title": "Rename Project…", "category": "Threavia" },
+      { "command": "threavia.deleteProject", "title": "Delete Project…", "category": "Threavia" },
       {
         "command": "threavia.signIn",
         "title": "Sign In",
@@ -544,6 +546,8 @@
         }
       ],
       "view/item/context": [
+        { "command": "threavia.renameProject", "when": "view == threavia.sidebar && viewItem == project", "group": "2_project@1" },
+        { "command": "threavia.deleteProject", "when": "view == threavia.sidebar && viewItem == project", "group": "3_remove" },
         {
           "command": "threavia.newSession",
           "when": "view == threavia.sidebar && viewItem =~ /^core\\.ready/",

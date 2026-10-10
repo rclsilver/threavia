@@ -264,6 +264,16 @@ export class EventStream {
         void this.queries.invalidateQueries({ queryKey: keys.backends() });
         break;
 
+      case 'project.updated':
+      case 'project.deleted':
+        void this.queries.invalidateQueries({ queryKey: ['projects'] });
+        void this.queries.invalidateQueries({ queryKey: ['project'] });
+        if (event.type === 'project.deleted') {
+          void this.queries.invalidateQueries({ queryKey: ['sessions'] });
+          void this.queries.invalidateQueries({ queryKey: keys.attention() });
+        }
+        break;
+
       // An agent writes project memory through the Core Tools, so these arrive
       // without any client having asked for them.
       case 'task.created':

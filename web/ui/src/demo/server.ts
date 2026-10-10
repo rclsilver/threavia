@@ -198,6 +198,24 @@ const routes: [string, RegExp, Handler][] = [
     Object.assign(project, body, { updatedAt: nowIso() });
     return project;
   }],
+  ['DELETE', /^\/api\/v1\/projects\/([^/]+)$/, (m) => {
+    const project = state.projects.find((entry) => entry.id === m[1]);
+    if (!project) throw notFound('This project');
+    const ids = new Set(state.sessions.filter((session) => session.projectId === m[1]).map((session) => String(session.id)));
+    if ([...ids].some((id) => state.timelines[id]?.jobs.some((job) => !['COMPLETED', 'FAILED', 'CANCELLED'].includes(String(job.status))))) {
+      throw new ApiError(409, 'conflict', 'This project has unfinished jobs; stop them before deleting it.');
+    }
+    state.projects = state.projects.filter((entry) => entry.id !== m[1]);
+    state.sessions = state.sessions.filter((entry) => entry.projectId !== m[1]);
+    state.tasks = state.tasks.filter((entry) => entry.projectId !== m[1]);
+    state.decisions = state.decisions.filter((entry) => entry.projectId !== m[1]);
+    state.artifacts = state.artifacts.filter((entry) => entry.projectId !== m[1]);
+    state.skills = state.skills.filter((entry) => entry.projectId !== m[1]);
+    state.schedules = state.schedules.filter((entry) => !ids.has(String(entry.sessionId)));
+    for (const id of ids) { delete state.timelines[id]; delete state.sessionPolicies[id]; }
+    delete state.projectPolicies[m[1]];
+    return undefined;
+  }],
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/sessions$/, (m, _b, query) =>
     list(
       state.sessions

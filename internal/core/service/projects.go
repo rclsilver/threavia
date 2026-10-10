@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
+	"github.com/rclsilver/threavia/internal/core/events"
+	"github.com/rclsilver/threavia/internal/core/storage/s3"
 )
 
 // CreateProject creates a Project owned by the caller.
@@ -58,7 +61,19 @@ func (s *Service) SetProjectStatus(ctx context.Context, identity auth.Identity, 
 // DeleteProject permanently removes a Project and everything it owns.
 // BackendInstances belong to the user and are never deleted with it.
 func (s *Service) DeleteProject(ctx context.Context, identity auth.Identity, id domain.ProjectID) error {
-	return translate(s.store.DeleteProject(ctx, identity.UserID, id))
+	keys, err := s.store.DeleteProjectData(ctx, identity.UserID, id)
+	if err != nil {
+		return translate(err)
+	}
+	for _, key := range keys {
+		if s.objects != nil {
+			if err := s.objects.Delete(ctx, key); err != nil && !errors.Is(err, s3.ErrObjectNotFound) {
+				s.logger.Error("cannot remove a deleted project's artifact bytes", "objectKey", key, "error", err)
+			}
+		}
+	}
+	s.emit(ctx, identity.UserID, events.TypeProjectDeleted, domain.Scope{}, map[string]any{"projectId": id})
+	return nil
 }
 
 // CreateKnownDirectory registers a project-level logical directory.
@@ -149,5 +164,9 @@ func (s *Service) UpdateProject(ctx context.Context, identity auth.Identity, id 
 
 	project, err := s.store.UpdateProject(ctx, identity.UserID, id,
 		name, strings.TrimSpace(description), strings.TrimSpace(instructions))
-	return project, translate(err)
+	if err != nil {
+		return project, translate(err)
+	}
+	s.emit(ctx, identity.UserID, events.TypeProjectUpdated, domain.Scope{ProjectID: id}, map[string]any{"projectId": id, "name": project.Name})
+	return project, nil
 }

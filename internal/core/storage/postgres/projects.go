@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/rclsilver/threavia/internal/core/domain"
@@ -75,14 +76,48 @@ func (s *Store) TouchProject(ctx context.Context, id domain.ProjectID) error {
 // is the normal lifecycle; this is the explicit, separate operation of
 // specification section 21.
 func (s *Store) DeleteProject(ctx context.Context, ownerID domain.UserID, id domain.ProjectID) error {
-	tag, err := s.q.Exec(ctx, `DELETE FROM projects WHERE id = $1 AND owner_id = $2`, id, ownerID)
-	if err != nil {
+	_, err := s.DeleteProjectData(ctx, ownerID, id)
+	return err
+}
+
+// DeleteProjectData serializes deletion with new Jobs, and returns object keys
+// for cleanup after commit. Backend filesystem contents are never touched.
+func (s *Store) DeleteProjectData(ctx context.Context, ownerID domain.UserID, id domain.ProjectID) ([]string, error) {
+	var keys []string
+	err := s.WithTx(ctx, func(tx *Store) error {
+		var locked domain.ProjectID
+		if err := tx.q.QueryRow(ctx, `SELECT id FROM projects WHERE id = $1 AND owner_id = $2 FOR UPDATE`, id, ownerID).Scan(&locked); err != nil {
+			return classify(err, "lock project")
+		}
+		var unfinished bool
+		if err := tx.q.QueryRow(ctx, `SELECT EXISTS (
+			SELECT 1 FROM jobs j JOIN runs r ON r.id = j.run_id JOIN sessions s ON s.id = r.session_id
+			WHERE s.project_id = $1 AND j.status NOT IN ('COMPLETED','FAILED','CANCELLED'))`, id).Scan(&unfinished); err != nil {
+			return classify(err, "read project work")
+		}
+		if unfinished {
+			return fmt.Errorf("%w: this project has unfinished jobs; stop them before deleting it", ErrConflict)
+		}
+		rows, err := tx.q.Query(ctx, `SELECT object_key FROM artifacts WHERE project_id = $1`, id)
+		if err != nil {
+			return classify(err, "read project artifact keys")
+		}
+		for rows.Next() {
+			var key string
+			if err := rows.Scan(&key); err != nil {
+				rows.Close()
+				return err
+			}
+			keys = append(keys, key)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		_, err = tx.q.Exec(ctx, `DELETE FROM projects WHERE id = $1 AND owner_id = $2`, id, ownerID)
 		return classify(err, "delete project")
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
+	})
+	return keys, err
 }
 
 type scanner interface{ Scan(dest ...any) error }

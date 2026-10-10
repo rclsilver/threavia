@@ -23,6 +23,14 @@ const jobColumns = `j.id, j.run_id, j.status, j.idempotency_key, j.error, j.orig
 // Job is made in. It is read from the Run rather than passed in, so no caller
 // can file a key under someone else.
 func (s *Store) CreateJob(ctx context.Context, job *domain.Job) error {
+	// Held until the enclosing transaction commits: project deletion cannot
+	// miss a Job queued concurrently after checking for unfinished work.
+	var projectID domain.ProjectID
+	if err := s.q.QueryRow(ctx, `SELECT p.id FROM projects p
+		JOIN sessions s ON s.project_id = p.id JOIN runs r ON r.session_id = s.id
+		WHERE r.id = $1 FOR SHARE OF p`, job.RunID).Scan(&projectID); err != nil {
+		return classify(err, "lock job project")
+	}
 	err := s.q.QueryRow(ctx, `
 		INSERT INTO jobs (id, run_id, status, idempotency_key, idempotency_owner_id, origin_channel)
 		VALUES ($1, $2, $3, $4, (

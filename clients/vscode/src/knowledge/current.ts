@@ -26,10 +26,12 @@ export class CurrentProject implements vscode.Disposable {
   private readonly projects = new Map<string, Project[]>();
   private readonly read = new Set<string>();
   private readonly loading = new Map<string, Promise<void>>();
+  private readonly reread = new Set<string>();
   private followed: ProjectRef | undefined;
   private shown: { core: Core; project: Project } | undefined;
   private readonly listeners = new Set<() => void>();
   private readonly subscription: vscode.Disposable;
+  private readonly eventSubscription: vscode.Disposable;
 
   constructor(
     private readonly cores: Cores,
@@ -39,6 +41,12 @@ export class CurrentProject implements vscode.Disposable {
     // A Core that can be asked has its Projects read; one that cannot has
     // them forgotten. A change of its setting (its Project) settles again.
     this.subscription = cores.onDidChange(() => this.sync());
+    this.eventSubscription = cores.on('effect', (core, effect) => {
+      if (effect.kind !== 'projects') return;
+      this.read.delete(core.id);
+      if (this.loading.has(core.id)) this.reread.add(core.id);
+      else void this.load(core);
+    });
   }
 
   get project(): Project | undefined {
@@ -85,6 +93,7 @@ export class CurrentProject implements vscode.Disposable {
 
   /** Reads every Core's Projects again, for Refresh. */
   reload() {
+    for (const id of this.loading.keys()) this.reread.add(id);
     this.read.clear();
     this.sync();
   }
@@ -161,6 +170,12 @@ export class CurrentProject implements vscode.Disposable {
       })
       .finally(() => {
         this.loading.delete(core.id);
+        // An event can arrive while an older HTTP response is in flight.
+        // Read once more before accepting that response as current.
+        if (this.reread.delete(core.id) && core.ready) {
+          void this.load(core);
+          return;
+        }
         // Settled before telling anyone, so a view drawn now trusts the answer;
         // told even without a Project, which a view says differently now.
         const first = core.ready && !this.read.has(core.id);
@@ -195,6 +210,7 @@ export class CurrentProject implements vscode.Disposable {
 
   dispose() {
     this.subscription.dispose();
+    this.eventSubscription.dispose();
     this.listeners.clear();
   }
 }

@@ -23,6 +23,8 @@ import {
   Pin,
   PinOff,
   Plus,
+  Pencil,
+  Trash2,
   ShieldAlert,
   Server,
   ShieldCheck,
@@ -42,6 +44,8 @@ import {
   useSessions,
   useSnapshot,
   useTasks,
+  useUpdateProject,
+  useDeleteProject,
 } from '@/api/queries';
 import type { BackendInstance, Project, Session } from '@/api/types';
 import { DEMO } from '@/demo/mode';
@@ -58,6 +62,7 @@ import {
   DialogClose,
   DialogContent,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Input, Label } from '@/components/ui/input';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
@@ -122,6 +127,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // decision is every Project's at once, so it stays.
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
+  useEffect(() => {
+    if (projectId && projects.data && !projects.data.some((project) => project.id === projectId)) {
+      const next = projects.data[0]?.id;
+      setProjectId(next);
+      void (next ? navigate({ to: '/sessions/new', search: { projectId: next } }) : navigate({ to: '/waiting' }));
+    }
+  }, [projectId, projects.data, navigate]);
   const switchProject = (id: string) => {
     if (id === projectId) return;
     setProjectId(id);
@@ -892,6 +904,7 @@ function ProjectSwitcher({
   onSwitch: (projectId: string) => void;
 }) {
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<'rename' | 'delete' | undefined>();
   const project = projects.find((candidate) => candidate.id === current);
 
   return (
@@ -920,6 +933,11 @@ function ProjectSwitcher({
             </MenuItem>
           ))}
           {projects.length > 0 && <MenuSeparator />}
+          {project && <>
+            <MenuItem onSelect={() => setEditing('rename')}><Pencil className="size-4" />Rename {project.name}…</MenuItem>
+            <MenuItem className="text-danger" onSelect={() => setEditing('delete')}><Trash2 className="size-4" />Delete {project.name}…</MenuItem>
+            <MenuSeparator />
+          </>}
           <MenuItem onSelect={() => setCreating(true)}>
             <span className="text-muted flex size-6 shrink-0 items-center justify-center">
               <Plus className="size-4" />
@@ -929,6 +947,7 @@ function ProjectSwitcher({
         </MenuContent>
       </Menu>
       <NewProjectDialog open={creating} onOpenChange={setCreating} onCreated={onSwitch} />
+      {project && editing && <ManageProjectDialog key={`${project.id}/${editing}`} project={project} action={editing} onClose={() => setEditing(undefined)} />}
     </>
   );
 }
@@ -940,6 +959,34 @@ function ProjectMark({ name }: { name?: string }) {
       {(name ?? '').trim().slice(0, 1) || '·'}
     </span>
   );
+}
+
+function ManageProjectDialog({ project, action, onClose }: { project: Project; action: 'rename' | 'delete'; onClose: () => void }) {
+  const rename = useUpdateProject(project.id);
+  const remove = useDeleteProject(project.id);
+  const [name, setName] = useState(project.name);
+  const deleting = action === 'delete';
+  const mutation = deleting ? remove : rename;
+  return <Dialog open onOpenChange={(open) => { if (!open && !mutation.isPending) onClose(); }}>
+    <DialogContent>
+      <DialogTitle>{deleting ? 'Delete project' : 'Rename project'}</DialogTitle>
+      <DialogDescription>{deleting
+        ? `Permanently delete “${project.name}” and its sessions, history, tasks, memory, schedules, skills and artifacts. Backend files and backend instances are kept. Stop all unfinished jobs before deleting.`
+        : 'The new name will appear on all connected clients.'}</DialogDescription>
+      <form className="space-y-3" onSubmit={(event) => {
+        event.preventDefault();
+        if (!deleting && !name.trim()) return;
+        void (deleting ? remove.mutateAsync() : rename.mutateAsync({ name: name.trim() })).then(onClose).catch(() => {});
+      }}>
+        {!deleting && <><Label htmlFor="project-name">Project name</Label><Input id="project-name" autoFocus value={name} onChange={(event) => setName(event.target.value)} /></>}
+        <ActionError error={mutation.error} />
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" type="button" onClick={onClose} disabled={mutation.isPending}>Cancel</Button>
+          <Button variant={deleting ? 'danger' : 'primary'} type="submit" disabled={mutation.isPending || (!deleting && !name.trim())}>{mutation.isPending ? 'Saving…' : deleting ? 'Delete permanently' : 'Rename'}</Button>
+        </div>
+      </form>
+    </DialogContent>
+  </Dialog>;
 }
 
 function NewProjectDialog({

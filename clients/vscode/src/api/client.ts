@@ -217,6 +217,14 @@ export class CoreClient {
     return this.get<List<Project>>('/api/v1/projects').then(items);
   }
 
+  renameProject(projectId: string, name: string) {
+    return this.patch<Project>(`/api/v1/projects/${projectId}`, { name });
+  }
+
+  deleteProject(projectId: string) {
+    return this.delete<void>(`/api/v1/projects/${projectId}`);
+  }
+
   sessions(projectId: string) {
     return this.get<List<Session>>(`/api/v1/projects/${projectId}/sessions?includeArchived=false`).then(items);
   }

@@ -422,6 +422,12 @@ class ConversationPanel {
   }
 
   private onEvent(event: Event) {
+    if (event.type === 'project.deleted') {
+      const projectId = typeof event.payload?.projectId === 'string' ? event.payload.projectId : undefined;
+      const shown = this.target.kind === 'session' ? this.session?.projectId : this.target.start.projectId;
+      if (projectId && projectId === shown) this.panel.dispose();
+      return;
+    }
     if (!this.sessionId || event.sessionId !== this.sessionId || !this.loaded) return;
     const before = this.events;
     this.events = mergeEvents(this.events, [event]);

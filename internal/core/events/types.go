@@ -54,6 +54,8 @@ const (
 	TypeBackendRegistered    Type = "backend.registered"
 	TypeBackendRevoked       Type = "backend.revoked"
 	TypeBackendQuotasUpdated Type = "backend.quotas_updated"
+	TypeProjectUpdated       Type = "project.updated"
+	TypeProjectDeleted       Type = "project.deleted"
 
 	// TypeScheduleSkipped says, in the Session, that a scheduled message was
 	// not sent and why.
@@ -97,6 +99,8 @@ var persistentTypes = map[Type]bool{
 	TypeBackendRegistered:       true,
 	TypeBackendRevoked:          true,
 	TypeBackendQuotasUpdated:    true,
+	TypeProjectUpdated:          true,
+	TypeProjectDeleted:          true,
 	TypeScheduleSkipped:         true,
 }
 

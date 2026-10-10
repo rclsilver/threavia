@@ -364,7 +364,11 @@ export interface paths {
         post?: never;
         /**
          * Permanently delete a Project and everything it owns
-         * @description Archiving is the normal lifecycle; this is the explicit, separate operation of section 21.
+         * @description Permanently removes the project's sessions, history, tasks, decisions,
+         *     schedules, skills, directory bindings and artifacts. Files on backend
+         *     machines and user-owned backends are kept. Refused while any job is
+         *     unfinished: stop the work before deleting the project.
+         *
          */
         delete: {
             parameters: {
@@ -385,6 +389,7 @@ export interface paths {
                     content?: never;
                 };
                 404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
             };
         };
         options?: never;
@@ -3709,6 +3714,9 @@ export interface components {
              *
              *     - `backend.quotas_updated`: `{ backendInstanceId }`, owner-scoped;
              *       refresh backend instances to read the complete quota snapshot
+             *     - `project.updated`: `{ projectId, name }`, refresh project metadata
+             *     - `project.deleted`: `{ projectId }`, owner-scoped without projectId
+             *       in the envelope, so the notification survives the deletion
              *
              *     - `user.message`: `{ text, delivery?, scheduleId?, actorJobId? }`, delivery NOW or
              *       NEXT for a message that joined a Job already running, scheduleId

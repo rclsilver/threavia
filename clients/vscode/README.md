@@ -12,6 +12,8 @@ from one Threavia Core or from several at once.
   how far it is from its upstream and what is left to commit. Right-click a
   session to pin, rename, archive, refresh its repository from origin, or open
   it in the browser.
+  Right-click a Project to rename or permanently delete it. Deletion removes
+  its sessions and Core data, keeps backend files, and refuses unfinished work.
 - **Backends.** The Backends view identifies Claude and Codex by icon and shows
   every reported quota window, provider status, threshold and reset. Expand a
   quota for its values and provider details. No report is displayed as unknown,

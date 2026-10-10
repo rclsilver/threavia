@@ -75,6 +75,19 @@ export function useUpdateProject(projectId: string) {
   });
 }
 
+export function useDeleteProject(projectId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete(`/api/v1/projects/${projectId}`),
+    onSuccess: () => {
+      queries.removeQueries({ queryKey: keys.project(projectId) });
+      void queries.invalidateQueries({ queryKey: ['projects'] });
+      void queries.invalidateQueries({ queryKey: ['sessions'] });
+      void queries.invalidateQueries({ queryKey: keys.attention() });
+    },
+  });
+}
+
 // --------------------------------------------------------------- directories
 
 export function useDirectories(projectId: string | undefined) {

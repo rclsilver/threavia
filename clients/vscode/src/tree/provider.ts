@@ -100,6 +100,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     this.disposables.push(
       cores.onAttention(() => this.redraw()),
       cores.on('effect', (core, effect) => {
+        if (effect.kind === 'projects') this.reload(core.id);
         if (effect.kind === 'sessions') this.invalidateSessions(core.id);
         if (effect.kind === 'repository') this.invalidateRepository(core.id, effect.sessionId);
       }),

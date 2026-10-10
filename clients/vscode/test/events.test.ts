@@ -16,8 +16,10 @@ const event = (type: string, extra: Partial<Event> = {}): Event => ({
 const kinds = (effects: Effect[]) => effects.map((effect) => effect.kind);
 
 describe('what an event changes', () => {
-  it('refreshes backend lists across clients', () => {
+  it('refreshes backends and project lists across clients', () => {
     expect(kinds(effectsOf(event('backend.quotas_updated', { sessionId: undefined }), at))).toEqual(['backends']);
+    expect(kinds(effectsOf(event('project.updated'), at))).toEqual(['projects']);
+    expect(kinds(effectsOf(event('project.deleted', { sessionId: undefined }), at))).toEqual(['projects', 'sessions', 'attention']);
   });
   it('re-reads what waits when a request arrives', () => {
     expect(kinds(effectsOf(event('validation.requested'), at))).toEqual(['attention', 'sessions', 'snapshot']);

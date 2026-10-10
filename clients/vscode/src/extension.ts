@@ -16,6 +16,7 @@ import { MemoryView } from './knowledge/memory';
 import { TasksView } from './knowledge/tasks';
 import { openInBrowser, runOpenSession, setSessionOpener } from './sessions';
 import { chooseNewSession } from './start/new';
+import { pickProject } from './start/pickers';
 import { BackendsView } from './tree/backends';
 import { UNTITLED, titleOf } from './tree/model';
 import { SidebarProvider, type Node, type RequestNode, type SessionNode } from './tree/provider';
@@ -258,6 +259,28 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     if (!(await ensureReady())) return undefined;
     return coreFor(target, title, cores.ready());
   };
+
+  for (const action of ['rename', 'delete'] as const) {
+    command(`threavia.${action}Project`, async (node?: Node) => {
+      const core = await readyCore(`${action === 'rename' ? 'Rename' : 'Delete'} Project`, node);
+      if (!core) return;
+      try {
+        const project = node?.type === 'project' ? node.project : await pickProject(core.client, core.projectSetting, 'Manage Project', 'Which Project?');
+        if (!project) return;
+        if (action === 'rename') {
+          const name = await vscode.window.showInputBox({ title: 'Rename Project', value: project.name, prompt: 'The new name appears on all clients.', ignoreFocusOut: true, validateInput: (value) => value.trim() ? undefined : 'Enter a project name.' });
+          if (name === undefined || !name.trim()) return;
+          await core.client.renameProject(project.id, name.trim());
+        } else {
+          const choice = await vscode.window.showWarningMessage(`Permanently delete “${project.name}”?`, { modal: true, detail: 'Deletes its sessions, history, tasks, memory, schedules, skills and artifacts. Backend files and backend instances are kept. Stop all unfinished jobs first.' }, 'Delete permanently');
+          if (choice !== 'Delete permanently') return;
+          await core.client.deleteProject(project.id);
+        }
+        sidebar.reload(core.id);
+        currentProject.reload();
+      } catch (error) { failed(error, `Project not ${action === 'rename' ? 'renamed' : 'deleted'}`); }
+    });
+  }
 
   command('threavia.ask', async (uri?: vscode.Uri) => {
     const core = await readyCore('Ask Threavia');

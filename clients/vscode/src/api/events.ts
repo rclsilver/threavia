@@ -25,7 +25,8 @@ export type Effect =
   | { kind: 'tasks'; projectId?: string }
   /** A Project's Decisions changed; without a Project, any list may be stale. */
   | { kind: 'decisions'; projectId?: string }
-  | { kind: 'backends' };
+  | { kind: 'backends' }
+  | { kind: 'projects' };
 
 /** How old an ended Job can be and still be told: a replay is not news. */
 export const JOB_ENDED_FRESH_FOR = 2 * 60_000;
@@ -37,6 +38,10 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
     case 'backend.revoked':
     case 'backend.quotas_updated':
       return [{ kind: 'backends' }];
+    case 'project.updated':
+      return [{ kind: 'projects' }];
+    case 'project.deleted':
+      return [{ kind: 'projects' }, { kind: 'sessions' }, { kind: 'attention' }];
     // Pending attention is current state, not a count of unread events, so it
     // is re-read rather than built from the event: what makes an item worth a
     // notification is decided by Core, and this payload does not carry it.

@@ -45,7 +45,7 @@ const STEPS: Step[] = [
     path: SESSION(IDS.certManager),
     target: '[title="Switch project"]',
     title: 'Projects',
-    body: 'A project holds its sessions, tasks, memory and rules. Switching lands you back where you left that project.',
+    body: 'A project holds its sessions, tasks, memory and rules. This menu also renames or deletes the current project; deletion asks for confirmation and refuses unfinished work.',
   },
   {
     path: SESSION(IDS.certManager),
