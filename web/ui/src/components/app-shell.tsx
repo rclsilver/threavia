@@ -5,6 +5,8 @@ import {
   BookText,
   Bell,
   Check,
+  ChevronDown,
+  ChevronUp,
   ChevronsUpDown,
   Clock,
   FileText,
@@ -215,12 +217,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           'md:static md:z-auto md:w-auto md:translate-x-0 md:shadow-none md:transition-none',
           drawer ? 'translate-x-0' : '-translate-x-full',
           folded ? 'gap-2 p-2' : 'gap-4 p-4',
+          // On a phone the drawer scrolls as one: a fixed top over a list
+          // that scrolls on its own left the list a sliver once a few
+          // sessions were pinned.
+          'max-md:overflow-y-auto max-md:overscroll-contain',
         )}
       >
         {/* The mark says whose window this is and goes nowhere: every
             destination is one of the entries below, and a logo that quietly
             lands on one of them makes that entry look like two places. */}
-        <header className={cn('flex items-center gap-2', folded && 'flex-col')}>
+        <header
+          className={cn(
+            'flex items-center gap-2',
+            folded && 'flex-col',
+            // On a phone the drawer scrolls as one, and its header stays: the
+            // way out of the drawer is never scrolled away. It reaches over the
+            // drawer's padding so nothing shows above it or at its sides.
+            'max-md:bg-surface max-md:border-border/70 max-md:sticky max-md:-top-4 max-md:z-10 max-md:-mx-4 max-md:-mt-4 max-md:border-b max-md:px-4 max-md:pt-4 max-md:pb-3',
+          )}
+        >
           {folded ? (
             <span title="Threavia" className="py-1">
               <Logo className="w-7" />
@@ -261,14 +276,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </>
         ) : (
           <>
-        <WaitingLink count={waitingCount} active={pathname === '/waiting'} />
-        <PinnedSessions current={params.sessionId} projectId={projectId} projects={projects.data ?? []} waiting={waiting} />
+        {/* On a phone the top bar already carries what waits, as a button
+            that only shows when something does. */}
+        {wide && <WaitingLink count={waitingCount} active={pathname === '/waiting'} />}
+        <PinnedSessions current={params.sessionId} projectId={projectId} projects={projects.data ?? []} waiting={waiting} limit={wide ? undefined : 3} />
         <section className="space-y-2">
           <ProjectSwitcher projects={projects.data ?? []} current={projectId} onSwitch={switchProject} />
-          {projectId && <ProjectNav projectId={projectId} />}
+          {projectId && (wide ? <ProjectNav projectId={projectId} /> : <ProjectTiles projectId={projectId} />)}
         </section>
 
-        <section data-tour="sessions" className="flex min-h-0 flex-1 flex-col gap-2">
+        <section data-tour="sessions" className="flex flex-col gap-2 md:min-h-0 md:flex-1">
           <div className="flex items-center justify-between">
             <Label>{showArchived ? 'Archived sessions' : 'Sessions'}</Label>
             <div className="flex items-center">
@@ -294,7 +311,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
            * a timestamp under every row doubles the height of the list to
            * answer a question nobody asks per session, only per group.
            */}
-          <div className="-mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
+          <div className="-mx-1 space-y-4 px-1 md:min-h-0 md:flex-1 md:overflow-y-auto">
             {shown.length === 0 && (
               <p className="text-muted px-2 text-sm">
                 {showArchived ? 'Nothing archived.' : 'No sessions yet.'}
@@ -477,16 +494,29 @@ function PinnedSessions({
   projectId,
   projects,
   waiting,
+  limit,
 }: {
   current?: string;
   projectId?: string;
   projects: Project[];
   waiting: Map<string, 'validation' | 'input'>;
+  /** On a phone, how many to list before the rest fold behind a count. */
+  limit?: number;
 }) {
   const pinned = usePinnedSessions();
   const pin = usePinSession();
+  const [unfolded, setUnfolded] = useState(false);
   const sessions = pinned.data ?? [];
   if (sessions.length === 0) return null;
+
+  // Folded on a phone past a few, so the drawer still reaches the session
+  // list. What waits for a decision, and the one open, stay whatever their
+  // place: those are the rows the drawer was opened for.
+  const shown =
+    limit === undefined || unfolded
+      ? sessions
+      : sessions.filter((session, index) => index < limit || session.id === current || waiting.has(session.id));
+  const folded = sessions.length - shown.length;
 
   const nameOf = (id: string) => projects.find((project) => project.id === id)?.name;
   return (
@@ -496,7 +526,7 @@ function PinnedSessions({
         Pinned
       </p>
       <ul>
-        {sessions.map((session) => {
+        {shown.map((session) => {
           const elsewhere = session.projectId !== projectId ? nameOf(session.projectId) : undefined;
           const title = session.title || 'Untitled session';
           return (
@@ -531,7 +561,59 @@ function PinnedSessions({
           );
         })}
       </ul>
+      {(folded > 0 || unfolded) && limit !== undefined && sessions.length > limit && (
+        <button
+          type="button"
+          aria-expanded={unfolded}
+          onClick={() => setUnfolded(!unfolded)}
+          className="text-muted hover:text-text hover:bg-surface-2 flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-xs"
+        >
+          {unfolded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+          {unfolded ? 'Show fewer' : `${folded} more pinned`}
+        </button>
+      )}
     </section>
+  );
+}
+
+/**
+ * The parts of a Project as a grid of tiles, for the phone's drawer.
+ *
+ * As a list they were seven rows of 44px — two thirds of a phone's height —
+ * above the sessions the drawer is mostly opened for. Tiles keep every
+ * destination one tap away, each still named, in two short rows. The count of
+ * open tasks rides on its tile, as it rides on its row on a desktop.
+ */
+function ProjectTiles({ projectId }: { projectId: string }) {
+  const tasks = useTasks(projectId, false);
+  const open = tasks.data?.length ?? 0;
+  const tiles = [
+    { to: '/projects/$projectId/tasks', label: 'Tasks', Icon: ListChecks, count: open },
+    ...SECTIONS.map((section) => ({ ...section, count: 0 })),
+  ] as const;
+  return (
+    <nav aria-label="Project" className="-mx-1 grid grid-cols-4">
+      {tiles.map(({ to, label, Icon, count }) => (
+        <Link
+          key={to}
+          to={to}
+          params={{ projectId }}
+          title={label === 'Tasks' ? `${open} open task${open === 1 ? '' : 's'}` : label}
+          className="text-muted hover:bg-surface-2 hover:text-text flex min-h-14 flex-col items-center justify-center gap-1 rounded-md px-0.5 text-[0.6875rem] leading-none"
+          activeProps={{ className: 'bg-surface-2 text-text font-medium' }}
+        >
+          <span className="relative">
+            <Icon className="size-[1.125rem]" />
+            {count > 0 && (
+              <span className="bg-accent text-accent-text ring-surface figures absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[0.625rem] font-medium ring-2">
+                {count > 99 ? '99+' : count}
+              </span>
+            )}
+          </span>
+          <span className="max-w-full truncate">{label}</span>
+        </Link>
+      ))}
+    </nav>
   );
 }
 
