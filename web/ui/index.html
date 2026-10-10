@@ -2,7 +2,13 @@
 <html lang="en" class="h-full">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- interactive-widget=resizes-content: on Android the keyboard shrinks the
+         page rather than sliding the view over it. The shell is h-dvh with the
+         timeline as the one scroller, so it fits above the keyboard and the
+         header, with the session's title, stays on screen. By default Chrome
+         only shrinks what is visible and scrolls the page to the field,
+         pushing the header off the top. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
     <title>Threavia</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#5146c9" />
