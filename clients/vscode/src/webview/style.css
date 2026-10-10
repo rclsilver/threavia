@@ -198,6 +198,18 @@ button.ghost:not(:disabled):hover {
   padding: 8px 20px 8px;
   border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, var(--border));
 }
+.backend-popover { position: relative; }
+.backend-popover summary { cursor: pointer; list-style: none; }
+.backend-popover summary::-webkit-details-marker { display: none; }
+.quota-panel {
+  position: absolute; z-index: 10; top: 100%; left: 0;
+  width: min(360px, calc(100vw - 40px)); max-height: 60vh; overflow: auto;
+  margin: 0; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere;
+  color: var(--vscode-editorHoverWidget-foreground, var(--text));
+  background: var(--vscode-editorHoverWidget-background, var(--vscode-editor-background));
+  border: 1px solid var(--vscode-editorHoverWidget-border, var(--border)); border-radius: 4px;
+  box-shadow: 0 4px 12px var(--vscode-widget-shadow, transparent);
+}
 .title {
   margin: 0;
   font-size: 1.1em;

@@ -13,6 +13,7 @@ import (
 	"github.com/rclsilver/threavia/internal/core/domain"
 	"github.com/rclsilver/threavia/internal/core/events"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/quotas"
 )
 
 // Service implements the backend control sink.
@@ -147,6 +148,23 @@ func conditionsFromProto(reported []*backendv1.Condition) []domain.Condition {
 		})
 	}
 	return out
+}
+
+// QuotaReport stores provider data; Core never queries a provider or sees its credentials.
+func (s *Service) QuotaReport(ctx context.Context, instanceID domain.BackendInstanceID, report *backendv1.QuotaReport) {
+	snapshot, err := quotas.FromStruct(report.GetSnapshot())
+	if err != nil {
+		s.logger.Warn("ignoring invalid quota snapshot", "backendInstanceId", instanceID, "error", err)
+		return
+	}
+	if err := s.store.UpdateBackendQuotas(ctx, instanceID, snapshot); err != nil {
+		s.logger.Error("cannot record backend quotas", "backendInstanceId", instanceID, "error", err)
+		return
+	}
+	backend, err := s.store.BackendInstanceByID(ctx, instanceID)
+	if err == nil && backend.OwnerID != nil {
+		s.emit(ctx, *backend.OwnerID, events.TypeBackendQuotasUpdated, domain.Scope{}, map[string]any{"backendInstanceId": instanceID})
+	}
 }
 
 // ReconcileState converges Core desired state with what the backend reports

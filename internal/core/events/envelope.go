@@ -42,7 +42,8 @@ type BackendOrigin struct {
 // origin when it was produced by a BackendInstance.
 type Record struct {
 	Envelope
-	Origin *BackendOrigin
+	Origin  *BackendOrigin
+	OwnerID *domain.UserID `json:"-"`
 }
 
 // Cursor is a client position in the global event stream. A client reconnects

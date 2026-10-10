@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { ApiError } from '../api/client';
 import type { Project } from '../api/types';
 import type { DraftStart } from '../conversation/draft';
+import { backendTooltip } from '../conversation/backend';
 import type { Core } from '../cores/core';
 import { pickBackend, pickDirectory, pickProject } from './pickers';
 
@@ -31,6 +32,8 @@ export async function chooseNewSession(core: Core, several: boolean, from?: Proj
       projectName: project.name,
       backendInstanceId: backend.id,
       backendName: backend.name,
+      backendType: backend.backend,
+      backendTooltip: backendTooltip(backend),
       workingDirectoryId: directory?.id ?? null,
       directoryName: directory?.name,
     };

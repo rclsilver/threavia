@@ -24,6 +24,7 @@ func (s *Service) appendAll(ctx context.Context, tx *postgres.Store, b *batch, r
 		if err != nil {
 			return err
 		}
+		built.OwnerID = &b.ownerID
 		if err := tx.AppendEvent(ctx, built); err != nil {
 			return err
 		}
@@ -43,6 +44,7 @@ func (s *Service) emit(ctx context.Context, ownerID domain.UserID, eventType eve
 		s.logger.Error("cannot build event", "type", eventType, "error", err)
 		return
 	}
+	built.OwnerID = &ownerID
 	if err := s.store.AppendEvent(ctx, built); err != nil {
 		s.logger.Error("cannot persist event", "type", eventType, "error", err)
 		return

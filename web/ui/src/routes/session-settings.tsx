@@ -17,6 +17,7 @@ import { ActionError } from '@/components/ui/action-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { BackendIcon } from '@/components/backend-info';
 import { cn, humanise } from '@/lib/utils';
 import { useShortcut } from '@/use-shortcut';
 
@@ -178,7 +179,7 @@ function MoveSession({ sessionId }: { sessionId: string }) {
               <SelectContent>
                 {usable.map((backend) => (
                   <SelectItem key={backend.id} value={backend.id}>
-                    {backend.name} ({humanise(backend.operationalStatus)})
+                    <span className="flex items-center gap-2"><BackendIcon provider={backend.backend} />{backend.name} ({humanise(backend.operationalStatus)})</span>
                   </SelectItem>
                 ))}
               </SelectContent>

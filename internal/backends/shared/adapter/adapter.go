@@ -15,6 +15,7 @@ import (
 	"github.com/rclsilver/threavia/internal/backends/shared/runner"
 	"github.com/rclsilver/threavia/internal/backends/shared/skills"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/client"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/quotas"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/state"
 )
 
@@ -35,10 +36,13 @@ type Adapter struct {
 	localSkills []skills.Local
 	logger      *slog.Logger
 
-	mu      sync.Mutex
-	client  *client.Client
-	jobs    map[string]*jobState
-	waiters map[string]*waiter
+	mu            sync.Mutex
+	client        *client.Client
+	jobs          map[string]*jobState
+	waiters       map[string]*waiter
+	quotaCancel   context.CancelFunc
+	quotaMu       sync.Mutex
+	quotaSnapshot *quotas.Status
 }
 
 // jobState is what the adapter remembers about a Job it is running.
@@ -123,6 +127,7 @@ func (a *Adapter) OnConnected(ctx context.Context, welcome *backendv1.Welcome) e
 	// Reported on every connection: Core keeps the metadata of what only exists
 	// here, so a handoff can say another backend cannot run a given Skill.
 	a.reportSkills(ctx)
+	a.startQuotaReporting(ctx)
 
 	a.logger.Info("reporting backend status",
 		slog.String("connectionId", welcome.GetConnectionId()),
@@ -134,6 +139,12 @@ func (a *Adapter) OnConnected(ctx context.Context, welcome *backendv1.Welcome) e
 // running: a Core outage must never stop agent work, and events are buffered
 // durably until Core comes back.
 func (a *Adapter) OnDisconnected(_ context.Context, cause error) {
+	a.mu.Lock()
+	if a.quotaCancel != nil {
+		a.quotaCancel()
+		a.quotaCancel = nil
+	}
+	a.mu.Unlock()
 	if cause != nil {
 		a.logger.Warn("disconnected from core", slog.String("cause", cause.Error()))
 		return

@@ -22,6 +22,7 @@ provider-specific RPCs, and no provider assumption in any message.
 | `Hello` | `Welcome` |
 | `Heartbeat` | `StartJob` |
 | `StatusUpdate` | `CancelJob` |
+| `QuotaReport` | |
 | `ReconcileState` | `ValidationResolution` |
 | `JobEvent` | `UserInputResolution` |
 | `EphemeralJobEvent` | `JobInputNow` |
@@ -65,6 +66,24 @@ The instance name in `Hello` replaces the stored one, so renaming a backend is a
 change to its configuration and a restart, not a new registration. A name
 another live backend of the same owner holds is logged and ignored: the old
 name stays and the connection goes on.
+
+## Quotas
+
+`QuotaReport.snapshot` follows the HTTP `BackendQuotas` schema. Each instance
+reports its own limits and thresholds, with stable window ids, optional usage,
+provider status, resets and raw quota metadata. Missing values remain absent;
+Core validates and stores a bounded snapshot and publishes the owner-scoped
+`backend.quotas_updated` notification. Provider credentials never enter this
+report. Older backends can omit it and clients show an unknown quota status.
+
+Codex polls `account/rateLimits/read` every minute and forwards
+`account/rateLimits/updated` notifications, including every family in
+`rateLimitsByLimitId`. API-key accounts report unsupported subscription quotas.
+Claude forwards `rate_limit_event.rate_limit_info`, including unified windows
+and provider thresholds; it only observes quotas during CLI jobs, without
+reading OAuth credentials or calling a separate provider endpoint. Partial
+notifications keep other windows; a failed poll preserves the last values and
+observation date with an unavailable status.
 
 ## Connection lease
 

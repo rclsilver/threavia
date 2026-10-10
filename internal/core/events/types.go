@@ -51,8 +51,9 @@ const (
 	TypeWorkspaceChanged        Type = "workspace.changed"
 	TypeArtifactCreated         Type = "artifact.created"
 
-	TypeBackendRegistered Type = "backend.registered"
-	TypeBackendRevoked    Type = "backend.revoked"
+	TypeBackendRegistered    Type = "backend.registered"
+	TypeBackendRevoked       Type = "backend.revoked"
+	TypeBackendQuotasUpdated Type = "backend.quotas_updated"
 
 	// TypeScheduleSkipped says, in the Session, that a scheduled message was
 	// not sent and why.
@@ -95,6 +96,7 @@ var persistentTypes = map[Type]bool{
 	TypeArtifactCreated:         true,
 	TypeBackendRegistered:       true,
 	TypeBackendRevoked:          true,
+	TypeBackendQuotasUpdated:    true,
 	TypeScheduleSkipped:         true,
 }
 

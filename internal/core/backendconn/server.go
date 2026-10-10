@@ -252,6 +252,10 @@ func (s *Server) handle(ctx context.Context, instanceID domain.BackendInstanceID
 		s.sink.Heartbeat(ctx, instanceID, at, body.Heartbeat.GetCapacity())
 		return nil
 
+	case *backendv1.BackendToCore_QuotaReport:
+		s.sink.QuotaReport(ctx, instanceID, body.QuotaReport)
+		return nil
+
 	case *backendv1.BackendToCore_StatusUpdate:
 		logger.Info("backend status update",
 			slog.String("status", body.StatusUpdate.GetStatus().String()),

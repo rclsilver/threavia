@@ -16,6 +16,7 @@ import { MemoryView } from './knowledge/memory';
 import { TasksView } from './knowledge/tasks';
 import { openInBrowser, runOpenSession, setSessionOpener } from './sessions';
 import { chooseNewSession } from './start/new';
+import { BackendsView } from './tree/backends';
 import { UNTITLED, titleOf } from './tree/model';
 import { SidebarProvider, type Node, type RequestNode, type SessionNode } from './tree/provider';
 import { PathResolver } from './workspace/resolve';
@@ -59,6 +60,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
   const currentProject = new CurrentProject(cores, context.workspaceState);
   const tasks = new TasksView(currentProject, cores);
   const memory = new MemoryView(currentProject, cores);
+  const backends = new BackendsView(cores);
   panels.onActiveProject = (coreId, projectId) => currentProject.follow(coreId, projectId);
 
   /** A Session's title from what is already known, asking Core only as a last resort. */
@@ -93,6 +95,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     currentProject,
     tasks,
     memory,
+    backends,
     new WaitingStatus(cores),
     new Notifier(cores, sessionTitle),
   );
@@ -211,6 +214,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     currentProject.reload();
     tasks.reload();
     memory.reload();
+    backends.reload();
   });
 
   command('threavia.switchProject', async () => {

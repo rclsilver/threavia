@@ -18,6 +18,7 @@ import (
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	sdkevents "github.com/rclsilver/threavia/pkg/backend-sdk/events"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/quotas"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/state"
 	sdktools "github.com/rclsilver/threavia/pkg/backend-sdk/tools"
 )
@@ -412,6 +413,17 @@ func (c *Client) SendStatus(ctx context.Context, status backendv1.BackendOperati
 			},
 		},
 	})
+}
+
+// SendQuotas reports quota state independently from operational readiness.
+func (c *Client) SendQuotas(ctx context.Context, snapshot quotas.Status) error {
+	value, err := snapshot.Struct()
+	if err != nil {
+		return err
+	}
+	return c.enqueue(ctx, &backendv1.BackendToCore{Message: &backendv1.BackendToCore_QuotaReport{
+		QuotaReport: &backendv1.QuotaReport{Snapshot: value},
+	}})
 }
 
 // Invoke calls a Core Tool and waits for the response. It implements

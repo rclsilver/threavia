@@ -2166,6 +2166,9 @@ components:
             The shape depends on `type`, and a backend may add one without a
             Core release, so it is open. The ones a client renders:
 
+            - `backend.quotas_updated`: `{ backendInstanceId }`, owner-scoped;
+              refresh backend instances to read the complete quota snapshot
+
             - `user.message`: `{ text, delivery?, scheduleId?, actorJobId? }`, delivery NOW or
               NEXT for a message that joined a Job already running, scheduleId
               for one a Schedule sent, actorJobId for an agent manager's message
@@ -2637,6 +2640,10 @@ components:
           type: string
           description: Absent while the instance is UNCLAIMED.
         name: { type: string }
+        backend:
+          type: string
+          description: Provider identifier announced in Hello, such as claude or codex. Empty before the first connection; clients must handle unknown providers.
+        quotas: { $ref: "#/components/schemas/BackendQuotas" }
         ownershipStatus: { $ref: "#/components/schemas/BackendOwnershipStatus" }
         operationalStatus: { $ref: "#/components/schemas/BackendOperationalStatus" }
         providerAuthState: { $ref: "#/components/schemas/ProviderAuthState" }
@@ -2661,6 +2668,53 @@ components:
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         revokedAt: { type: string, format: date-time }
+
+    BackendQuotas:
+      type: object
+      description: A complete provider quota snapshot. Every limit and provider-specific threshold is kept independently; absence never means zero usage. Credentials are never included.
+      required: [availability, observedAt, limits]
+      properties:
+        availability: { type: string, enum: [AVAILABLE, UNAVAILABLE, UNSUPPORTED] }
+        observedAt: { type: string, format: date-time }
+        message: { type: string }
+        limits:
+          type: array
+          items: { $ref: "#/components/schemas/BackendQuota" }
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional quota-only information supplied by the provider, including credits or overage settings.
+
+    BackendQuota:
+      type: object
+      required: [id, label]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        status:
+          type: string
+          description: Provider-specific status; clients must display unfamiliar values too.
+        used: { type: number }
+        limit: { type: number }
+        remaining: { type: number }
+        unit: { type: string }
+        percentUsed: { type: number, minimum: 0 }
+        windowSeconds: { type: integer, minimum: 0 }
+        resetsAt: { type: string, format: date-time }
+        thresholds:
+          type: array
+          items:
+            type: object
+            required: [label]
+            properties:
+              label: { type: string }
+              value: { type: number }
+              unit: { type: string }
+              status: { type: string }
+        details:
+          type: object
+          additionalProperties: true
+          description: All other information reported for this quota, without folding different windows or models together.
 
     Handoff:
       type: object

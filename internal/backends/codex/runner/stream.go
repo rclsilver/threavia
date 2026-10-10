@@ -261,6 +261,10 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 				return out
 			}
 		}
+		if msg.Method == "account/rateLimits/updated" {
+			_ = contract.ReportQuotas(reportCtx, sink, codexRateLimits(payload), false)
+			continue
+		}
 		// Isolated reviewers/search helpers have their own consumers. Their
 		// messages never become user-facing messages or replace the native Run ID.
 		threadID := str(payload, "threadId")

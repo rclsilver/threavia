@@ -5,6 +5,8 @@ import { useCallback, useState } from 'react';
 import { useBackends, useClaimBackend, useIssueBackendToken, useMe, useRevokeBackend } from '@/api/queries';
 import type { BackendInstance } from '@/api/types';
 import { NotificationsPane } from '@/components/notifications-pane';
+import { BackendQuotas } from '@/components/backend-info';
+import { backendIcon } from '@/lib/backend';
 import { ConfirmLine, RecordList, RecordRow } from '@/components/record-list';
 import { ActionError } from '@/components/ui/action-error';
 import { Avatar } from '@/components/ui/avatar';
@@ -201,13 +203,14 @@ function BackendRow({ backend }: { backend: BackendInstance }) {
 
   return (
     <RecordRow
-      icon={Server}
+      icon={backendIcon(backend.backend)}
       tone={revoked ? 'text-muted' : backend.operationalStatus === 'READY' ? 'text-ok' : 'text-warn-text'}
       title={backend.name}
       muted={revoked}
       badges={
         <>
           <Badge tone={backendTone(backend)}>{humanise(backend.operationalStatus)}</Badge>
+          <Badge>{backend.backend ? humanise(backend.backend) : 'Unknown provider'}</Badge>
           {backend.ownershipStatus !== 'CLAIMED' && <Badge tone="warn">{humanise(backend.ownershipStatus)}</Badge>}
         </>
       }
@@ -233,8 +236,9 @@ function BackendRow({ backend }: { backend: BackendInstance }) {
         )
       }
       below={
-        (asking || revoke.error) && (
-          <>
+        <div className="space-y-3">
+          <BackendQuotas snapshot={backend.quotas} />
+          {(asking || revoke.error) && <>
             <ConfirmLine
               question="Revoke its credential? It stops taking work at once."
               confirm="Revoke"
@@ -246,8 +250,8 @@ function BackendRow({ backend }: { backend: BackendInstance }) {
               }}
             />
             <ActionError error={revoke.error} recovery="It still holds its credential; try again." className="mt-1 text-xs" />
-          </>
-        )
+          </>}
+        </div>
       }
     />
   );

@@ -12,6 +12,10 @@ from one Threavia Core or from several at once.
   how far it is from its upstream and what is left to commit. Right-click a
   session to pin, rename, archive, refresh its repository from origin, or open
   it in the browser.
+- **Backends.** The Backends view identifies Claude and Codex by icon and shows
+  every reported quota window, provider status, threshold and reset. Expand a
+  quota for its values and provider details. No report is displayed as unknown,
+  never as zero usage.
 - **Notifications.** An approval or a question pops up once, with Approve and
   Deny, or its choices and Answer…, right there. Work that ends in a session
   you are not looking at says so quietly.
@@ -33,6 +37,10 @@ from one Threavia Core or from several at once.
     Queue, Next step or Interrupt (as far as the backend allows), and Stop it
     with the button or Escape. What you were writing is kept until sent.
   - **Pin, unpin, open in the browser** from the tab's title bar.
+  - **Quotas.** Hover or focus the backend in the header, or click it, to see
+    its full quota report. Claude reports through CLI events during jobs;
+    Codex also refreshes account quotas every minute while connected. The
+    observation date remains visible when a refresh fails.
   - **Files.** A path the agent wrote opens in the editor when it is in your
     workspace. In a "files changed" card, each file opens the editor's diff
     view, built from the diff the backend computes: the whole file when your

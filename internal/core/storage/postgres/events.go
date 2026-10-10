@@ -46,12 +46,12 @@ func (s *Store) AppendEvent(ctx context.Context, record *events.Record) error {
 	err := s.q.QueryRow(ctx, `
 		INSERT INTO events (id, type, project_id, session_id, run_id, job_id,
 		                    backend_instance_id, backend_event_id, backend_sequence,
-		                    payload, occurred_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11, now()))
+		                    payload, occurred_at, owner_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11, now()), $12)
 		ON CONFLICT (backend_instance_id, backend_event_id) DO NOTHING
 		RETURNING global_sequence, occurred_at`,
 		record.ID, record.Type, record.ProjectID, record.SessionID, record.RunID, record.JobID,
-		instanceID, eventID, sequence, payload, nullableTime(record.Timestamp),
+		instanceID, eventID, sequence, payload, nullableTime(record.Timestamp), record.OwnerID,
 	).Scan(&record.Sequence, &record.Timestamp)
 
 	if err := classify(err, "append event"); err != nil {
@@ -106,8 +106,8 @@ func (s *Store) EventsAfter(ctx context.Context, ownerID domain.UserID, after do
 	rows, err := s.q.Query(ctx, `
 		SELECT `+eventColumns+`
 		FROM events e
-		JOIN projects p ON p.id = e.project_id
-		WHERE p.owner_id = $1 AND e.global_sequence > $2
+		LEFT JOIN projects p ON p.id = e.project_id
+		WHERE (p.owner_id = $1 OR e.owner_id = $1) AND e.global_sequence > $2
 		ORDER BY e.global_sequence
 		LIMIT $3`, ownerID, after, limit)
 	if err != nil {

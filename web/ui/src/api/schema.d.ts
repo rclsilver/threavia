@@ -3707,6 +3707,9 @@ export interface components {
             /** @description The shape depends on `type`, and a backend may add one without a
              *     Core release, so it is open. The ones a client renders:
              *
+             *     - `backend.quotas_updated`: `{ backendInstanceId }`, owner-scoped;
+             *       refresh backend instances to read the complete quota snapshot
+             *
              *     - `user.message`: `{ text, delivery?, scheduleId?, actorJobId? }`, delivery NOW or
              *       NEXT for a message that joined a Job already running, scheduleId
              *       for one a Schedule sent, actorJobId for an agent manager's message
@@ -4085,6 +4088,9 @@ export interface components {
             /** @description Absent while the instance is UNCLAIMED. */
             ownerId?: string;
             name: string;
+            /** @description Provider identifier announced in Hello, such as claude or codex. Empty before the first connection; clients must handle unknown providers. */
+            backend?: string;
+            quotas?: components["schemas"]["BackendQuotas"];
             ownershipStatus: components["schemas"]["BackendOwnershipStatus"];
             operationalStatus: components["schemas"]["BackendOperationalStatus"];
             providerAuthState: components["schemas"]["ProviderAuthState"];
@@ -4105,6 +4111,43 @@ export interface components {
             updatedAt: string;
             /** Format: date-time */
             revokedAt?: string;
+        };
+        /** @description A complete provider quota snapshot. Every limit and provider-specific threshold is kept independently; absence never means zero usage. Credentials are never included. */
+        BackendQuotas: {
+            /** @enum {string} */
+            availability: "AVAILABLE" | "UNAVAILABLE" | "UNSUPPORTED";
+            /** Format: date-time */
+            observedAt: string;
+            message?: string;
+            limits: components["schemas"]["BackendQuota"][];
+            /** @description Additional quota-only information supplied by the provider, including credits or overage settings. */
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+        BackendQuota: {
+            id: string;
+            label: string;
+            /** @description Provider-specific status; clients must display unfamiliar values too. */
+            status?: string;
+            used?: number;
+            limit?: number;
+            remaining?: number;
+            unit?: string;
+            percentUsed?: number;
+            windowSeconds?: number;
+            /** Format: date-time */
+            resetsAt?: string;
+            thresholds?: {
+                label: string;
+                value?: number;
+                unit?: string;
+                status?: string;
+            }[];
+            /** @description All other information reported for this quota, without folding different windows or models together. */
+            details?: {
+                [key: string]: unknown;
+            };
         };
         /** @description What moving a Session to another BackendInstance produced. */
         Handoff: {

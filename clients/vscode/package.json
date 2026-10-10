@@ -61,6 +61,12 @@
           "name": "Memory",
           "icon": "media/threavia.svg",
           "contextualTitle": "Threavia"
+        },
+        {
+          "id": "threavia.backends",
+          "name": "Backends",
+          "visibility": "collapsed",
+          "contextualTitle": "Threavia"
         }
       ]
     },
@@ -480,6 +486,7 @@
         }
       ],
       "view/title": [
+        { "command": "threavia.refresh", "when": "view == threavia.backends", "group": "navigation@1" },
         {
           "command": "threavia.newSession",
           "when": "view == threavia.sidebar && threavia.state == ready",

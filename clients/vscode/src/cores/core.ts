@@ -40,6 +40,7 @@ export class Core implements vscode.Disposable {
   readonly connection: Connection;
   readonly artifacts: Artifacts;
   private backendList: { at: number; list: Promise<BackendInstance[]> } | undefined;
+  private readonly subscriptions: vscode.Disposable[] = [];
 
   constructor(
     public setting: CoreSetting,
@@ -74,6 +75,10 @@ export class Core implements vscode.Disposable {
       this.presence,
     );
     this.artifacts = new Artifacts(this.client, deps.artifactDocuments, setting.id);
+    this.subscriptions.push(
+      this.bus.on('effect', (effect) => { if (effect.kind === 'backends') this.invalidateBackends(); }),
+      this.bus.on('connection', () => this.invalidateBackends()),
+    );
   }
 
   get id(): string {
@@ -118,13 +123,16 @@ export class Core implements vscode.Disposable {
   backends(): Promise<BackendInstance[]> {
     if (!this.backendList || Date.now() - this.backendList.at > 60_000) {
       const list = this.client.backends();
-      list.catch(() => (this.backendList = undefined));
+      list.catch(() => { if (this.backendList?.list === list) this.backendList = undefined; });
       this.backendList = { at: Date.now(), list };
     }
     return this.backendList.list;
   }
 
+  invalidateBackends() { this.backendList = undefined; }
+
   dispose() {
+    for (const subscription of this.subscriptions) subscription.dispose();
     this.connection.dispose();
     this.presence.dispose();
     this.attention.dispose();

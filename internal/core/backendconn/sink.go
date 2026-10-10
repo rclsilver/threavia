@@ -27,6 +27,7 @@ type Sink interface {
 	Heartbeat(ctx context.Context, instanceID domain.BackendInstanceID, at time.Time, capacity *backendv1.Capacity)
 	// StatusUpdate records a self-reported operational status.
 	StatusUpdate(ctx context.Context, instanceID domain.BackendInstanceID, update *backendv1.StatusUpdate)
+	QuotaReport(ctx context.Context, instanceID domain.BackendInstanceID, report *backendv1.QuotaReport)
 	// ReconcileState receives what the backend believes is happening locally, so
 	// Core can converge its desired state.
 	ReconcileState(ctx context.Context, instanceID domain.BackendInstanceID, state *backendv1.ReconcileState)
@@ -73,6 +74,8 @@ func (NopSink) Heartbeat(context.Context, domain.BackendInstanceID, time.Time, *
 
 // StatusUpdate implements Sink.
 func (NopSink) StatusUpdate(context.Context, domain.BackendInstanceID, *backendv1.StatusUpdate) {}
+
+func (NopSink) QuotaReport(context.Context, domain.BackendInstanceID, *backendv1.QuotaReport) {}
 
 // ReconcileState implements Sink.
 func (NopSink) ReconcileState(context.Context, domain.BackendInstanceID, *backendv1.ReconcileState) {}

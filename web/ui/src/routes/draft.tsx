@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { useBackends, useCreateDirectory, useDirectories, useStartSession } from '@/api/queries';
 import { ActionError } from '@/components/ui/action-error';
+import { BackendIcon, BackendInfo } from '@/components/backend-info';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input, Label, Textarea } from '@/components/ui/input';
@@ -71,11 +72,12 @@ export function DraftView() {
             <SelectContent>
               {usable.map((backend) => (
                 <SelectItem key={backend.id} value={backend.id}>
-                  {backend.name} ({humanise(backend.operationalStatus)})
+                  <span className="flex items-center gap-2"><BackendIcon provider={backend.backend} />{backend.name} ({humanise(backend.operationalStatus)})</span>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {usable.find((backend) => backend.id === chosenBackend) && <div className="text-muted text-xs"><BackendInfo backend={usable.find((backend) => backend.id === chosenBackend)!} /></div>}
         </div>
 
         <div className="space-y-1.5">

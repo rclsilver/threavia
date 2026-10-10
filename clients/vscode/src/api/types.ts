@@ -22,6 +22,8 @@ export type Me = Schemas['Me'];
 export type FileDiff = Schemas['FileDiff'];
 export type Run = Schemas['Run'];
 export type BackendInstance = Schemas['BackendInstance'];
+export type BackendQuotas = Schemas['BackendQuotas'];
+export type BackendQuota = Schemas['BackendQuota'];
 export type KnownDirectory = Schemas['KnownDirectory'];
 export type Usage = Schemas['Usage'];
 export type Task = Schemas['Task'];
@@ -52,6 +54,9 @@ export interface ChangedFile {
  * same as the web client's (web/ui/src/api/types.ts).
  */
 export interface EventPayloads {
+  'backend.quotas_updated': { backendInstanceId: string };
+  'project.updated': { projectId: string; name: string };
+  'project.deleted': { projectId: string };
   'session.created': { title: string; managerSessionId?: string };
   'user.message': { text: string; delivery?: 'NOW' | 'NEXT'; scheduleId?: string; actorJobId?: string };
   'schedule.skipped': { scheduleId: string; outcome: string; reason: string; due: string };

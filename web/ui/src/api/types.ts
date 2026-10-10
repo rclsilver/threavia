@@ -30,6 +30,7 @@ export type SessionPolicy = Schemas['SessionPolicy'];
 export type KnownDirectory = Schemas['KnownDirectory'];
 export type KnownDirectoryBinding = Schemas['KnownDirectoryBinding'];
 export type BackendInstance = Schemas['BackendInstance'];
+export type BackendQuotas = Schemas['BackendQuotas'];
 export type Condition = Schemas['Condition'];
 export type Handoff = Schemas['Handoff'];
 export type Task = Schemas['Task'];
@@ -59,6 +60,9 @@ export interface List<T> {
  * line.
  */
 export interface EventPayloads {
+  'backend.quotas_updated': { backendInstanceId: string };
+  'project.updated': { projectId: string; name: string };
+  'project.deleted': { projectId: string };
   'session.created': { title: string; managerSessionId?: string };
   'user.message': { text: string; delivery?: 'NOW' | 'NEXT'; scheduleId?: string; actorJobId?: string };
   'schedule.skipped': { scheduleId: string; outcome: string; reason: string; due: string };

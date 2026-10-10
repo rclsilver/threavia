@@ -43,6 +43,14 @@ message StatusUpdate {
   ProviderAuthState provider_auth_state = 4;
 }
 
+// Complete quota-only snapshot, shaped as BackendQuotas in api/openapi.yaml.
+// Provider-specific limits, thresholds and metadata remain separate. Missing
+// data is UNAVAILABLE or UNSUPPORTED, never interpreted as an empty balance.
+// No provider credential or account profile may be included.
+message QuotaReport {
+  google.protobuf.Struct snapshot = 1;
+}
+
 message JobState {
   string job_id = 1;
   JobStatus status = 2;
@@ -95,6 +103,7 @@ message BackendToCore {
     SkillFetchRequest skill_fetch_request = 10;
     WorkspaceDiff workspace_diff = 11;
     RepositoryStatus repository_status = 12;
+    QuotaReport quota_report = 13;
   }
 }
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
+	contract "github.com/rclsilver/threavia/internal/backends/shared/runner"
 )
 
 // streamLine is one line of Claude Code --output-format stream-json output.
@@ -25,9 +26,10 @@ type streamLine struct {
 	Result    string           `json:"result"`
 
 	// What the turn consumed, reported on the result line.
-	Usage    *providerUsage `json:"usage"`
-	CostUSD  float64        `json:"total_cost_usd"`
-	Duration int64          `json:"duration_ms"`
+	Usage         *providerUsage `json:"usage"`
+	CostUSD       float64        `json:"total_cost_usd"`
+	Duration      int64          `json:"duration_ms"`
+	RateLimitInfo map[string]any `json:"rate_limit_info"`
 }
 
 // providerUsage is the subset of the provider accounting Threavia keeps.
@@ -116,6 +118,10 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 		}
 
 		switch line.Type {
+		case "rate_limit_event":
+			if line.RateLimitInfo != nil {
+				_ = contract.ReportQuotas(ctx, sink, claudeRateLimit(line.RateLimitInfo), false)
+			}
 		case "system":
 			// The init frame confirms the session the provider actually used.
 			if line.Subtype == "init" && line.SessionID != "" {
@@ -145,8 +151,7 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 			c.turnEnded(params.JobID)
 
 		default:
-			// Rate limit notices and other provider bookkeeping are liveness at
-			// best and are never persisted.
+			// Other provider bookkeeping does not belong in the job timeline.
 			c.logger.Debug("ignoring provider frame", slog.String("type", line.Type))
 		}
 	}

@@ -2,15 +2,18 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/rclsilver/threavia/internal/core/domain"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/quotas"
 )
 
 const backendColumns = `b.id, b.owner_id, b.name, b.ownership_status, b.operational_status,
 	b.provider_auth_state, b.capabilities, b.max_concurrent_runs, b.active_runs,
 	b.protocol_version, b.connection_id, b.last_heartbeat_at, b.features,
-	b.created_at, b.updated_at, b.revoked_at`
+	b.created_at, b.updated_at, b.revoked_at, COALESCE(b.backend_name, ''), b.quotas`
 
 // CreateBackendInstance inserts a BackendInstance, with the SHA-256 of the
 // persistent credential it will present on every connection. The credential
@@ -193,14 +196,20 @@ func scanBackendInstance(row scanner) (domain.BackendInstance, error) {
 		instance     domain.BackendInstance
 		capabilities []string
 		features     []string
+		quotaJSON    []byte
 	)
 	err := row.Scan(&instance.ID, &instance.OwnerID, &instance.Name, &instance.OwnershipStatus,
 		&instance.OperationalStatus, &instance.ProviderAuthState, &capabilities,
 		&instance.Capacity.MaxConcurrentRuns, &instance.Capacity.ActiveRuns,
 		&instance.ProtocolVersion, &instance.ConnectionID, &instance.LastHeartbeatAt, &features,
-		&instance.CreatedAt, &instance.UpdatedAt, &instance.RevokedAt)
+		&instance.CreatedAt, &instance.UpdatedAt, &instance.RevokedAt, &instance.Backend, &quotaJSON)
 	if err != nil {
 		return instance, classify(err, "read backend instance")
+	}
+	if len(quotaJSON) > 0 {
+		if err := json.Unmarshal(quotaJSON, &instance.Quotas); err != nil {
+			return instance, fmt.Errorf("read backend quotas: %w", err)
+		}
 	}
 	instance.Capabilities = make([]domain.Capability, 0, len(capabilities))
 	for _, c := range capabilities {
@@ -219,6 +228,16 @@ func featureStrings(features []domain.Feature) []string {
 		out = append(out, string(f))
 	}
 	return out
+}
+
+// UpdateBackendQuotas replaces the entire latest snapshot, including failures.
+func (s *Store) UpdateBackendQuotas(ctx context.Context, id domain.BackendInstanceID, snapshot quotas.Status) error {
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		return err
+	}
+	_, err = s.q.Exec(ctx, `UPDATE backend_instances SET quotas = $2, updated_at = now() WHERE id = $1`, id, data)
+	return classify(err, "update backend quotas")
 }
 
 // ReplaceBackendConditions records why a backend is in the state it reports.

@@ -260,6 +260,7 @@ export class EventStream {
 
       case 'backend.registered':
       case 'backend.revoked':
+      case 'backend.quotas_updated':
         void this.queries.invalidateQueries({ queryKey: keys.backends() });
         break;
 

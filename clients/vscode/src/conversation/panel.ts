@@ -21,6 +21,7 @@ import { markSessionOpen } from '../sessions';
 import { repositoryDescription, repositoryLines, titleOf, waitingBySession } from '../tree/model';
 import type { PathResolver } from '../workspace/resolve';
 import { humanise } from './format';
+import { backendTooltip } from './backend';
 import {
   onSend,
   restoredTarget,
@@ -242,6 +243,7 @@ class ConversationPanel {
     userInputs: [],
   };
   private backend: BackendInstance | undefined;
+  private backendGeneration = 0;
   private repository: Repository | undefined;
   private activity: { kind: string; at: number } | undefined;
   private exhausted = false;
@@ -288,6 +290,7 @@ class ConversationPanel {
       }),
       bus.on('event', (event) => this.onEvent(event)),
       bus.on('effect', (effect) => {
+        if (effect.kind === 'backends') void this.loadBackend();
         const id = this.sessionId;
         if (effect.kind === 'snapshot' && id && effect.sessionId === id) this.scheduleReload();
         if (effect.kind === 'repository' && id && effect.sessionId === id) void this.loadRepository();
@@ -395,14 +398,14 @@ class ConversationPanel {
   }
 
   private async loadBackend() {
+    const generation = ++this.backendGeneration;
     const run = currentRun(this.runs);
     if (!run) return;
     try {
       const backend = (await this.core.backends()).find((candidate) => candidate.id === run.backendInstanceId);
-      if (backend?.id !== this.backend?.id || backend?.features?.length !== this.backend?.features?.length) {
-        this.backend = backend;
-        this.postView();
-      }
+      if (generation !== this.backendGeneration) return;
+      this.backend = backend;
+      this.postView();
     } catch {
       // The header goes without the backend's name; the conversation works.
     }
@@ -454,6 +457,8 @@ class ConversationPanel {
       title: titleOf(this.session),
       status: sessionStatus(active, waiting),
       backend: this.backend?.name,
+      backendType: this.backend?.backend,
+      backendTooltip: this.backend && backendTooltip(this.backend),
       repository: repo && text ? { text, tooltip: repositoryLines(repo).join('\n') } : undefined,
       activity: active?.status === 'RUNNING' && fresh ? humanise(fresh) : undefined,
       pending: pendingJobs(this.jobs),
@@ -657,4 +662,3 @@ function reason(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) return error.message;
   return String(error);
 }
-

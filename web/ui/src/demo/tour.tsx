@@ -153,7 +153,7 @@ const STEPS: Step[] = [
     path: '/settings/backends',
     target: 'main ul',
     title: 'Your machines',
-    body: 'Work runs on your machines with Claude Code or Codex; choose nas-codex to use Codex. A backend that needs you says what to do.',
+    body: 'The icon identifies Claude or Codex. Every quota window, reset and provider threshold appears here; hover or focus a session’s backend to read the same report. Unknown usage stays unknown.',
   },
   {
     path: SESSION(IDS.backups),

@@ -1,5 +1,5 @@
 import { Link, useParams } from '@tanstack/react-router';
-import { ArrowUp, Pin, Server, Settings2, Square } from 'lucide-react';
+import { ArrowUp, Pin, Settings2, Square } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import {
@@ -15,6 +15,7 @@ import {
 } from '@/api/queries';
 import type { Session } from '@/api/types';
 import { AttentionPanel } from '@/components/attention';
+import { BackendInfo } from '@/components/backend-info';
 import { ActionError } from '@/components/ui/action-error';
 import { Badge } from '@/components/ui/badge';
 import { RepositoryStatus } from '@/components/repository-status';
@@ -135,10 +136,7 @@ export function SessionView() {
             )}
             {/* Which machine does the work: first-class, never a detail. */}
             {backend && (
-              <span className="flex items-center gap-1" title="The backend running this session">
-                <Server className="size-3" />
-                {backend.name}
-              </span>
+              <BackendInfo backend={backend} />
             )}
             <RepositoryStatus sessionId={sessionId} />
             {active && working && (
@@ -499,4 +497,3 @@ function Composer({
     </div>
   );
 }
-

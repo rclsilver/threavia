@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	"github.com/rclsilver/threavia/pkg/backend-sdk/quotas"
+)
 
 // Project is a logical body of work. It belongs to one user in V1 and groups
 // Sessions (spec section 3.1).
@@ -89,6 +93,8 @@ type BackendInstance struct {
 	// OwnerID is nil while the instance is UNCLAIMED.
 	OwnerID           *UserID                  `json:"ownerId,omitempty"`
 	Name              string                   `json:"name"`
+	Backend           string                   `json:"backend,omitempty"`
+	Quotas            *quotas.Status           `json:"quotas,omitempty"`
 	OwnershipStatus   BackendOwnershipStatus   `json:"ownershipStatus"`
 	OperationalStatus BackendOperationalStatus `json:"operationalStatus"`
 	ProviderAuthState ProviderAuthState        `json:"providerAuthState"`

@@ -1,5 +1,6 @@
 import { payloadOf, type Delivery, type Event, type UserInputRequest, type ValidationRequest } from '../api/types';
 import { artifactKind, bytes, clock, cost, duration, humanise, tokens } from '../conversation/format';
+import { backendIcon } from '../conversation/backend';
 import type { DraftStart } from '../conversation/draft';
 import type { HostMessage, PersistedState, SessionView, WebviewMessage } from '../conversation/protocol';
 import { riskOf } from '../conversation/risk';
@@ -220,7 +221,7 @@ function renderHeader() {
       view.status.label,
     ),
     ...(view.backend
-      ? [h('span', { class: 'meta-item', title: 'The backend running this session' }, icon('server'), view.backend)]
+      ? [backendMeta(view.backend, view.backendType, view.backendTooltip)]
       : []),
     ...(view.repository
       ? [h('span', { class: 'meta-item', title: view.repository.tooltip }, icon('git-branch'), view.repository.text)]
@@ -237,7 +238,7 @@ function renderDraftHeader(draft: DraftStart) {
       ? [h('span', { class: 'meta-item', title: 'The Core the session will be created on' }, icon('cloud'), draft.coreName)]
       : []),
     h('span', { class: 'meta-item', title: 'The Project the session works in' }, icon('project'), draft.projectName),
-    h('span', { class: 'meta-item', title: 'The backend that will run this session' }, icon('server'), draft.backendName),
+    backendMeta(draft.backendName, draft.backendType, draft.backendTooltip),
     ...(draft.directoryName
       ? [h('span', { class: 'meta-item', title: 'The working directory the agent starts in' }, icon('folder'), draft.directoryName)]
       : []),
@@ -245,6 +246,18 @@ function renderDraftHeader(draft: DraftStart) {
 }
 
 // ---------------------------------------------------------------- timeline
+function backendMeta(name: string, provider?: string, tooltip = 'No quota report received yet.') {
+  const details = h('details', { class: 'backend-popover' },
+    h('summary', { class: 'meta-item', title: tooltip, 'aria-label': `${name}: show quotas` }, icon(backendIcon(provider)), name),
+    h('pre', { class: 'quota-panel' }, tooltip),
+  );
+  details.addEventListener('mouseenter', () => { details.open = true; });
+  details.addEventListener('mouseleave', () => { if (!details.contains(document.activeElement)) details.open = false; });
+  details.addEventListener('focusin', (event) => { if (event.target instanceof HTMLElement && event.target.matches(':focus-visible')) details.open = true; });
+  details.addEventListener('focusout', (event) => { if (!(event.relatedTarget instanceof Node) || !details.contains(event.relatedTarget)) details.open = false; });
+  details.addEventListener('keydown', (event) => { if (event.key === 'Escape') { details.open = false; event.stopPropagation(); } });
+  return details;
+}
 
 const rowElements = new Map<string, { element: HTMLElement; signature: string }>();
 

@@ -17,6 +17,8 @@ export interface SessionView {
   status: { label: string; tone: StateTone };
   /** Which machine does the work: first-class, never a detail. */
   backend?: string;
+  backendType?: string;
+  backendTooltip?: string;
   /** The branch, short (`main ↑1 ●`), and in words for a tooltip. */
   repository?: { text: string; tooltip: string };
   /** A liveness signal, shown only while a Job runs. */

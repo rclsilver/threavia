@@ -17,6 +17,8 @@ export interface DraftStart {
   projectName: string;
   backendInstanceId: string;
   backendName: string;
+  backendType?: string;
+  backendTooltip?: string;
   workingDirectoryId: string | null;
   directoryName?: string;
 }
