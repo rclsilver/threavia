@@ -198,6 +198,9 @@ button.ghost:not(:disabled):hover {
   padding: 8px 20px 8px;
   border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, var(--border));
 }
+.header-title { display: flex; align-items: center; gap: 8px; }
+.header-title .title { flex: 1; min-width: 0; }
+body.full-width { --reading: 100%; }
 .backend-popover { position: relative; }
 .backend-popover summary { cursor: pointer; list-style: none; }
 .backend-popover summary::-webkit-details-marker { display: none; }

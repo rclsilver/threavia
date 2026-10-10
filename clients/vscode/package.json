@@ -53,12 +53,14 @@
         {
           "id": "threavia.tasks",
           "name": "Tasks",
+          "visibility": "collapsed",
           "icon": "media/threavia.svg",
           "contextualTitle": "Threavia"
         },
         {
           "id": "threavia.memory",
           "name": "Memory",
+          "visibility": "collapsed",
           "icon": "media/threavia.svg",
           "contextualTitle": "Threavia"
         },
@@ -124,6 +126,7 @@
       }
     ],
     "commands": [
+      { "command": "threavia.open", "title": "Open Threavia", "category": "Threavia" },
       { "command": "threavia.renameProject", "title": "Rename Project…", "category": "Threavia" },
       { "command": "threavia.deleteProject", "title": "Delete Project…", "category": "Threavia" },
       {

@@ -260,6 +260,8 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     return coreFor(target, title, cores.ready());
   };
 
+  command('threavia.open', () => vscode.commands.executeCommand('workbench.view.extension.threavia'));
+
   for (const action of ['rename', 'delete'] as const) {
     command(`threavia.${action}Project`, async (node?: Node) => {
       const core = await readyCore(`${action === 'rename' ? 'Rename' : 'Delete'} Project`, node);

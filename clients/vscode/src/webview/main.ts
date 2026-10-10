@@ -67,6 +67,8 @@ const asked = new Set<string>();
  * no Session to add to, and a second message must not start a second one.
  */
 let starting = false;
+let fullWidth = saved.fullWidth === true;
+document.body.classList.toggle('full-width', fullWidth);
 
 function persist() {
   vscode.setState({
@@ -75,6 +77,7 @@ function persist() {
     start,
     draft: field.value,
     delivery,
+    fullWidth,
     opened: [...opened],
     expanded: [...expanded],
   });
@@ -84,7 +87,14 @@ function persist() {
 
 const title = h('h1', { class: 'title' });
 const meta = h('div', { class: 'meta' });
-const header = h('header', { class: 'header' }, title, meta);
+const widthToggle = button(icon(fullWidth ? 'screen-normal' : 'screen-full'), () => {
+  fullWidth = !fullWidth;
+  document.body.classList.toggle('full-width', fullWidth);
+  widthToggle.setAttribute('aria-pressed', String(fullWidth));
+  widthToggle.replaceChildren(icon(fullWidth ? 'screen-normal' : 'screen-full'));
+  persist();
+}, { class: 'icon-button width-toggle', title: 'Full width', 'aria-label': 'Full width', 'aria-pressed': String(fullWidth) });
+const header = h('header', { class: 'header' }, h('div', { class: 'header-title' }, title, widthToggle), meta);
 
 const list = h('div', { class: 'timeline', role: 'list', 'aria-label': 'Conversation' });
 const stickySlot = h('div', { class: 'sticky-slot' });

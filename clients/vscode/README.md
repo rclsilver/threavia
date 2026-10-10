@@ -12,6 +12,9 @@ from one Threavia Core or from several at once.
   how far it is from its upstream and what is left to commit. Right-click a
   session to pin, rename, archive, refresh its repository from origin, or open
   it in the browser.
+  **Threavia: Open Threavia** focuses this dedicated activity-bar container,
+  independently of Explorer. Tasks, Memory and Backends start collapsed so
+  Sessions can use its height; VS Code keeps your later layout choices.
   Right-click a Project to rename or permanently delete it. Deletion removes
   its sessions and Core data, keeps backend files, and refuses unfinished work.
 - **Backends.** The Backends view identifies Claude and Codex by icon and shows
@@ -43,6 +46,8 @@ from one Threavia Core or from several at once.
     its full quota report. Claude reports through CLI events during jobs;
     Codex also refreshes account quotas every minute while connected. The
     observation date remains visible when a refresh fails.
+  - **Full width.** The header's Full width button lets the conversation use
+    the editor's width. It is off by default and kept with the panel on reload.
   - **Files.** A path the agent wrote opens in the editor when it is in your
     workspace. In a "files changed" card, each file opens the editor's diff
     view, built from the diff the backend computes: the whole file when your

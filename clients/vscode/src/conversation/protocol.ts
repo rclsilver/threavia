@@ -79,6 +79,7 @@ export interface PersistedState {
   start?: DraftStart;
   draft?: string;
   delivery?: Delivery;
+  fullWidth?: boolean;
   /** The folds and tool calls the reader opened. */
   opened?: number[];
   expanded?: string[];
