@@ -2091,6 +2091,10 @@ components:
         title:
           type: string
           description: Generated, user-renamable, and with no technical meaning.
+        managerSessionId:
+          type: string
+          format: uuid
+          description: The Session that delegated this work. Absent for a conversation started by a person.
         status: { $ref: "#/components/schemas/SessionStatus" }
         workingDirectoryId:
           type: string
@@ -2162,9 +2166,13 @@ components:
             The shape depends on `type`, and a backend may add one without a
             Core release, so it is open. The ones a client renders:
 
-            - `user.message`: `{ text, delivery?, scheduleId? }`, delivery NOW or
+            - `user.message`: `{ text, delivery?, scheduleId?, actorJobId? }`, delivery NOW or
               NEXT for a message that joined a Job already running, scheduleId
-              for one a Schedule sent
+              for one a Schedule sent, actorJobId for an agent manager's message
+            - `session.created`: `{ title, workingDirectoryId?, managerSessionId? }`,
+              managerSessionId for delegated work
+            - `user_input.resolved`: `{ requestId, value, actorUserId, channel, actorJobId? }`,
+              channel agent and actorJobId for an agent manager's answer
             - `schedule.skipped`: `{ scheduleId, outcome, reason, due }`, a
               scheduled message that was not sent
             - `agent.message`: `{ text }`
@@ -2178,9 +2186,8 @@ components:
               present when the diff of a file can be asked for
             - `artifact.created`: `{ artifactId, filename, mimeType, size,
               title? }`, a file the agent published for the person to open
-            - `validation.resolved`: `{ validationId, approved, note, title }`, title
+            - `validation.resolved`: `{ validationId, approved, note, title, actorJobId? }`, title
               naming what was decided
-            - `user_input.resolved`: `{ requestId, value }`
 
     ConnectedClient:
       type: object

@@ -208,6 +208,13 @@ func (s *Service) deliver(ctx context.Context, subs []domain.PushSubscription, m
 // focused, used in the last minutes — that screen already shows it and
 // nothing rings; otherwise every subscribed device does.
 func (s *Service) notifyAttention(ctx context.Context, jc postgres.JobContext, event *backendv1.JobEvent) {
+	if session, err := s.store.GetSession(ctx, jc.OwnerID, jc.SessionID); err == nil && session.ManagerSessionID != nil {
+		// The manager handles worker questions and reports their results. Its
+		// own input/validation requests still notify the person as usual.
+		if manager, err := s.store.GetSession(ctx, jc.OwnerID, *session.ManagerSessionID); err == nil && manager.Status == domain.SessionActive {
+			return
+		}
+	}
 	var title, body string
 	switch payload := event.GetBody().(type) {
 	case *backendv1.JobEvent_ValidationRequested:

@@ -17,17 +17,26 @@ type Name string
 
 // The Core Tools of specification section 12.
 const (
-	NameTaskCreate             Name = "task_create"
-	NameTaskSearch             Name = "task_search"
-	NameTaskUpdate             Name = "task_update"
-	NameTaskComplete           Name = "task_complete"
-	NameTaskReady              Name = "task_ready"
-	NameDecisionCreate         Name = "decision_create"
-	NameProjectHistorySearch   Name = "project_history_search"
-	NameKnownDirectoryRegister Name = "known_directory_register"
-	NameKnownDirectoryBind     Name = "known_directory_bind"
-	NameWorkingDirectorySet    Name = "working_directory_set"
-	NameArtifactPublish        Name = "artifact_publish"
+	NameTaskCreate               Name = "task_create"
+	NameTaskSearch               Name = "task_search"
+	NameTaskUpdate               Name = "task_update"
+	NameTaskComplete             Name = "task_complete"
+	NameTaskReady                Name = "task_ready"
+	NameDecisionCreate           Name = "decision_create"
+	NameProjectHistorySearch     Name = "project_history_search"
+	NameKnownDirectoryRegister   Name = "known_directory_register"
+	NameKnownDirectoryBind       Name = "known_directory_bind"
+	NameWorkingDirectorySet      Name = "working_directory_set"
+	NameArtifactPublish          Name = "artifact_publish"
+	NameSessionCreate            Name = "session_create"
+	NameSessionList              Name = "session_list"
+	NameSessionRead              Name = "session_read"
+	NameSessionSend              Name = "session_send"
+	NameSessionAnswer            Name = "session_answer"
+	NameSessionCancel            Name = "session_cancel"
+	NameSessionArchive           Name = "session_archive"
+	NameSessionWait              Name = "session_wait"
+	NameSessionResolveValidation Name = "session_resolve_validation"
 )
 
 func (n Name) String() string { return string(n) }
@@ -41,8 +50,8 @@ type Spec struct {
 	// machine. The backend reads that file and sends its content with the call:
 	// Core never reaches a backend's disk itself.
 	FileInput string `json:"fileInput,omitempty"`
-	// RequiresValidation marks a tool that changes where future runs execute,
-	// and so what they may read without asking. The backend asks the person
+	// RequiresValidation marks a tool that widens execution scope or relays a
+	// permission decision. The backend asks the person
 	// before running it, as it would before a Write, while it allows the other
 	// Core Tools on its own: an agent must not widen its own scope.
 	RequiresValidation bool `json:"requiresValidation,omitempty"`
@@ -75,7 +84,7 @@ func str(description string) map[string]any {
 // The descriptions are the only instruction an agent gets about when to use
 // them, so they say what the tool is for rather than what it does.
 func Specs() []Spec {
-	return []Spec{
+	return append([]Spec{
 		{
 			Name: NameProjectHistorySearch,
 			Description: "Search everything that was already said and done in this project. " +
@@ -188,5 +197,5 @@ func Specs() []Spec {
 				"knownDirectoryId": str("Identifier of the known directory to work in."),
 			}, "knownDirectoryId"),
 		},
-	}
+	}, sessionSpecs()...)
 }

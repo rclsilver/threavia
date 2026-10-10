@@ -372,6 +372,12 @@ export function toolName(name: string): string {
   return name.replace(/^mcp__threavia__/, '');
 }
 
+/** Automated coordination is part of the record, never something the person typed. */
+export function messageAuthor(event: Event): 'Agent' | 'Schedule' | 'You' {
+  const message = payloadOf(event, 'user.message');
+  return message?.scheduleId ? 'Schedule' : message?.actorJobId ? 'Agent' : 'You';
+}
+
 /** The line of an event the timeline does not lay out specially. */
 export function describe(event: Event): { icon: string; tone?: 'ok' | 'danger' | 'warn'; text: string; code?: string } {
   switch (event.type) {

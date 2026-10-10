@@ -23,6 +23,7 @@ export const IDS = {
   grafana: id('d0000003', 4),
   blog: id('d0000003', 5),
   oldSession: id('d0000003', 6),
+  ingressCheck: id('d0000003', 7),
 };
 
 const now = Date.now();
@@ -155,6 +156,7 @@ const session = (
 export const sessions = [
   session(IDS.certManager, IDS.homelab, 'Upgrade cert-manager to 1.16', 14, 1, { activeJobStatus: 'WAITING_VALIDATION' }),
   session(IDS.ingress, IDS.homelab, 'Fix the flaky deploy of the ingress controller', 70, 22),
+  session(IDS.ingressCheck, IDS.homelab, 'Check the ingress rollout', 24, 22, { managerSessionId: IDS.ingress }),
   session(IDS.backups, IDS.homelab, 'Check last night’s backups', 60 * 9, 30, { activeJobStatus: 'WAITING_INPUT' }),
   // Pinned, as someone going back and forth between two Projects would.
   session(IDS.grafana, IDS.homelab, 'Grafana dashboard for the UPS', 60 * 30, 60 * 28, { pinnedAt: at(60 * 29) }),
@@ -309,6 +311,14 @@ function ingress(): SessionState {
   t.push('agent.message', 22.2, { text: 'Committed as `7c21e9a` and pushed to `main`.' }, j2);
   t.push('job.completed', 22.2, { summary: 'Pushed', usage: { costUsd: 0.09, inputTokens: 12, outputTokens: 40, cacheReadTokens: 90000, cacheWriteTokens: 800 } }, j2);
   t.job(j2, 'COMPLETED', 23, 22.2);
+  const callback = id('d0000006', 20);
+  t.push('job.created', 21.9, { runId: r.id }, callback);
+  t.push('user.message', 21.9, { text: 'The delegated rollout check has finished. Review its findings and report the result here.', actorJobId: id('d0000006', 17) }, callback);
+  t.push('job.started', 21.8, {}, callback);
+  t.tool(callback, 21.8, 'session_read', { sessionId: IDS.ingressCheck }, 'The worker checked both controller replicas and the public endpoint: all healthy.');
+  t.push('agent.message', 21.7, { text: 'The delegated check confirms both replicas are healthy and the public endpoint returns **200**. The rollout is verified.' }, callback);
+  t.push('job.completed', 21.7, { summary: 'Delegated verification reviewed' }, callback);
+  t.job(callback, 'COMPLETED', 21.9, 21.7);
   return { runs: [r], jobs: t.jobs, events: t.events };
 }
 
@@ -370,6 +380,17 @@ function quiet(sessionId: string, n: number, backend: string, minutesAgo: number
   return { runs: [r], jobs: t.jobs, events: t.events };
 }
 
+function ingressCheck(): SessionState {
+  const state = quiet(IDS.ingressCheck, 7, IDS.laptop, 24,
+    'Check both ingress replicas and the public endpoint after the rollout.',
+    'Both controller replicas are Ready. The public endpoint returns 200; no port binding errors in either log.');
+  for (const event of state.events) {
+    if (event.type === 'session.created') event.payload = { title: 'Check the ingress rollout', managerSessionId: IDS.ingress };
+    if (event.type === 'user.message') event.payload = { ...(event.payload as Record<string, unknown>), actorJobId: id('d0000006', 1) };
+  }
+  return state;
+}
+
 /** A finished job that published what it made: a page and a chart. */
 function grafana(): SessionState {
   const r = run(IDS.grafana, 4, IDS.laptop, 60 * 30);
@@ -402,6 +423,7 @@ export function timelines(): Record<string, SessionState> {
     [IDS.backups]: backups(),
     [IDS.grafana]: grafana(),
     [IDS.oldSession]: quiet(IDS.oldSession, 5, IDS.laptop, 60 * 24 * 12, 'Move Puppet to the new CA.', 'Every agent now trusts the new CA and the old one is revoked.'),
+    [IDS.ingressCheck]: ingressCheck(),
     [IDS.blog]: quiet(IDS.blog, 6, IDS.laptop, 60 * 27, 'Draft a post about rebuilding the homelab: why, what changed, what I would do again.', 'The draft is in `content/posts/homelab-rebuild.md`: the why, the three changes that mattered, and what I would do again.', IDS.website),
   };
 }

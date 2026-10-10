@@ -83,7 +83,8 @@ func replaceNUL(value any) any {
 // UserMessagePayload is the body of a user.message event. Messages are events:
 // there is no separate message history.
 type UserMessagePayload struct {
-	Text string `json:"text"`
+	Text       string       `json:"text"`
+	ActorJobID domain.JobID `json:"actorJobId,omitempty"`
 	// Delivery says how a message sent while a Job ran reached it: NOW or
 	// NEXT. Absent for a message that started a Job of its own.
 	Delivery Delivery `json:"delivery,omitempty"`
@@ -109,8 +110,9 @@ type AgentMessagePayload struct {
 
 // SessionCreatedPayload is the body of a session.created event.
 type SessionCreatedPayload struct {
-	Title              string  `json:"title"`
-	WorkingDirectoryID *string `json:"workingDirectoryId,omitempty"`
+	Title              string            `json:"title"`
+	WorkingDirectoryID *string           `json:"workingDirectoryId,omitempty"`
+	ManagerSessionID   *domain.SessionID `json:"managerSessionId,omitempty"`
 }
 
 // SessionRenamedPayload is the body of a session.renamed event.
@@ -192,11 +194,12 @@ type ValidationRequestedPayload struct {
 // ValidationResolvedPayload is the body of a validation.resolved event, and the
 // audit receipt of specification section 16.
 type ValidationResolvedPayload struct {
-	ValidationID  string `json:"validationId"`
-	Approved      bool   `json:"approved"`
-	ActorUserID   string `json:"actorUserId"`
-	Channel       string `json:"channel"`
-	PayloadSHA256 string `json:"payloadSha256"`
+	ValidationID  string       `json:"validationId"`
+	Approved      bool         `json:"approved"`
+	ActorUserID   string       `json:"actorUserId"`
+	Channel       string       `json:"channel"`
+	ActorJobID    domain.JobID `json:"actorJobId,omitempty"`
+	PayloadSHA256 string       `json:"payloadSha256"`
 	// Title is what was decided, as the request named it ("Bash: go test"),
 	// so the timeline can say what was allowed rather than that something was.
 	Title string `json:"title,omitempty"`
@@ -213,10 +216,11 @@ type UserInputRequestedPayload struct {
 
 // UserInputResolvedPayload is the body of a user_input.resolved event.
 type UserInputResolvedPayload struct {
-	RequestID   string `json:"requestId"`
-	Value       string `json:"value"`
-	ActorUserID string `json:"actorUserId"`
-	Channel     string `json:"channel"`
+	RequestID   string       `json:"requestId"`
+	Value       string       `json:"value"`
+	ActorUserID string       `json:"actorUserId"`
+	Channel     string       `json:"channel"`
+	ActorJobID  domain.JobID `json:"actorJobId,omitempty"`
 }
 
 // WorkspaceChangedPayload is the body of a workspace.changed event. Core keeps

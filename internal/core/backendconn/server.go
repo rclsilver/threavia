@@ -77,7 +77,8 @@ type recvResult struct {
 
 // Connect handles one backend control stream for its whole lifetime.
 func (s *Server) Connect(stream backendv1.BackendControl_ConnectServer) error {
-	ctx := stream.Context()
+	ctx, cancel := context.WithCancel(stream.Context())
+	defer cancel()
 
 	instanceID, err := s.authenticate(ctx)
 	if err != nil {
@@ -300,19 +301,23 @@ func (s *Server) handle(ctx context.Context, instanceID domain.BackendInstanceID
 
 	case *backendv1.BackendToCore_CoreToolRequest:
 		request := body.CoreToolRequest
-		result, err := s.sink.CoreToolRequest(ctx, instanceID, request)
-		response := &backendv1.CoreToolResponse{RequestId: request.GetRequestId(), Result: result}
-		if err != nil {
-			// Answering with an explicit error keeps the agent from waiting
-			// forever on a tool Core cannot run.
-			response.Error = &backendv1.Error{
-				Code:    codes.Unimplemented.String(),
-				Message: fmt.Sprintf("core tool %q: %v", request.GetName(), err),
+		// A manager may wait on workers on this same connection. Keep reading
+		// their events, other tool requests and heartbeats while it waits.
+		go func() {
+			result, err := s.sink.CoreToolRequest(ctx, instanceID, request)
+			response := &backendv1.CoreToolResponse{RequestId: request.GetRequestId(), Result: result}
+			if err != nil {
+				// Answering with an explicit error keeps the agent from waiting
+				// forever on a tool Core cannot run.
+				response.Error = &backendv1.Error{
+					Code:    codes.Unimplemented.String(),
+					Message: fmt.Sprintf("core tool %q: %v", request.GetName(), err),
+				}
 			}
-		}
-		conn.Send(&backendv1.CoreToBackend{
-			Message: &backendv1.CoreToBackend_CoreToolResponse{CoreToolResponse: response},
-		})
+			conn.Send(&backendv1.CoreToBackend{
+				Message: &backendv1.CoreToBackend_CoreToolResponse{CoreToolResponse: response},
+			})
+		}()
 		return nil
 
 	case *backendv1.BackendToCore_SkillInventory:

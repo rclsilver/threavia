@@ -4,6 +4,7 @@ import type { Event } from '../src/api/types';
 import {
   describe as describeEvent,
   foldFinished,
+  messageAuthor,
   rowsOf,
   stepsLabel,
   stickyPrompt,
@@ -43,6 +44,15 @@ function finishedJob(jobId: string): Event[] {
 
 const kinds = (rows: Row[]) =>
   rows.map((row) => (row.kind === 'event' ? row.event.type : row.kind === 'tool' ? `tool:${row.call.name}` : row.kind));
+
+describe('messageAuthor', () => {
+  it('identifies manager instructions and callbacks as agent messages', () => {
+    expect(messageAuthor(event('user.message', { text: 'Inspect the parser', actorJobId: 'manager-job' }))).toBe('Agent');
+    expect(messageAuthor(event('user.message', { text: 'A worker needs attention', actorJobId: 'worker-job' }))).toBe('Agent');
+    expect(messageAuthor(event('user.message', { text: 'Fix the parser' }))).toBe('You');
+    expect(messageAuthor(event('user.message', { text: 'Run the checks', scheduleId: 'daily' }))).toBe('Schedule');
+  });
+});
 
 describe('rowsOf', () => {
   it('pairs a tool call with its result, and opens the day once', () => {

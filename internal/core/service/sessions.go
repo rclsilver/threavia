@@ -27,6 +27,10 @@ type StartSessionInput struct {
 	BackendInstanceID  domain.BackendInstanceID
 	WorkingDirectoryID *domain.KnownDirectoryID
 	Message            string
+	// Internal delegation metadata, never accepted from the HTTP start route.
+	ManagerSessionID *domain.SessionID
+	Title            string
+	ExecutionPolicy  *domain.ExecutionPolicy
 	// NativeSessionID adopts a provider session that already exists on the
 	// backend, typically one started in a terminal. Empty opens a fresh one.
 	NativeSessionID string
@@ -84,7 +88,11 @@ func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in S
 			Title:              deriveTitle(message),
 			Status:             domain.SessionActive,
 			WorkingDirectoryID: workingDirectoryString(in.WorkingDirectoryID),
+			ManagerSessionID:   in.ManagerSessionID,
 		},
+	}
+	if title := strings.TrimSpace(in.Title); title != "" {
+		result.Session.Title = title
 	}
 	result.Run = domain.Run{
 		ID:                domain.NewRunID(),
@@ -113,6 +121,11 @@ func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in S
 		if err := tx.CreateSession(ctx, &result.Session); err != nil {
 			return err
 		}
+		if in.ExecutionPolicy != nil {
+			if err := tx.SetSessionExecutionPolicy(ctx, identity.UserID, result.Session.ID, in.ExecutionPolicy); err != nil {
+				return err
+			}
+		}
 		if err := tx.CreateRun(ctx, &result.Run); err != nil {
 			return err
 		}
@@ -121,11 +134,11 @@ func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in S
 		}
 		return s.appendAll(ctx, tx, b,
 			record{events.TypeSessionCreated, domain.Scope{ProjectID: scope.ProjectID, SessionID: scope.SessionID},
-				SessionCreatedPayload{Title: result.Session.Title, WorkingDirectoryID: result.Session.WorkingDirectoryID}},
+				SessionCreatedPayload{Title: result.Session.Title, WorkingDirectoryID: result.Session.WorkingDirectoryID, ManagerSessionID: in.ManagerSessionID}},
 			record{events.TypeRunCreated, domain.Scope{ProjectID: scope.ProjectID, SessionID: scope.SessionID, RunID: scope.RunID},
 				RunCreatedPayload{BackendInstanceID: string(in.BackendInstanceID)}},
 			record{events.TypeJobCreated, scope, JobCreatedPayload{RunID: string(scope.RunID)}},
-			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message}},
+			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, ActorJobID: managerJobFrom(ctx)}},
 		)
 	})
 	if err != nil {
@@ -233,7 +246,7 @@ func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sess
 		}
 		return s.appendAll(ctx, tx, b,
 			record{events.TypeJobCreated, scope, JobCreatedPayload{RunID: string(run.ID)}},
-			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, ScheduleID: scheduleID}},
+			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, ScheduleID: scheduleID, ActorJobID: managerJobFrom(ctx)}},
 		)
 	})
 	if err != nil {
@@ -326,7 +339,7 @@ func (s *Service) deliverToRunningJob(ctx context.Context, identity auth.Identit
 			}
 		}
 		return s.appendAll(ctx, tx, b,
-			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, Delivery: delivery}},
+			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, Delivery: delivery, ActorJobID: managerJobFrom(ctx)}},
 		)
 	})
 	if err != nil {
@@ -337,11 +350,11 @@ func (s *Service) deliverToRunningJob(ctx context.Context, identity auth.Identit
 	command := &backendv1.CoreToBackend{CommandId: domain.NewUUID()}
 	if delivery == DeliveryNow {
 		command.Message = &backendv1.CoreToBackend_JobInputNow{JobInputNow: &backendv1.JobInputNow{
-			RunId: string(run.ID), JobId: string(job.ID), Text: message,
+			RunId: string(run.ID), JobId: string(job.ID), Text: agentPrompt(managerJobFrom(ctx), message),
 		}}
 	} else {
 		command.Message = &backendv1.CoreToBackend_JobInputNext{JobInputNext: &backendv1.JobInputNext{
-			RunId: string(run.ID), JobId: string(job.ID), Text: message,
+			RunId: string(run.ID), JobId: string(job.ID), Text: agentPrompt(managerJobFrom(ctx), message),
 		}}
 	}
 	conn.Send(command)
@@ -642,6 +655,33 @@ func (s *Service) markRelevance(ctx context.Context, ownerID domain.UserID, atte
 		origin := origins[attention.UserInputs[i].Scope.JobID]
 		attention.UserInputs[i].OriginChannel = origin
 		attention.UserInputs[i].Notify = notify(origin)
+	}
+	// Delegated requests are addressed to the manager. Keep them inspectable
+	// and resolvable by the owner, but avoid asking them to converse with each
+	// worker separately. Detached children revert to ordinary sessions.
+	managed := make(map[domain.SessionID]bool)
+	checkManaged := func(id domain.SessionID) bool {
+		if value, ok := managed[id]; ok {
+			return value
+		}
+		session, err := s.store.GetSession(ctx, ownerID, id)
+		value := false
+		if err == nil && session.ManagerSessionID != nil {
+			manager, managerErr := s.store.GetSession(ctx, ownerID, *session.ManagerSessionID)
+			value = managerErr == nil && manager.Status == domain.SessionActive
+		}
+		managed[id] = value
+		return value
+	}
+	for i := range attention.UserInputs {
+		if checkManaged(attention.UserInputs[i].Scope.SessionID) {
+			attention.UserInputs[i].Notify = false
+		}
+	}
+	for i := range attention.Validations {
+		if checkManaged(attention.Validations[i].Scope.SessionID) {
+			attention.Validations[i].Notify = false
+		}
 	}
 }
 

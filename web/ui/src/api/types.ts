@@ -59,8 +59,8 @@ export interface List<T> {
  * line.
  */
 export interface EventPayloads {
-  'session.created': { title: string };
-  'user.message': { text: string; delivery?: 'NOW' | 'NEXT'; scheduleId?: string };
+  'session.created': { title: string; managerSessionId?: string };
+  'user.message': { text: string; delivery?: 'NOW' | 'NEXT'; scheduleId?: string; actorJobId?: string };
   'schedule.skipped': { scheduleId: string; outcome: string; reason: string; due: string };
   'agent.message': { text: string };
   'tool.started': { toolCallId: string; name: string; input?: Record<string, unknown> };
@@ -70,8 +70,8 @@ export interface EventPayloads {
   'tool.failed': { toolCallId: string; name: string; error?: string };
   'job.completed': { summary?: string; usage?: Usage };
   'job.failed': { error?: string; usage?: Usage };
-  'validation.resolved': { validationId: string; approved: boolean; note?: string; title?: string };
-  'user_input.resolved': { requestId: string; value: string };
+  'validation.resolved': { validationId: string; approved: boolean; note?: string; title?: string; actorJobId?: string };
+  'user_input.resolved': { requestId: string; value: string; actorJobId?: string };
   'artifact.created': { artifactId: string; filename: string; mimeType: string; size: number; title?: string };
   'workspace.changed': {
     knownDirectoryId?: string;

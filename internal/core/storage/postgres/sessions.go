@@ -10,15 +10,15 @@ import (
 )
 
 const sessionColumns = `s.id, s.project_id, s.title, s.status, s.working_directory_id,
-	s.created_at, s.updated_at, s.archived_at, s.pinned_at`
+	s.created_at, s.updated_at, s.archived_at, s.pinned_at, s.manager_session_id`
 
 // CreateSession inserts a Session.
 func (s *Store) CreateSession(ctx context.Context, session *domain.Session) error {
 	err := s.q.QueryRow(ctx, `
-		INSERT INTO sessions (id, project_id, title, status, working_directory_id)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO sessions (id, project_id, title, status, working_directory_id, manager_session_id)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING created_at, updated_at`,
-		session.ID, session.ProjectID, session.Title, session.Status, session.WorkingDirectoryID,
+		session.ID, session.ProjectID, session.Title, session.Status, session.WorkingDirectoryID, session.ManagerSessionID,
 	).Scan(&session.CreatedAt, &session.UpdatedAt)
 	return classify(err, "create session")
 }
@@ -107,6 +107,7 @@ func readSessionList(rows pgx.Rows) ([]domain.Session, error) {
 		var session domain.Session
 		err := rows.Scan(&session.ID, &session.ProjectID, &session.Title, &session.Status,
 			&session.WorkingDirectoryID, &session.CreatedAt, &session.UpdatedAt, &session.ArchivedAt, &session.PinnedAt,
+			&session.ManagerSessionID,
 			&session.ActiveJobStatus)
 		if err != nil {
 			return nil, classify(err, "read session")
@@ -158,7 +159,7 @@ func (s *Store) TouchSession(ctx context.Context, id domain.SessionID) error {
 func scanSession(row scanner) (domain.Session, error) {
 	var session domain.Session
 	err := row.Scan(&session.ID, &session.ProjectID, &session.Title, &session.Status,
-		&session.WorkingDirectoryID, &session.CreatedAt, &session.UpdatedAt, &session.ArchivedAt, &session.PinnedAt)
+		&session.WorkingDirectoryID, &session.CreatedAt, &session.UpdatedAt, &session.ArchivedAt, &session.PinnedAt, &session.ManagerSessionID)
 	return session, classify(err, "read session")
 }
 

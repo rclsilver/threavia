@@ -8,6 +8,7 @@ import {
   fileOfTool,
   foldFinished,
   formatInput,
+  messageAuthor,
   rowsOf,
   stepsLabel,
   stickyPrompt,
@@ -401,7 +402,7 @@ function eventEntry(event: Event, startedAt?: string): HTMLElement {
       h(
         'p',
         { class: 'message-meta' },
-        user.scheduleId ? h('strong', {}, icon('calendar'), 'Schedule') : h('strong', {}, 'You'),
+        h('strong', {}, messageAuthor(event) === 'Schedule' && icon('calendar'), messageAuthor(event)),
         // Sent while the agent worked: it changed the course of a Job rather
         // than starting one, and the reader of the log should know.
         user.delivery &&
@@ -689,7 +690,7 @@ function updateSticky() {
   if (!user) return;
   const text = h('span', { class: 'sticky-text' }, user.text);
   const toggle = button(
-    [h('span', { class: 'message-meta' }, h('strong', {}, user.scheduleId ? 'Schedule' : 'You'), clock(row.event.timestamp)), text],
+    [h('span', { class: 'message-meta' }, h('strong', {}, messageAuthor(row.event)), clock(row.event.timestamp)), text],
     () => {
       const open = toggle.getAttribute('aria-expanded') !== 'true';
       toggle.setAttribute('aria-expanded', String(open));

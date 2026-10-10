@@ -79,6 +79,12 @@ const STEPS: Step[] = [
   },
   {
     path: SESSION(IDS.ingress),
+    target: '[data-tour="delegated-message"]',
+    title: 'One conversation, several agents',
+    body: 'A manager delegates checks and fixes, answers worker questions and gathers their results here. Messages between agents say Agent; permissions still need your approval in the manager conversation.',
+  },
+  {
+    path: SESSION(IDS.ingress),
     target: '[data-tour="workspace"]',
     title: 'What changed, file by file',
     body: 'A job ends with the files it touched. Open one to read its diff, asked of the machine that made it.',

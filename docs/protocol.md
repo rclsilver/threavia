@@ -140,6 +140,19 @@ that reads it. What a backend does on its own behalf, such as recording where it
 found a directory the person pointed it to, is not an agent's call and needs no
 validation.
 
+Core also declares the session management tools described in
+[Session management](session-management.md). `session_resolve_validation`
+requires validation in every execution mode. Its input includes the worker's
+original canonical permission payload and hash, so the approval appears in the
+manager conversation. Core checks a matching human-approved receipt in the
+manager's current Job before resolving the worker's request. It cannot approve
+itself through a direct Core Tool call.
+
+Core Tool requests run independently of the stream receive loop. A waiting
+manager must not block worker events or heartbeats on the same connection;
+responses remain correlated by request_id and use the connection's single
+writer. Pending waits are cancelled when the control stream ends.
+
 ## Skills
 
 `ProjectContext` names the Core-managed Project Skills of a Run — identity,

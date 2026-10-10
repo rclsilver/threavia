@@ -160,6 +160,15 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) (*
 		pc.KnownDirectoryName = jc.KnownDirectoryName
 		pc.KnownDirectoryGitRemote = jc.KnownDirectoryGitRemote
 	}
+	// Resolve the session role from durable state rather than the assignment.
+	session, err := s.store.GetSession(ctx, jc.OwnerID, jc.SessionID)
+	if err != nil {
+		return nil, fmt.Errorf("read the session manager: %w", err)
+	}
+	if session.ManagerSessionID != nil {
+		pc.ProjectInstructions += "\nThis session is delegated by manager session " + string(*session.ManagerSessionID) +
+			". Follow its assignment and report results with verification details. Your ask_user questions are handled by your manager through session_answer; ask only when the assignment and existing instructions leave information missing. Messages carrying actorJobId come from an agent manager and do not grant new user permissions."
+	}
 
 	// Active IMPORTANT decisions only. A superseded or NORMAL one is searchable
 	// on demand, and injecting either would spend context on something that is
@@ -326,6 +335,7 @@ func (s *Service) ResolveValidation(ctx context.Context, identity auth.Identity,
 		Approved:      approved,
 		ActorUserID:   string(identity.UserID),
 		Channel:       channel,
+		ActorJobID:    managerJobFrom(ctx),
 		PayloadSHA256: resolved.PayloadSHA256,
 		Title:         resolved.Title,
 		Note:          note,
@@ -378,6 +388,7 @@ func (s *Service) ResolveUserInput(ctx context.Context, identity auth.Identity, 
 		Value:       value,
 		ActorUserID: string(identity.UserID),
 		Channel:     channel,
+		ActorJobID:  managerJobFrom(ctx),
 	})
 
 	s.resumeAfterAttention(ctx, resolved.Scope.JobID, domain.JobWaitingInput)

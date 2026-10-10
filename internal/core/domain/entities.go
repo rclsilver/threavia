@@ -24,6 +24,8 @@ type Project struct {
 type Session struct {
 	ID        SessionID `json:"id"`
 	ProjectID ProjectID `json:"projectId"`
+	// ManagerSessionID keeps delegated work attached to its manager across runs.
+	ManagerSessionID *SessionID `json:"managerSessionId,omitempty"`
 	// Title is generated automatically, user-renamable and has no technical
 	// meaning.
 	Title  string        `json:"title"`

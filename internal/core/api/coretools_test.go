@@ -391,19 +391,17 @@ func TestDeletingASessionAsksAboutItsFiles(t *testing.T) {
 	}
 }
 
-// TestOnlyTheDirectoryToolsRequireValidation pins what Core declares to
-// backends: the three tools that change where future runs execute are asked of
-// the user, and every other Core Tool is not. Adding a tool to either side is a
-// decision, so the list is spelled out.
-func TestOnlyTheDirectoryToolsRequireValidation(t *testing.T) {
+// Tools which widen scope or relay permissions must always ask the person.
+func TestScopeAndPermissionToolsRequireValidation(t *testing.T) {
 	c, backend, projectID, dirID := setup(t)
 	c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
 	start := receive(t, "the dispatched job", backend.starts)
 
 	want := map[string]bool{
-		"known_directory_register": true,
-		"known_directory_bind":     true,
-		"working_directory_set":    true,
+		"known_directory_register":   true,
+		"known_directory_bind":       true,
+		"working_directory_set":      true,
+		"session_resolve_validation": true,
 	}
 	declared := start.GetProjectContext().GetTools()
 	if len(declared) <= len(want) {

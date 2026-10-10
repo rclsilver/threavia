@@ -106,6 +106,29 @@ func (s *Store) ListJobs(ctx context.Context, sessionID domain.SessionID) ([]dom
 	return out, classify(rows.Err(), "list jobs")
 }
 
+// SessionToolJobs bounds the state returned to a manager. Unfinished Jobs come
+// first so truncating old completed work never makes a busy worker look done.
+func (s *Store) SessionToolJobs(ctx context.Context, sessionID domain.SessionID) ([]domain.Job, error) {
+	rows, err := s.q.Query(ctx, `
+		SELECT `+jobColumns+` FROM jobs j JOIN runs r ON r.id = j.run_id
+		WHERE r.session_id = $1
+		ORDER BY (j.status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')) DESC, j.created_at DESC
+		LIMIT 50`, sessionID)
+	if err != nil {
+		return nil, classify(err, "read managed session jobs")
+	}
+	defer rows.Close()
+	out := make([]domain.Job, 0)
+	for rows.Next() {
+		job, err := scanJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, job)
+	}
+	return out, classify(rows.Err(), "read managed session jobs")
+}
+
 // TransitionJob moves a Job from one status to another, atomically and only
 // from the expected current status. It returns ErrNotFound when the Job already
 // moved on, which is how a replayed backend event becomes a no-op, and

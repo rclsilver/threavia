@@ -700,17 +700,17 @@ function Entry({
     return (
       // A tinted row headed by who spoke, rather than a coloured stripe down
       // its side: the log keeps one left margin, and the mark is a word.
-      <div className="bg-surface-2 border-border space-y-1 rounded-(--radius-card) border px-3 py-2">
+      <div data-tour={user.actorJobId ? 'delegated-message' : undefined} className="bg-surface-2 border-border space-y-1 rounded-(--radius-card) border px-3 py-2">
         <p className="text-muted flex flex-wrap items-center gap-x-2 text-xs">
           <span className="text-text font-medium">
-            {user.scheduleId ? (
+            {!user.actorJobId && user.scheduleId ? (
               // Nobody typed it: a schedule did, and the reader should not
               // wonder when they wrote this.
               <span className="flex items-center gap-1">
                 <CalendarClock className="size-3" /> Schedule
               </span>
             ) : (
-              'You'
+              user.actorJobId ? 'Agent' : 'You'
             )}
           </span>
           {/* Sent while the agent worked: it changed the course of a Job
@@ -794,7 +794,7 @@ function StickyPrompt({ event, onJump }: { event: Event; onJump: () => void }) {
             className="min-w-0 flex-1 py-0.5 text-left"
           >
             <span className="text-muted flex items-center gap-1.5 text-xs">
-              <span className="text-text font-medium">{user.scheduleId ? 'Schedule' : 'You'}</span>
+              <span className="text-text font-medium">{user.actorJobId ? 'Agent' : user.scheduleId ? 'Schedule' : 'You'}</span>
               {clock(event.timestamp)}
             </span>
             <span

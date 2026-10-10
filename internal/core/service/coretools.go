@@ -28,6 +28,12 @@ func (s *Service) CoreToolRequest(ctx context.Context, instanceID domain.Backend
 	if jc.BackendInstanceID != instanceID {
 		return nil, fmt.Errorf("backend %s does not own job %s", instanceID, request.GetJobId())
 	}
+	if request.GetRunId() != string(jc.Run.ID) {
+		return nil, fmt.Errorf("%w: run does not own the job", ErrInvalid)
+	}
+	if jc.Job.Status.Terminal() {
+		return nil, fmt.Errorf("%w: the calling job has finished", ErrConflict)
+	}
 
 	identity := auth.Identity{UserID: jc.OwnerID}
 	scope := jobScope{
@@ -177,7 +183,7 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 		}, nil
 
 	default:
-		return nil, fmt.Errorf("%w: unknown core tool %q", ErrInvalid, name)
+		return s.invokeSessionTool(ctx, identity, jc, name, input)
 	}
 }
 

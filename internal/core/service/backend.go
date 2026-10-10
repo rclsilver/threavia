@@ -466,7 +466,13 @@ func (s *Service) JobEvent(ctx context.Context, instanceID domain.BackendInstanc
 	if !duplicate {
 		s.flush(b)
 		s.afterEvent(ctx, scope, event)
+		s.wakeSessionManager(ctx, jc, event)
 		s.notifyAttention(ctx, jc, event)
+	} else {
+		// Recover a callback if Core stopped after persisting the worker event
+		// but before enqueueing its manager message. The callback key makes
+		// an ordinary replay a no-op.
+		s.wakeSessionManager(ctx, jc, event)
 	}
 
 	sequence, err := s.store.LastBackendSequence(ctx, jobID)
@@ -568,6 +574,10 @@ func (s *Service) afterEvent(ctx context.Context, scope domain.Scope, event *bac
 	case *backendv1.JobEvent_JobCompleted, *backendv1.JobEvent_JobFailed, *backendv1.JobEvent_JobCancelled:
 		// The active slot of the Run is free: start the next queued Job.
 		s.dispatchNext(ctx, scope.RunID)
+		jc, err := s.store.LoadJobContext(ctx, scope.JobID)
+		if err == nil {
+			s.wakeManagedAttention(ctx, jc.OwnerID, jc.ProjectID, jc.SessionID)
+		}
 	}
 }
 
