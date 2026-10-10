@@ -185,19 +185,26 @@ describe('stickyPrompt', () => {
   ];
 
   it('is nothing while the message is still on screen', () => {
-    expect(stickyPrompt(geometry, 0)).toBe(-1);
-    expect(stickyPrompt(geometry, 30)).toBe(-1);
+    expect(stickyPrompt(geometry, 0, 300)).toBe(-1);
+    expect(stickyPrompt(geometry, 30, 300)).toBe(-1);
   });
 
   it('is the last message sent above the view once it scrolled out', () => {
-    expect(stickyPrompt(geometry, 60)).toBe(0);
-    expect(stickyPrompt(geometry, 800)).toBe(0);
-    expect(stickyPrompt(geometry, 1000)).toBe(3);
+    expect(stickyPrompt(geometry, 60, 300)).toBe(0);
+    expect(stickyPrompt(geometry, 500, 300)).toBe(0);
+    expect(stickyPrompt(geometry, 1000, 300)).toBe(3);
   });
 
   it('is nothing without a message above', () => {
-    expect(stickyPrompt([{ user: false, top: 0, bottom: 500 }], 200)).toBe(-1);
-    expect(stickyPrompt([], 0)).toBe(-1);
+    expect(stickyPrompt([{ user: false, top: 0, bottom: 500 }], 200, 300)).toBe(-1);
+    expect(stickyPrompt([], 0, 300)).toBe(-1);
+  });
+
+  it('is nothing once a later message is on screen', () => {
+    // Just sent: the new message sits in the view, the old one above it.
+    expect(stickyPrompt(geometry, 800, 300)).toBe(-1);
+    // Its answer pushed it out: it is the one held now.
+    expect(stickyPrompt(geometry, 1000, 300)).toBe(3);
   });
 });
 

@@ -378,7 +378,24 @@ export function Timeline({
     }
     // Only once it is gone: a prompt still on screen needs no copy of itself.
     const measured = found >= 0 ? virtualizer.measurementsCache[found] : undefined;
-    setPrompt(measured && measured.end <= top + 4 ? found : -1);
+    if (!measured || measured.end > top + 4) {
+      setPrompt(-1);
+      return;
+    }
+    // Nor while a later message is on screen: just after sending one, its
+    // answer has not yet pushed it up, and the old prompt held above it would
+    // caption what the new one asked.
+    const bottom = top + (element?.clientHeight ?? 0);
+    for (let index = found + 1; index < rows.length; index++) {
+      const later = virtualizer.measurementsCache[index];
+      if (!later || later.start >= bottom) break;
+      const row = rows[index];
+      if (row.kind === 'event' && row.event.type === 'user.message') {
+        setPrompt(-1);
+        return;
+      }
+    }
+    setPrompt(found);
   };
   useEffect(() => findPrompt.current(), [rows]);
   const promptRow = prompt >= 0 ? rows[prompt] : undefined;

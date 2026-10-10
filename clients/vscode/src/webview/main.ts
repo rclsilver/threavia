@@ -669,7 +669,7 @@ function updateSticky() {
       bottom: top + (element?.offsetHeight ?? 0),
     };
   });
-  const index = stickyPrompt(geometry, scroller.scrollTop);
+  const index = stickyPrompt(geometry, scroller.scrollTop, scroller.clientHeight);
   const row = index >= 0 ? rows[index] : undefined;
   const key = row?.key;
   if (key === promptKey) return;

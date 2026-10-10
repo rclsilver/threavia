@@ -295,11 +295,15 @@ export function stepsLabel(row: Extract<Row, { kind: 'steps' }>): string {
  *
  * `rows` are the rows in order, each with where it sits in the scroller; the
  * answer is an index, or -1 when no message is above, or when the one above
- * still shows — a prompt on screen needs no copy of itself.
+ * still shows — a prompt on screen needs no copy of itself — or when a later
+ * message is already on screen: just after sending one, the answer to it has
+ * not yet pushed it up, and the old prompt held above it would caption what
+ * the new one asked.
  */
 export function stickyPrompt(
   rows: readonly { user: boolean; top: number; bottom: number }[],
   scrollTop: number,
+  height: number,
 ): number {
   let first = -1;
   for (let index = 0; index < rows.length; index++) {
@@ -310,10 +314,18 @@ export function stickyPrompt(
   }
   // Scrolled past the end of everything: the last row is the one above.
   if (first === -1) first = rows.length - 1;
+  let found = -1;
   for (let index = first; index >= 0; index--) {
-    if (rows[index].user) return rows[index].bottom <= scrollTop + 4 ? index : -1;
+    if (rows[index].user) {
+      found = rows[index].bottom <= scrollTop + 4 ? index : -1;
+      break;
+    }
   }
-  return -1;
+  if (found === -1) return -1;
+  for (let index = found + 1; index < rows.length && rows[index].top < scrollTop + height; index++) {
+    if (rows[index].user) return -1;
+  }
+  return found;
 }
 
 /** The field that says what a call actually did: a command, a path, a URL. */
