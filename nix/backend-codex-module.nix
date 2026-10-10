@@ -19,12 +19,16 @@ in
 
     instanceName = lib.mkOption {
       type = lib.types.str;
-      default = config.networking.hostName;
-      defaultText = lib.literalExpression "config.networking.hostName";
+      default = "${config.networking.hostName}-codex";
+      defaultText = lib.literalExpression ''"''${config.networking.hostName}-codex"'';
       description = ''
         How this machine names itself to Core. It is what a person picks from
         when starting a Session, so it should read like the machine. Changing
         it renames the backend at its next connection.
+
+        The suffix keeps it apart from a Claude backend on the same machine,
+        which takes the bare host name: names are unique per owner, and the
+        second backend to register under the same one would be refused.
       '';
     };
 
