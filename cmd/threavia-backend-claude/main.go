@@ -16,9 +16,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/rclsilver/threavia/internal/backends/claude/adapter"
-	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
 	"github.com/rclsilver/threavia/internal/backends/claude/runner"
+	"github.com/rclsilver/threavia/internal/backends/shared/adapter"
+	"github.com/rclsilver/threavia/internal/backends/shared/mcp"
 	"github.com/rclsilver/threavia/internal/logging"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/client"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/state"
@@ -65,7 +65,7 @@ func run() error {
 	// The default working directory must exist before a Job lands in it: on a
 	// Kubernetes backend it sits on a fresh volume, and a missing directory
 	// would fail every unscoped Run rather than the deployment.
-	if err := os.MkdirAll(cfg.Claude.DefaultWorkingDirectory, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.Provider.DefaultWorkingDirectory, 0o755); err != nil {
 		return fmt.Errorf("prepare the default working directory: %w", err)
 	}
 
@@ -93,9 +93,9 @@ func run() error {
 		_ = tools.Close(shutdownCtx)
 	}()
 
-	claude := runner.NewClaude(cfg.Claude.Binary, tools, runner.Options{
-		Readable: cfg.Claude.DiscoveryRoots,
-		Scratch:  cfg.Claude.ScratchPath,
+	claude := runner.NewClaude(cfg.Provider.Binary, tools, runner.Options{
+		Readable: cfg.Provider.DiscoveryRoots,
+		Scratch:  cfg.Provider.ScratchPath,
 	}, logger)
 	if err := claude.Available(); err != nil {
 		// Not fatal: the backend connects anyway and reports DEGRADED so the
@@ -119,7 +119,7 @@ func run() error {
 		slog.String("coreAddress", cfg.Client.CoreAddress),
 		slog.Bool("tls", cfg.Client.TLS.Enabled),
 		slog.Int("maxConcurrentRuns", int(cfg.Client.MaxConcurrentRuns)),
-		slog.Any("discoveryRoots", cfg.Claude.DiscoveryRoots),
+		slog.Any("discoveryRoots", cfg.Provider.DiscoveryRoots),
 	)
 
 	if err := sdk.Run(ctx); err != nil {

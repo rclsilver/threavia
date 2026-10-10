@@ -25,24 +25,54 @@
     {
       packages = forAllSystems (pkgs: rec {
         threavia-backend-claude = pkgs.callPackage ./nix/backend-claude.nix { inherit version; };
+        threavia-backend-codex = pkgs.callPackage ./nix/backend-codex.nix { inherit version; };
         default = threavia-backend-claude;
       });
 
       nixosModules = rec {
         backend-claude = import ./nix/backend-claude-module.nix;
+        backend-codex = import ./nix/backend-codex-module.nix;
         default = backend-claude;
       };
 
       overlays.default = _final: prev: {
         threavia-backend-claude = self.packages.${prev.stdenv.hostPlatform.system}.threavia-backend-claude;
+        threavia-backend-codex = self.packages.${prev.stdenv.hostPlatform.system}.threavia-backend-codex;
       };
 
       checks = forAllSystems (
         pkgs:
         {
           package = self.packages.${pkgs.stdenv.hostPlatform.system}.threavia-backend-claude;
+          package-codex = self.packages.${pkgs.stdenv.hostPlatform.system}.threavia-backend-codex;
         }
         // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          nixos-module-codex =
+            (nixpkgs.lib.nixosSystem {
+              system = pkgs.stdenv.hostPlatform.system;
+              modules = [
+                self.nixosModules.backend-codex
+                {
+                  boot.loader.grub.devices = [ "nodev" ];
+                  fileSystems."/" = {
+                    device = "/dev/null";
+                    fsType = "ext4";
+                  };
+                  system.stateVersion = "25.05";
+                  networking.hostName = "codex-laptop";
+                  services.threavia-backend-codex = {
+                    enable = true;
+                    package = self.packages.${pkgs.stdenv.hostPlatform.system}.threavia-backend-codex;
+                    coreAddress = "threavia.example.com:9090";
+                    coreApi = "https://threavia.example.com";
+                    user = "alex";
+                    defaultWorkingDirectory = "/home/alex/git";
+                    codexBinary = "/home/alex/.local/bin/codex";
+                    environmentFile = "/run/secrets/threavia-codex";
+                  };
+                }
+              ];
+            }).config.systemd.units."threavia-backend-codex.service".unit;
           # The module has to keep evaluating. A renamed option or an
           # environment variable the backend no longer reads would otherwise be
           # found by the first person to rebuild their laptop, which is the one

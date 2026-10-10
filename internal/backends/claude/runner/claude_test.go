@@ -13,10 +13,10 @@ import (
 	"time"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
-	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
-	"github.com/rclsilver/threavia/internal/backends/claude/policy"
 	"github.com/rclsilver/threavia/internal/backends/claude/runner"
-	"github.com/rclsilver/threavia/internal/backends/claude/workspace"
+	"github.com/rclsilver/threavia/internal/backends/shared/mcp"
+	"github.com/rclsilver/threavia/internal/backends/shared/policy"
+	"github.com/rclsilver/threavia/internal/backends/shared/workspace"
 )
 
 // recordingSink captures everything the runner normalises out of provider

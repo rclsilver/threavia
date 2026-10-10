@@ -1,0 +1,581 @@
+// Package mcp hosts the Model Context Protocol server through which Claude Code
+// asks the user for things.
+//
+// This is the Claude-specific adaptation of two provider-independent Threavia
+// concepts (THREAVIA_SPEC_V1.md sections 12 and 16): a permission request
+// becomes a ValidationRequest, and a question becomes a UserInputRequest. Claude
+// Code is pointed at it with --permission-prompt-tool and --mcp-config, so a
+// prompt that would block an interactive terminal instead travels to Core and
+// waits there, for as long as it takes.
+//
+// The server listens on the loopback interface only, and every Job gets its own
+// unguessable endpoint path, so the only caller able to reach a Job's tools is
+// the process started for it.
+package mcp
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+)
+
+// ServerName is the MCP server name Claude Code sees. Tool names it exposes are
+// therefore mcp__threavia__<tool>.
+const ServerName = "threavia"
+
+// Tool names exposed to the agent.
+const (
+	// ToolApprovalPrompt is wired to --permission-prompt-tool: Claude Code calls
+	// it instead of prompting a terminal.
+	ToolApprovalPrompt = "approval_prompt"
+	// ToolAskUser lets the agent ask for an answer, a choice or information.
+	ToolAskUser = "ask_user"
+)
+
+// PermissionTool is the fully qualified name to pass to --permission-prompt-tool.
+const PermissionTool = "mcp__" + ServerName + "__" + ToolApprovalPrompt
+
+// Decision is what the user decided about a tool invocation.
+type Decision struct {
+	Approved bool
+	// Reason is shown to the agent when the request is denied.
+	Reason string
+}
+
+// CoreTool is one Core Tool, as Core declared it in the ProjectContext at Job
+// start. The backend hardcodes none of this: it forwards what it was told.
+type CoreTool struct {
+	Name        string
+	Description string
+	InputSchema map[string]any
+	// FileInput names the input property that is a file on this machine,
+	// whose content goes to Core with the call.
+	FileInput string
+	// RequiresValidation marks a tool that changes where future runs execute.
+	// It is asked of the user like a Write, where every other Core Tool is
+	// allowed on its own.
+	RequiresValidation bool
+}
+
+// LocalTool is implemented by a provider backend, never forwarded to Core.
+// Its handler must enforce the current Job policy before performing work.
+type LocalTool struct {
+	Name, Description string
+	InputSchema       map[string]any
+	Call              func(context.Context, map[string]any) (any, error)
+}
+
+// Asker is what the server needs from the backend: a way to turn a local tool
+// call into a Threavia request and wait for the answer.
+//
+// The ones that ask block until the user answers, the Job ends or the context is
+// cancelled. Waiting indefinitely is the specified behaviour: validation and
+// input requests never time out.
+type Asker interface {
+	// AskPermission raises a ValidationRequest for a tool invocation.
+	AskPermission(ctx context.Context, jobID, toolName string, input map[string]any) (Decision, error)
+	// AskValidation raises a ValidationRequest for a tool invocation whatever
+	// the execution policy says. It is for the Core Tools that widen what
+	// future runs may reach: the policy allows anything it does not know in
+	// AUTONOMOUS, and an agent must not be able to grant itself a wider scope
+	// in any mode.
+	AskValidation(ctx context.Context, jobID, toolName string, input map[string]any) (Decision, error)
+	// AskUser raises a UserInputRequest.
+	//
+	// freeText is explicit rather than derived from the absence of choices: a
+	// question may legitimately offer shortcuts and still accept an answer that
+	// is none of them, and a request that offers a choice while asking for a
+	// path contradicts itself.
+	AskUser(ctx context.Context, jobID, prompt string, choices []string, freeText bool) (string, error)
+	// CallCoreTool runs a Core Tool through Core and returns its result. When
+	// fileInput is set, the file that input property names is read here and
+	// sent with the call.
+	CallCoreTool(ctx context.Context, jobID, name string, input map[string]any, fileInput string) (map[string]any, error)
+}
+
+// Server is the loopback MCP endpoint.
+type Server struct {
+	asker  Asker
+	logger *slog.Logger
+
+	mu       sync.RWMutex
+	sessions map[string]*session // endpoint token -> job
+
+	listener net.Listener
+	http     *http.Server
+}
+
+// New builds the server. Install the Asker with SetAsker, then call Start.
+func New(logger *slog.Logger) *Server {
+	return &Server{
+		logger:   logger,
+		sessions: make(map[string]*session),
+	}
+}
+
+// SetAsker installs what answers the tools. It must be called before Start:
+// the adapter that answers needs the runner, which needs this server, so the
+// three are wired in that order and only then does the endpoint accept calls.
+func (s *Server) SetAsker(asker Asker) { s.asker = asker }
+
+// Start binds the loopback listener and serves until Close.
+func (s *Server) Start() error {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return fmt.Errorf("bind the local tool endpoint: %w", err)
+	}
+	s.listener = listener
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /mcp/{token}", s.handle)
+	mux.HandleFunc("POST /policy/{token}", s.handlePolicy)
+	s.http = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+
+	go func() {
+		if err := s.http.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.logger.Error("local tool endpoint stopped", slog.String("error", err.Error()))
+		}
+	}()
+	return nil
+}
+
+// Close stops the server.
+func (s *Server) Close(ctx context.Context) error {
+	if s.http == nil {
+		return nil
+	}
+	return s.http.Shutdown(ctx)
+}
+
+// session is one Job and what it may call.
+type session struct {
+	localTools []LocalTool
+	jobID      string
+	coreTools  []CoreTool
+	gate       func(context.Context, map[string]any) (any, error)
+}
+
+// RegisterLocalTools adds provider tools before the Job's first tools/list.
+func (s *Server) RegisterLocalTools(token string, tools []LocalTool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if sess := s.sessions[token]; sess != nil {
+		sess.localTools = append([]LocalTool(nil), tools...)
+	}
+}
+
+// RegisterPolicyGate attaches a provider's pre-execution hook to the same
+// per-Job lifetime and credential as its MCP tools.
+func (s *Server) RegisterPolicyGate(token string, gate func(context.Context, map[string]any) (any, error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if sess := s.sessions[token]; sess != nil {
+		sess.gate = gate
+	}
+}
+
+func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	sess := s.sessions[r.PathValue("token")]
+	var gate func(context.Context, map[string]any) (any, error)
+	if sess != nil {
+		gate = sess.gate
+	}
+	s.mu.RUnlock()
+	if gate == nil {
+		http.NotFound(w, r)
+		return
+	}
+	var input map[string]any
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20)).Decode(&input); err != nil {
+		http.Error(w, "malformed policy request", http.StatusBadRequest)
+		return
+	}
+	result, err := gate(r.Context(), input)
+	if err != nil {
+		http.Error(w, "policy decision unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(result)
+}
+
+// provides reports whether a tool is one this endpoint serves, under either the
+// bare name or the mcp__<server>__<name> form the provider qualifies it with.
+//
+// It is what tells a Threavia tool apart from the provider's own Bash or Write:
+// one needs a decision from the user, the other is Core answering Core.
+func (s *session) provides(toolName string) bool {
+	name := strings.TrimPrefix(toolName, "mcp__"+ServerName+"__")
+	if name == ToolApprovalPrompt || name == ToolAskUser {
+		return true
+	}
+	for _, tool := range s.coreTools {
+		if tool.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// needsValidation reports whether a tool is a Core Tool whose spec requires the
+// user's validation, and returns its bare name, which is what the user should
+// read in the request.
+func (s *session) needsValidation(toolName string) (string, bool) {
+	name := strings.TrimPrefix(toolName, "mcp__"+ServerName+"__")
+	for _, tool := range s.coreTools {
+		if tool.Name == name {
+			return name, tool.RequiresValidation
+		}
+	}
+	return "", false
+}
+
+// Register gives a Job its own endpoint and returns the URL to configure Claude
+// Code with. The token is the only thing standing between a local process and
+// another Job's prompts and project knowledge, so it must be unguessable.
+func (s *Server) Register(jobID, token string, coreTools []CoreTool) string {
+	s.mu.Lock()
+	s.sessions[token] = &session{jobID: jobID, coreTools: coreTools}
+	s.mu.Unlock()
+	return fmt.Sprintf("http://%s/mcp/%s", s.listener.Addr().String(), token)
+}
+
+// Unregister drops a Job endpoint once its process is gone.
+func (s *Server) Unregister(token string) {
+	s.mu.Lock()
+	delete(s.sessions, token)
+	s.mu.Unlock()
+}
+
+func (s *Server) sessionFor(token string) (*session, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	sess, ok := s.sessions[token]
+	if !ok {
+		return nil, false
+	}
+	copy := *sess
+	return &copy, true
+}
+
+// JSON-RPC envelopes.
+type (
+	request struct {
+		JSONRPC string          `json:"jsonrpc"`
+		ID      json.RawMessage `json:"id"`
+		Method  string          `json:"method"`
+		Params  json.RawMessage `json:"params"`
+	}
+	response struct {
+		JSONRPC string          `json:"jsonrpc"`
+		ID      json.RawMessage `json:"id"`
+		Result  any             `json:"result,omitempty"`
+		Error   *rpcError       `json:"error,omitempty"`
+	}
+	rpcError struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+)
+
+const (
+	codeMethodNotFound = -32601
+	codeInternalError  = -32603
+)
+
+func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
+	sess, ok := s.sessionFor(r.PathValue("token"))
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	var msg request
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&msg); err != nil {
+		http.Error(w, "malformed request", http.StatusBadRequest)
+		return
+	}
+
+	// A notification carries no id and expects no reply.
+	if len(msg.ID) == 0 {
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+
+	result, rpcErr := s.dispatch(r.Context(), sess, msg)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response{JSONRPC: "2.0", ID: msg.ID, Result: result, Error: rpcErr})
+}
+
+func (s *Server) dispatch(ctx context.Context, sess *session, msg request) (any, *rpcError) {
+	switch msg.Method {
+	case "initialize":
+		var params struct {
+			ProtocolVersion string `json:"protocolVersion"`
+		}
+		_ = json.Unmarshal(msg.Params, &params)
+		// Echoing the client protocol version keeps this server compatible with
+		// whatever revision Claude Code speaks.
+		return map[string]any{
+			"protocolVersion": params.ProtocolVersion,
+			"capabilities":    map[string]any{"tools": map[string]any{}},
+			"serverInfo":      map[string]any{"name": ServerName, "version": "1"},
+		}, nil
+
+	case "tools/list":
+		definitions := toolDefinitions(sess.coreTools)
+		for _, tool := range sess.localTools {
+			definitions = append(definitions, map[string]any{"name": tool.Name, "description": tool.Description, "inputSchema": tool.InputSchema})
+		}
+		return map[string]any{"tools": definitions}, nil
+
+	case "tools/call":
+		return s.call(ctx, sess, msg.Params)
+
+	default:
+		return nil, &rpcError{Code: codeMethodNotFound, Message: "unknown method " + msg.Method}
+	}
+}
+
+func (s *Server) call(ctx context.Context, sess *session, raw json.RawMessage) (any, *rpcError) {
+	var params struct {
+		Name      string         `json:"name"`
+		Arguments map[string]any `json:"arguments"`
+	}
+	if err := json.Unmarshal(raw, &params); err != nil {
+		return nil, &rpcError{Code: codeInternalError, Message: "malformed tool call"}
+	}
+	if params.Arguments == nil {
+		params.Arguments = map[string]any{}
+	}
+
+	switch params.Name {
+	case ToolApprovalPrompt:
+		return s.approvalPrompt(ctx, sess, params.Arguments)
+	case ToolAskUser:
+		return s.askUser(ctx, sess.jobID, params.Arguments)
+	}
+	for _, tool := range sess.localTools {
+		if tool.Name == params.Name {
+			result, err := tool.Call(ctx, params.Arguments)
+			if err != nil {
+				return map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": err.Error()}}}, nil
+			}
+			return map[string]any{"content": []any{map[string]any{"type": "text", "text": fmt.Sprint(result)}}}, nil
+		}
+	}
+
+	// Anything else must be one of the Core Tools this Job was told about.
+	// Checking against that list, rather than forwarding whatever was asked,
+	// keeps the endpoint from becoming a general proxy into Core.
+	for _, tool := range sess.coreTools {
+		if tool.Name == params.Name {
+			if sess.gate != nil {
+				result, err := sess.gate(ctx, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "mcp__threavia__" + tool.Name, "tool_input": params.Arguments, "threavia_direct": true, "requires_validation": tool.RequiresValidation})
+				if err != nil {
+					return nil, &rpcError{Code: codeInternalError, Message: "policy decision unavailable"}
+				}
+				if d, ok := result.(map[string]any); !ok || d["decision"] == "block" {
+					return map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": "The execution policy or the user refused this tool."}}}, nil
+				}
+			}
+			return s.coreTool(ctx, sess.jobID, tool, params.Arguments)
+		}
+	}
+	return nil, &rpcError{Code: codeMethodNotFound, Message: "unknown tool " + params.Name}
+}
+
+// approvalPrompt turns a Claude Code permission prompt into a Threavia
+// ValidationRequest and answers in the shape Claude Code expects.
+func (s *Server) approvalPrompt(ctx context.Context, sess *session, args map[string]any) (any, *rpcError) {
+	jobID := sess.jobID
+	toolName, _ := args["tool_name"].(string)
+	input, _ := args["input"].(map[string]any)
+	if input == nil {
+		input = map[string]any{}
+	}
+
+	// A tool this endpoint provides needs no permission: it is Threavia asking
+	// Threavia. A Core Tool reads or writes the project's own memory through
+	// Core — no filesystem, no network, no git — so a prompt would say nothing
+	// a user could act on, and would stall the agent until someone answered it.
+	//
+	// Except for the tools whose spec says otherwise. Registering a directory
+	// or making it the working directory decides where the next run starts,
+	// and the provider reads anything under its working directory without
+	// asking: an agent allowed to do that on its own could hand the next run
+	// the user's home. Those are asked like a Write, in every mode, since no
+	// execution policy is meant to let an agent widen its own scope.
+	var (
+		decision Decision
+		err      error
+	)
+	if name, validated := sess.needsValidation(toolName); validated {
+		s.logger.Info("validation required by the tool",
+			slog.String("jobId", jobID), slog.String("tool", name))
+		decision, err = s.asker.AskValidation(ctx, jobID, name, input)
+	} else if sess.provides(toolName) {
+		return toolText(map[string]any{"behavior": "allow", "updatedInput": input})
+	} else {
+		s.logger.Info("permission requested",
+			slog.String("jobId", jobID), slog.String("tool", toolName))
+		decision, err = s.asker.AskPermission(ctx, jobID, toolName, input)
+	}
+	if err != nil {
+		// Failing closed is the only safe default: an unanswered permission
+		// request must never become an approval.
+		s.logger.Warn("permission request failed, denying",
+			slog.String("jobId", jobID), slog.String("error", err.Error()))
+		return toolText(map[string]any{
+			"behavior": "deny",
+			"message":  "Threavia could not obtain a decision: " + err.Error(),
+		})
+	}
+
+	if !decision.Approved {
+		message := decision.Reason
+		if message == "" {
+			message = "The user declined this action."
+		}
+		return toolText(map[string]any{"behavior": "deny", "message": message})
+	}
+	return toolText(map[string]any{"behavior": "allow", "updatedInput": input})
+}
+
+// askUser turns an agent question into a Threavia UserInputRequest.
+func (s *Server) askUser(ctx context.Context, jobID string, args map[string]any) (any, *rpcError) {
+	prompt, _ := args["prompt"].(string)
+	if prompt == "" {
+		return nil, &rpcError{Code: codeInternalError, Message: "a prompt is required"}
+	}
+
+	var choices []string
+	if raw, ok := args["choices"].([]any); ok {
+		for _, choice := range raw {
+			if text, ok := choice.(string); ok {
+				choices = append(choices, text)
+			}
+		}
+	}
+
+	s.logger.Info("user input requested", slog.String("jobId", jobID))
+	// The tool describes `choices` as a closed list, so offering one is the
+	// agent saying it wants nothing else.
+	answer, err := s.asker.AskUser(ctx, jobID, prompt, choices, len(choices) == 0)
+	if err != nil {
+		return nil, &rpcError{Code: codeInternalError, Message: err.Error()}
+	}
+	return map[string]any{"content": []any{map[string]any{"type": "text", "text": answer}}}, nil
+}
+
+// toolText wraps a payload as the single text content block a tool returns.
+func toolText(payload map[string]any) (any, *rpcError) {
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return nil, &rpcError{Code: codeInternalError, Message: err.Error()}
+	}
+	return map[string]any{"content": []any{map[string]any{"type": "text", "text": string(encoded)}}}, nil
+}
+
+// coreTool forwards a Core Tool call to Core and renders its result.
+//
+// The round trip can be slow and can fail; an explicit error reaches the agent
+// rather than an empty result it would read as "nothing found".
+func (s *Server) coreTool(ctx context.Context, jobID string, tool CoreTool, args map[string]any) (any, *rpcError) {
+	if args == nil {
+		args = map[string]any{}
+	}
+	s.logger.Info("core tool called",
+		slog.String("jobId", jobID), slog.String("tool", tool.Name))
+
+	result, err := s.asker.CallCoreTool(ctx, jobID, tool.Name, args, tool.FileInput)
+	if err != nil {
+		return nil, &rpcError{Code: codeInternalError, Message: err.Error()}
+	}
+
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return nil, &rpcError{Code: codeInternalError, Message: err.Error()}
+	}
+	return map[string]any{"content": []any{map[string]any{"type": "text", "text": string(encoded)}}}, nil
+}
+
+// toolDefinitions lists what this Job may call: the two Threavia-specific tools,
+// plus the Core Tools Core declared for it.
+func toolDefinitions(coreTools []CoreTool) []any {
+	definitions := []any{
+		map[string]any{
+			"name":        ToolApprovalPrompt,
+			"description": "Ask the Threavia user to approve or deny a tool invocation.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"tool_name": map[string]any{"type": "string", "description": "The tool being invoked."},
+					"input":     map[string]any{"type": "object", "description": "The tool input."},
+				},
+				"required": []string{"tool_name", "input"},
+			},
+		},
+		map[string]any{
+			"name": ToolAskUser,
+			"description": "Ask the Threavia user a question and wait for their answer. " +
+				"Use it whenever you need information, a choice or a decision from the user. " +
+				"It may take a long time to come back, which is expected.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"prompt": map[string]any{"type": "string", "description": "The question to ask."},
+					"choices": map[string]any{
+						"type":        "array",
+						"items":       map[string]any{"type": "string"},
+						"description": "Optional closed list of acceptable answers.",
+					},
+				},
+				"required": []string{"prompt"},
+			},
+		},
+	}
+
+	for _, tool := range coreTools {
+		schema := tool.InputSchema
+		if schema == nil {
+			schema = map[string]any{"type": "object", "properties": map[string]any{}}
+		}
+		definitions = append(definitions, map[string]any{
+			"name":        tool.Name,
+			"description": tool.Description,
+			"inputSchema": schema,
+		})
+	}
+	return definitions
+}
+
+// callTimeout is how long Claude Code waits on one call to this server, in
+// milliseconds. Its default is a minute, after which it abandons the call: a
+// permission prompt the user had not answered within the minute failed the
+// tool with "The operation timed out", although validations are specified to
+// wait as long as it takes (spec section 16). This is the largest delay a
+// JavaScript timer holds, about 24 days, which is as close to no limit as the
+// setting allows.
+const callTimeout = 1<<31 - 1
+
+// Config renders the --mcp-config value pointing Claude Code at a Job endpoint.
+func Config(endpoint string) (string, error) {
+	encoded, err := json.Marshal(map[string]any{
+		"mcpServers": map[string]any{
+			ServerName: map[string]any{"type": "http", "url": endpoint, "timeout": callTimeout},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}

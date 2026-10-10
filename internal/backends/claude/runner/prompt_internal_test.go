@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
-	"github.com/rclsilver/threavia/internal/backends/claude/mcp"
-	"github.com/rclsilver/threavia/internal/backends/claude/policy"
+	"github.com/rclsilver/threavia/internal/backends/shared/mcp"
+	"github.com/rclsilver/threavia/internal/backends/shared/policy"
 )
 
 // TestThePromptNamesWhatIsOnPath pins a line that pays for itself.

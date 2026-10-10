@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/rclsilver/threavia/internal/backends/claude/runner"
-	"github.com/rclsilver/threavia/internal/backends/claude/workspace"
+	"github.com/rclsilver/threavia/internal/backends/shared/workspace"
 )
 
 // editingRunner stands in for Claude Code on a Job that edits one file of a

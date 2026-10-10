@@ -5,7 +5,7 @@ outbound control stream, holds the provider credentials and owns the filesystem
 the agent works on. That is why a laptop backend needs no cluster, no inbound
 port and no chart — only a service on the machine that holds the code.
 
-The flake packages the Claude backend and a NixOS module for it. Core is not
+The flake packages the Claude and Codex backends and a NixOS module for each. Core is not
 packaged here: it is deployed from its container image and its Helm chart, and
 its binary embeds a web client that needs the whole Node toolchain to build. A
 Nix package of Core that silently served no client would be worse than none.
@@ -22,6 +22,8 @@ nix develop github:rclsilver/threavia            # the development shell
 | --- | --- |
 | `packages.<system>.threavia-backend-claude` | the backend binary |
 | `nixosModules.backend-claude` | `services.threavia-backend-claude` |
+| `packages.<system>.threavia-backend-codex` | the Codex backend binary |
+| `nixosModules.backend-codex` | `services.threavia-backend-codex` |
 | `overlays.default` | the package under `pkgs.threavia-backend-claude` |
 | `devShells.<system>.default` | Go, Node, Helm, buf — the same shell as `shell.nix` |
 

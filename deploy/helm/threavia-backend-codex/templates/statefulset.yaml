@@ -1,0 +1,183 @@
+{{/* A StatefulSet rather than a Deployment: a BackendInstance has a durable
+     identity. Its credential, its local execution state and the native provider
+     sessions all live on its volume, and a replacement pod must come back as
+     the same instance rather than registering a second one. */}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "backend.fullname" . }}
+  labels:
+    {{- include "backend.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  serviceName: {{ include "backend.fullname" . }}
+  selector:
+    matchLabels:
+      {{- include "backend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "backend.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "backend.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: backend
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: THREAVIA_BACKEND_LOG_LEVEL
+              value: {{ .Values.log.level | quote }}
+            - name: THREAVIA_BACKEND_LOG_FORMAT
+              value: {{ .Values.log.format | quote }}
+
+            # --- Core control plane ---
+            - name: THREAVIA_BACKEND_CORE_ADDRESS
+              value: {{ .Values.core.address | quote }}
+            - name: THREAVIA_BACKEND_CORE_API
+              value: {{ .Values.core.api | quote }}
+            - name: THREAVIA_BACKEND_TLS_ENABLED
+              value: {{ .Values.core.tls.enabled | quote }}
+            {{- with .Values.core.tls.caFile }}
+            - name: THREAVIA_BACKEND_TLS_CA_FILE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.core.tls.serverName }}
+            - name: THREAVIA_BACKEND_TLS_SERVER_NAME
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.core.tls.insecureSkipVerify }}
+            - name: THREAVIA_BACKEND_TLS_INSECURE_SKIP_VERIFY
+              value: "true"
+            {{- end }}
+
+            # --- Identity ---
+            #
+            # Each is optional: the backend uses whichever is set, and once it
+            # holds a credential on its volume it needs none of them again.
+            - name: THREAVIA_BACKEND_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "backend.secretName" . }}
+                  key: {{ if .Values.core.existingSecret }}{{ .Values.core.existingSecretTokenKey }}{{ else }}token{{ end }}
+                  optional: true
+            - name: THREAVIA_BACKEND_REGISTRATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "backend.secretName" . }}
+                  key: {{ if .Values.core.existingSecret }}{{ .Values.core.existingSecretRegistrationTokenKey }}{{ else }}registrationToken{{ end }}
+                  optional: true
+            - name: THREAVIA_BACKEND_SHARED_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "backend.secretName" . }}
+                  key: {{ if .Values.core.existingSecret }}{{ .Values.core.existingSecretSharedKeyKey }}{{ else }}sharedKey{{ end }}
+                  optional: true
+
+            # --- Instance ---
+            - name: THREAVIA_BACKEND_INSTANCE_NAME
+              {{- if .Values.backend.instanceName }}
+              value: {{ .Values.backend.instanceName | quote }}
+              {{- else }}
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+              {{- end }}
+            - name: THREAVIA_BACKEND_MAX_CONCURRENT_RUNS
+              value: {{ .Values.backend.maxConcurrentRuns | quote }}
+            - name: THREAVIA_BACKEND_HEARTBEAT_INTERVAL
+              value: {{ .Values.backend.heartbeatInterval | quote }}
+            - name: THREAVIA_BACKEND_STATE_PATH
+              value: "/home/threavia/.threavia/backend.db"
+            - name: THREAVIA_BACKEND_SKILL_CACHE_PATH
+              value: "/home/threavia/.threavia/skills"
+            - name: THREAVIA_BACKEND_DEFAULT_WORKING_DIRECTORY
+              value: {{ .Values.backend.defaultWorkingDirectory | quote }}
+            {{- with .Values.backend.discoveryRoots }}
+            - name: THREAVIA_BACKEND_DISCOVERY_ROOTS
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- with .Values.backend.localSkillRoots }}
+            - name: THREAVIA_BACKEND_LOCAL_SKILL_ROOTS
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- with .Values.backend.localInstructions }}
+            - name: THREAVIA_BACKEND_LOCAL_INSTRUCTIONS
+              value: {{ . | quote }}
+            {{- end }}
+
+            # --- Provider ---
+            {{- with .Values.provider.model }}
+            - name: THREAVIA_BACKEND_CODEX_MODEL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.provider.reasoningEffort }}
+            - name: THREAVIA_BACKEND_CODEX_REASONING_EFFORT
+              value: {{ . | quote }}
+            {{- end }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if .Values.provider.existingSecret }}{{ .Values.provider.existingSecret }}{{ else }}{{ include "backend.secretName" . }}{{ end }}
+                  key: {{ if .Values.provider.existingSecret }}{{ .Values.provider.existingSecretKey }}{{ else }}apiKey{{ end }}
+                  optional: true
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: state
+              mountPath: /home/threavia
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        {{- if not .Values.persistence.enabled }}
+        - name: state
+          emptyDir: {}
+        {{- else if .Values.persistence.existingClaim }}
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+  volumeClaimTemplates:
+    - metadata:
+        name: state
+      spec:
+        accessModes:
+          {{- toYaml .Values.persistence.accessModes | nindent 10 }}
+        {{- with .Values.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+  {{- end }}

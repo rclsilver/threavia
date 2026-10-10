@@ -115,14 +115,16 @@ dev-web: ## Serve the web client with hot reload on http://localhost:5173
 	@echo "Editing web/ui reloads the browser; the Go binary is untouched."
 
 .PHONY: build
-build: web ## Build the web client, then the Core and Claude backend binaries into bin/
+build: web ## Build the web client, Core and both backend binaries into bin/
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/threavia-core ./cmd/threavia-core
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/threavia-backend-claude ./cmd/threavia-backend-claude
+	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/threavia-backend-codex ./cmd/threavia-backend-codex
 
 .PHONY: build-go
 build-go: ## Build only the Go binaries, leaving whatever client is already built
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/threavia-core ./cmd/threavia-core
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/threavia-backend-claude ./cmd/threavia-backend-claude
+	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/threavia-backend-codex ./cmd/threavia-backend-codex
 
 .PHONY: test
 test: ## Run the test suite
@@ -173,6 +175,14 @@ run-core: ## Run Core against the local development dependencies
 run-backend: ## Run the Claude backend against a local Core
 	go run ./cmd/threavia-backend-claude
 
+.PHONY: run-backend-codex
+run-backend-codex: ## Run the Codex backend against a local Core
+	go run ./cmd/threavia-backend-codex
+
+.PHONY: test-codex-real
+test-codex-real: ## Test real authenticated Codex against a temporary local Core schema
+	THREAVIA_CODEX_REAL_E2E=1 THREAVIA_TEST_POSTGRES_URL='$(TEST_POSTGRES_URL)' go test ./internal/core/api -run '^TestCodexReal' -v -count=1 -timeout=30m
+
 .PHONY: clean
 clean: ## Remove the build output
 	rm -rf web/ui/dist/assets web/ui/dist/index.html
@@ -209,6 +219,7 @@ generate-check: generate ## Fail if the committed generated code is out of date
 	fi
 
 .PHONY: docker
-docker: ## Build both container images locally
+docker: ## Build Core and both backend container images locally
 	docker build -f deploy/docker/core.Dockerfile --build-arg VERSION=$(VERSION) -t threavia-core:$(VERSION) .
 	docker build -f deploy/docker/backend-claude.Dockerfile --build-arg VERSION=$(VERSION) -t threavia-backend-claude:$(VERSION) .
+	docker build -f deploy/docker/backend-codex.Dockerfile --build-arg VERSION=$(VERSION) -t threavia-backend-codex:$(VERSION) .

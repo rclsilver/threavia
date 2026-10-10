@@ -98,7 +98,7 @@ export const backends = [
   {
     id: IDS.nas,
     ownerId: 'alex',
-    name: 'nas',
+    name: 'nas-codex',
     ownershipStatus: 'CLAIMED',
     operationalStatus: 'READY',
     providerAuthState: 'AUTHENTICATED',

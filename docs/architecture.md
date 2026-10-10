@@ -213,6 +213,12 @@ receipt of section 16 references a stable byte sequence.
 
 ### Claude Code integration
 
+The provider-independent adapter, MCP endpoint, policy gate, skill cache and
+workspace helpers live in `internal/backends/shared`. The Claude runner retains
+its stream-json process integration; the [Codex runner](codex.md) implements the
+same contract through app-server JSON-RPC. Both use the SDK's durable state and
+replay without changing Core's protocol or either client's API.
+
 Claude Code runs in print mode with `stream-json` output, which the runner
 normalises into the Threavia vocabulary. Three decisions are worth recording:
 

@@ -147,7 +147,7 @@ const STEPS: Step[] = [
     path: '/settings/backends',
     target: 'main ul',
     title: 'Your machines',
-    body: 'Work runs on backends — a laptop, a NAS, a CI runner — never on Threavia’s server. One that needs you says what to do.',
+    body: 'Work runs on your machines with Claude Code or Codex; choose nas-codex to use Codex. A backend that needs you says what to do.',
   },
   {
     path: SESSION(IDS.backups),

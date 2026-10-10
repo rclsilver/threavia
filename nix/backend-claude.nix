@@ -50,7 +50,7 @@
       && (!insideClient || clientKept);
   };
 
-  vendorHash = "sha256-jtJ+I7cd0cFUuU4UxmzAq6EqLy7dWAH2jI4Ussu9SWo=";
+  vendorHash = "sha256-BRVPytQwvq+BfymcH/4nzwEffPBfC+FgxSoUEz5+Hdw=";
 
   subPackages = [ "cmd/threavia-backend-claude" ];
 

@@ -88,7 +88,7 @@ make migrate       # apply the database migrations
 make test          # run the test suite
 make test-db       # add the database integration and end-to-end tests
 make dev-up-storage # add S3-compatible object storage (Garage), configured
-make build         # build the web client, then both binaries into bin/
+make build         # build the web client, then all three binaries into bin/
 ```
 
 Run the whole thing: Core in one terminal, a backend in another, the client in a
@@ -116,6 +116,31 @@ make run-backend
 ```
 
 Then open <http://localhost:8080>, create a project and send a first message.
+
+### Using Codex
+
+The Codex backend drives `codex app-server` (CLI 0.161.0). Install the CLI and
+authenticate on the backend machine with `codex login`, or supply
+`OPENAI_API_KEY`. With a separate Core registration token:
+
+```bash
+export THREAVIA_BACKEND_CORE_ADDRESS=localhost:9090
+export THREAVIA_BACKEND_CORE_API=http://localhost:8080
+export THREAVIA_BACKEND_REGISTRATION_TOKEN="$TOKEN"
+export THREAVIA_BACKEND_TLS_ENABLED=false
+make run-backend-codex
+```
+
+Select that backend when starting a session in the web or VS Code client.
+Its default identity and database are separate from Claude's, so both can run
+on one machine. `THREAVIA_BACKEND_CODEX_MODEL` and
+`THREAVIA_BACKEND_CODEX_REASONING_EFFORT` optionally override Codex's defaults.
+See [the Codex backend guide](docs/codex.md) for deployment, supported policies
+and protocol checks. It supports the same features as the Claude backend:
+automatic supervision, skills, sub-agents, plans, background commands and
+policy-controlled web search/fetch. With the development database running,
+`make test-codex-real` exercises the installed, authenticated CLI against a
+temporary Core schema using real inference.
 
 Without `THREAVIA_AUTH_MODE`, Core runs with no authentication: every request
 acts as a single local user. That is why it then listens on `127.0.0.1:8080`
@@ -160,7 +185,7 @@ one file:
 
 ```bash
 make web           # build into web/ui/dist
-make build         # the client, then both binaries
+make build         # the client, then all three binaries
 ```
 
 A binary built without the client says so on the page rather than serving a
@@ -194,11 +219,13 @@ from a tag.
 
 Tagging `vX.Y.Z` publishes:
 
-- `ghcr.io/rclsilver/threavia-core:X.Y.Z` and
-  `ghcr.io/rclsilver/threavia-backend-claude:X.Y.Z`, both linux/amd64 and
+- `ghcr.io/rclsilver/threavia-core:X.Y.Z`,
+  `ghcr.io/rclsilver/threavia-backend-claude:X.Y.Z` and
+  `ghcr.io/rclsilver/threavia-backend-codex:X.Y.Z`, all linux/amd64 and
   linux/arm64;
-- the Helm charts as OCI artifacts at `oci://ghcr.io/rclsilver/charts/threavia`
-  and `oci://ghcr.io/rclsilver/charts/threavia-backend-claude`;
+- the Helm charts as OCI artifacts at `oci://ghcr.io/rclsilver/charts/threavia`,
+  `oci://ghcr.io/rclsilver/charts/threavia-backend-claude` and
+  `oci://ghcr.io/rclsilver/charts/threavia-backend-codex`;
 - a GitHub release with binary archives for linux and darwin, amd64 and arm64,
   the VS Code extension as `threavia-X.Y.Z.vsix`, and their SHA-256 checksums.
 
@@ -214,7 +241,7 @@ git push origin vX.Y.Z
 
 `make verify` runs locally exactly what the lint job runs: formatting, module
 tidiness, generated-code freshness for both the protocol and the API types,
-`go vet`, `buf lint` and the test suite. `make docker` builds both images.
+`go vet`, `buf lint` and the test suite. `make docker` builds all three images.
 
 The Core image is a static binary on a minimal Alpine that carries git, which
 installing a Skill from a git source runs, with the web client
@@ -232,6 +259,7 @@ api/proto/threavia/backend/v1/   protobuf definitions of the backend protocol
 gen/threavia/backend/v1/         generated Go bindings, never edited by hand
 cmd/threavia-core/               Core binary
 cmd/threavia-backend-claude/     Claude BackendInstance binary
+cmd/threavia-backend-codex/      Codex BackendInstance binary
 internal/core/api/               client HTTP/JSON + SSE surface
 internal/core/auth/              none / basic / oidc authentication
 internal/core/backendconn/       backend gRPC control connections and leases
@@ -243,14 +271,17 @@ internal/core/storage/postgres/  connection pool and migrations
 internal/core/storage/s3/        S3-compatible object storage
 internal/core/skills/            acquisition and packing of project skills
 internal/core/tools/             Core Tools exposed to agents
-internal/backends/claude/        Claude adapter, runner and MCP bridge
+internal/backends/shared/        adapter, execution contracts, policy gate, MCP, skills and workspace
+internal/backends/claude/        Claude Code runner
+internal/backends/codex/         Codex app-server runner and approval translation
 internal/envutil/                environment parsing helpers
 internal/logging/                shared structured logger
 pkg/backend-sdk/                 reusable Go SDK for BackendInstances
 migrations/                      embedded PostgreSQL migrations
-deploy/docker/                   container images for Core and the Claude backend
+deploy/docker/                   container images for Core, Claude and Codex
 deploy/helm/threavia/            Helm chart for Core
 deploy/helm/threavia-backend-claude/  Helm chart for a Kubernetes backend
+deploy/helm/threavia-backend-codex/   Helm chart for a Codex Kubernetes backend
 examples/backend-example/        smallest possible BackendInstance
 docs/                            architecture, protocol and API notes
 web/                             the embed, and the fallback when nothing is built

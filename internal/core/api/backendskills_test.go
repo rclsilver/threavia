@@ -12,9 +12,9 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/rclsilver/threavia/internal/backends/claude/adapter"
 	"github.com/rclsilver/threavia/internal/backends/claude/runner"
-	claudeskills "github.com/rclsilver/threavia/internal/backends/claude/skills"
+	"github.com/rclsilver/threavia/internal/backends/shared/adapter"
+	claudeskills "github.com/rclsilver/threavia/internal/backends/shared/skills"
 	"github.com/rclsilver/threavia/internal/core/skills"
 	sdkclient "github.com/rclsilver/threavia/pkg/backend-sdk/client"
 	sdkstate "github.com/rclsilver/threavia/pkg/backend-sdk/state"
@@ -69,9 +69,9 @@ func (c *core) connectBackendWith(local runner.Runner, credential, skillCache st
 	c.t.Helper()
 
 	cfg := adapter.Default()
-	cfg.Claude.SkillCachePath = skillCache
-	cfg.Claude.DefaultWorkingDirectory = c.t.TempDir()
-	cfg.Claude.DiscoveryRoots = discoveryRoots
+	cfg.Provider.SkillCachePath = skillCache
+	cfg.Provider.DefaultWorkingDirectory = c.t.TempDir()
+	cfg.Provider.DiscoveryRoots = discoveryRoots
 
 	handler := adapter.New(cfg, local, sdkstate.NewMemoryStore(),
 		slog.New(slog.NewTextHandler(discard{}, nil)))
