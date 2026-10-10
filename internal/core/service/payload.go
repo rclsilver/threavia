@@ -1,8 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 
@@ -19,13 +21,63 @@ func encodePayload(payload any) (json.RawMessage, error) {
 		if len(raw) == 0 {
 			return json.RawMessage(`{}`), nil
 		}
-		return raw, nil
+		return withoutNUL(raw)
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("encode event payload: %w", err)
 	}
-	return encoded, nil
+	return withoutNUL(encoded)
+}
+
+// withoutNUL replaces every NUL character in the strings of a JSON payload with
+// U+FFFD.
+//
+// PostgreSQL refuses \u0000 in a jsonb value, and a payload carrying one — a
+// tool's output read from a binary file, say — failed the whole insert: the
+// event was lost from the timeline, and a job event stayed unacknowledged for
+// the backend to replay into the same refusal. A NUL means nothing to a person
+// reading a timeline, so it is shown as the replacement character instead.
+//
+// The payload is decoded and encoded again rather than edited as text: in the
+// encoded form, `\\u0000` is a backslash followed by the letters u0000, which
+// must stay as they are.
+func withoutNUL(encoded json.RawMessage) (json.RawMessage, error) {
+	if !bytes.Contains(encoded, []byte(`\u0000`)) {
+		return encoded, nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	// Numbers are kept as written, so a large id does not become a float.
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, fmt.Errorf("read event payload: %w", err)
+	}
+	cleaned, err := json.Marshal(replaceNUL(value))
+	if err != nil {
+		return nil, fmt.Errorf("encode event payload: %w", err)
+	}
+	return cleaned, nil
+}
+
+func replaceNUL(value any) any {
+	switch typed := value.(type) {
+	case string:
+		return strings.ReplaceAll(typed, "\x00", "�")
+	case []any:
+		for index, item := range typed {
+			typed[index] = replaceNUL(item)
+		}
+		return typed
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, item := range typed {
+			out[strings.ReplaceAll(key, "\x00", "�")] = replaceNUL(item)
+		}
+		return out
+	default:
+		return value
+	}
 }
 
 // UserMessagePayload is the body of a user.message event. Messages are events:
