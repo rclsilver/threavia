@@ -172,10 +172,10 @@ function ValidationCard({ request, showSession }: { request: ValidationRequest; 
         risk.tone === 'danger' ? 'border-danger/50' : 'border-border',
       )}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={risk.tone === 'neutral' ? 'neutral' : risk.tone}>{risk.label}</Badge>
-        {tool && <span className="text-muted text-xs">{toolLabel(tool)}</span>}
-        <time dateTime={request.createdAt} title={when(request.createdAt)} className="text-muted ml-auto text-xs">
+      <div className="flex items-center gap-2">
+        <Badge className="shrink-0" tone={risk.tone === 'neutral' ? 'neutral' : risk.tone}>{risk.label}</Badge>
+        {tool && <span className="text-muted min-w-0 truncate text-xs">{toolLabel(tool)}</span>}
+        <time dateTime={request.createdAt} title={when(request.createdAt)} className="text-muted ml-auto shrink-0 text-xs whitespace-nowrap">
           {ago(request.createdAt)}
         </time>
       </div>

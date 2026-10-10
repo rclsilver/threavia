@@ -83,7 +83,7 @@ export function SessionView() {
     return <p className="text-muted p-6 text-sm">Loading…</p>;
   }
   if (snapshot.error) {
-    return <p className="text-danger p-6 text-sm">{(snapshot.error).message}</p>;
+    return <ActionError error={snapshot.error} outcome="This session did not open" recovery="Reload the page to try again." className="p-6" />;
   }
 
   const data = snapshot.data;
@@ -433,7 +433,7 @@ function Composer({
               type="submit"
               variant="primary"
               size="icon"
-              className="disabled:bg-surface-2 disabled:text-muted size-11 rounded-lg disabled:opacity-100 sm:size-8"
+              className="disabled:bg-surface-2 disabled:text-muted size-11 rounded-md disabled:opacity-100 sm:size-8"
               title="Send (Enter)"
               aria-label="Send"
               disabled={send.isPending || !message.trim()}

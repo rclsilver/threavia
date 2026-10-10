@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { usePolicy, useSetPolicy, useSnapshot } from '@/api/queries';
 import type { ExecutionPolicy } from '@/api/types';
 import { PolicyForm, RulesEditor } from '@/components/policy-form';
+import { ActionError } from '@/components/ui/action-error';
 import { Button } from '@/components/ui/button';
 
 const FINISHED = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
@@ -93,7 +94,7 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
         backend account.
       </p>
 
-      {save.error && <p className="text-danger text-sm">{save.error.message}</p>}
+      <ActionError error={save.error} outcome="Not saved" recovery="The permissions that were in place still apply." />
 
       {/* The provider reads its permissions when the process starts, so a
           change cannot reach a turn already under way. Saying so here is the

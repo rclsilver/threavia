@@ -150,7 +150,7 @@ export function DraftView() {
           />
         </div>
 
-        {start.error && <p className="text-danger text-sm">{(start.error).message}</p>}
+        <ActionError error={start.error} outcome="Not started" recovery="Your message is still in the field; send it again." />
 
         <Button
           variant="primary"

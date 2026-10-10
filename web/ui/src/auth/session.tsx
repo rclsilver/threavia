@@ -2,6 +2,8 @@ import { createContext, useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { setBearer } from '@/api/client';
+import { ActionError } from '@/components/ui/action-error';
+import { Button } from '@/components/ui/button';
 import { setLandingPath } from '@/auth/landing';
 import { CALLBACK_PATH, complete, login, refresh, type AuthPublic, type Tokens } from '@/auth/oidc';
 
@@ -116,14 +118,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   if (status === 'failed') {
     return (
       <Waiting>
-        <p className="text-danger">{error}</p>
-        <button
-          type="button"
-          onClick={signIn}
-          className="bg-surface-2 border-border rounded-lg border px-3 py-1.5 text-sm"
-        >
+        <ActionError error={error ? new Error(error) : null} outcome="Not signed in" recovery="Nothing was changed; sign in again." />
+        <Button size="lg" onClick={signIn}>
           Try again
-        </button>
+        </Button>
       </Waiting>
     );
   }

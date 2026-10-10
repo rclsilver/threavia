@@ -187,7 +187,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {waitingCount > 0 && (
           <Link
             to="/waiting"
-            className="bg-warn/15 text-warn-text ml-1 inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium"
+            className="bg-warn/15 text-warn-text ml-1 inline-flex h-11 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium md:h-9"
           >
             <Inbox className="size-4" />
             {waitingCount} waiting
@@ -313,7 +313,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         params={{ sessionId: session.id }}
                         title={session.title || 'Untitled session'}
                         className={cn(
-                          'hover:bg-surface-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+                          'hover:bg-surface-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm max-md:min-h-11',
                           params.sessionId === session.id && 'bg-surface-2 font-medium',
                         )}
                       >
@@ -430,7 +430,7 @@ function groupSessions(
  * one on screen.
  */
 const nav = {
-  className: 'hover:bg-surface-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+  className: 'hover:bg-surface-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm max-md:min-h-11',
   activeProps: { className: 'bg-surface-2 font-medium' },
 };
 
@@ -687,7 +687,9 @@ function UserMenu({
   // Authenticated or not is not a detail to smooth over: in ModeNone nobody was
   // asked to prove anything, and the id is whatever Core was configured with.
   const anonymous = !me.data || me.data.authMode === 'none';
-  const name = anonymous ? 'anonymous' : me.data.name || me.data.email || me.data.userId;
+  // In mode none nobody signed in, but Core still names the one user it
+  // attributes everything to; that name is what the person knows themselves by.
+  const name = me.data?.name || me.data?.email || me.data?.userId || 'anonymous';
   const live = backends.filter((backend) => backend.ownershipStatus !== 'REVOKED');
   const unwell = live.filter((backend) => backend.operationalStatus !== 'READY');
   const status =
@@ -721,7 +723,7 @@ function UserMenu({
           <button
             type="button"
             data-tour="user"
-            className="hover:bg-surface-2 data-[state=open]:bg-surface-2 flex w-full items-center gap-2.5 rounded-lg p-2 text-left"
+            className="hover:bg-surface-2 data-[state=open]:bg-surface-2 flex w-full items-center gap-2.5 rounded-md p-2 text-left"
           >
             <Avatar name={name} />
             <span className="min-w-0 flex-1">
@@ -817,7 +819,7 @@ function ProjectSwitcher({
           <button
             type="button"
             title="Switch project"
-            className="hover:bg-surface-2 data-[state=open]:bg-surface-2 border-border flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-sm"
+            className="hover:bg-surface-2 data-[state=open]:bg-surface-2 border-border flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm max-md:min-h-11"
           >
             <ProjectMark name={project?.name} />
             <span className={cn('min-w-0 flex-1 truncate', project ? 'font-medium' : 'text-muted')}>

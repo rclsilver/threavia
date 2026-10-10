@@ -26,14 +26,14 @@ export function ConfirmAction({
   const [asking, setAsking] = useState(false);
   if (!asking) return <>{trigger(() => setAsking(true))}</>;
   return (
-    <span className="flex items-center gap-2 text-xs">
+    <span className="flex flex-wrap items-center gap-2 text-xs">
       <span className="text-muted">{question}</span>
-      <Button variant="ghost" size="sm" onClick={() => setAsking(false)}>
+      <Button variant="ghost" size="lg" onClick={() => setAsking(false)}>
         No
       </Button>
       <Button
         variant="danger"
-        size="sm"
+        size="lg"
         disabled={pending}
         onClick={() => {
           onConfirm();

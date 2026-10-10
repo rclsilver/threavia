@@ -51,7 +51,9 @@ export function SettingsView() {
   // Authenticated or not is not a detail to smooth over: in ModeNone nobody was
   // asked to prove anything, and the id is whatever Core was configured with.
   const anonymous = !me.data || me.data.authMode === 'none';
-  const name = anonymous ? 'anonymous' : me.data.name || me.data.email || me.data.userId;
+  // In mode none nobody signed in, but Core still names the one user it
+  // attributes everything to; that name is what the person knows themselves by.
+  const name = me.data?.name || me.data?.email || me.data?.userId || 'anonymous';
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
