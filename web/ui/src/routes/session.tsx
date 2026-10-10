@@ -294,6 +294,10 @@ function SessionTitle({ sessionId, title }: { sessionId: string; title: string }
  * grows with what is being written instead of hiding the top of a long message
  * behind a fixed three rows.
  */
+// Whether the browser sizes a textarea to its content by itself, which is
+// smooth, rather than through the measuring above.
+const SIZES_ITSELF = typeof CSS !== 'undefined' && CSS.supports('field-sizing', 'content');
+
 const PLACEHOLDERS: Record<Delivery | 'IDLE', string> = {
   IDLE: 'Send a message…',
   QUEUE: 'Queue a message for when this is done…',
@@ -362,11 +366,21 @@ function Composer({
   const send = usePostMessage(sessionId);
   const [message, setMessage] = useDraft(sessionId);
 
+  // The field grows with what is written. Where the browser can size it to its
+  // content (field-sizing, on the textarea's class), it does, and nothing here
+  // runs. Elsewhere it is measured on every change: collapsed to measure, then
+  // set — which, on a long message, scrolled the field back to its top and the
+  // page with it at each key. So the field's own scroll is put back, and the
+  // height only written when it changes.
   useLayoutEffect(() => {
     const element = field.current;
-    if (!element) return;
+    if (!element || SIZES_ITSELF) return;
+    const scrolled = element.scrollTop;
+    const before = element.style.height;
     element.style.height = 'auto';
-    element.style.height = `${Math.min(element.scrollHeight, 240)}px`;
+    const after = `${Math.min(element.scrollHeight, 240)}px`;
+    element.style.height = after === before ? before : after;
+    element.scrollTop = scrolled;
   }, [message]);
 
   // How a message reaches the work already running. Queued by default, as
@@ -427,7 +441,7 @@ function Composer({
               }}
               placeholder={PLACEHOLDERS[active ? chosen : 'IDLE']}
               aria-label="Message"
-              className="placeholder:text-muted block max-h-60 min-w-0 flex-1 resize-none bg-transparent py-2.5 text-base outline-none sm:py-1.5 sm:text-sm"
+              className="placeholder:text-muted field-sizing-content block max-h-60 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2.5 text-base outline-none sm:py-1.5 sm:text-sm"
             />
             <Button
               type="submit"
