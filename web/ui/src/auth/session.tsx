@@ -1,11 +1,12 @@
 import { createContext, useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { setBearer } from '@/api/client';
+import { setBearer, setTokenRenewal } from '@/api/client';
+import { SessionRenewal } from './renewal';
 import { ActionError } from '@/components/ui/action-error';
 import { Button } from '@/components/ui/button';
 import { setLandingPath } from '@/auth/landing';
-import { CALLBACK_PATH, complete, login, refresh, type AuthPublic, type Tokens } from '@/auth/oidc';
+import { CALLBACK_PATH, complete, login, refresh, type AuthPublic } from '@/auth/oidc';
 
 /**
  * Where the client stands with the provider.
@@ -37,27 +38,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>('checking');
   const [error, setError] = useState<string>();
   const config = useRef<AuthPublic>({ mode: 'none' });
-  const renewal = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  // Holds the tokens and arms the renewal. Memory only: a reload starts a fresh
-  // redirect, which the provider answers silently while its session stands, and
-  // which leaves nothing on disk for a script on this page to find.
-  const hold = useCallback((tokens: Tokens) => {
-    setBearer(tokens.accessToken);
-    clearTimeout(renewal.current);
-
-    if (!tokens.refreshToken) return;
-    // A minute of margin, and never a timer so short it spins.
-    const delay = Math.max(tokens.expiresAt - Date.now() - 60_000, 15_000);
-    renewal.current = setTimeout(() => {
-      refresh(config.current, tokens.refreshToken!)
-        .then(hold)
-        // A refresh that fails means the provider session is over. Starting the
-        // flow again is the honest answer, and it is silent when it can be.
-        .catch(() => void login(config.current));
-    }, delay);
-  }, []);
-
   const signIn = useCallback(() => {
     setStatus('signing-in');
     login(config.current).catch((cause: unknown) => {
@@ -68,6 +48,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const renewal = new SessionRenewal(
+      (token) => refresh(config.current, token),
+      (tokens) => setBearer(tokens?.accessToken ?? null),
+      signIn,
+    );
+    setTokenRenewal(renewal);
+    const wake = () => {
+      if (document.visibilityState === 'visible') void renewal.prepare().catch(() => {});
+    };
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('pageshow', wake);
+    window.addEventListener('online', wake);
 
     const start = async () => {
       try {
@@ -87,7 +79,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (window.location.pathname === CALLBACK_PATH) {
           const { tokens, to } = await complete(found);
           if (cancelled) return;
-          hold(tokens);
+          renewal.hold(tokens);
           // Where to land is left for the callback route to act on: the router
           // captured the location when it was created, so rewriting history
           // here would leave it showing a page nobody asked for.
@@ -107,9 +99,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     void start();
     return () => {
       cancelled = true;
-      clearTimeout(renewal.current);
+      renewal.dispose();
+      setTokenRenewal(null);
+      setBearer(null);
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('pageshow', wake);
+      window.removeEventListener('online', wake);
     };
-  }, [hold]);
+  }, [signIn]);
 
   if (status === 'checking' || status === 'signing-in') {
     return <Waiting>Signing in…</Waiting>;

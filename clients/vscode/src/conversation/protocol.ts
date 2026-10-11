@@ -1,4 +1,4 @@
-import type { Delivery, Event, JobStatus, UserInputRequest, ValidationRequest } from '../api/types';
+import type { BackendQuotas, Delivery, Event, JobStatus, UserInputRequest, ValidationRequest } from '../api/types';
 import type { DraftStart } from './draft';
 import type { StateTone } from './state';
 
@@ -19,6 +19,7 @@ export interface SessionView {
   backend?: string;
   backendType?: string;
   backendTooltip?: string;
+  backendQuotas?: BackendQuotas;
   /** The branch, short (`main ↑1 ●`), and in words for a tooltip. */
   repository?: { text: string; tooltip: string };
   /** A liveness signal, shown only while a Job runs. */

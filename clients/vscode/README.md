@@ -43,8 +43,8 @@ from one Threavia Core or from several at once.
     with the button or Escape. What you were writing is kept until sent.
   - **Pin, unpin, open in the browser** from the tab's title bar.
   - **Quotas.** Hover or focus the backend in the header, or click it, to see
-    its full quota report. Claude reports through CLI events during jobs;
-    Codex also refreshes account quotas every minute while connected. The
+    its full quota report. Claude and Codex refresh account quotas through their CLI every minute
+    while connected, and forward quota events during jobs. The
     observation date remains visible when a refresh fails.
   - **Full width.** The header's Full width button lets the conversation use
     the editor's width. It is off by default and kept with the panel on reload.
@@ -127,7 +127,9 @@ code --install-extension threavia-<version>.vsix
    - **None**: there is nothing to sign in to.
 
 Tokens and passwords are kept in the editor's secret storage, one sign-in per
-Core, and access tokens are renewed before they expire. **Threavia: Sign Out**
+Core, and access tokens are renewed before they expire or before a request after
+a pause. Temporary provider or network failures keep that sign-in and retry; a
+refused refresh token asks you to sign in again. **Threavia: Sign Out**
 forgets them; each Core's account also shows in the editor's Accounts menu,
 and signs out from there.
 

@@ -118,11 +118,21 @@ export async function complete(config: AuthPublic): Promise<{ tokens: Tokens; to
 /** Trades a refresh token for a fresh pair, before the access token expires. */
 export async function refresh(config: AuthPublic, refreshToken: string): Promise<Tokens> {
   const endpoints = await discover(config.issuer ?? '');
-  return exchange(endpoints.token_endpoint, {
+  const tokens = await exchange(endpoints.token_endpoint, {
     grant_type: 'refresh_token',
     client_id: config.clientId ?? '',
     refresh_token: refreshToken,
   });
+  // Some providers reuse the refresh token instead of returning a replacement.
+  return { ...tokens, refreshToken: tokens.refreshToken ?? refreshToken };
+}
+
+/** A refused grant requires signing in; transport failures can be retried. */
+export class RefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RefusedError';
+  }
 }
 
 async function exchange(endpoint: string, body: Record<string, string>): Promise<Tokens> {
@@ -132,7 +142,9 @@ async function exchange(endpoint: string, body: Record<string, string>): Promise
     body: new URLSearchParams(body).toString(),
   });
   if (!response.ok) {
-    throw new Error(`the provider refused the exchange (${response.status})`);
+    const message = `the provider refused the exchange (${response.status})`;
+    if (response.status === 400 || response.status === 401) throw new RefusedError(message);
+    throw new Error(message);
   }
 
   const payload = (await response.json()) as {

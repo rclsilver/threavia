@@ -2,7 +2,6 @@ package runner
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os/exec"
 	"sort"
@@ -71,19 +70,46 @@ func codexRateLimits(payload map[string]any) quotas.Status {
 		if !ok {
 			continue
 		}
-		for _, kind := range []string{"primary", "secondary"} {
+		name, _ := family["limitName"].(string)
+		model, _ := family["normalModelSlug"].(string)
+		if name == "" {
+			name = model
+		} else if model != "" && model != name {
+			name += " · " + model
+		}
+		if name == "" {
+			name = id
+		}
+
+		// Discover windows by their provider fields, including future window keys.
+		// Primary/secondary also allow status-only reports from older CLIs.
+		kinds := make([]string, 0)
+		for kind, value := range family {
+			window, ok := value.(map[string]any)
+			if !ok {
+				continue
+			}
+			_, usage := window["usedPercent"]
+			_, duration := window["windowDurationMins"]
+			_, reset := window["resetsAt"]
+			if kind == "primary" || kind == "secondary" || usage || duration || reset {
+				kinds = append(kinds, kind)
+			}
+		}
+		sort.Strings(kinds)
+		for _, kind := range kinds {
 			window, ok := family[kind].(map[string]any)
 			if !ok {
 				continue
 			}
-			limit := quotas.Limit{ID: id + "/" + kind, Label: id + " · " + kind, Details: window}
+			limit := quotas.Limit{ID: id + "/" + kind, Label: name + " · " + kind, Details: window}
 			limit.Status, _ = window["status"].(string)
 			if used, ok := window["usedPercent"].(float64); ok {
 				limit.PercentUsed = &used
 			}
 			if minutes, ok := window["windowDurationMins"].(float64); ok {
 				limit.WindowSeconds = int64(minutes * 60)
-				limit.Label = fmt.Sprintf("%s · %g min", id, minutes)
+				limit.Label = name
 			}
 			if reset, ok := window["resetsAt"].(float64); ok {
 				at := time.Unix(int64(reset), 0).UTC()

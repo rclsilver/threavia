@@ -2,14 +2,13 @@ package runner
 
 import (
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/rclsilver/threavia/pkg/backend-sdk/quotas"
 )
 
 func (c *Claude) InitialQuotas() quotas.Status {
-	return quotas.Unavailable("Waiting for quota events from the Claude CLI. Quotas are reported while a job is running.")
+	return quotas.Unavailable("Waiting for account usage from the Claude CLI.")
 }
 
 func claudeRateLimit(info map[string]any) quotas.Status {
@@ -42,7 +41,8 @@ func claudeRateLimit(info map[string]any) quotas.Status {
 		if !ok {
 			continue
 		}
-		limit := quotas.Limit{ID: key, Label: strings.ReplaceAll(key, "_", " "), Details: window}
+		limit := quotas.Limit{ID: key, Label: claudeUsageLabel(key, window), Details: window,
+			WindowSeconds: claudeUsageDuration(key, window)}
 		limit.Status, _ = window["status"].(string)
 		if usage, ok := window["utilization"].(float64); ok {
 			percentage := usage * 100

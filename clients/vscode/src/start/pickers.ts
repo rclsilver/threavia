@@ -3,7 +3,8 @@ import * as vscode from 'vscode';
 import type { CoreClient } from '../api/client';
 import type { BackendInstance, KnownDirectory, Project } from '../api/types';
 import { humanise } from '../conversation/format';
-import { backendIcon, backendTooltip } from '../conversation/backend';
+import { backendTooltip } from '../conversation/backend';
+import { providerIcon } from '../conversation/provider-icon';
 import { isCurrentProject, orderProjects } from '../tree/model';
 
 /**
@@ -58,7 +59,8 @@ export async function pickBackend(client: CoreClient, title: string): Promise<Ba
     `${title}: Backend`,
     'Which machine does the work?',
     backends.map((backend) => ({
-      label: `$(${backendIcon(backend.backend)}) ${backend.name}`,
+      label: backend.name,
+      iconPath: providerIcon(backend.backend),
       description: `${backend.backend || 'Unknown provider'} · ${humanise(backend.operationalStatus)}`,
       detail: backendTooltip(backend),
       value: backend,

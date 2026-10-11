@@ -78,10 +78,24 @@ report. Older backends can omit it and clients show an unknown quota status.
 
 Codex polls `account/rateLimits/read` every minute and forwards
 `account/rateLimits/updated` notifications, including every family in
-`rateLimitsByLimitId`. API-key accounts report unsupported subscription quotas.
-Claude forwards `rate_limit_event.rate_limit_info`, including unified windows
-and provider thresholds; it only observes quotas during CLI jobs, without
-reading OAuth credentials or calling a separate provider endpoint. Partial
+`rateLimitsByLimitId`. Window objects are discovered by their usage, duration
+or reset fields; primary/secondary status-only windows remain supported. Names
+combine the provider's limit name and model slug, falling back to the family id,
+without model
+aliases or assumptions about which special quotas an account should have.
+Reading quotas never enables automatic reserve fallback.
+API-key accounts report unsupported subscription quotas.
+Claude polls its CLI `get_usage` control every minute without starting a model
+turn, persisting a session or loading MCP servers. Every entry in the canonical
+usage list is retained; legacy windows and scoped arrays are discovered by their
+usage fields. Scoped identities include all dimensions, and labels use provider
+names for models, surfaces and future scope dimensions. Explicit durations take
+precedence over legacy period conventions. Both clients render the reported list
+generically: adding a quota within these provider schemas needs no UI change.
+Claude also forwards `rate_limit_event.rate_limit_info`,
+including unified windows and provider thresholds. Threavia never reads OAuth
+credentials or calls an independent Anthropic usage endpoint. Older CLI versions
+that lack the usage control report the failure explicitly. Partial
 notifications keep other windows; a failed poll preserves the last values and
 observation date with an unavailable status.
 

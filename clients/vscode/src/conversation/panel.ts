@@ -465,6 +465,7 @@ class ConversationPanel {
       backend: this.backend?.name,
       backendType: this.backend?.backend,
       backendTooltip: this.backend && backendTooltip(this.backend),
+      backendQuotas: this.backend?.quotas,
       repository: repo && text ? { text, tooltip: repositoryLines(repo).join('\n') } : undefined,
       activity: active?.status === 'RUNNING' && fresh ? humanise(fresh) : undefined,
       pending: pendingJobs(this.jobs),

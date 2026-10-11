@@ -1006,3 +1006,16 @@ body.full-width { --reading: 100%; }
 body.vscode-reduce-motion .codicon-modifier-spin {
   animation: none !important;
 }
+
+/* Provider marks and quota windows follow the editor theme. */
+.provider-icon { width: 14px; height: 14px; flex: none; margin-right: 4px; }
+.quota-panel { white-space: normal; font-size: 12px; }
+.quota-panel p { margin: 0; }
+.quota-observed, .quota-reset { color: var(--muted); }
+.quota-window { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.quota-heading { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 16px; font-variant-numeric: tabular-nums; }
+.quota-progress { display: block; appearance: none; width: 100%; height: 6px; margin: 6px 0; border: 0; border-radius: 2px; overflow: hidden; }
+.quota-progress::-webkit-progress-bar { background: var(--vscode-editorWidget-background, var(--border)); }
+.quota-progress::-webkit-progress-value { background: var(--vscode-progressBar-background); }
+.quota-progress.warning::-webkit-progress-value { background: var(--vscode-editorWarning-foreground); }
+.quota-progress.exhausted::-webkit-progress-value { background: var(--vscode-editorError-foreground); }

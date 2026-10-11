@@ -5,8 +5,7 @@ import { useCallback, useState } from 'react';
 import { useBackends, useClaimBackend, useIssueBackendToken, useMe, useRevokeBackend } from '@/api/queries';
 import type { BackendInstance } from '@/api/types';
 import { NotificationsPane } from '@/components/notifications-pane';
-import { BackendQuotas } from '@/components/backend-info';
-import { backendIcon } from '@/lib/backend';
+import { BackendIcon, BackendQuotas } from '@/components/backend-info';
 import { ConfirmLine, RecordList, RecordRow } from '@/components/record-list';
 import { ActionError } from '@/components/ui/action-error';
 import { Avatar } from '@/components/ui/avatar';
@@ -203,7 +202,8 @@ function BackendRow({ backend }: { backend: BackendInstance }) {
 
   return (
     <RecordRow
-      icon={backendIcon(backend.backend)}
+      icon={Server}
+      mark={<span className="flex size-11 shrink-0 items-center justify-center sm:size-8"><BackendIcon provider={backend.backend} /></span>}
       tone={revoked ? 'text-muted' : backend.operationalStatus === 'READY' ? 'text-ok' : 'text-warn-text'}
       title={backend.name}
       muted={revoked}

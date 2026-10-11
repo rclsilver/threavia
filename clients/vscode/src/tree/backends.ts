@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import type { BackendInstance, BackendQuota } from '../api/types';
 import type { Cores } from '../cores/registry';
-import { backendIcon, backendTooltip, quotaSummary, quotaText } from '../conversation/backend';
+import { backendTooltip, quotaLabel, quotaReset, quotaSummary, quotaText } from '../conversation/backend';
 import { humanise } from '../conversation/format';
+import { providerIcon } from '../conversation/provider-icon';
 
 type Node = { type: 'core'; coreId: string } | { type: 'backend'; backend: BackendInstance; coreId: string }
   | { type: 'quota'; quota: BackendQuota } | { type: 'message'; text: string; details?: string };
@@ -46,17 +47,14 @@ export class BackendsView implements vscode.TreeDataProvider<Node>, vscode.Dispo
         { type: 'message', text: `Observed: ${new Date(snapshot.observedAt).toLocaleString()}` },
         ...(snapshot.message ? [{ type: 'message' as const, text: snapshot.message }] : []),
         ...snapshot.limits.map((quota) => ({ type: 'quota' as const, quota })),
-        ...(snapshot.details ? [{ type: 'message' as const, text: 'Provider details', details: JSON.stringify(snapshot.details, null, 2) }] : []),
       ];
     }
     if (node.type === 'quota') {
       const quota = node.quota;
       const children: Node[] = [];
       for (const field of ['used', 'limit', 'remaining'] as const) if (quota[field] !== undefined) children.push({ type: 'message', text: `${humanise(field)}: ${quota[field]} ${quota.unit ?? ''}` });
-      if (quota.windowSeconds) children.push({ type: 'message', text: `Window: ${quota.windowSeconds / 60} min` });
-      if (quota.resetsAt) children.push({ type: 'message', text: `Resets: ${new Date(quota.resetsAt).toLocaleString()}` });
+      if (quota.resetsAt) children.push({ type: 'message', text: `Resets: ${quotaReset(quota.resetsAt)}` });
       for (const threshold of quota.thresholds ?? []) children.push({ type: 'message', text: `${threshold.label}: ${threshold.value ?? 'not reported'} ${threshold.unit ?? ''} ${threshold.status ?? ''}` });
-      if (quota.details) children.push({ type: 'message', text: 'Provider details', details: JSON.stringify(quota.details, null, 2) });
       return children;
     }
     return [];
@@ -66,15 +64,15 @@ export class BackendsView implements vscode.TreeDataProvider<Node>, vscode.Dispo
     if (node.type === 'backend') {
       const item = new vscode.TreeItem(node.backend.name, vscode.TreeItemCollapsibleState.Expanded);
       item.id = `backend/${node.coreId}/${node.backend.id}`;
-      item.iconPath = new vscode.ThemeIcon(backendIcon(node.backend.backend));
+      item.iconPath = providerIcon(node.backend.backend);
       item.description = humanise(node.backend.operationalStatus);
       item.tooltip = backendTooltip(node.backend);
       return item;
     }
     if (node.type === 'quota') {
-      const item = new vscode.TreeItem(node.quota.label, vscode.TreeItemCollapsibleState.Collapsed);
+      const item = new vscode.TreeItem(quotaLabel(node.quota), vscode.TreeItemCollapsibleState.Collapsed);
       item.description = quotaSummary(node.quota);
-      item.tooltip = JSON.stringify(node.quota, null, 2);
+      item.tooltip = `${quotaLabel(node.quota)}: ${quotaSummary(node.quota)}${node.quota.resetsAt ? `\nResets: ${quotaReset(node.quota.resetsAt)}` : ''}`;
       item.iconPath = new vscode.ThemeIcon('dashboard');
       return item;
     }

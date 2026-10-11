@@ -1,4 +1,4 @@
-import { clientId, deviceName } from '@/lib/device';
+import { clientId, deviceName } from '../lib/device';
 
 /**
  * The HTTP client.
@@ -50,6 +50,17 @@ interface ErrorBody {
  */
 let bearer: string | null = null;
 
+interface TokenRenewal {
+  prepare: () => Promise<void>;
+  recover: () => Promise<boolean>;
+}
+
+let renewal: TokenRenewal | null = null;
+
+export function setTokenRenewal(next: TokenRenewal | null) {
+  renewal = next;
+}
+
 export function setBearer(token: string | null) {
   bearer = token;
 }
@@ -63,6 +74,24 @@ export function authorize(headers: Headers): Headers {
   headers.set('X-Threavia-Client-Name', encodeURIComponent(deviceName()));
   if (bearer) headers.set('Authorization', `Bearer ${bearer}`);
   return headers;
+}
+
+/** All Core requests, including uploads, artifacts and the event stream, renew first. */
+export async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const session = renewal;
+  await session?.prepare();
+  const sentToken = bearer;
+  const send = () => fetch(path, { ...init, headers: authorize(new Headers(init.headers)) });
+  let response = await send();
+  if (response.status === 401 && session && session === renewal) {
+    // A concurrent request may already have replaced the rejected token.
+    const renewed = bearer !== null && bearer !== sentToken;
+    if (renewed || await session.recover()) {
+      await response.body?.cancel();
+      response = await send();
+    }
+  }
+  return response;
 }
 
 /**
@@ -92,7 +121,7 @@ export function setTransport(next: Transport) {
  */
 export async function fetchBlob(path: string): Promise<Blob> {
   if (transport) return transport.blob(path);
-  const response = await fetch(path, { headers: authorize(new Headers()) });
+  const response = await authorizedFetch(path);
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as ErrorBody | null;
     throw new ApiError(
@@ -120,9 +149,7 @@ async function request<T>(method: string, path: string, init: RequestInit = {}):
     if (method !== 'GET') transport.changed();
     return result;
   }
-  const headers = authorize(new Headers(init.headers));
-
-  const response = await fetch(path, { ...init, method, headers });
+  const response = await authorizedFetch(path, { ...init, method });
 
   if (response.status === 204) {
     return undefined as T;

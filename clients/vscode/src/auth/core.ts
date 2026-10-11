@@ -180,11 +180,15 @@ export class CoreAuth implements vscode.Disposable {
 
   /**
    * Core answered 401. A token may have been revoked or expired early, so one
-   * renewal is worth trying; past that, the credential is wrong and is dropped,
-   * which shows the sign-in again rather than failing every request.
+   * renewal is worth trying. A refused grant is dropped; an unreachable
+   * provider keeps the stored session for the next attempt.
    */
   async recover(): Promise<boolean> {
-    if (this.credential?.type === 'oidc' && (await this.refresh())) return true;
+    if (this.credential?.type === 'oidc' && this.credential.tokens.refreshToken) {
+      // doRefresh clears refused grants itself. A transport failure must keep
+      // SecretStorage intact so the scheduled retry can recover the session.
+      return this.refresh();
+    }
     if (this.credential) {
       await this.store(undefined);
       this.offerSignIn(`${this.who} no longer accepts your sign-in.`);
@@ -216,9 +220,11 @@ export class CoreAuth implements vscode.Disposable {
         clientId: config.clientId ?? '',
         refreshToken: credential.tokens.refreshToken,
       });
+      if (this.credential !== credential || this.config !== config) return false;
       await this.store({ ...credential, tokens });
       return true;
     } catch (error) {
+      if (this.credential !== credential || this.config !== config) return false;
       if (error instanceof RefusedError) {
         // The provider's session is over. Starting the flow again is the honest
         // answer, but only when the person asks: a browser tab opening by itself

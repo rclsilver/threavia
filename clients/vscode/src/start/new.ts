@@ -34,6 +34,7 @@ export async function chooseNewSession(core: Core, several: boolean, from?: Proj
       backendName: backend.name,
       backendType: backend.backend,
       backendTooltip: backendTooltip(backend),
+      backendQuotas: backend.quotas,
       workingDirectoryId: directory?.id ?? null,
       directoryName: directory?.name,
     };

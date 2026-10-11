@@ -38,7 +38,7 @@ const contexts = await Promise.all([
     platform: 'browser',
     target: 'chrome120',
     outdir: 'dist',
-    loader: { '.ttf': 'file' },
+    loader: { '.ttf': 'file', '.svg': 'dataurl', '.png': 'dataurl' },
     assetNames: '[name]',
   }),
 ]);

@@ -1,8 +1,10 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
-// The tests cover the logic that does not need an editor: everything that
-// imports `vscode` is kept thin on purpose, so nothing here has to fake it.
+// Protocol and lifecycle tests run without an editor. CoreAuth explicitly
+// mocks only the host events and SecretStorage that surround its real logic.
 export default defineConfig({
+  resolve: { alias: { vscode: fileURLToPath(new URL('./test/vscode-mock.ts', import.meta.url)) } },
   test: {
     include: ['test/**/*.test.ts'],
     environment: 'node',

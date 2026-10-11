@@ -1,51 +1,51 @@
+import { Server } from 'lucide-react';
 import type { BackendInstance, BackendQuotas as QuotaSnapshot } from '@/api/types';
-import { backendIcon, quotaNumber } from '@/lib/backend';
+import claudeIcon from '@/assets/providers/claude.svg';
+import codexIcon from '@/assets/providers/codex.png';
+import { quotaLabel, quotaNumber, quotaPercent, quotaReset } from '@/lib/backend';
 import { humanise } from '@/lib/utils';
 
 export function BackendIcon({ provider, className = 'size-4 shrink-0' }: { provider?: string; className?: string }) {
-  const Icon = backendIcon(provider);
-  return <Icon className={className} aria-hidden="true" />;
+  const source = provider?.toLowerCase() === 'claude' ? claudeIcon : provider?.toLowerCase() === 'codex' ? codexIcon : undefined;
+  return source ? <img src={source} alt="" className={className} /> : <Server className={className} aria-hidden="true" />;
 }
 
 export function BackendQuotas({ snapshot }: { snapshot?: QuotaSnapshot }) {
   if (!snapshot) return <p className="text-muted text-xs">No quota report received yet.</p>;
   return (
-    <div className="space-y-2 text-xs">
-      <p className="text-muted">
-        Quotas · {humanise(snapshot.availability)} · observed {new Date(snapshot.observedAt).toLocaleString()}
-      </p>
+    <div className="space-y-3 text-xs">
+      <p className="text-muted">Quotas · {humanise(snapshot.availability)} · observed {new Date(snapshot.observedAt).toLocaleString()}</p>
       {snapshot.message && <p>{snapshot.message}</p>}
-      {snapshot.limits.map((limit) => (
-        <div key={limit.id} className="border-border space-y-1 border-t pt-2">
-          <p className="flex flex-wrap justify-between gap-x-4 gap-y-1">
-            <span className="font-medium">{limit.label}</span>
-            <span className="font-mono tabular-nums">
-              {limit.percentUsed !== undefined ? `${quotaNumber(limit.percentUsed)}% used` : 'Usage not reported'}
-              {limit.status && ` · ${humanise(limit.status)}`}
-            </span>
-          </p>
-          {(limit.used !== undefined || limit.limit !== undefined || limit.remaining !== undefined) && (
-            <p className="text-muted tabular-nums">
-              {limit.used !== undefined && `Used ${quotaNumber(limit.used)} ${limit.unit ?? ''} · `}
-              {limit.limit !== undefined && `Limit ${quotaNumber(limit.limit)} ${limit.unit ?? ''} · `}
-              {limit.remaining !== undefined && `Remaining ${quotaNumber(limit.remaining)} ${limit.unit ?? ''}`}
+      {snapshot.limits.map((limit) => {
+        const percentage = quotaPercent(limit);
+        const label = quotaLabel(limit);
+        return (
+          <div key={limit.id} className="border-border space-y-1.5 border-t pt-3">
+            <p className="flex flex-wrap justify-between gap-x-4 gap-y-1">
+              <span className="font-medium">{label}</span>
+              <span className="tabular-nums">{percentage !== undefined ? `${quotaNumber(percentage)}% used` : 'Usage not reported'}{limit.status && ` · ${humanise(limit.status)}`}</span>
             </p>
-          )}
-          {!!limit.windowSeconds && <p className="text-muted">Window: {quotaNumber(limit.windowSeconds / 60)} min</p>}
-          {limit.resetsAt && <p className="text-muted">Resets {new Date(limit.resetsAt).toLocaleString()}</p>}
-          {(limit.thresholds ?? []).map((threshold, index) => (
-            <p key={index}>{threshold.label}{threshold.value !== undefined && `: ${quotaNumber(threshold.value)} ${threshold.unit ?? ''}`}{threshold.status && ` · ${humanise(threshold.status)}`}</p>
-          ))}
-          {limit.details && <ProviderDetails value={limit.details} />}
-        </div>
-      ))}
-      {snapshot.details && <ProviderDetails value={snapshot.details} />}
+            {percentage !== undefined && (
+              <div role="progressbar" aria-label={`${label} usage`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.max(0, Math.min(100, percentage))} aria-valuetext={`${quotaNumber(percentage)}% used`} className="bg-surface-2 h-1.5 overflow-hidden rounded-sm">
+                <div className={`h-full ${percentage >= 100 ? 'bg-danger' : percentage >= 80 ? 'bg-warn' : 'bg-accent'}`} style={{ width: `${Math.max(0, Math.min(100, percentage))}%` }} />
+              </div>
+            )}
+            {(limit.used !== undefined || limit.limit !== undefined || limit.remaining !== undefined) && (
+              <p className="text-muted tabular-nums">{[
+                limit.used !== undefined && `Used ${quotaNumber(limit.used)} ${limit.unit ?? ''}`,
+                limit.limit !== undefined && `Limit ${quotaNumber(limit.limit)} ${limit.unit ?? ''}`,
+                limit.remaining !== undefined && `Remaining ${quotaNumber(limit.remaining)} ${limit.unit ?? ''}`,
+              ].filter(Boolean).join(' · ')}</p>
+            )}
+            {limit.resetsAt && <p className="text-muted tabular-nums">Resets <time dateTime={limit.resetsAt} title={new Date(limit.resetsAt).toLocaleString()}>{quotaReset(limit.resetsAt)}</time></p>}
+            {(limit.thresholds ?? []).map((threshold, index) => (
+              <p key={index}>{threshold.label}{threshold.value !== undefined && `: ${quotaNumber(threshold.value)} ${threshold.unit ?? ''}`}{threshold.status && ` · ${humanise(threshold.status)}`}</p>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
-}
-
-function ProviderDetails({ value }: { value: Record<string, unknown> }) {
-  return <details className="text-muted"><summary className="cursor-pointer focus-visible:outline focus-visible:outline-2">Provider details</summary><pre className="mt-1 max-h-52 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{JSON.stringify(value, null, 2)}</pre></details>;
 }
 
 /** Hover, keyboard focus and a touch/click all reveal the same quota report. */

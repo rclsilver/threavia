@@ -1,3 +1,5 @@
+import type { BackendQuotas } from '../api/types';
+
 /**
  * A new Session before it exists: what was chosen to start it, and how the
  * panel showing it becomes the Session's own once the first message is sent.
@@ -19,6 +21,7 @@ export interface DraftStart {
   backendName: string;
   backendType?: string;
   backendTooltip?: string;
+  backendQuotas?: BackendQuotas;
   workingDirectoryId: string | null;
   directoryName?: string;
 }

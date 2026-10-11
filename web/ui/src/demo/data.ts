@@ -89,6 +89,7 @@ export const backends = [
     quotas: { availability: 'AVAILABLE', observedAt: at(0.2), limits: [
       { id: 'five_hour', label: 'five hour', status: 'allowed', percentUsed: 24, resetsAt: new Date(Date.now() + 2 * 3600000).toISOString(), thresholds: [{ label: 'Provider warning threshold', value: 0.8, unit: 'utilization', status: 'not reached' }] },
       { id: 'seven_day', label: 'seven day', percentUsed: 13, resetsAt: new Date(Date.now() + 3 * 86400000).toISOString() },
+      { id: 'weekly_scoped/fable', label: 'Fable', percentUsed: 8, windowSeconds: 604800, resetsAt: new Date(Date.now() + 3 * 86400000).toISOString() },
     ], message: 'Reported by the Claude CLI during the latest job.' },
     ownershipStatus: 'CLAIMED',
     operationalStatus: 'READY',
@@ -110,6 +111,7 @@ export const backends = [
       { id: 'codex/primary', label: 'codex · 300 min', percentUsed: 67, windowSeconds: 18000, resetsAt: new Date(Date.now() + 3600000).toISOString() },
       { id: 'codex/secondary', label: 'codex · 10080 min', percentUsed: 31, windowSeconds: 604800, resetsAt: new Date(Date.now() + 5 * 86400000).toISOString() },
       { id: 'review/primary', label: 'review · 10080 min', percentUsed: 0, windowSeconds: 604800 },
+      { id: 'reserve/secondary', label: 'gpt-reserve · gpt-5.6-luna', percentUsed: 6, windowSeconds: 604800, resetsAt: new Date(Date.now() + 5 * 86400000).toISOString() },
     ], details: { planType: 'plus', credits: { hasCredits: false, unlimited: false } } },
     ownershipStatus: 'CLAIMED',
     operationalStatus: 'READY',

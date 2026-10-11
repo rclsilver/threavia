@@ -102,6 +102,24 @@ Selected by `THREAVIA_AUTH_MODE`:
   an issuer guarantees to be stable and unique.
 
 
+The Web client keeps tokens in memory and renews ahead of expiry, on wake-up and
+before requests. Concurrent renewals share one exchange; a Core 401 gets one
+retry with fresh credentials. Temporary provider/network failures retry without
+restarting sign-in. Refused grants start a new login. A refresh response without
+a replacement refresh token retains the previous one. Editor credentials live
+in SecretStorage and survive temporary renewal failures.
+
+Long sign-in sessions belong to the provider's SSO idle/max settings, rather
+than to long-lived access tokens. In Keycloak, enabling Remember Me lets the
+user choose a persistent login cookie; its own idle/max durations govern that
+choice after a browser closes. Neither client requests offline access.
+
+Registered Web Push subscriptions are independent of the OIDC session. Core
+sends an encrypted payload using its VAPID identity and the worker displays it
+without an API token. Opening the notification still requires authentication.
+Notifications are suppressed while a client reports the user as active, and a
+push service that returns Gone removes the expired subscription.
+
 ## Working directories
 
 A Session may name a KnownDirectory: a logical directory of the Project, such as
