@@ -9,13 +9,15 @@
 # so it is the same bytes for every target architecture.
 FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 
-WORKDIR /web
+WORKDIR /src/web/ui
 
 # The lockfile first, so a source-only change does not reinstall the tree.
 COPY web/ui/package.json web/ui/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 COPY web/ui/ ./
+# Keep the repository layout for helpers shared with the editor client.
+COPY clients/shared/ /src/clients/shared/
 RUN npm run build
 
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
@@ -29,7 +31,7 @@ RUN go mod download
 COPY . .
 # Overwrites whatever the build context carried, so the image always embeds the
 # client this build produced rather than a stale local one.
-COPY --from=web /web/dist ./web/ui/dist
+COPY --from=web /src/web/ui/dist ./web/ui/dist
 
 ARG VERSION=dev
 ARG TARGETOS
