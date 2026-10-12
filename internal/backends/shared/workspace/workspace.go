@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"regexp"
@@ -136,10 +137,28 @@ func treeOf(ctx context.Context, directory string) string {
 		return ""
 	}
 	defer func() { _ = os.Remove(scratch.Name()) }()
-	if current, err := os.ReadFile(strings.TrimSpace(index)); err == nil {
-		_, _ = scratch.Write(current)
+	source, err := os.Open(strings.TrimSpace(index))
+	if err != nil {
+		_ = scratch.Close()
+		return ""
 	}
-	_ = scratch.Close()
+	defer func() { _ = source.Close() }()
+	info, err := source.Stat()
+	if err != nil {
+		_ = scratch.Close()
+		return ""
+	}
+	_, copyErr := io.Copy(scratch, source)
+	closeErr := scratch.Close()
+	if copyErr != nil || closeErr != nil {
+		return ""
+	}
+	// Git uses the index timestamp to detect files whose cached stat data may
+	// hide a same-size edit within one clock tick. A newer copy would make
+	// those entries look clean and let git add skip the changed content.
+	if err := os.Chtimes(scratch.Name(), info.ModTime(), info.ModTime()); err != nil {
+		return ""
+	}
 
 	env := "GIT_INDEX_FILE=" + scratch.Name()
 	if _, err := gitWith(ctx, directory, []string{env}, "add", "--all"); err != nil {

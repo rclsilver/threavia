@@ -1,12 +1,14 @@
 package workspace
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // newRepository builds a real git repository with one committed file. The
@@ -219,5 +221,65 @@ func TestADiffIsServedFromTheTreesOfTheJob(t *testing.T) {
 
 	if _, err := DiffOf(ctx, directory, "not-a-tree", summary.HeadTree, "README.md"); err == nil {
 		t.Error("a diff against something that is not a tree id must be refused")
+	}
+}
+
+// A filesystem or Git configuration with second-level stat precision can
+// leave a same-size edit indistinguishable from the index's cached metadata.
+// Git still detects it using the index timestamp, including on our copy.
+func TestCopiedIndexDoesNotHideSameSizeEdit(t *testing.T) {
+	t.Parallel()
+	directory := newRepository(t)
+	ctx := context.Background()
+	for _, args := range [][]string{
+		{"config", "core.checkstat", "minimal"},
+		{"config", "core.trustctime", "false"},
+	} {
+		if _, err := git(ctx, directory, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stamp := time.Now().Add(-3 * time.Second).Truncate(time.Second)
+	path := filepath.Join(directory, "README.md")
+	if err := os.Chtimes(path, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := git(ctx, directory, "add", "README.md"); err != nil {
+		t.Fatal(err)
+	}
+	index := filepath.Join(directory, ".git", "index")
+	if err := os.Chtimes(index, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	indexBefore, err := os.ReadFile(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := Observe(ctx, directory)
+	write(t, directory, "README.md", "one\nTWO\n")
+	if err := os.Chtimes(path, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	summary := Since(ctx, directory, before)
+	if len(summary.Files) != 1 || summary.Files[0].Path != "README.md" {
+		t.Fatalf("summary = %+v, want the edited file", summary)
+	}
+	diff, err := DiffOf(ctx, directory, summary.BaseTree, summary.HeadTree, "README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(diff.Text, "+TWO") || !strings.Contains(diff.Text, "-two") {
+		t.Fatalf("diff = %q, want the same-size edit", diff.Text)
+	}
+	indexAfter, err := os.ReadFile(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(indexBefore, indexAfter) || !info.ModTime().Equal(stamp) {
+		t.Fatal("capturing the trees must leave the original index and its timestamp alone")
 	}
 }
