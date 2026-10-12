@@ -50,6 +50,7 @@ type Connection struct {
 
 	mu            sync.Mutex
 	lastHeartbeat time.Time
+	reconciled    bool
 	closed        bool
 	reason        CloseReason
 }
@@ -62,6 +63,21 @@ func (c *Connection) BackendInstanceID() domain.BackendInstanceID { return c.ins
 
 // ConnectedAt returns when the connection was established.
 func (c *Connection) ConnectedAt() time.Time { return c.connectedAt }
+
+// Reconciled reports whether the initial backend state has been processed.
+// New Jobs must wait until then: they cannot appear in that earlier report.
+func (c *Connection) Reconciled() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.reconciled && !c.closed
+}
+
+// MarkReconciled allows new work on this lease after its initial state settles.
+func (c *Connection) MarkReconciled() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.reconciled = true
+}
 
 // Done is closed when the connection must stop serving.
 func (c *Connection) Done() <-chan struct{} { return c.done }

@@ -22,6 +22,13 @@ func TestRegisterSupersedesThePreviousConnection(t *testing.T) {
 	if superseded != nil {
 		t.Fatal("the first connection supersedes nothing")
 	}
+	if first.Reconciled() {
+		t.Fatal("a fresh connection must wait for its initial report")
+	}
+	first.MarkReconciled()
+	if !first.Reconciled() {
+		t.Fatal("a reconciled connection must allow dispatch")
+	}
 
 	second, superseded := registry.Register(instanceID)
 	if superseded != first {
@@ -29,6 +36,9 @@ func TestRegisterSupersedesThePreviousConnection(t *testing.T) {
 	}
 	if first.ID() == second.ID() {
 		t.Fatal("each connection must receive its own lease id")
+	}
+	if first.Reconciled() || second.Reconciled() {
+		t.Fatal("a closed lease cannot dispatch, and its successor must reconcile again")
 	}
 
 	select {

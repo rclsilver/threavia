@@ -121,9 +121,8 @@ func TestParkedJobIsNotReleasedOnConnectAlone(t *testing.T) {
 	_ = session
 }
 
-// TestQueuedWorkIsStillReleasedOnConnect keeps the fix from stalling work that
-// was never dispatched anywhere.
-func TestQueuedWorkIsStillReleasedOnConnect(t *testing.T) {
+// Queued work is released once the newly connected backend has reconciled.
+func TestQueuedWorkIsReleasedAfterReconciliation(t *testing.T) {
 	c := newCore(t)
 	backendID, credential := c.registerBackend("laptop")
 
@@ -141,6 +140,39 @@ func TestQueuedWorkIsStillReleasedOnConnect(t *testing.T) {
 	start := receive(t, "the queued job on connection", backend.starts)
 	if start.GetJobId() != started.Job.ID {
 		t.Fatalf("dispatched %s, want %s", start.GetJobId(), started.Job.ID)
+	}
+}
+
+// Force the initial report to arrive after a Session is created. Previously
+// Core dispatched the Job before that report, then dispatched it again because
+// the report could not know about it. Cover work queued before connection too.
+func TestInitialReconciliationPrecedesNewDispatch(t *testing.T) {
+	for _, queuedBeforeConnection := range []bool{false, true} {
+		t.Run(fmt.Sprintf("queuedBeforeConnection=%t", queuedBeforeConnection), func(t *testing.T) {
+			c := newCore(t)
+			project := c.createProject("manager")
+			backendID, credential := c.registerBackend("laptop")
+			gate := make(chan struct{})
+			var session string
+			if queuedBeforeConnection {
+				session = c.startSessionFrom(project, backendID, "web", "Coordinate")
+			}
+			backend := c.connectBackendWithReconcileGate(credential, gate)
+			if !queuedBeforeConnection {
+				session = c.startSessionFrom(project, backendID, "web", "Coordinate")
+			}
+			snapshot := c.snapshot(session)
+			if len(snapshot.Jobs) != 1 || snapshot.Jobs[0].Status != "QUEUED" {
+				t.Fatalf("jobs before reconciliation = %+v, want one queued Job", snapshot.Jobs)
+			}
+			expectNothing(t, "a dispatch before initial reconciliation", backend.starts)
+			close(gate)
+			first := receive(t, "the first start after reconciliation", backend.starts)
+			if first.GetSessionId() != session || first.GetJobId() != snapshot.Jobs[0].ID {
+				t.Fatalf("start = %s/%s, want %s/%s", first.GetSessionId(), first.GetJobId(), session, snapshot.Jobs[0].ID)
+			}
+			expectNothing(t, "a duplicate dispatch after initial reconciliation", backend.starts)
+		})
 	}
 }
 

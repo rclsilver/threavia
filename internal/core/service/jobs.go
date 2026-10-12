@@ -28,7 +28,7 @@ const (
 )
 
 // DispatchJob sends a queued Job to its backend, if that backend is connected
-// and its Run has no active Job.
+// and reconciled and its Run has no active Job.
 //
 // Dispatching is deliberately best-effort and never fails an enqueue: a Job
 // waits in the queue until its backend comes back, and Core re-dispatches on
@@ -56,7 +56,7 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 	}
 
 	conn, ok := s.backends.Lookup(jc.BackendInstanceID)
-	if !ok {
+	if !ok || !conn.Reconciled() {
 		s.logger.Debug("job waits for its backend",
 			slog.String("jobId", string(jobID)),
 			slog.String("backendInstanceId", string(jc.BackendInstanceID)))

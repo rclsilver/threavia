@@ -30,7 +30,7 @@ type dispatchedCommand struct {
 	at    time.Time
 }
 
-// Connected records a backend connection and releases the work waiting on it.
+// Connected records a backend connection. Work waits for its initial report.
 func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstanceID, connectionID string, hello *backendv1.Hello) error {
 	capabilities := make([]domain.Capability, 0, len(hello.GetCapabilities()))
 	for _, capability := range hello.GetCapabilities() {
@@ -64,10 +64,8 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 		}
 	}
 
-	// Only work that has never been dispatched is released here. Anything this
-	// backend may already have run waits for the reconciliation report it sends
-	// next, so Core never runs a Job twice.
-	go s.releaseQueuedWork(context.WithoutCancel(ctx), instanceID)
+	// Even new work waits for reconciliation: a Job dispatched now would be
+	// absent from the initial report and could be mistaken for lost work.
 	return nil
 }
 
@@ -193,6 +191,7 @@ func (s *Service) ReconcileState(ctx context.Context, instanceID domain.BackendI
 	}
 
 	conn, connected := s.backends.Lookup(instanceID)
+	var retry []domain.JobID
 	for _, job := range active {
 		reported, ok := known[job.ID]
 		if !ok {
@@ -204,7 +203,7 @@ func (s *Service) ReconcileState(ctx context.Context, instanceID domain.BackendI
 				!errors.Is(err, postgres.ErrNotFound) {
 				s.logger.Error("cannot requeue a job", slog.String("jobId", string(job.ID)), slog.String("error", err.Error()))
 			}
-			s.DispatchJob(ctx, job.ID)
+			retry = append(retry, job.ID)
 			continue
 		}
 
@@ -269,6 +268,16 @@ func (s *Service) ReconcileState(ctx context.Context, instanceID domain.BackendI
 		if !terminalJobStatus(reported.GetStatus()) {
 			s.replayResolutions(ctx, conn, job)
 		}
+	}
+	if connected {
+		// Only release new work after the whole initial report is reconciled.
+		// Jobs missing from that report are retried explicitly; jobs the backend
+		// still holds remain parked until their events arrive.
+		conn.MarkReconciled()
+		for _, jobID := range retry {
+			s.DispatchJob(ctx, jobID)
+		}
+		go s.releaseQueuedWork(context.WithoutCancel(ctx), instanceID)
 	}
 }
 
@@ -646,8 +655,7 @@ func (s *Service) CommandResult(ctx context.Context, instanceID domain.BackendIn
 	s.dispatchNext(ctx, jc.Run.ID)
 }
 
-// releaseQueuedWork dispatches everything waiting on a backend that just came
-// back.
+// releaseQueuedWork dispatches queued work after the backend's initial report.
 func (s *Service) releaseQueuedWork(ctx context.Context, instanceID domain.BackendInstanceID) {
 	jobs, err := s.store.QueuedJobsForBackend(ctx, instanceID)
 	if err != nil {

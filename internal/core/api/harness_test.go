@@ -169,6 +169,20 @@ type fakeBackend struct {
 	inputs       chan *backendv1.UserInputResolution
 	reconciles   chan *backendv1.ReconcileInstruction
 	acceptStarts bool
+	// Optional barrier before the SDK sends its initial reconciliation report.
+	reconcileGate <-chan struct{}
+}
+
+func (b *fakeBackend) OnConnected(ctx context.Context, _ *backendv1.Welcome) error {
+	if b.reconcileGate == nil {
+		return nil
+	}
+	select {
+	case <-b.reconcileGate:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (b *fakeBackend) OnStartJob(_ context.Context, cmd *backendv1.StartJob) error {
@@ -230,16 +244,21 @@ func (c *core) registerBackend(name string) (id, credential string) {
 // connectBackend starts a fake backend against Core and waits until it holds
 // the connection lease.
 func (c *core) connectBackend(credential string) *fakeBackend {
+	return c.connectBackendWithReconcileGate(credential, nil)
+}
+
+func (c *core) connectBackendWithReconcileGate(credential string, gate <-chan struct{}) *fakeBackend {
 	c.t.Helper()
 
 	backend := &fakeBackend{
-		t:           c.t,
-		starts:      make(chan *backendv1.StartJob, 8),
-		cancels:     make(chan *backendv1.CancelJob, 8),
-		policies:    make(chan *backendv1.UpdateJobPolicy, 8),
-		validations: make(chan *backendv1.ValidationResolution, 8),
-		inputs:      make(chan *backendv1.UserInputResolution, 8),
-		reconciles:  make(chan *backendv1.ReconcileInstruction, 8),
+		t:             c.t,
+		starts:        make(chan *backendv1.StartJob, 8),
+		cancels:       make(chan *backendv1.CancelJob, 8),
+		policies:      make(chan *backendv1.UpdateJobPolicy, 8),
+		validations:   make(chan *backendv1.ValidationResolution, 8),
+		inputs:        make(chan *backendv1.UserInputResolution, 8),
+		reconciles:    make(chan *backendv1.ReconcileInstruction, 8),
+		reconcileGate: gate,
 	}
 
 	cfg := sdkclient.DefaultConfig()
