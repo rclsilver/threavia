@@ -59,6 +59,14 @@ func SystemPrompt(params StartParams, available []string, scratch string) string
 		b.WriteString("in another session or on another machine. The mcp__" + mcp.ServerName)
 		b.WriteString("__ tools read and write it. Search it before assuming work is new, ")
 		b.WriteString("and record what a later session would otherwise have to rediscover.\n")
+		b.WriteString("When the user asks you to remember something (for example, ‘remember’ or ")
+		b.WriteString("‘retiens’), record the durable facts, preferences or decisions with these ")
+		b.WriteString("project memory tools. Threavia project memory takes precedence over ")
+		b.WriteString("provider-native memory: do not create or update local memory files ")
+		b.WriteString("such as MEMORY.md or ~/.claude/projects/*/memory/ for this purpose. ")
+		b.WriteString("If the project memory tools are unavailable or a write fails, tell the user ")
+		b.WriteString("that the information was not saved; do not silently fall back to a local file. ")
+		b.WriteString("For credentials, remember only the file location and purpose, never the secret values.\n")
 
 		// The person reads the conversation, not this machine: a page or a
 		// chart left in a directory is one they never see. The tool that

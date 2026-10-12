@@ -47,6 +47,12 @@ Core restart mid-job, stopped on cancellation, read back the project Skills it
 had been handed and the project instructions it had been given, and worked in a
 directory the backend located and bound on its own.
 
+Requests to remember facts, preferences or decisions use Threavia project
+memory, shared across sessions and backends, through the Core tools. Claude's
+automatic local memory is disabled for each Threavia process, including resumed
+sessions; this does not change the user's Claude settings. Credential references
+retain the file location and purpose, never the secret values.
+
 What is deliberately not implemented, matching the non-goals of section 33:
 
 - the Android and Voice clients: Core is client-agnostic, and the clients

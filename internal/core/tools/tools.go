@@ -96,7 +96,8 @@ func Specs() []Spec {
 		},
 		{
 			Name: NameDecisionCreate,
-			Description: "Record a decision that should outlive this conversation. " +
+			Description: "Record durable facts, preferences and decisions in Threavia project memory. " +
+				"Use this when the user asks you to remember something, instead of writing a local memory file. " +
 				"Mark it IMPORTANT when every future session must know it; IMPORTANT " +
 				"decisions are injected into the context of every later run. " +
 				"Set supersedes when this replaces an earlier decision.",

@@ -522,6 +522,11 @@ func (c *Claude) command(ctx context.Context, params StartParams, scratch, nativ
 
 	cmd := exec.CommandContext(ctx, c.binary, args...)
 	cmd.Dir = params.WorkingDirectory
+	// Threavia owns project memory. Disable Claude's automatic local memory
+	// for this process, including resumed sessions, without changing the user's
+	// settings or the environment of unrelated Claude invocations. The last
+	// value wins even when the service environment explicitly enables it.
+	cmd.Env = append(cmd.Environ(), "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
 	// Its own process group, so cancelling stops the children the provider
 	// spawned too.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

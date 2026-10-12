@@ -239,6 +239,41 @@ OUT
 	}
 }
 
+// The memory switch belongs to the provider process, not the service or the
+// user's settings. Exercise the actual process environment for fresh and
+// resumed sessions, including an inherited value that enables auto-memory.
+func TestRunDisablesNativeMemoryWithoutChangingTheParentEnvironment(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_DISABLE_AUTO_MEMORY", "0")
+	t.Setenv("THREAVIA_MEMORY_TEST_KEEP", "kept")
+
+	for _, mode := range []backendv1.ExecutionMode{
+		backendv1.ExecutionMode_EXECUTION_MODE_INTERACTIVE,
+		backendv1.ExecutionMode_EXECUTION_MODE_GUARDED,
+		backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS,
+		backendv1.ExecutionMode_EXECUTION_MODE_SUPERVISED,
+	} {
+		for _, native := range []string{"", "native-42"} {
+			t.Run(fmt.Sprintf("%s/resume=%t", mode, native != ""), func(t *testing.T) {
+				binary, _ := fakeClaude(t, `printf '{"type":"result","subtype":"success","is_error":false,"result":"%s:%s"}\n' "$CLAUDE_CODE_DISABLE_AUTO_MEMORY" "$THREAVIA_MEMORY_TEST_KEEP"`)
+				sink := &recordingSink{}
+				if err := newRunner(t, binary).Run(context.Background(), runner.StartParams{
+					RunID: "run-1", JobID: "job-1", Prompt: "Retiens cette préférence",
+					WorkingDirectory: t.TempDir(), NativeSessionID: native,
+					Policy: policy.Policy{Mode: mode},
+				}, sink); err != nil {
+					t.Fatal(err)
+				}
+				if sink.summary != "1:kept" {
+					t.Fatalf("provider environment = %q, want disabled memory and inherited environment", sink.summary)
+				}
+			})
+		}
+	}
+	if got := os.Getenv("CLAUDE_CODE_DISABLE_AUTO_MEMORY"); got != "0" {
+		t.Fatalf("the runner changed the parent's memory setting to %q", got)
+	}
+}
+
 // TestRunResumesTheNativeSession pins that a second Job continues the same
 // provider session rather than starting a new one.
 func TestRunResumesTheNativeSession(t *testing.T) {
