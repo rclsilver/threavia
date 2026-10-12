@@ -295,9 +295,13 @@ func TestABackendExplainsItsState(t *testing.T) {
 			Message string `json:"message"`
 		} `json:"conditions"`
 	}
-	waitUntil(t, "the condition to be recorded", func() bool {
+	waitUntil(t, "the reported status and condition to be recorded", func() bool {
 		c.mustDo(http.MethodGet, "/api/v1/backends/"+backendID, nil, &instance, http.StatusOK)
-		return len(instance.Conditions) == 1
+		// Status and conditions are read separately: a response can still
+		// carry STARTING while it already includes the reported condition.
+		return instance.OperationalStatus == "DEGRADED" && len(instance.Conditions) == 1 &&
+			instance.Conditions[0].Type == "ProviderAvailable" &&
+			instance.Conditions[0].Reason == "ExecutableNotFound"
 	})
 
 	if instance.OperationalStatus != "DEGRADED" {
