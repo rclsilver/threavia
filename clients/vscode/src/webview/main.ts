@@ -759,6 +759,7 @@ function renderAttention() {
       cards.delete(id);
     }
   }
+  let previous: HTMLElement | null = null;
   for (const card of wanted) {
     let element = cards.get(card.id);
     if (!element) {
@@ -768,7 +769,11 @@ function renderAttention() {
     // Answered here and still shown: the answer did not land, so it can be
     // given again.
     for (const control of element.querySelectorAll<HTMLButtonElement>('button[data-answer]')) control.disabled = false;
-    attention.append(element);
+    // Moving a connected card blurs its answer field. Leave cards that are
+    // already in order in place when a Session update changes nothing here.
+    const expected: ChildNode | null = previous ? previous.nextSibling : attention.firstChild;
+    if (expected !== element) attention.insertBefore(element, expected);
+    previous = element;
   }
   attention.hidden = wanted.length === 0;
 }
