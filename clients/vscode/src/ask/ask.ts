@@ -36,7 +36,7 @@ export async function askAboutThis(core: Core, several: boolean, uri?: vscode.Ur
   }
 
   try {
-    const project = await pickProject(client, core.projectSetting, title, 'Which Project is this about?');
+    const project = await pickProject(client, core.projectSetting, title, 'Which Project is this about?', core.id);
     if (!project) return;
     const target = await pickSession(client, project, title);
     if (!target) return;

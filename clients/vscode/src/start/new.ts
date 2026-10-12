@@ -19,7 +19,7 @@ export async function chooseNewSession(core: Core, several: boolean, from?: Proj
   const { client } = core;
   const title = several ? `${TITLE} on ${core.name}` : TITLE;
   try {
-    const project = from ?? (await pickProject(client, core.projectSetting, title, 'Which Project does the session work in?'));
+    const project = from ?? (await pickProject(client, core.projectSetting, title, 'Which Project does the session work in?', core.id));
     if (!project) return undefined;
     const backend = await pickBackend(client, title);
     if (!backend) return undefined;

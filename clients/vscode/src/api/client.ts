@@ -21,6 +21,10 @@ import type {
   UserInputRequest,
   ValidationRequest,
 } from './types';
+import type { paths } from './schema';
+
+export type NewProjectBody = paths['/api/v1/projects']['post']['requestBody']['content']['application/json'];
+export type ProjectPatch = paths['/api/v1/projects/{projectId}']['patch']['requestBody']['content']['application/json'];
 
 /** The body of POST /projects/{id}/tasks, as the web client's form sends it. */
 export interface NewTaskBody {
@@ -217,8 +221,20 @@ export class CoreClient {
     return this.get<List<Project>>('/api/v1/projects').then(items);
   }
 
+  project(projectId: string) {
+    return this.get<Project>(`/api/v1/projects/${projectId}`);
+  }
+
+  createProject(body: NewProjectBody) {
+    return this.post<Project>('/api/v1/projects', body);
+  }
+
+  updateProject(projectId: string, patch: ProjectPatch) {
+    return this.patch<Project>(`/api/v1/projects/${projectId}`, patch);
+  }
+
   renameProject(projectId: string, name: string) {
-    return this.patch<Project>(`/api/v1/projects/${projectId}`, { name });
+    return this.updateProject(projectId, { name });
   }
 
   deleteProject(projectId: string) {

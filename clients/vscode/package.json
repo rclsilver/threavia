@@ -127,6 +127,8 @@
     ],
     "commands": [
       { "command": "threavia.open", "title": "Open Threavia", "category": "Threavia" },
+      { "command": "threavia.newProject", "title": "New Project…", "category": "Threavia", "icon": "$(new-folder)" },
+      { "command": "threavia.editProject", "title": "Edit Project…", "category": "Threavia" },
       { "command": "threavia.renameProject", "title": "Rename Project…", "category": "Threavia" },
       { "command": "threavia.deleteProject", "title": "Delete Project…", "category": "Threavia" },
       {
@@ -353,6 +355,10 @@
     ],
     "menus": {
       "commandPalette": [
+        { "command": "threavia.newProject", "when": "threavia.state == ready" },
+        { "command": "threavia.editProject", "when": "threavia.state == ready" },
+        { "command": "threavia.renameProject", "when": "threavia.state == ready" },
+        { "command": "threavia.deleteProject", "when": "threavia.state == ready" },
         {
           "command": "threavia.openSession",
           "when": "false"
@@ -491,6 +497,7 @@
         }
       ],
       "view/title": [
+        { "command": "threavia.newProject", "when": "view == threavia.sidebar && threavia.state == ready", "group": "navigation@2" },
         { "command": "threavia.refresh", "when": "view == threavia.backends", "group": "navigation@1" },
         {
           "command": "threavia.newSession",
@@ -500,7 +507,7 @@
         {
           "command": "threavia.refresh",
           "when": "view == threavia.sidebar",
-          "group": "navigation@2"
+          "group": "navigation@3"
         },
         {
           "command": "threavia.signOut",
@@ -549,7 +556,9 @@
         }
       ],
       "view/item/context": [
-        { "command": "threavia.renameProject", "when": "view == threavia.sidebar && viewItem == project", "group": "2_project@1" },
+        { "command": "threavia.newProject", "when": "view == threavia.sidebar && viewItem =~ /^core\\.ready/", "group": "2_project@1" },
+        { "command": "threavia.editProject", "when": "view == threavia.sidebar && viewItem == project", "group": "2_project@1" },
+        { "command": "threavia.renameProject", "when": "view == threavia.sidebar && viewItem == project", "group": "2_project@2" },
         { "command": "threavia.deleteProject", "when": "view == threavia.sidebar && viewItem == project", "group": "3_remove" },
         {
           "command": "threavia.newSession",

@@ -227,7 +227,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     const cache = this.cache(core.id);
     cache.state = core.state;
     const [projects, pinned] = await Promise.all([this.loadProjects(core), this.loadPinned(core)]);
-    return coreSections(pinned.length, projects, core.projectSetting).map((section): Node => {
+    const nodes = coreSections(pinned.length, projects, core.projectSetting).map((section): Node => {
       switch (section.type) {
         case 'waiting':
           return cache.waiting;
@@ -237,6 +237,12 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
           return { type: 'project', coreId: core.id, project: section.project };
       }
     });
+    if (projects.length === 0) nodes.push({
+      type: 'message', text: 'Create a project…', icon: 'new-folder',
+      parent: this.cores.several ? cache.core : undefined,
+      command: { command: 'threavia.newProject', title: 'New Project', arguments: [core.id] },
+    });
+    return nodes;
   }
 
   private waitingChildren(core: Core): Node[] {

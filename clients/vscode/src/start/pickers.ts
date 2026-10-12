@@ -27,10 +27,12 @@ export async function pickProject(
   setting: string,
   title: string,
   placeHolder: string,
+  coreId?: string,
 ): Promise<Project | undefined> {
   const projects = orderProjects(await client.projects(), setting);
   if (projects.length === 0) {
-    void vscode.window.showInformationMessage('There is no Project yet. Create one in Threavia first.');
+    const choice = await vscode.window.showInformationMessage('There is no Project yet.', 'New Project');
+    if (choice) await vscode.commands.executeCommand('threavia.newProject', coreId);
     return undefined;
   }
   return pick(

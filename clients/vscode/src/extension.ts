@@ -14,6 +14,7 @@ import { createIdentity } from './identity';
 import { CurrentProject } from './knowledge/current';
 import { MemoryView } from './knowledge/memory';
 import { TasksView } from './knowledge/tasks';
+import { ProjectEditors } from './projects/editor';
 import { openInBrowser, runOpenSession, setSessionOpener } from './sessions';
 import { chooseNewSession } from './start/new';
 import { pickProject } from './start/pickers';
@@ -63,6 +64,11 @@ export function activate(context: vscode.ExtensionContext): Threavia {
   const memory = new MemoryView(currentProject, cores);
   const backends = new BackendsView(cores);
   panels.onActiveProject = (coreId, projectId) => currentProject.follow(coreId, projectId);
+  const projectEditors = new ProjectEditors((core, project, created) => {
+    sidebar.reload(core.id);
+    currentProject.reload();
+    if (created) currentProject.follow(core.id, project.id);
+  });
 
   /** A Session's title from what is already known, asking Core only as a last resort. */
   const sessionTitle = async (core: Core, sessionId: string): Promise<string> => {
@@ -94,6 +100,13 @@ export function activate(context: vscode.ExtensionContext): Threavia {
       if (project) currentProject.follow(project.coreId, project.projectId);
     }),
     currentProject,
+    projectEditors,
+    cores.onDidRemove((coreId) => projectEditors.closeCore(coreId)),
+    cores.on('event', (core, event) => {
+      if (event.type === 'project.deleted' && typeof event.payload?.projectId === 'string') {
+        projectEditors.closeProject(core.id, event.payload.projectId);
+      }
+    }),
     tasks,
     memory,
     backends,
@@ -262,25 +275,43 @@ export function activate(context: vscode.ExtensionContext): Threavia {
 
   command('threavia.open', () => vscode.commands.executeCommand('workbench.view.extension.threavia'));
 
-  for (const action of ['rename', 'delete'] as const) {
+  command('threavia.newProject', async (target?: unknown) => {
+    const core = await readyCore('New Project', target);
+    if (core?.ready) projectEditors.open(core);
+  });
+
+  for (const action of ['edit', 'rename', 'delete'] as const) {
     command(`threavia.${action}Project`, async (node?: Node) => {
-      const core = await readyCore(`${action === 'rename' ? 'Rename' : 'Delete'} Project`, node);
-      if (!core) return;
+      const title = `${action === 'edit' ? 'Edit' : action === 'rename' ? 'Rename' : 'Delete'} Project`;
+      const core = await readyCore(title, node);
+      if (!core?.ready) return;
       try {
-        const project = node?.type === 'project' ? node.project : await pickProject(core.client, core.projectSetting, 'Manage Project', 'Which Project?');
+        const project = node?.type === 'project'
+          ? await core.client.project(node.project.id)
+          : await pickProject(core.client, core.projectSetting, title, 'Which Project?', core.id);
         if (!project) return;
+        if (action === 'edit') {
+          projectEditors.open(core, project);
+          return;
+        }
         if (action === 'rename') {
-          const name = await vscode.window.showInputBox({ title: 'Rename Project', value: project.name, prompt: 'The new name appears on all clients.', ignoreFocusOut: true, validateInput: (value) => value.trim() ? undefined : 'Enter a project name.' });
-          if (name === undefined || !name.trim()) return;
+          const name = await vscode.window.showInputBox({
+            title, value: project.name, prompt: 'The new name appears on all clients.', ignoreFocusOut: true,
+            validateInput: (value) => value.trim() ? undefined : 'Enter a project name.',
+          });
+          if (name === undefined || !name.trim() || name.trim() === project.name) return;
           await core.client.renameProject(project.id, name.trim());
         } else {
           const choice = await vscode.window.showWarningMessage(`Permanently delete “${project.name}”?`, { modal: true, detail: 'Deletes its sessions, history, tasks, memory, schedules, skills and artifacts. Backend files and backend instances are kept. Stop all unfinished jobs first.' }, 'Delete permanently');
           if (choice !== 'Delete permanently') return;
           await core.client.deleteProject(project.id);
+          projectEditors.closeProject(core.id, project.id);
         }
         sidebar.reload(core.id);
         currentProject.reload();
-      } catch (error) { failed(error, `Project not ${action === 'rename' ? 'renamed' : 'deleted'}`); }
+      } catch (error) {
+        failed(error, action === 'edit' ? 'Project could not be opened' : `Project not ${action === 'rename' ? 'renamed' : 'deleted'}`);
+      }
     });
   }
 

@@ -15,8 +15,15 @@ from one Threavia Core or from several at once.
   **Threavia: Open Threavia** focuses this dedicated activity-bar container,
   independently of Explorer. Tasks, Memory and Backends start collapsed so
   Sessions can use its height; VS Code keeps your later layout choices.
-  Right-click a Project to rename or permanently delete it. Deletion removes
-  its sessions and Core data, keeps backend files, and refuses unfinished work.
+  Create a Project with the folder-plus button or **Threavia: New Project…**;
+  when several Cores are connected, choose which one owns it (or right-click
+  that Core). Enter its name and optional description in an editor tab. The
+  new Project appears in Sessions and becomes current in Tasks and Memory.
+  Right-click a Project to edit its name, description and multiline instructions,
+  rename it, or permanently delete it. These actions are also in the command
+  palette. The form keeps your input after a failed save so you can retry.
+  Deletion asks for confirmation, removes its sessions and Core data, keeps
+  backend files, and refuses unfinished work.
 - **Backends.** The Backends view identifies Claude and Codex by icon and shows
   every reported quota window, provider status, threshold and reset. Expand a
   quota for its values and provider details. No report is displayed as unknown,

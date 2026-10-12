@@ -142,7 +142,8 @@ export class CurrentProject implements vscode.Disposable {
       }
     }
     if (items.length === 0) {
-      void vscode.window.showInformationMessage('There is no Project yet. Create one in Threavia first.');
+      const choice = await vscode.window.showInformationMessage('There is no Project yet.', 'New Project');
+      if (choice) await vscode.commands.executeCommand('threavia.newProject');
       return;
     }
     const picked = await vscode.window.showQuickPick(items, {
