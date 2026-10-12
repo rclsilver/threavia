@@ -18,7 +18,7 @@ import type { Cores } from '../cores/registry';
 import type { VirtualDocuments } from '../diff/documents';
 import { openFileDiff } from '../diff/open';
 import { markSessionOpen } from '../sessions';
-import { repositoryDescription, repositoryLines, titleOf, waitingBySession } from '../tree/model';
+import { repositoryDescription, titleOf, waitingBySession } from '../tree/model';
 import type { PathResolver } from '../workspace/resolve';
 import { humanise } from './format';
 import { backendTooltip } from './backend';
@@ -245,6 +245,8 @@ class ConversationPanel {
   private backend: BackendInstance | undefined;
   private backendGeneration = 0;
   private repository: Repository | undefined;
+  private fetchingRepository = false;
+  private repositoryError: string | undefined;
   private repositoryWatch: vscode.Disposable | undefined;
   private activity: { kind: string; at: number } | undefined;
   private exhausted = false;
@@ -420,7 +422,9 @@ class ConversationPanel {
       return;
     }
     this.repositoryWatch ??= this.core.repositories.watch(this.sessionId, (value) => {
-      this.repository = value.repo;
+      // Keep the last status while a manual fetch fails, so its panel can
+      // show the error and offer a retry instead of disappearing.
+      if (value.repo || (!this.fetchingRepository && !this.repositoryError)) this.repository = value.repo;
       this.postView();
     });
   }
@@ -470,7 +474,7 @@ class ConversationPanel {
       backendType: this.backend?.backend,
       backendTooltip: this.backend && backendTooltip(this.backend),
       backendQuotas: this.backend?.quotas,
-      repository: repo && text ? { text, tooltip: repositoryLines(repo).join('\n') } : undefined,
+      repository: repo && text ? { text, status: repo, fetching: this.fetchingRepository, error: this.repositoryError } : undefined,
       activity: active?.status === 'RUNNING' && fresh ? humanise(fresh) : undefined,
       pending: pendingJobs(this.jobs),
       active: active && { id: active.id, status: active.status },
@@ -543,6 +547,23 @@ class ConversationPanel {
 
       case 'loadEarlier':
         return this.loadEarlier();
+
+      case 'refreshRepository': {
+        const sessionId = this.sessionId;
+        if (!sessionId || this.fetchingRepository) return;
+        this.fetchingRepository = true;
+        this.repositoryError = undefined;
+        this.postView();
+        try {
+          this.repository = await this.core.repositories.refresh(sessionId, true);
+        } catch (error) {
+          this.repositoryError = reason(error);
+        } finally {
+          this.fetchingRepository = false;
+          this.postView();
+        }
+        return;
+      }
 
       case 'resolvePaths': {
         const resolved: Record<string, boolean> = {};

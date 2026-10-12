@@ -4,6 +4,7 @@ import type { BackendQuotas } from '../api/types';
 import claudeIcon from '../../media/providers/claude.svg';
 import codexIcon from '../../media/providers/codex.png';
 import { quotaPanel } from './quotas';
+import { repositoryPanel } from './repository';
 import type { DraftStart } from '../conversation/draft';
 import type { HostMessage, PersistedState, SessionView, WebviewMessage } from '../conversation/protocol';
 import { riskOf } from '../conversation/risk';
@@ -221,12 +222,26 @@ window.addEventListener('message', (message: MessageEvent<HostMessage>) => {
 
 // ------------------------------------------------------------------ header
 
+let repositoryMetaView: ReturnType<typeof createRepositoryMeta> | undefined;
+
+/** Leave the Git panel in place so reading and fetching do not lose focus. */
+function renderMeta(children: HTMLElement[]) {
+  const keep = new Set(children);
+  for (const child of Array.from(meta.children)) if (!keep.has(child as HTMLElement)) child.remove();
+  let previous: HTMLElement | undefined;
+  for (const child of children) {
+    const next = previous ? previous.nextSibling : meta.firstChild;
+    if (child !== next) meta.insertBefore(child, next);
+    previous = child;
+  }
+}
+
 function renderHeader() {
   if (!view && start) return renderDraftHeader(start);
   if (!view) return;
   title.textContent = view.title;
   const stateIcon = view.status.tone === 'running' ? 'loading' : view.status.tone === 'waiting' ? 'bell-dot' : 'circle-outline';
-  meta.replaceChildren(
+  renderMeta([
     h(
       'span',
       { class: `state tone-${view.status.tone}` },
@@ -234,40 +249,91 @@ function renderHeader() {
       view.status.label,
     ),
     ...(view.backend
-      ? [backendMeta(view.backend, view.backendType, view.backendTooltip, view.backendQuotas)]
+      ? [backendMeta(view.backend, view.backendType, view.backendQuotas)]
       : []),
     ...(view.repository
-      ? [h('span', { class: 'meta-item', title: view.repository.tooltip }, icon('git-branch'), view.repository.text)]
+      ? [repositoryMeta(view.repository)]
       : []),
     ...(view.active && view.activity ? [h('span', { class: 'activity' }, `${view.activity}…`)] : []),
-  );
+  ]);
 }
 
 /** A draft's header: where the first message will go, chosen before it opened. */
 function renderDraftHeader(draft: DraftStart) {
   title.textContent = 'New session';
-  meta.replaceChildren(
+  renderMeta([
     ...(draft.coreName
       ? [h('span', { class: 'meta-item', title: 'The Core the session will be created on' }, icon('cloud'), draft.coreName)]
       : []),
     h('span', { class: 'meta-item', title: 'The Project the session works in' }, icon('project'), draft.projectName),
-    backendMeta(draft.backendName, draft.backendType, draft.backendTooltip, draft.backendQuotas),
+    backendMeta(draft.backendName, draft.backendType, draft.backendQuotas),
     ...(draft.directoryName
       ? [h('span', { class: 'meta-item', title: 'The working directory the agent starts in' }, icon('folder'), draft.directoryName)]
       : []),
-  );
+  ]);
 }
 
 // ---------------------------------------------------------------- timeline
-function backendMeta(name: string, provider?: string, tooltip = 'No quota report received yet.', snapshot?: BackendQuotas) {
+function repositoryMeta(repo: NonNullable<SessionView['repository']>): HTMLDetailsElement {
+  repositoryMetaView ??= createRepositoryMeta();
+  repositoryMetaView.update(repo);
+  return repositoryMetaView.element;
+}
+
+function createRepositoryMeta() {
+  const label = h('span');
+  const summary = h('summary', { class: 'meta-item' }, icon('git-branch'), label);
+  const content = h('div');
+  const error = h('p', { class: 'repository-error', role: 'alert', hidden: true });
+  const refresh = button([], () => {
+    refresh.disabled = true;
+    refresh.replaceChildren(icon('sync', 'codicon-modifier-spin'), 'Asking origin…');
+    element.open = true;
+    post({ type: 'refreshRepository' });
+  }, { class: 'ghost repository-refresh', 'aria-label': 'Refresh from origin' });
+  const element = metaPopover(summary, h('div', { class: 'meta-panel repository-panel' }, content,
+    h('div', { class: 'repository-actions' }, error, refresh)));
+  let signature = '';
+  return { element, update: (repo: NonNullable<SessionView['repository']>) => {
+    label.textContent = repo.text;
+    summary.setAttribute('aria-label', `${repo.text}: show Git status`);
+    const next = JSON.stringify({ ...repo.status, checkedAt: undefined });
+    if (next !== signature) {
+      content.replaceChildren(repositoryPanel(repo.status));
+      signature = next;
+    }
+    const open = element.open;
+    refresh.disabled = repo.fetching === true;
+    element.open = open;
+    refresh.setAttribute('aria-busy', String(repo.fetching === true));
+    refresh.replaceChildren(icon('sync', repo.fetching ? 'codicon-modifier-spin' : ''), repo.fetching ? 'Asking origin…' : 'Refresh from origin');
+    error.textContent = repo.error ? `Not refreshed: ${repo.error}` : '';
+    error.hidden = !repo.error;
+  } };
+}
+
+function backendMeta(name: string, provider?: string, snapshot?: BackendQuotas) {
   const source = provider?.toLowerCase() === 'claude' ? claudeIcon : provider?.toLowerCase() === 'codex' ? codexIcon : undefined;
-  const details = h('details', { class: 'backend-popover' },
-    h('summary', { class: 'meta-item', title: tooltip, 'aria-label': `${name}: show quotas` }, source ? h('img', { src: source, alt: '', class: 'provider-icon' }) : icon('server'), name),
-    h('div', { class: 'quota-panel' }, quotaPanel(snapshot)),
+  return metaPopover(
+    h('summary', { class: 'meta-item', 'aria-label': `${name}: show quotas` }, source ? h('img', { src: source, alt: '', class: 'provider-icon' }) : icon('server'), name),
+    h('div', { class: 'meta-panel quota-panel' }, quotaPanel(snapshot)),
   );
-  details.addEventListener('mouseenter', () => { details.open = true; });
+}
+
+/** Header panels open on hover, keyboard focus or click, within the viewport. */
+function metaPopover(summary: HTMLElement, panel: HTMLElement): HTMLDetailsElement {
+  const details = h('details', { class: 'meta-popover' }, summary, panel);
+  const position = () => {
+    panel.style.left = '0px';
+    const rect = panel.getBoundingClientRect();
+    const offset = Math.max(8 - rect.left, Math.min(0, window.innerWidth - 8 - rect.right));
+    panel.style.left = `${offset}px`;
+  };
+  const open = () => { details.open = true; position(); };
+  details.addEventListener('mouseenter', open);
+  details.addEventListener('toggle', () => { if (details.open) position(); });
   details.addEventListener('mouseleave', () => { if (!details.contains(document.activeElement)) details.open = false; });
-  details.addEventListener('focusin', (event) => { if (event.target instanceof HTMLElement && event.target.matches(':focus-visible')) details.open = true; });
+  details.addEventListener('focusin', (event) => { if (event.target instanceof HTMLElement && event.target.matches(':focus-visible')) open(); });
   details.addEventListener('focusout', (event) => { if (!(event.relatedTarget instanceof Node) || !details.contains(event.relatedTarget)) details.open = false; });
   details.addEventListener('keydown', (event) => { if (event.key === 'Escape') { details.open = false; event.stopPropagation(); } });
   return details;

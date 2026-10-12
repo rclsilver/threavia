@@ -1,4 +1,4 @@
-import type { BackendQuotas, Delivery, Event, JobStatus, UserInputRequest, ValidationRequest } from '../api/types';
+import type { BackendQuotas, Delivery, Event, JobStatus, Repository, UserInputRequest, ValidationRequest } from '../api/types';
 import type { DraftStart } from './draft';
 import type { StateTone } from './state';
 
@@ -20,8 +20,8 @@ export interface SessionView {
   backendType?: string;
   backendTooltip?: string;
   backendQuotas?: BackendQuotas;
-  /** The branch, short (`main ↑1 ●`), and in words for a tooltip. */
-  repository?: { text: string; tooltip: string };
+  /** The compact branch label and the Git status shown in its hover panel. */
+  repository?: { text: string; status: Repository; fetching?: boolean; error?: string };
   /** A liveness signal, shown only while a Job runs. */
   activity?: string;
   /** Every Job still going, so a message can carry its own stop. */
@@ -63,6 +63,7 @@ export type WebviewMessage =
   | { type: 'decide'; id: string; approved: boolean }
   | { type: 'answer'; id: string; value: string }
   | { type: 'loadEarlier' }
+  | { type: 'refreshRepository' }
   | { type: 'resolvePaths'; paths: string[] }
   | { type: 'openPath'; path: string }
   | { type: 'openLink'; href: string }

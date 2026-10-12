@@ -201,10 +201,12 @@ button.ghost:not(:disabled):hover {
 .header-title { display: flex; align-items: center; gap: 8px; }
 .header-title .title { flex: 1; min-width: 0; }
 body.full-width { --reading: 100%; }
-.backend-popover { position: relative; }
-.backend-popover summary { cursor: pointer; list-style: none; }
-.backend-popover summary::-webkit-details-marker { display: none; }
-.quota-panel {
+.meta-popover { position: relative; }
+.meta-popover summary { cursor: pointer; list-style: none; }
+.meta-popover summary::-webkit-details-marker { display: none; }
+.meta-popover summary:hover { color: var(--text); }
+.meta-popover summary:focus-visible { outline: 1px solid var(--focus); outline-offset: 3px; border-radius: 2px; }
+.meta-panel {
   position: absolute; z-index: 10; top: 100%; left: 0;
   width: min(360px, calc(100vw - 40px)); max-height: 60vh; overflow: auto;
   margin: 0; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere;
@@ -213,6 +215,10 @@ body.full-width { --reading: 100%; }
   border: 1px solid var(--vscode-editorHoverWidget-border, var(--border)); border-radius: 4px;
   box-shadow: 0 4px 12px var(--vscode-widget-shadow, transparent);
 }
+.meta-panel::-webkit-scrollbar { width: 8px; height: 8px; }
+.meta-panel::-webkit-scrollbar-track { background: transparent; }
+.meta-panel::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background, var(--border)); border-radius: 4px; }
+.meta-panel::-webkit-scrollbar-thumb:hover { background: var(--vscode-scrollbarSlider-hoverBackground, var(--border)); }
 .title {
   margin: 0;
   font-size: 1.1em;
@@ -1011,6 +1017,27 @@ body.vscode-reduce-motion .codicon-modifier-spin {
 .provider-icon { width: 14px; height: 14px; flex: none; margin-right: 4px; }
 .quota-panel { white-space: normal; font-size: 12px; }
 .quota-panel p { margin: 0; }
+.repository-panel { white-space: normal; font-size: 12px; line-height: 1.5; }
+.repository-panel p { margin: 0; }
+.repository-panel code { font-family: var(--mono); font-size: inherit; }
+.repository-heading { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+.repository-heading strong { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+.repository-facts { display: grid; gap: 6px; margin: 0; }
+.repository-facts > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; }
+.repository-facts dt, .repository-label, .repository-footer { color: var(--muted); }
+.repository-facts dd { margin: 0; }
+.repository-sync { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px; font-variant-numeric: tabular-nums; }
+.repository-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.repository-label { display: block; font-weight: 500; margin-bottom: 6px; }
+.repository-changes { display: flex; flex-wrap: wrap; gap: 6px; font-variant-numeric: tabular-nums; }
+.repository-change { padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; }
+.repository-change.warning, .repository-error { color: var(--warn); }
+.repository-clean { color: var(--text); }
+.repository-footer .repository-error { margin-top: 6px; }
+.repository-directory { display: block; margin-top: 8px; overflow-wrap: anywhere; user-select: text; }
+.repository-actions { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); }
+.repository-refresh { width: 100%; justify-content: flex-start; }
+.repository-actions .repository-error:not([hidden]) { margin-bottom: 8px; }
 .quota-observed, .quota-reset { color: var(--muted); }
 .quota-window { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .quota-heading { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 16px; font-variant-numeric: tabular-nums; }
