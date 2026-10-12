@@ -45,6 +45,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     treeDataProvider: sidebar,
     showCollapseAll: true,
   });
+  sidebar.setVisible(tree.visible);
 
   // The conversation: one webview per Session, with what it opens — diffs,
   // artifacts, files — in the editor's own documents.
@@ -93,6 +94,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     artifactDocuments,
     sidebar,
     tree,
+    tree.onDidChangeVisibility((event) => sidebar.setVisible(event.visible)),
     tree.onDidChangeSelection((event) => {
       const node = event.selection[0];
       sidebar.select(node);

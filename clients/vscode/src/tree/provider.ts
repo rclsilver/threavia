@@ -83,9 +83,8 @@ class CoreCache {
  *
  * Lists are fetched when a node is first shown and kept until the stream says
  * they changed, so expanding and collapsing costs nothing. The repository of a
- * Session is read only when the Session is hovered or selected: asking every
- * backend for git state of fifty Sessions to draw a list is the eager fetch
- * the web client avoids too.
+ * Session is read when hovered or selected, and the selected visible row is
+ * kept current. Only that row is polled, rather than every Session in a list.
  */
 export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Disposable {
   private readonly changed = new vscode.EventEmitter<Node | undefined>();
@@ -93,6 +92,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
 
   private readonly caches = new Map<string, CoreCache>();
   private selected: { coreId: string; sessionId: string } | undefined;
+  private visible = false;
+  private repositoryWatch: vscode.Disposable | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly disposables: vscode.Disposable[] = [];
 
@@ -113,6 +114,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
         } else {
           for (const id of this.caches.keys()) if (!cores.get(id)) this.caches.delete(id);
         }
+        this.watchRepository();
         this.changed.fire(undefined);
       }),
     );
@@ -439,8 +441,28 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
   /** Follows the selection, so the selected Session shows its branch in its row. */
   select(node: Node | undefined) {
     this.selected = node?.type === 'session' ? { coreId: node.coreId, sessionId: node.session.id } : undefined;
+    this.watchRepository();
+  }
+
+  setVisible(visible: boolean) {
+    this.visible = visible;
+    this.watchRepository();
+  }
+
+  private watchRepository() {
+    this.repositoryWatch?.dispose();
+    this.repositoryWatch = undefined;
     const selected = this.selected;
-    if (selected) void this.loadRepository(selected.coreId, selected.sessionId).then(() => this.redraw());
+    if (!this.visible || !selected) return;
+    const core = this.cores.get(selected.coreId);
+    if (!core) return;
+    this.repositoryWatch = core.repositories.watch(selected.sessionId, (value) => {
+      const cache = this.cache(selected.coreId);
+      cache.repositories.set(selected.sessionId, value.repo
+        ? { repo: value.repo, at: Date.now() }
+        : { error: repositoryError(value.error), at: Date.now() });
+      this.redraw();
+    });
   }
 
   private loadRepository(coreId: string, sessionId: string, fetch = false): Promise<void> {
@@ -452,8 +474,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     const loading = cache.loadingRepositories.get(sessionId);
     if (loading && !fetch) return loading;
 
-    const load = core.client
-      .repository(sessionId, fetch)
+    const load = core.repositories
+      .refresh(sessionId, fetch)
       .then((repo) => {
         cache.repositories.set(sessionId, { repo, at: Date.now() });
       })
@@ -474,6 +496,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
   }
 
   dispose() {
+    this.repositoryWatch?.dispose();
     clearTimeout(this.timer);
     this.changed.dispose();
     for (const disposable of this.disposables) disposable.dispose();

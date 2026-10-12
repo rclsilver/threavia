@@ -8,6 +8,7 @@ import { AttentionStore } from '../attention/store';
 import { CoreAuth, type Callbacks } from '../auth/core';
 import { Connection } from '../connection';
 import { Artifacts } from '../conversation/artifacts';
+import { RepositoryMonitor } from '../conversation/repository';
 import type { VirtualDocuments } from '../diff/documents';
 import { Presence } from '../presence';
 import { withCore, type CoreState } from '../tree/model';
@@ -39,6 +40,7 @@ export class Core implements vscode.Disposable {
   readonly presence: Presence;
   readonly connection: Connection;
   readonly artifacts: Artifacts;
+  readonly repositories: RepositoryMonitor;
   private backendList: { at: number; list: Promise<BackendInstance[]> } | undefined;
   private readonly subscriptions: vscode.Disposable[] = [];
 
@@ -75,7 +77,10 @@ export class Core implements vscode.Disposable {
       this.presence,
     );
     this.artifacts = new Artifacts(this.client, deps.artifactDocuments, setting.id);
+    this.repositories = new RepositoryMonitor(this.client, this.bus);
+    this.repositories.setFocused(vscode.window.state.focused);
     this.subscriptions.push(
+      vscode.window.onDidChangeWindowState((state) => this.repositories.setFocused(state.focused)),
       this.bus.on('effect', (effect) => { if (effect.kind === 'backends') this.invalidateBackends(); }),
       this.bus.on('connection', () => this.invalidateBackends()),
     );
@@ -133,6 +138,7 @@ export class Core implements vscode.Disposable {
 
   dispose() {
     for (const subscription of this.subscriptions) subscription.dispose();
+    this.repositories.dispose();
     this.connection.dispose();
     this.presence.dispose();
     this.attention.dispose();

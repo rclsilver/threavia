@@ -167,6 +167,19 @@ An earlier version's `threavia.coreUrl` (and `threavia.project`) becomes the
 first entry of `threavia.cores` on the first start, sign-in included, and is
 not read after that.
 
+## Git status
+
+The conversation header and the selected visible session in the sidebar read
+their repository from the backend every five seconds while VS Code has focus.
+They also refresh when the window regains focus, when work ends and when the
+backend reconnects. A checkout or commit from a terminal therefore appears
+without starting another Job. Hidden conversations stop polling; views of the
+same Session share each read.
+
+These reads do not fetch a remote. Ahead/behind counts compare with the last
+fetched upstream. **Refresh from Origin** fetches it explicitly and updates
+both the sidebar and any open conversation for that Session.
+
 ## Settings
 
 | Setting | What it does |

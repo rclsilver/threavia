@@ -245,6 +245,7 @@ class ConversationPanel {
   private backend: BackendInstance | undefined;
   private backendGeneration = 0;
   private repository: Repository | undefined;
+  private repositoryWatch: vscode.Disposable | undefined;
   private activity: { kind: string; at: number } | undefined;
   private exhausted = false;
   private loadingEarlier = false;
@@ -287,13 +288,13 @@ class ConversationPanel {
       webview.onDidReceiveMessage((message: WebviewMessage) => void this.receive(message)),
       panel.onDidChangeViewState(() => {
         if (this.sessionId) markSessionOpen(this.ref(this.sessionId), panel.visible);
+        this.watchRepository();
       }),
       bus.on('event', (event) => this.onEvent(event)),
       bus.on('effect', (effect) => {
         if (effect.kind === 'backends') void this.loadBackend();
         const id = this.sessionId;
         if (effect.kind === 'snapshot' && id && effect.sessionId === id) this.scheduleReload();
-        if (effect.kind === 'repository' && id && effect.sessionId === id) void this.loadRepository();
       }),
       bus.on('activity', (activity) => {
         if (!this.sessionId || activity.sessionId !== this.sessionId) return;
@@ -313,10 +314,12 @@ class ConversationPanel {
       if (this.sessionId) markSessionOpen(this.ref(this.sessionId), false);
       clearTimeout(this.reloadTimer);
       clearTimeout(this.activityTimer);
+      this.repositoryWatch?.dispose();
       for (const disposable of this.disposables) disposable.dispose();
       onClosed();
     });
     if (this.sessionId) markSessionOpen(this.ref(this.sessionId), panel.visible);
+    this.watchRepository();
     void this.reload();
   }
 
@@ -389,7 +392,6 @@ class ConversationPanel {
       if (this.ready) this.post({ type: 'events', events: this.events, reset: true });
       this.postView();
       void this.loadBackend();
-      if (!this.repository) void this.loadRepository();
     } catch (error) {
       if (!this.loaded && this.ready) {
         this.post({ type: 'failed', message: `This session could not be read: ${reason(error)}` });
@@ -411,14 +413,16 @@ class ConversationPanel {
     }
   }
 
-  private async loadRepository() {
-    if (!this.sessionId) return;
-    try {
-      this.repository = await this.core.client.repository(this.sessionId);
-    } catch {
-      this.repository = undefined;
+  private watchRepository() {
+    if (!this.panel.visible || !this.sessionId) {
+      this.repositoryWatch?.dispose();
+      this.repositoryWatch = undefined;
+      return;
     }
-    this.postView();
+    this.repositoryWatch ??= this.core.repositories.watch(this.sessionId, (value) => {
+      this.repository = value.repo;
+      this.postView();
+    });
   }
 
   private onEvent(event: Event) {
@@ -626,6 +630,7 @@ class ConversationPanel {
   private become(sessionId: string) {
     const draft = this.key;
     this.target = started(this.target, sessionId);
+    this.watchRepository();
     this.post({ type: 'started', sessionId });
     markSessionOpen(this.ref(sessionId), this.panel.visible);
     this.onStarted(draft);
