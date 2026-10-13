@@ -30,7 +30,10 @@ func (s *Service) SetProjectExecutionPolicy(ctx context.Context, identity auth.I
 		return domain.ExecutionPolicy{}, translate(err)
 	}
 
-	effective := domain.Effective(policy, nil, nil)
+	effective, err := s.ProjectExecutionPolicy(ctx, identity, projectID)
+	if err != nil {
+		return domain.ExecutionPolicy{}, err
+	}
 	s.audit(ctx, identity, postgres.AuditEntry{
 		Action:    "execution_policy.set",
 		ProjectID: string(projectID),
@@ -61,7 +64,11 @@ func (s *Service) ProjectExecutionPolicy(ctx context.Context, identity auth.Iden
 	if err != nil {
 		return domain.ExecutionPolicy{}, translate(err)
 	}
-	return domain.Effective(stored, nil, nil), nil
+	instance, err := s.store.InstancePolicy(ctx, identity.UserID)
+	if err != nil {
+		return domain.ExecutionPolicy{}, translate(err)
+	}
+	return domain.Effective(instance, stored), nil
 }
 
 // SetSessionExecutionPolicy sets what the agent may do in a Session by default.

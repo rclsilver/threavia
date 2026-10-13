@@ -22,6 +22,7 @@ export type Attention = Schemas['Attention'];
 export type ValidationRequest = Schemas['ValidationRequest'];
 export type UserInputRequest = Schemas['UserInputRequest'];
 export type ExecutionPolicy = Schemas['ExecutionPolicy'];
+export type PolicyView = Schemas['PolicyView'];
 export type ExecutionMode = Schemas['ExecutionMode'];
 export type PermissionRule = Schemas['PermissionRule'];
 export type PermissionEffect = Schemas['PermissionEffect'];

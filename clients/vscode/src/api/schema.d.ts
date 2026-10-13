@@ -1714,6 +1714,194 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's instance defaults for all projects and backends */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Stored defaults and effective permissions */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PolicyView"];
+                    };
+                };
+            };
+        };
+        /**
+         * Set the caller's instance defaults
+         * @description Account-scoped. Inheritance order is instance, backend, project, session,
+         *     job. The narrowest configured level sets mode, switches, supervision and
+         *     limits. Rules are merged; DENY cannot be lifted below. An empty object
+         *     restores built-in defaults. Changes are sent to running jobs; a provider
+         *     may only apply its native permissions on its next process start.
+         *
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ExecutionPolicy"];
+                };
+            };
+            responses: {
+                /** @description Updated defaults */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PolicyView"];
+                    };
+                };
+                400: components["responses"]["Error"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/backends/{backendId}/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                backendId: components["schemas"]["UUID"];
+            };
+            cookie?: never;
+        };
+        /** Backend permissions and their instance fallback */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    backendId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The permissions */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PolicyView"];
+                    };
+                };
+                404: components["responses"]["Error"];
+            };
+        };
+        /**
+         * Override the instance defaults on a backend
+         * @description An empty object returns to instance inheritance. Does not change the project's own settings.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    backendId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ExecutionPolicy"];
+                };
+            };
+            responses: {
+                /** @description Updated permissions */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PolicyView"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/policy/origin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Project permissions and their instance fallback
+         * @description A project has no backend of its own. Its preview uses the instance
+         *     fallback. Sessions include the backend of their latest run before the
+         *     project's own settings. Job permissions use the job's actual backend.
+         *
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Permissions and inheritance */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PolicyView"];
+                    };
+                };
+                404: components["responses"]["Error"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{projectId}/policy": {
         parameters: {
             query?: never;
@@ -1750,7 +1938,8 @@ export interface paths {
          * Set the default every Session of a Project inherits
          * @description A Session that set nothing of its own follows this from its next Job,
          *     and a Job already running has it pushed. An empty body resets to the
-         *     restrained default.
+         *     instance defaults. When work runs, backend defaults also apply before
+         *     the project's own settings.
          *
          *     The switches are defaults a Session may loosen. A rule here with effect
          *     DENY is not: it is carried into every Session and answered first, so no
@@ -4037,6 +4226,13 @@ export interface components {
             match?: string;
             /** @description Why. Kept for the audit and shown beside the rule, because a rule nobody can explain is a rule nobody dares remove. */
             note?: string;
+        };
+        /** @description A level's own settings, effective permissions and fallback. */
+        PolicyView: {
+            effective: components["schemas"]["ExecutionPolicy"];
+            parent: components["schemas"]["ExecutionPolicy"];
+            inherited: boolean;
+            own?: components["schemas"]["ExecutionPolicy"];
         };
         /** @description What applies to a Session, and where it comes from. */
         SessionPolicy: {

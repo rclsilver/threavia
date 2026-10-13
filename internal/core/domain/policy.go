@@ -253,8 +253,8 @@ func (p ExecutionPolicy) Binding() []PermissionRule {
 	return binding
 }
 
-// Effective returns the policy that applies, from the Project default down to
-// the Job override.
+// Effective returns the policy across levels ordered from broadest to narrowest:
+// instance, backend, project, session, job. A nil level inherits its parent.
 //
 // The mode, the switches and the limits come from the narrowest level that sets
 // one: a Session overrides its Project, a Job overrides its Session. The rules
@@ -263,14 +263,14 @@ func (p ExecutionPolicy) Binding() []PermissionRule {
 // Project stands however the Session is configured, because nothing below can
 // take it out of the set. That is what makes a Project rule a limit rather than
 // a suggestion.
-func Effective(project, session, job *ExecutionPolicy) ExecutionPolicy {
+func Effective(levels ...*ExecutionPolicy) ExecutionPolicy {
 	effective := DefaultExecutionPolicy()
-	for _, level := range []*ExecutionPolicy{project, session, job} {
+	for _, level := range levels {
 		if level != nil {
 			effective = *level
 		}
 	}
-	effective.Rules = MergeRules(project, session, job)
+	effective.Rules = MergeRules(levels...)
 	return effective
 }
 

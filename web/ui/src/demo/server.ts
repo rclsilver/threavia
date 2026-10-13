@@ -33,6 +33,8 @@ const state = {
   schedules: clone(data.schedules) as Json[],
   audit: clone(data.auditEntries) as Json[],
   projectPolicies: clone(data.projectPolicies),
+  instancePolicy: clone(data.instancePolicy) as Json | null,
+  backendPolicies: {} as Record<string, Json | null>,
   sessionPolicies: {} as Record<string, Json | null>,
   pushSubscriptions: clone(data.pushConfig.subscriptions) as Json[],
   files: {} as Record<string, Blob>,
@@ -143,14 +145,24 @@ function snapshot(sessionId: string) {
 
 function effectivePolicy(sessionId: string) {
   const session = sessionOf(sessionId);
-  const project = state.projectPolicies[String(session.projectId)] ?? {};
+  const run = timelineOf(sessionId).runs.at(-1);
+  const backend = defaultPolicyView(state.backendPolicies[String(run?.backendInstanceId)] ?? null, state.instancePolicy).effective;
+  const project = defaultPolicyView(state.projectPolicies[String(session.projectId)] ?? null, backend).effective;
   const own = state.sessionPolicies[sessionId] ?? null;
   return {
-    effective: own ? { ...own, rules: [...((project.rules as unknown[]) ?? []), ...((own.rules as unknown[]) ?? [])] } : project,
+    effective: defaultPolicyView(own, project).effective,
     inherited: !own,
     project,
     ...(own ? { own } : {}),
   };
+}
+
+function defaultPolicyView(own: Json | null, outer: Json | null = null) {
+  const parent = outer ?? { mode: 'INTERACTIVE', allowFilesystemWrite: true, allowGitCommit: true, allowGitPush: false, allowNetwork: true };
+  const rules = [...((parent.rules as Json[]) ?? []), ...((own?.rules as Json[]) ?? [])];
+  const denials = rules.filter((rule) => rule.effect === 'DENY');
+  const merged = rules.filter((rule) => rule.effect === 'DENY' || !denials.some((bound) => bound.capability === rule.capability && (!bound.match || bound.match === rule.match)));
+  return { effective: { ...(own ?? parent), rules: merged }, parent, inherited: !own, ...(own ? { own } : {}) };
 }
 
 function ready(projectId: string) {
@@ -170,6 +182,19 @@ function record(action: string, rest: Json) {
 type Handler = (match: RegExpMatchArray, body: Json, query: URLSearchParams) => unknown;
 
 const routes: [string, RegExp, Handler][] = [
+  ['GET', /^\/api\/v1\/me\/policy$/, () => defaultPolicyView(state.instancePolicy)],
+  ['PUT', /^\/api\/v1\/me\/policy$/, (_m, body) => {
+    state.instancePolicy = body.mode ? body : null;
+    record('execution_policy.instance_set', { detail: body });
+    return defaultPolicyView(state.instancePolicy);
+  }],
+  ['GET', /^\/api\/v1\/backends\/([^/]+)\/policy$/, (m) => defaultPolicyView(state.backendPolicies[m[1]] ?? null, state.instancePolicy)],
+  ['PUT', /^\/api\/v1\/backends\/([^/]+)\/policy$/, (m, body) => {
+    state.backendPolicies[m[1]] = body.mode ? body : null;
+    record('execution_policy.backend_set', { subjectId: m[1], detail: body });
+    return defaultPolicyView(state.backendPolicies[m[1]], state.instancePolicy);
+  }],
+  ['GET', /^\/api\/v1\/projects\/([^/]+)\/policy\/origin$/, (m) => defaultPolicyView(state.projectPolicies[m[1]] ?? null, state.instancePolicy)],
   ['GET', /^\/api\/v1\/me$/, () => data.me],
   ['POST', /^\/api\/v1\/me\/presence$/, () => undefined],
   ['GET', /^\/api\/v1\/me\/attention$/, () => attentionFor()],
@@ -229,11 +254,12 @@ const routes: [string, RegExp, Handler][] = [
     )],
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/directories$/, (m) => list(data.directories.filter((entry) => entry.projectId === m[1]))],
   ['POST', /^\/api\/v1\/projects\/([^/]+)\/directories$/, () => { throw unavailable('Registering a directory'); }],
-  ['GET', /^\/api\/v1\/projects\/([^/]+)\/policy$/, (m) => state.projectPolicies[m[1]] ?? {}],
+  ['GET', /^\/api\/v1\/projects\/([^/]+)\/policy$/, (m) => defaultPolicyView(state.projectPolicies[m[1]] ?? null, state.instancePolicy).effective],
   ['PUT', /^\/api\/v1\/projects\/([^/]+)\/policy$/, (m, body) => {
-    state.projectPolicies[m[1]] = body;
+    if (body.mode) state.projectPolicies[m[1]] = body;
+    else delete state.projectPolicies[m[1]];
     record('execution_policy.set', { projectId: m[1], subjectId: m[1], detail: body });
-    return body;
+    return defaultPolicyView(state.projectPolicies[m[1]] ?? null, state.instancePolicy).effective;
   }],
 
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/tasks\/ready$/, (m) => list(ready(m[1]))],

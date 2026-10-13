@@ -32,7 +32,7 @@ Interface consequence: the person must always see **which machine** is doing **w
 
 - Core runs in the owner's Kubernetes cluster; backends run as a NixOS service under the owner's account on their machines.
 - Core loop: open a Session on a backend and a directory, send a message, watch a live timeline (agent messages, tool calls, file changes), answer validations (permission requests) and questions, stop or redirect the running Job (Queue / Next step / Interrupt), schedule recurring messages.
-- Execution policy modes: INTERACTIVE, GUARDED, SUPERVISED (a reviewer model answers in the user's place), AUTONOMOUS; switches for write, commit, push, network; per-project and per-session rules.
+- Execution policy modes: INTERACTIVE, GUARDED, SUPERVISED (a reviewer model answers in the user's place), AUTONOMOUS; switches for write, commit, push, network; defaults inherited from instance to backend, project, session and job, with explicit refusals retained across levels.
 - Notifications: Web Push to subscribed devices, only when the person is not active on another client.
 - Terminology used in the product and API: Project, Session, Run, Job, Backend (BackendInstance), KnownDirectory, Validation, Question (user input), Policy, Schedule, Artifact, Skill, Decision, Task.
 

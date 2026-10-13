@@ -28,6 +28,7 @@ import {
   useInstallSkill,
   useProject,
   useProjectPolicy,
+  useProjectPolicyOrigin,
   useSkills,
   useUploadArtifact,
   useSetDecisionImportance,
@@ -996,15 +997,19 @@ function comparable(policy: ExecutionPolicy): string {
  */
 function PermissionsPane({ projectId }: { projectId: string }) {
   const { data, error } = useProjectPolicy(projectId);
+  const origin = useProjectPolicyOrigin(projectId);
   const save = useSetProjectPolicy(projectId);
   const [draft, setDraft] = useState<ExecutionPolicy | null>(null);
   const [saved, setSaved] = useState(false);
+  const [overriding, setOverriding] = useState(false);
+  const editing = Boolean(origin.data && (!origin.data.inherited || overriding));
+  const baseline = origin.data?.own ?? (data ? { ...data, rules: [] } : null);
 
   useEffect(() => {
-    if (data) setDraft(data);
-  }, [data]);
+    if (data && origin.data) setDraft(origin.data.own ?? { ...data, rules: [] });
+  }, [data, origin.data]);
 
-  const dirty = Boolean(data && draft && comparable(data) !== comparable(draft));
+  const dirty = Boolean(baseline && draft && (overriding || comparable(baseline) !== comparable(draft)));
 
   useEffect(() => {
     if (!dirty) return;
@@ -1021,13 +1026,13 @@ function PermissionsPane({ projectId }: { projectId: string }) {
 
   const commit = () => {
     if (!draft || !dirty || save.isPending) return;
-    save.mutate(draft, { onSuccess: () => setSaved(true) });
+    save.mutate(draft, { onSuccess: () => { setOverriding(false); setSaved(true); } });
   };
 
-  if (error) {
-    return <ActionError error={error} outcome="The permissions could not be read" recovery="Reload the page." />;
+  if (error || origin.error) {
+    return <ActionError error={error ?? origin.error} outcome="The permissions could not be read" recovery="Reload the page." />;
   }
-  if (!draft) return <p className="text-muted text-sm">Reading the permissions…</p>;
+  if (!draft || !origin.data) return <p className="text-muted text-sm">Reading the permissions…</p>;
 
   const edit = (next: ExecutionPolicy) => {
     setDraft(next);
@@ -1045,13 +1050,20 @@ function PermissionsPane({ projectId }: { projectId: string }) {
         }
       }}
     >
-      <PolicyForm value={draft} onChange={edit} idPrefix="project-policy" />
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-muted">{origin.data.inherited ? 'Following instance and backend defaults.' : 'Set for this project.'} Backend defaults depend on the machine selected for each session.</span>
+        {!editing && <Button size="sm" onClick={() => setOverriding(true)}>Override for this project</Button>}
+        {!origin.data.inherited && <Button size="sm" variant="ghost" disabled={save.isPending} onClick={() => save.mutate(null, { onSuccess: () => { setOverriding(false); setSaved(true); } })}>Follow defaults again</Button>}
+      </div>
+      <PolicyForm value={editing ? draft : origin.data.effective} onChange={edit} idPrefix="project-policy" disabled={!editing} />
 
       <RulesEditor
-        rules={draft.rules ?? []}
+        rules={(editing ? draft.rules : origin.data.effective.rules) ?? []}
         onChange={(rules) => edit({ ...draft, rules })}
+        disabled={!editing}
         note="A refusal written here binds every Session of the Project; the switches above are defaults a Session may loosen, and the audit records it when one does."
       />
+      {editing && (origin.data.parent.rules?.length ?? 0) > 0 && <RulesEditor rules={origin.data.parent.rules ?? []} onChange={() => {}} disabled note="Inherited from the instance; edit them in Settings → Permissions." />}
 
       <p className="text-muted text-xs">
         A guard rail, not a sandbox: files and processes stay within what the backend's own account
@@ -1079,7 +1091,7 @@ function PermissionsPane({ projectId }: { projectId: string }) {
                   A job already running keeps the permissions it started with.
                 </span>
                 <span className="ml-auto flex gap-2">
-                  <Button variant="ghost" size="lg" onClick={() => data && edit(data)}>
+                  <Button variant="ghost" size="lg" onClick={() => { if (baseline) edit(baseline); setOverriding(false); }}>
                     Discard
                   </Button>
                   <Button variant="primary" size="lg" disabled={save.isPending} onClick={commit} title="Save (Ctrl+S)">

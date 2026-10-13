@@ -322,6 +322,27 @@ Everything else is found on demand, which is why the search tools exist at all.
 
 ### ExecutionPolicy
 
+Permissions inherit in this order: instance → the Run's backend → project →
+session → job. Instance defaults belong to the authenticated account, preserving
+the same owner isolation as projects and backends. A level with no stored policy
+follows its parent live; resetting it removes the override instead of copying
+today's defaults. An explicit policy replaces the mode, switches, supervision
+and limits as a whole. Rules from every level are merged, with DENY evaluated
+before ASK and ALLOW, so narrower overrides cannot remove explicit refusals.
+
+`GET/PUT /api/v1/me/policy` manages instance defaults; the corresponding
+`/api/v1/backends/{backendId}/policy` manages backend overrides. Both expose own,
+parent and effective values. A project's `/policy/origin` describes its own
+settings and instance fallback, since the project has no backend of its own.
+Sessions preview their latest Run's backend; a Job always uses its actual Run's
+backend, including after a session moves elsewhere. Changes are pushed to
+running Jobs, though provider-native permissions may wait for the next process.
+
+The web client exposes instance defaults under Settings → Permissions, backend
+overrides beside each backend, and an explicit return to inheritance on projects.
+The VS Code extension consumes the same permissions when it dispatches work;
+editing these defaults remains in the web client.
+
 Section 17 is explicit that a policy is enforced rather than suggested: one
 forbidding a push rejects the push instead of asking the model not to. So the
 policy travels with every dispatched Job and is evaluated in the backend

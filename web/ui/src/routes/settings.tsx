@@ -1,10 +1,11 @@
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Bell, Copy, KeyRound, Monitor, Moon, Server, Sun, Trash2, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Bell, Copy, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
 import { useBackends, useClaimBackend, useIssueBackendToken, useMe, useRevokeBackend } from '@/api/queries';
 import type { BackendInstance } from '@/api/types';
 import { NotificationsPane } from '@/components/notifications-pane';
+import { DefaultPolicyPane } from '@/components/default-policy';
 import { BackendIcon, BackendQuotas } from '@/components/backend-info';
 import { ConfirmLine, RecordList, RecordRow } from '@/components/record-list';
 import { ActionError } from '@/components/ui/action-error';
@@ -20,9 +21,10 @@ import { useWideLayout } from '@/use-layout';
 import { useTheme, type Theme } from '@/use-theme';
 import { useShortcut } from '@/use-shortcut';
 
-export type AccountTab = 'appearance' | 'notifications' | 'backends';
+export type AccountTab = 'appearance' | 'notifications' | 'backends' | 'permissions';
 
 const TABS: { tab: AccountTab; label: string; Icon: LucideIcon; detail: string }[] = [
+  { tab: 'permissions', label: 'Permissions', Icon: ShieldCheck, detail: 'The defaults for all your projects and backends on this instance. Backends, projects and sessions can override them.' },
   { tab: 'appearance', label: 'Appearance', Icon: Monitor, detail: 'How this client looks and lays itself out, on this device.' },
   {
     tab: 'notifications',
@@ -106,6 +108,7 @@ export function SettingsView() {
           {current.tab === 'appearance' && <AppearancePane />}
           {current.tab === 'notifications' && <NotificationsPane />}
           {current.tab === 'backends' && <BackendsPane />}
+          {current.tab === 'permissions' && <DefaultPolicyPane />}
         </div>
       </div>
     </div>
@@ -198,6 +201,7 @@ function BackendsPane() {
 function BackendRow({ backend }: { backend: BackendInstance }) {
   const revoke = useRevokeBackend();
   const [asking, setAsking] = useState(false);
+  const [permissions, setPermissions] = useState(false);
   const revoked = backend.ownershipStatus === 'REVOKED';
 
   return (
@@ -227,6 +231,7 @@ function BackendRow({ backend }: { backend: BackendInstance }) {
         </>
       }
       menuLabel={`More for ${backend.name}`}
+      action={!revoked && <Button size="sm" onClick={() => setPermissions(!permissions)} aria-expanded={permissions}><ShieldCheck /><span>Permissions</span></Button>}
       menu={
         !revoked && (
           <MenuItem className="text-danger" onSelect={() => setAsking(true)}>
@@ -238,6 +243,7 @@ function BackendRow({ backend }: { backend: BackendInstance }) {
       below={
         <div className="space-y-3">
           <BackendQuotas snapshot={backend.quotas} />
+          {permissions && <DefaultPolicyPane backendId={backend.id} />}
           {(asking || revoke.error) && <>
             <ConfirmLine
               question="Revoke its credential? It stops taking work at once."

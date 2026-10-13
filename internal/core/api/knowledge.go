@@ -217,6 +217,11 @@ func (h *handler) searchProject(w http.ResponseWriter, r *http.Request, identity
 }
 
 func (h *handler) registerPolicy(mux *http.ServeMux) {
+	h.handle(mux, "GET /api/v1/me/policy", h.getInstancePolicy)
+	h.handle(mux, "PUT /api/v1/me/policy", h.setInstancePolicy)
+	h.handle(mux, "GET /api/v1/backends/{backendId}/policy", h.getBackendPolicy)
+	h.handle(mux, "PUT /api/v1/backends/{backendId}/policy", h.setBackendPolicy)
+	h.handle(mux, "GET /api/v1/projects/{projectId}/policy/origin", h.getProjectPolicyOrigin)
 	h.handle(mux, "GET /api/v1/projects/{projectId}/policy", h.getProjectPolicy)
 	h.handle(mux, "PUT /api/v1/projects/{projectId}/policy", h.setProjectPolicy)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/policy", h.getPolicy)

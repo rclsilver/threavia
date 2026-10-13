@@ -13,6 +13,7 @@ import type {
   Decision,
   Event,
   ExecutionPolicy,
+  PolicyView,
   PushConfig,
   FileDiff,
   SessionPolicy,
@@ -560,13 +561,44 @@ export function useProjectPolicy(projectId: string | undefined) {
 export function useSetProjectPolicy(projectId: string) {
   const queries = useQueryClient();
   return useMutation({
-    mutationFn: (policy: ExecutionPolicy) =>
-      api.put<ExecutionPolicy>(`/api/v1/projects/${projectId}/policy`, policy),
+    mutationFn: (policy: ExecutionPolicy | null) =>
+      api.put<ExecutionPolicy>(`/api/v1/projects/${projectId}/policy`, policy ?? {}),
     onSuccess: (policy) => {
       queries.setQueryData(keys.projectPolicy(projectId), policy);
+      void queries.invalidateQueries({ queryKey: ['policy-origin'] });
       // Every Session that never overrode it now reads differently.
       void queries.invalidateQueries({ queryKey: ['policy'] });
       void queries.invalidateQueries({ queryKey: keys.audit() });
+    },
+  });
+}
+
+export function useProjectPolicyOrigin(projectId: string) {
+  return useQuery({
+    queryKey: ['policy-origin', projectId],
+    queryFn: () => api.get<PolicyView>(`/api/v1/projects/${projectId}/policy/origin`),
+  });
+}
+
+export function useDefaultPolicy(backendId?: string) {
+  return useQuery({
+    queryKey: ['default-policy', backendId ?? 'instance'],
+    queryFn: () => backendId
+      ? api.get<PolicyView>(`/api/v1/backends/${backendId}/policy`)
+      : api.get<PolicyView>('/api/v1/me/policy'),
+  });
+}
+
+export function useSetDefaultPolicy(backendId?: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (policy: ExecutionPolicy | null) => backendId
+      ? api.put<PolicyView>(`/api/v1/backends/${backendId}/policy`, policy ?? {})
+      : api.put<PolicyView>('/api/v1/me/policy', policy ?? {}),
+    onSuccess: () => {
+      for (const key of ['default-policy', 'policy-origin', 'project-policy', 'policy', 'audit']) {
+        void queries.invalidateQueries({ queryKey: [key] });
+      }
     },
   });
 }

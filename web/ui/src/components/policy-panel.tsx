@@ -50,7 +50,7 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted text-xs">
-          {!editing && 'Following the project. Changing the project changes this session.'}
+          {!editing && 'Following project, backend and instance defaults. Changes there also apply here.'}
           {editing && data.inherited && 'Overriding for this session. Nothing is saved yet.'}
           {editing && !data.inherited && 'Set for this session, apart from the project.'}
         </span>
@@ -76,7 +76,7 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
               save.mutate(null);
             }}
           >
-            Follow the project again
+            Follow defaults again
           </Button>
         )}
       </div>

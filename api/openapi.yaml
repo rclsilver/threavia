@@ -939,6 +939,95 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Session" }
 
+  /api/v1/me/policy:
+    get:
+      tags: [sessions]
+      summary: The caller's instance defaults for all projects and backends
+      responses:
+        "200":
+          description: Stored defaults and effective permissions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyView" }
+    put:
+      tags: [sessions]
+      summary: Set the caller's instance defaults
+      description: |
+        Account-scoped. Inheritance order is instance, backend, project, session,
+        job. The narrowest configured level sets mode, switches, supervision and
+        limits. Rules are merged; DENY cannot be lifted below. An empty object
+        restores built-in defaults. Changes are sent to running jobs; a provider
+        may only apply its native permissions on its next process start.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExecutionPolicy" }
+      responses:
+        "200":
+          description: Updated defaults
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyView" }
+        "400":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/backends/{backendId}/policy:
+    parameters:
+      - name: backendId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    get:
+      tags: [backends]
+      summary: Backend permissions and their instance fallback
+      responses:
+        "200":
+          description: The permissions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyView" }
+        "404":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [backends]
+      summary: Override the instance defaults on a backend
+      description: An empty object returns to instance inheritance. Does not change the project's own settings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExecutionPolicy" }
+      responses:
+        "200":
+          description: Updated permissions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyView" }
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/projects/{projectId}/policy/origin:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      tags: [projects]
+      summary: Project permissions and their instance fallback
+      description: |
+        A project has no backend of its own. Its preview uses the instance
+        fallback. Sessions include the backend of their latest run before the
+        project's own settings. Job permissions use the job's actual backend.
+      responses:
+        "200":
+          description: Permissions and inheritance
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyView" }
+        "404":
+          $ref: "#/components/responses/Error"
+
   /api/v1/projects/{projectId}/policy:
     parameters:
       - $ref: "#/components/parameters/ProjectID"
@@ -957,7 +1046,8 @@ paths:
       description: |
         A Session that set nothing of its own follows this from its next Job,
         and a Job already running has it pushed. An empty body resets to the
-        restrained default.
+        instance defaults. When work runs, backend defaults also apply before
+        the project's own settings.
 
         The switches are defaults a Session may loosen. A rule here with effect
         DENY is not: it is carried into every Session and answered first, so no
@@ -2581,6 +2671,16 @@ components:
           type: string
           maxLength: 512
           description: Why. Kept for the audit and shown beside the rule, because a rule nobody can explain is a rule nobody dares remove.
+
+    PolicyView:
+      type: object
+      description: A level's own settings, effective permissions and fallback.
+      required: [effective, parent, inherited]
+      properties:
+        effective: { $ref: "#/components/schemas/ExecutionPolicy" }
+        parent: { $ref: "#/components/schemas/ExecutionPolicy" }
+        inherited: { type: boolean }
+        own: { $ref: "#/components/schemas/ExecutionPolicy" }
 
     SessionPolicy:
       type: object

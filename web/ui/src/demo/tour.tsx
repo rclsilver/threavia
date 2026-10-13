@@ -156,6 +156,12 @@ const STEPS: Step[] = [
     body: 'The icon identifies Claude or Codex. Every quota window, reset and provider threshold appears here; hover or focus a session’s backend to read the same report. Unknown usage stays unknown.',
   },
   {
+    path: '/settings/permissions',
+    target: '[data-tour="instance-policy"]',
+    title: 'Defaults for the instance',
+    body: 'Set permissions once for all your projects. A backend can override them, then a project or session; explicit refusals stay in force.',
+  },
+  {
     path: SESSION(IDS.backups),
     title: 'Now it is yours',
     body: 'Everything stays clickable: answer the backup question, approve the cert-manager command, file a task, pin a decision. The Demo badge at the top of the sidebar brings the tour back.',

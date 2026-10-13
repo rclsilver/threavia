@@ -481,6 +481,12 @@ export const userInputs = [
 
 // ------------------------------------------------------------------- policy
 
+export const instancePolicy: Record<string, unknown> = {
+  mode: 'GUARDED', allowFilesystemWrite: true, allowGitCommit: true,
+  allowGitPush: false, allowNetwork: true, maxActions: 100,
+  rules: [{ effect: 'DENY', capability: 'SHELL', match: 'kubectl delete namespace *', note: 'Shared infrastructure' }],
+};
+
 export const projectPolicies: Record<string, Record<string, unknown>> = {
   [IDS.homelab]: {
     mode: 'GUARDED',
