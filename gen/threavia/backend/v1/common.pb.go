@@ -642,11 +642,13 @@ func (x *BackendInfo) GetVersion() string {
 // Optional CODE feature flags (spec sections 3.5 and 7). The rest of the CODE
 // semantic contract is mandatory and is not expressed as a flag.
 type FeatureFlags struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	JobInputNow   bool                   `protobuf:"varint,1,opt,name=job_input_now,json=jobInputNow,proto3" json:"job_input_now,omitempty"`
-	JobInputNext  bool                   `protobuf:"varint,2,opt,name=job_input_next,json=jobInputNext,proto3" json:"job_input_next,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	JobInputNow  bool                   `protobuf:"varint,1,opt,name=job_input_now,json=jobInputNow,proto3" json:"job_input_now,omitempty"`
+	JobInputNext bool                   `protobuf:"varint,2,opt,name=job_input_next,json=jobInputNext,proto3" json:"job_input_next,omitempty"`
+	// Understands and forwards StartJob.attachments, including native images.
+	PromptAttachments bool `protobuf:"varint,3,opt,name=prompt_attachments,json=promptAttachments,proto3" json:"prompt_attachments,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *FeatureFlags) Reset() {
@@ -689,6 +691,13 @@ func (x *FeatureFlags) GetJobInputNow() bool {
 func (x *FeatureFlags) GetJobInputNext() bool {
 	if x != nil {
 		return x.JobInputNext
+	}
+	return false
+}
+
+func (x *FeatureFlags) GetPromptAttachments() bool {
+	if x != nil {
+		return x.PromptAttachments
 	}
 	return false
 }
@@ -767,10 +776,11 @@ const file_threavia_backend_v1_common_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\tR\aversion\";\n" +
 	"\vBackendInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"X\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"\x87\x01\n" +
 	"\fFeatureFlags\x12\"\n" +
 	"\rjob_input_now\x18\x01 \x01(\bR\vjobInputNow\x12$\n" +
-	"\x0ejob_input_next\x18\x02 \x01(\bR\fjobInputNext\"5\n" +
+	"\x0ejob_input_next\x18\x02 \x01(\bR\fjobInputNext\x12-\n" +
+	"\x12prompt_attachments\x18\x03 \x01(\bR\x11promptAttachments\"5\n" +
 	"\x05Error\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage*p\n" +

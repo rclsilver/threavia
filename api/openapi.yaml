@@ -555,6 +555,11 @@ paths:
                   type: [string, "null"]
                   format: uuid
                 message: { type: string }
+                artifactIds:
+                  type: array
+                  maxItems: 8
+                  items: { $ref: "#/components/schemas/UUID" }
+                  description: Files from this project attached to the prompt (3 MiB total). Requires QUEUE delivery.
                 nativeSessionId:
                   type: [string, "null"]
                   description: |
@@ -784,6 +789,11 @@ paths:
               required: [message]
               properties:
                 message: { type: string }
+                artifactIds:
+                  type: array
+                  maxItems: 8
+                  items: { $ref: "#/components/schemas/UUID" }
+                  description: Files from this project attached to the prompt (3 MiB total). Requires QUEUE delivery.
                 delivery:
                   type: string
                   enum: [QUEUE, NOW, NEXT]
@@ -2178,7 +2188,9 @@ components:
             - `project.deleted`: `{ projectId }`, owner-scoped without projectId
               in the envelope, so the notification survives the deletion
 
-            - `user.message`: `{ text, delivery?, scheduleId?, actorJobId? }`, delivery NOW or
+            - `artifact.deleted`: `{ artifactId }`, project-scoped metadata removal
+            - `user.message`: `{ text, attachments?, delivery?, scheduleId?, actorJobId? }`,
+              attachments are `{ artifactId, filename, mimeType, size }` references; delivery NOW or
               NEXT for a message that joined a Job already running, scheduleId
               for one a Schedule sent, actorJobId for an agent manager's message
             - `session.created`: `{ title, workingDirectoryId?, managerSessionId? }`,
@@ -2197,7 +2209,7 @@ components:
               deletions, directory?, baseTree?, headTree? }`, the last three
               present when the diff of a file can be asked for
             - `artifact.created`: `{ artifactId, filename, mimeType, size,
-              title? }`, a file the agent published for the person to open
+              title? }`, a file uploaded (Project scope) or published by an agent (Session scope)
             - `validation.resolved`: `{ validationId, approved, note, title, actorJobId? }`, title
               naming what was decided
 

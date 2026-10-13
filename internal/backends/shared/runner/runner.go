@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
+
 	"github.com/rclsilver/threavia/internal/backends/shared/mcp"
 	"github.com/rclsilver/threavia/internal/backends/shared/policy"
 )
@@ -35,6 +37,7 @@ type StartParams struct {
 	// real OS permissions.
 	WorkingDirectory string
 	Prompt           string
+	Attachments      []*backendv1.PromptAttachment
 	// ProjectName and ProjectDescription come from the compact ProjectContext
 	// Core builds at Job start.
 	ProjectName        string

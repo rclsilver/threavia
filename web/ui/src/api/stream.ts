@@ -284,6 +284,7 @@ export class EventStream {
 
       // An agent published a file: the project's list has one more.
       case 'artifact.created':
+      case 'artifact.deleted':
         void this.queries.invalidateQueries({ queryKey: ['artifacts'] });
         break;
 

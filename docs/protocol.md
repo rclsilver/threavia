@@ -222,3 +222,31 @@ that does not implement them answers with an `UNSUPPORTED` error.
 `ProtocolVersion` is declared in `common.proto` and is the single source of truth
 for both sides. Protobuf compatibility is preserved: fields are added, never
 renumbered or repurposed. `make proto-breaking` checks this against the default branch.
+
+## Prompt attachments
+
+A backend that accepts attached files announces `FeatureFlags.prompt_attachments`
+(`PROMPT_ATTACHMENTS` in the HTTP backend metadata). Core refuses attachment
+messages on an older backend, rather than letting it silently ignore the files.
+
+The HTTP start and message routes accept `artifactIds`: at most eight distinct
+artifacts owned by the caller, from the same Project, totalling at most 3 MiB.
+They require QUEUE delivery; text may be empty when files are present. The
+`user.message` event keeps an `attachments` array of
+`{ artifactId, filename, mimeType, size }` references. The bytes remain in object
+storage and are fetched again when queued work is dispatched or replayed.
+
+`StartJob.attachments` carries `PromptAttachment` entries with artifact id,
+filename, MIME type and raw content. The total bound leaves room under the
+default gRPC receive limit for the prompt and Project context. Backends place
+files in their readable Run scratch directory and append their paths to the
+prompt. Claude and Codex also receive PNG, JPEG, GIF and WebP as native image
+content in the initial user message. Other media remain files for the agent's
+available tools. A deleted attachment fails queued work explicitly.
+
+User uploads emit a Project-scoped `artifact.created`, without adding a second
+card to the conversation. Agent publications keep their existing Session-scoped
+event. Removal emits Project-scoped `artifact.deleted` with `{ artifactId }`, so
+all clients refresh their artifact lists. Downloads still use authenticated
+attachment responses; clients render fetched bytes locally with their media
+MIME type, and generated HTML stays isolated from the conversation.

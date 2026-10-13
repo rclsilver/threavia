@@ -25,6 +25,7 @@ export type Effect =
   | { kind: 'tasks'; projectId?: string }
   /** A Project's Decisions changed; without a Project, any list may be stale. */
   | { kind: 'decisions'; projectId?: string }
+  | { kind: 'artifacts'; projectId?: string }
   | { kind: 'backends' }
   | { kind: 'projects' };
 
@@ -34,6 +35,9 @@ export const JOB_ENDED_FRESH_FOR = 2 * 60_000;
 export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
   const sessionId = event.sessionId ?? '';
   switch (event.type) {
+    case 'artifact.created':
+    case 'artifact.deleted':
+      return [{ kind: 'artifacts', projectId: event.projectId }];
     case 'backend.registered':
     case 'backend.revoked':
     case 'backend.quotas_updated':

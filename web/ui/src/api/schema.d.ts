@@ -1014,6 +1014,8 @@ export interface paths {
                         /** Format: uuid */
                         workingDirectoryId?: string | null;
                         message: string;
+                        /** @description Files from this project attached to the prompt (3 MiB total). Requires QUEUE delivery. */
+                        artifactIds?: components["schemas"]["UUID"][];
                         /** @description Adopts a provider session that already exists on the chosen
                          *     backend, such as one started in a terminal. The first Job
                          *     resumes it instead of opening a fresh one. The backend can
@@ -1393,6 +1395,8 @@ export interface paths {
                 content: {
                     "application/json": {
                         message: string;
+                        /** @description Files from this project attached to the prompt (3 MiB total). Requires QUEUE delivery. */
+                        artifactIds?: components["schemas"]["UUID"][];
                         /**
                          * @description How the message reaches a Session that is already working
                          *     (spec section 3.5). QUEUE makes it a Job of its own, started
@@ -3718,7 +3722,9 @@ export interface components {
              *     - `project.deleted`: `{ projectId }`, owner-scoped without projectId
              *       in the envelope, so the notification survives the deletion
              *
-             *     - `user.message`: `{ text, delivery?, scheduleId?, actorJobId? }`, delivery NOW or
+             *     - `artifact.deleted`: `{ artifactId }`, project-scoped metadata removal
+             *     - `user.message`: `{ text, attachments?, delivery?, scheduleId?, actorJobId? }`,
+             *       attachments are `{ artifactId, filename, mimeType, size }` references; delivery NOW or
              *       NEXT for a message that joined a Job already running, scheduleId
              *       for one a Schedule sent, actorJobId for an agent manager's message
              *     - `session.created`: `{ title, workingDirectoryId?, managerSessionId? }`,
@@ -3737,7 +3743,7 @@ export interface components {
              *       deletions, directory?, baseTree?, headTree? }`, the last three
              *       present when the diff of a file can be asked for
              *     - `artifact.created`: `{ artifactId, filename, mimeType, size,
-             *       title? }`, a file the agent published for the person to open
+             *       title? }`, a file uploaded (Project scope) or published by an agent (Session scope)
              *     - `validation.resolved`: `{ validationId, approved, note, title, actorJobId? }`, title
              *       naming what was decided
              *      */

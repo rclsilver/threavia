@@ -1,3 +1,4 @@
+import { mediaType } from '../../../shared/media';
 import * as vscode from 'vscode';
 
 import type { CoreClient } from '../api/client';
@@ -43,12 +44,11 @@ export class Artifacts {
       enableScripts: kind === 'html',
       localResourceRoots: [],
     });
-    if (kind === 'image') {
-      const type = artifact.mimeType.startsWith('image/')
-        ? artifact.mimeType
-        : artifact.filename.endsWith('.svg')
-          ? 'image/svg+xml'
-          : 'image/png';
+    if (kind === 'audio' || kind === 'video') {
+      const type = mediaType(artifact.mimeType, artifact.filename);
+      panel.webview.html = mediaPage(title, kind, `data:${type};base64,${Buffer.from(bytes).toString('base64')}`);
+    } else if (kind === 'image') {
+      const type = mediaType(artifact.mimeType, artifact.filename);
       panel.webview.html = imagePage(title, `data:${type};base64,${Buffer.from(bytes).toString('base64')}`);
     } else {
       panel.webview.html = sandboxed(new TextDecoder().decode(bytes));
@@ -98,7 +98,7 @@ function imagePage(title: string, source: string): string {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline';">
 <title>${escape(title)}</title>
 <style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--vscode-editor-background)}img{max-width:100%;max-height:100vh;object-fit:contain}</style>
-</head><body><img src="${source}" alt="${escape(title)}"></body></html>`;
+</head><body><img src="${escape(source)}" alt="${escape(title)}"></body></html>`;
 }
 
 /**
@@ -109,4 +109,8 @@ function imagePage(title: string, source: string): string {
 function sandboxed(html: string): string {
   const policy = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; media-src data: blob:; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">`;
   return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (head) => `${head}${policy}`) : `${policy}${html}`;
+}
+
+function mediaPage(title: string, kind: 'audio' | 'video', source: string): string {
+ return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; media-src data:; style-src 'unsafe-inline';"><title>${escape(title)}</title><style>body{background:var(--vscode-editor-background);color:var(--vscode-editor-foreground)}audio,video{width:100%;max-height:90vh}</style></head><body><h1>${escape(title)}</h1><${kind} controls preload="metadata" src="${escape(source)}"></${kind}></body></html>`;
 }

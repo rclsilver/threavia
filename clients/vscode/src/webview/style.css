@@ -1046,3 +1046,11 @@ body.vscode-reduce-motion .codicon-modifier-spin {
 .quota-progress::-webkit-progress-value { background: var(--vscode-progressBar-background); }
 .quota-progress.warning::-webkit-progress-value { background: var(--vscode-editorWarning-foreground); }
 .quota-progress.exhausted::-webkit-progress-value { background: var(--vscode-editorError-foreground); }
+
+.media-preview { width: 100%; flex-basis: 100%; order: 1; }
+.media-preview img, .media-preview video { max-width: 100%; max-height: 320px; object-fit: contain; }
+.media-preview audio { width: 100%; }
+.image-preview { padding: 0; border: 0; background: transparent; cursor: zoom-in; }
+.card.artifact { flex-wrap: wrap; }
+.attachment-list { padding: 0 8px; }
+.attached-file { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

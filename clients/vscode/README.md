@@ -61,8 +61,20 @@ from one Threavia Core or from several at once.
     workspace has it on either side of the change, the changed regions
     otherwise, and the raw diff when no comparison is possible (a binary file,
     a diff cut short).
-  - **Artifacts.** Open shows an image or a page in a tab of its own, and text
-    as a read-only document; Save as… downloads it.
+  - **Media in prompts.** Paste an image or use **Attach files** in a new or
+    existing conversation. Remove a file before sending if needed. Up to eight
+    files, totalling 3 MiB, go with a queued message; a file-only prompt works
+    too. An unsuccessful send keeps the text and attachments for retry.
+    PNG, JPEG, GIF and WebP reach Claude and Codex as native visual input;
+    other files are placed in the agent's readable scratch directory.
+  - **Artifacts.** Images appear in the conversation and open at full size.
+    Audio and video have native playback controls. Open shows a media file or
+    page in its own tab, and text as a read-only document; Save as… downloads it.
+    Playback depends on the formats supported by VS Code's embedded browser.
+  - **Artifacts view.** The collapsed **Artifacts** sidebar follows the same
+    Project as Tasks and Memory. Open, save or delete a row, upload files from
+    its title bar, refresh, or switch Project. It shows the latest 200 files.
+    Deleting an artifact also removes its conversation previews.
   - Panels come back after a reload of the window.
 - **New session.** The **+** on a Project in the sidebar, in the view's title
   bar, or **Threavia: New Session** asks for the Project (unless you started

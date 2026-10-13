@@ -33,6 +33,7 @@ export function conversationPage(options: PageOptions): string {
     `style-src ${options.cspSource}`,
     `font-src ${options.cspSource}`,
     `img-src ${options.cspSource} data:`,
+    'media-src data:',
     `script-src 'nonce-${options.nonce}'`,
   ].join('; ');
   return `<!DOCTYPE html>

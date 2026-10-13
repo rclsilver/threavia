@@ -3,6 +3,7 @@ package runner
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -119,10 +120,20 @@ func (c *Claude) Inject(jobID, text string, interrupt bool) error {
 
 // writeUserMessage writes one user message in the provider's stream-json input
 // format.
-func writeUserMessage(stdin io.Writer, text string) error {
+func writeUserMessage(stdin io.Writer, text string, attachments ...*backendv1.PromptAttachment) error {
+	var content any = text
+	if len(attachments) > 0 {
+		blocks := []any{map[string]any{"type": "text", "text": text}}
+		for _, attachment := range attachments {
+			if runner.IsVisualAttachment(attachment) {
+				blocks = append(blocks, map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": attachment.GetMimeType(), "data": base64.StdEncoding.EncodeToString(attachment.GetContent())}})
+			}
+		}
+		content = blocks
+	}
 	line, err := json.Marshal(map[string]any{
 		"type":    "user",
-		"message": map[string]any{"role": "user", "content": text},
+		"message": map[string]any{"role": "user", "content": content},
 	})
 	if err != nil {
 		return err
@@ -269,6 +280,9 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "INTERNAL", err.Error(), nil)
 	}
 	scratch := c.scratchFor(params.RunID)
+	if err := runner.PrepareAttachments(&params, scratch); err != nil {
+		return sink.JobFailed(ctx, params.RunID, params.JobID, "ATTACHMENT_ERROR", err.Error(), nil)
+	}
 	mcpConfigPath, removeConfig, err := writeMCPConfig(scratch, mcpConfig)
 	if err != nil {
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "INTERNAL", err.Error(), nil)
@@ -331,7 +345,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	if err := cmd.Start(); err != nil {
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "SPAWN_FAILED", err.Error(), nil)
 	}
-	if err := writeUserMessage(stdin, supervised(params.Policy, params.Prompt)); err != nil {
+	if err := writeUserMessage(stdin, supervised(params.Policy, params.Prompt), params.Attachments...); err != nil {
 		c.logger.Error("cannot hand the message to the provider", slog.String("error", err.Error()))
 	}
 	c.mu.Lock()

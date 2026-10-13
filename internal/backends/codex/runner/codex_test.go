@@ -355,6 +355,17 @@ func TestProviderProcess(t *testing.T) {
 				notify("turn/completed", map[string]any{"threadId": id, "turn": map[string]any{"id": "helper-turn", "status": "completed"}})
 				continue
 			}
+			if scenario == "attachments" {
+				input, _ := p["input"].([]any)
+				if len(input) != 2 {
+					os.Exit(31)
+				}
+				image, _ := input[1].(map[string]any)
+				message, _ := input[0].(map[string]any)
+				if image["type"] != "image" || image["url"] != "data:image/png;base64,AAEC" || !strings.Contains(str(message, "text"), "attachments") {
+					os.Exit(32)
+				}
+			}
 			if strings.HasPrefix(scenario, "supervised") {
 				input, _ := p["input"].([]any)
 				message, _ := input[0].(map[string]any)
@@ -727,5 +738,18 @@ func TestProviderAuthentication(t *testing.T) {
 				t.Fatalf("API-key login failed: %+v", sink)
 			}
 		})
+	}
+}
+
+func TestNativePromptAttachment(t *testing.T) {
+	c, p, sink := provider(t, "attachments")
+	p.Attachments = []*backendv1.PromptAttachment{{Filename: "image.png", MimeType: "image/png", Content: []byte{0, 1, 2}}}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := c.Run(ctx, p, sink); err != nil {
+		t.Fatal(err)
+	}
+	if sink.code != "" || !strings.Contains(strings.Join(sink.events, ","), "completed") {
+		t.Fatalf("image prompt did not complete: %#v", sink)
 	}
 }

@@ -71,6 +71,12 @@ const asked = new Set<string>();
  * no Session to add to, and a second message must not start a second one.
  */
 let starting = false;
+let sendingMessage = false;
+let attaching = 0;
+let reservedBytes = 0;
+let attachments = saved.attachments ?? [];
+const media = new Map<string, { source?: string; error?: string }>();
+const mediaAsked = new Set<string>();
 let fullWidth = saved.fullWidth === true;
 document.body.classList.toggle('full-width', fullWidth);
 
@@ -80,6 +86,7 @@ function persist() {
     sessionId,
     start,
     draft: field.value,
+    attachments,
     delivery,
     fullWidth,
     opened: [...opened],
@@ -118,12 +125,16 @@ const field = h('textarea', { rows: 1, 'aria-label': 'Message', class: 'field' }
 field.value = saved.draft ?? '';
 const send = button(icon('send'), () => submit(), { class: 'send icon-button', title: 'Send (Enter)', 'aria-label': 'Send' });
 const toolbar = h('div', { class: 'toolbar' });
+const attachmentList = h('div', { class: 'attachment-list' });
+const filePicker = h('input', { type: 'file', multiple: true, hidden: true });
+filePicker.addEventListener('change', () => { void addFiles(Array.from(filePicker.files ?? [])); filePicker.value = ''; });
+const attachButton = button([icon('attach'), 'Attach files'], () => filePicker.click(), { class: 'ghost small' });
 const sendError = h('p', { class: 'error', role: 'alert', hidden: true });
 const hint = h('p', { class: 'hint' });
 const composer = h(
   'form',
   { class: 'composer' },
-  h('div', { class: 'panel' }, h('div', { class: 'field-row' }, field, send), toolbar),
+  h('div', { class: 'panel' }, attachmentList, filePicker, attachButton, h('div', { class: 'field-row' }, field, send), toolbar),
   sendError,
   hint,
 );
@@ -190,22 +201,44 @@ window.addEventListener('message', (message: MessageEvent<HostMessage>) => {
       for (const [path, exists] of Object.entries(data.resolved)) resolved.set(path, exists);
       linkPaths(document.body);
       break;
+    case 'attached':
+      attaching = Math.max(0, attaching - 1);
+      attachments.push(data.artifact);
+      renderAttachments();
+      break;
+    case 'attachFailed':
+      attaching = Math.max(0, attaching - 1);
+      sendError.textContent = `Not attached: ${data.error}`;
+      sendError.hidden = false;
+      renderAttachments();
+      break;
+    case 'media':
+      media.set(data.artifactId, data);
+      for (const element of document.querySelectorAll<HTMLElement>('[data-media-id]')) {
+        if (element.dataset.mediaId === data.artifactId) fillMedia(element, data.artifactId);
+      }
+      break;
     case 'sent':
       starting = false;
+      sendingMessage = false;
+      attachments = [];
+      renderAttachments();
       delivery = 'QUEUE';
       sendError.hidden = true;
-      send.disabled = !field.value.trim();
+      updateSend();
       renderComposer();
       persist();
       break;
     case 'sendFailed':
       starting = false;
+      sendingMessage = false;
+      renderAttachments();
       // The text goes back in the field, so nothing typed is lost.
       if (!field.value.trim()) field.value = data.text;
       sendError.textContent = `Not sent: ${data.error} Your message is still in the field; send it again.`;
       sendError.hidden = false;
       autosize();
-      send.disabled = !field.value.trim();
+      updateSend();
       persist();
       break;
     case 'answered': {
@@ -506,6 +539,7 @@ function eventEntry(event: Event, startedAt?: string): HTMLElement {
           ),
       ),
       h('p', { class: 'message-text' }, user.text),
+      ...(user.attachments ?? []).map(artifactCard),
       event.jobId && status && stopControl(event.jobId, status),
     );
   }
@@ -649,6 +683,7 @@ function artifactCard(artifact: NonNullable<ReturnType<typeof payloadOf<'artifac
   return h(
     'div',
     { class: 'card artifact' },
+    ['image', 'audio', 'video'].includes(kind) && mediaPreview(ref.artifactId, kind, artifact.filename, artifact.mimeType),
     icon(kindIcon, 'muted'),
     h(
       'div',
@@ -1041,9 +1076,11 @@ function stop() {
 
 function submit() {
   const text = field.value.trim();
-  if (!text || starting) return;
+  if ((!text && !attachments.length) || starting || sendingMessage || attaching) return;
   starting = Boolean(start);
-  post({ type: 'send', text, delivery: view?.active ? chosen() : 'QUEUE' });
+  sendingMessage = true;
+  post({ type: 'send', text, delivery: attachments.length ? 'QUEUE' : view?.active ? chosen() : 'QUEUE', artifactIds: attachments.map((file) => file.artifactId) });
+  renderAttachments();
   field.value = '';
   sendError.hidden = true;
   autosize();
@@ -1059,7 +1096,7 @@ function autosize() {
 
 field.addEventListener('input', () => {
   autosize();
-  send.disabled = !field.value.trim();
+  updateSend();
   persist();
 });
 field.addEventListener('keydown', (event) => {
@@ -1095,7 +1132,7 @@ function focusComposer(event: MouseEvent) {
 // ------------------------------------------------------------------ start
 
 autosize();
-send.disabled = !field.value.trim();
+updateSend();
 renderComposer();
 // A draft restored after a reload is drawn from its own state at once; a
 // Session waits for the extension to read it.
@@ -1106,3 +1143,59 @@ if (start) {
   append(list, [h('p', { class: 'empty' }, 'Loading…')]);
 }
 post({ type: 'ready' });
+
+function updateSend() { send.disabled = starting || sendingMessage || attaching > 0 || (!field.value.trim() && attachments.length === 0); }
+function renderAttachments() {
+  if (attaching === 0) reservedBytes = 0;
+  attachmentList.replaceChildren(...attachments.map((file) => h('div', {class: 'attached-file'},
+    h('span', {}, file.filename + ' · ' + bytes(file.size)),
+    button(icon('close'), () => { attachments = attachments.filter((item) => item.artifactId !== file.artifactId); renderAttachments(); }, {class:'icon-button', disabled: sendingMessage, 'aria-label': 'Remove ' + file.filename}))),
+    ...(attaching ? [h('p', {}, 'Attaching…')] : []),
+    ...(attachments.length ? [h('p', { class: 'muted small' }, 'Files will be sent as a new queued message.')] : []));
+  attachButton.disabled = sendingMessage || attaching > 0;
+  updateSend(); persist();
+}
+async function addFiles(files: File[]) {
+  if (sendingMessage || starting || attaching) return;
+  const size = files.reduce((sum, file) => sum + file.size, 0);
+  if (attachments.length + files.length > 8 || size + reservedBytes + attachments.reduce((sum, file) => sum + file.size, 0) > 3 * 1024 * 1024) {
+    sendError.textContent = 'Attach up to 8 files, totalling at most 3 MiB.'; sendError.hidden = false; return;
+  }
+  attaching += files.length; reservedBytes += size; renderAttachments();
+  for (const file of files) {
+    try {
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result.split(',')[1]) : reject(new Error('File could not be read.'));
+        reader.onerror = () => reject(new Error('File could not be read.'));
+        reader.readAsDataURL(file);
+      });
+      post({type:'attach', filename:file.name, mimeType:file.type, content});
+    } catch (error) { attaching = Math.max(0, attaching - 1); sendError.textContent = String(error); sendError.hidden = false; renderAttachments(); }
+  }
+}
+field.addEventListener('paste', (event) => {
+  const files = Array.from(event.clipboardData?.files ?? []);
+  if (files.length) { event.preventDefault(); void addFiles(files); }
+});
+function mediaPreview(id: string, kind: string, filename: string, mimeType: string) {
+  const element = h('div', {'data-media-id':id, 'data-media-kind':kind, 'data-media-name':filename, 'data-media-mime':mimeType, class:'media-preview'});
+  fillMedia(element, id);
+  if (!mediaAsked.has(id)) { mediaAsked.add(id); post({type:'loadMedia', artifactId:id}); }
+  return element;
+}
+function fillMedia(element: HTMLElement, id: string) {
+  const content = media.get(id);
+  if (content?.source) {
+    const kind = element.dataset.mediaKind;
+    if (kind === 'image') {
+      const img = h('img', {src:content.source, alt:element.dataset.mediaName});
+      element.replaceChildren(button(img, () => post({type:'openArtifact', artifactId:id, filename:element.dataset.mediaName ?? '', mimeType:element.dataset.mediaMime ?? ''}), {class:'image-preview', 'aria-label': 'Open image'}));
+    } else {
+      element.replaceChildren(h(kind === 'audio' ? 'audio' : 'video', {src:content.source, controls:true, preload:'metadata', 'aria-label':element.dataset.mediaName}));
+    }
+  } else if (content?.error) {
+    element.replaceChildren(h('p', {class:'error'}, content.error), button('Try again', () => { media.delete(id); post({type:'loadMedia', artifactId:id}); }));
+  } else element.textContent = 'Loading preview…';
+}
+renderAttachments();

@@ -38,6 +38,9 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 	}
 
 	var features []domain.Feature
+	if hello.GetFeatures().GetPromptAttachments() {
+		features = append(features, domain.FeaturePromptAttachments)
+	}
 	if hello.GetFeatures().GetJobInputNow() {
 		features = append(features, domain.FeatureJobInputNow)
 	}

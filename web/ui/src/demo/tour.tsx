@@ -69,7 +69,7 @@ const STEPS: Step[] = [
     path: SESSION(IDS.certManager),
     target: '[data-tour="composer"]',
     title: 'Talk to work in progress',
-    body: 'While a job runs, a message can wait its turn, join at the next step, or interrupt. Escape stops the job, as in a terminal.',
+    body: 'While a job runs, a message can wait its turn, join at the next step, or interrupt. Paste an image or attach a sound to include it in a new queued prompt; Escape stops the job.',
   },
   {
     path: SESSION(IDS.ingress),
@@ -93,7 +93,7 @@ const STEPS: Step[] = [
     path: SESSION(IDS.grafana),
     target: '[data-tour="artifact"]',
     title: 'What the agent made, shown',
-    body: 'A page, a chart, a screenshot: the agent publishes it and it appears here, live — this preview runs its own script, safely apart. It stays with the project’s files.',
+    body: 'A page, a chart, a screenshot: the agent publishes it and it appears here, live — this preview runs its own script, safely apart. It stays with the project’s files; images open at full size and sounds have playback controls.',
   },
   {
     path: `${SESSION(IDS.ingress)}/settings/permissions`,

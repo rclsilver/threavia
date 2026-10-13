@@ -92,6 +92,9 @@ func (s *Service) UploadArtifact(ctx context.Context, identity auth.Identity, pr
 		}
 		return domain.Artifact{}, translate(err)
 	}
+	if scope.JobID == "" {
+		s.emit(ctx, identity.UserID, events.TypeArtifactCreated, domain.Scope{ProjectID: projectID}, ArtifactPayload{ArtifactID: string(artifact.ID), Filename: artifact.Filename, MimeType: artifact.MimeType, Size: artifact.Size})
+	}
 	return artifact, nil
 }
 
@@ -198,10 +201,15 @@ func (s *Service) ListArtifacts(ctx context.Context, identity auth.Identity, pro
 
 // DeleteArtifact removes an Artifact and the bytes behind it.
 func (s *Service) DeleteArtifact(ctx context.Context, identity auth.Identity, id domain.ArtifactID) error {
+	artifact, err := s.GetArtifact(ctx, identity, id)
+	if err != nil {
+		return err
+	}
 	key, err := s.store.DeleteArtifact(ctx, identity.UserID, id)
 	if err != nil {
 		return translate(err)
 	}
+	s.emit(ctx, identity.UserID, events.TypeArtifactDeleted, domain.Scope{ProjectID: artifact.ProjectID}, map[string]any{"artifactId": string(id)})
 	if s.objects == nil {
 		return nil
 	}

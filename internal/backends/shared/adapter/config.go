@@ -101,6 +101,7 @@ func Default() Config {
 	// can reach a turn under way, after an interrupt or not.
 	clientCfg.FeatureJobInputNow = true
 	clientCfg.FeatureJobInputNext = true
+	clientCfg.FeaturePromptAttachments = true
 
 	return Config{
 		Log:    LogConfig{Level: logging.LevelInfo, Format: logging.FormatText},

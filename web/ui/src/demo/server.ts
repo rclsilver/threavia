@@ -98,10 +98,15 @@ function settle(sessionId: string) {
 }
 
 /** The demo's agent: honest about being one, and quick. */
-function answer(sessionId: string, text: string, delivery?: string) {
+function answer(sessionId: string, text: string, delivery?: string, artifactIds?: string[]) {
   const timeline = timelineOf(sessionId);
   const running = timeline.jobs.find((job) => !['COMPLETED', 'FAILED', 'CANCELLED'].includes(String(job.status)));
-  if (running && delivery) {
+  const attachments = (artifactIds ?? []).map((id) => {
+    const artifact = state.artifacts.find((entry) => entry.id === id);
+    if (!artifact || artifact.projectId !== sessionOf(sessionId).projectId) throw notFound('That attachment');
+    return {artifactId:id, filename:artifact.filename, mimeType:artifact.mimeType, size:artifact.size};
+  });
+  if (running && delivery && delivery !== 'QUEUE') {
     pushEvent(sessionId, 'user.message', { text, delivery }, String(running.id));
     return running;
   }
@@ -109,7 +114,7 @@ function answer(sessionId: string, text: string, delivery?: string) {
   const job: Json = { id: jobId, runId: timeline.runs.at(-1)?.id, status: 'COMPLETED', originChannel: 'web', createdAt: nowIso(), updatedAt: nowIso(), startedAt: nowIso(), endedAt: nowIso() };
   timeline.jobs.push(job);
   pushEvent(sessionId, 'job.created', { runId: job.runId }, jobId);
-  pushEvent(sessionId, 'user.message', { text }, jobId);
+  pushEvent(sessionId, 'user.message', { text, attachments }, jobId);
   pushEvent(sessionId, 'job.started', {}, jobId);
   pushEvent(
     sessionId,
@@ -312,7 +317,7 @@ const routes: [string, RegExp, Handler][] = [
       events: [],
     };
     pushEvent(sessionId, 'session.created', {});
-    const job = answer(sessionId, message);
+    const job = answer(sessionId, message, undefined, body.artifactIds as string[] | undefined);
     return { session: sessionOf(sessionId), run: state.timelines[sessionId].runs[0], job };
   }],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)$/, (m) => snapshot(m[1])],
@@ -343,7 +348,7 @@ const routes: [string, RegExp, Handler][] = [
     else for (const entry of state.artifacts) if (entry.sessionId === m[1]) delete entry.sessionId;
   }],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/events$/, () => list([])],
-  ['POST', /^\/api\/v1\/sessions\/([^/]+)\/messages$/, (m, body) => answer(m[1], text(body.message), body.delivery as string | undefined)],
+  ['POST', /^\/api\/v1\/sessions\/([^/]+)\/messages$/, (m, body) => answer(m[1], text(body.message), body.delivery as string | undefined, body.artifactIds as string[] | undefined)],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/diff$/, (_m, _b, query) => ({ path: query.get('path'), diff: data.ingressDiff, binary: false, truncated: false })],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/repository$/, (m, _b, query) => {
     const repo = data.repositories[m[1]];

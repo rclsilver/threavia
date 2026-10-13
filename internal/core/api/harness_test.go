@@ -266,6 +266,7 @@ func (c *core) connectBackendWithReconcileGate(credential string, gate <-chan st
 	cfg.Token = credential
 	cfg.InstanceName = "test-backend"
 	cfg.BackendName = "fake"
+	cfg.FeaturePromptAttachments = true
 	cfg.BackendVersion = "test"
 	cfg.TLS.Enabled = false
 	cfg.HeartbeatInterval = 200 * time.Millisecond

@@ -257,3 +257,23 @@ func (s *Store) SessionEvent(ctx context.Context, ownerID domain.UserID, session
 		WHERE e.session_id = $1 AND p.owner_id = $2 AND e.global_sequence = $3`,
 		sessionID, ownerID, sequence))
 }
+
+// JobAttachmentIDs reads references from the durable initial user message.
+func (s *Store) JobAttachmentIDs(ctx context.Context, jobID domain.JobID) ([]domain.ArtifactID, error) {
+	var raw []byte
+	err := s.q.QueryRow(ctx, `SELECT COALESCE(payload->'attachments', '[]'::jsonb) FROM events WHERE job_id=$1 AND type='user.message' ORDER BY global_sequence LIMIT 1`, jobID).Scan(&raw)
+	if err != nil {
+		return nil, classify(err, "read job attachments")
+	}
+	var refs []struct {
+		ID domain.ArtifactID `json:"artifactId"`
+	}
+	if err := json.Unmarshal(raw, &refs); err != nil {
+		return nil, err
+	}
+	ids := make([]domain.ArtifactID, 0, len(refs))
+	for _, ref := range refs {
+		ids = append(ids, ref.ID)
+	}
+	return ids, nil
+}

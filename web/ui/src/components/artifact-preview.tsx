@@ -1,3 +1,4 @@
+import { mediaType } from '../../../../clients/shared/media';
 import { useQuery } from '@tanstack/react-query';
 import { Download, Maximize2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -25,7 +26,7 @@ function useArtifactContent(artifactId: string, kind: Kind, enabled: boolean) {
       const blob = await fetchBlob(contentPath(artifactId));
       // Served as bytes, whatever the file is: the type is set again here
       // from what the artifact says it is, so an image renders as one.
-      return kind === 'image' ? { blob } : { text: (await blob.text()).slice(0, TEXT_LIMIT) };
+      return ['image', 'audio', 'video'].includes(kind) ? { blob } : { text: (await blob.text()).slice(0, TEXT_LIMIT) };
     },
     enabled: enabled && kind !== 'other',
     staleTime: Infinity,
@@ -71,7 +72,7 @@ function Rendering({
   large?: boolean;
 }) {
   const content = useArtifactContent(artifactId, kind, true);
-  const imageType = mimeType.startsWith('image/') ? mimeType : filename.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+  const imageType = mediaType(mimeType, filename);
   const url = useObjectUrl(content.data && 'blob' in content.data ? content.data.blob : undefined, imageType);
 
   if (content.isPending) {
@@ -80,6 +81,8 @@ function Rendering({
   if (content.error) {
     return <ActionError error={content.error} outcome="It could not be shown" recovery="Download it instead." className="text-xs" />;
   }
+  if (kind === 'audio' && url) return <audio controls preload="metadata" src={url} aria-label={filename} className="w-full" />;
+  if (kind === 'video' && url) return <video controls preload="metadata" src={url} aria-label={filename} className="max-h-80 w-full" />;
   if (kind === 'image' && url) {
     return (
       <img
@@ -202,7 +205,7 @@ export function ArtifactCard({
   const kind = kindOf(mimeType, filename);
   const Icon = iconOf(kind);
   const [open, setOpen] = useState(false);
-  const previewable = kind === 'image' || kind === 'html';
+  const previewable = ['image', 'html', 'audio', 'video'].includes(kind);
 
   return (
     <div data-tour="artifact" className="bg-surface border-border space-y-2 rounded-(--radius-card) border p-2 sm:p-3">

@@ -50,6 +50,9 @@ export type HostMessage =
   | { type: 'paths'; resolved: Record<string, boolean> }
   /** An answer given from this panel: `ok` once it landed, so the card can say so. */
   | { type: 'answered'; id: string; ok: boolean }
+  | { type: 'media'; artifactId: string; source?: string; error?: string }
+  | { type: 'attached'; artifact: ArtifactRef & { size: number } }
+  | { type: 'attachFailed'; error: string }
   | { type: 'sent' }
   | { type: 'sendFailed'; text: string; error: string }
   | { type: 'failed'; message: string };
@@ -58,7 +61,9 @@ export type ArtifactRef = { artifactId: string; filename: string; mimeType: stri
 
 export type WebviewMessage =
   | { type: 'ready' }
-  | { type: 'send'; text: string; delivery: Delivery }
+  | { type: 'send'; text: string; delivery: Delivery; artifactIds?: string[] }
+  | { type: 'attach'; filename: string; mimeType: string; content: string }
+  | { type: 'loadMedia'; artifactId: string }
   | { type: 'stop'; jobId: string }
   | { type: 'decide'; id: string; approved: boolean }
   | { type: 'answer'; id: string; value: string }
@@ -80,6 +85,7 @@ export interface PersistedState {
   /** What a draft starts its Session with, until the first message is sent. */
   start?: DraftStart;
   draft?: string;
+  attachments?: (ArtifactRef & { size: number })[];
   delivery?: Delivery;
   fullWidth?: boolean;
   /** The folds and tool calls the reader opened. */

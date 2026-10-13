@@ -341,6 +341,7 @@ interface StartSession {
   workingDirectoryId: string | null;
   message: string;
   nativeSessionId?: string | null;
+  artifactIds?: string[];
 }
 
 export function useStartSession() {
@@ -362,10 +363,10 @@ export type Delivery = 'QUEUE' | 'NEXT' | 'NOW';
 export function usePostMessage(sessionId: string) {
   const queries = useQueryClient();
   return useMutation({
-    mutationFn: ({ message, delivery = 'QUEUE' }: { message: string; delivery?: Delivery }) =>
+    mutationFn: ({ message, delivery = 'QUEUE', artifactIds }: { message: string; delivery?: Delivery; artifactIds?: string[] }) =>
       api.post<Job>(
         `/api/v1/sessions/${sessionId}/messages`,
-        delivery === 'QUEUE' ? { message } : { message, delivery },
+        { message, delivery, artifactIds },
         delivery === 'QUEUE' ? idempotencyKey() : undefined,
       ),
     onSuccess: (_job, { delivery }) => {

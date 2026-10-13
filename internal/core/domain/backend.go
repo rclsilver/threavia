@@ -161,6 +161,8 @@ const (
 	// FeatureJobInputNext: a message can reach the running Job at its next
 	// step, without interrupting it.
 	FeatureJobInputNext Feature = "JOB_INPUT_NEXT"
+	// FeaturePromptAttachments forwards files and native visual input.
+	FeaturePromptAttachments Feature = "PROMPT_ATTACHMENTS"
 )
 
 // HasFeature reports whether the instance announced f.

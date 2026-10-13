@@ -69,6 +69,31 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 		return
 	}
 
+	attachmentIDs, err := s.store.JobAttachmentIDs(ctx, jobID)
+	if err != nil {
+		s.logger.Error("cannot read job attachments", "error", err)
+		return
+	}
+	var attachments []*backendv1.PromptAttachment
+	if len(attachmentIDs) > 0 {
+		err = s.checkPromptAttachmentsBackend(ctx, jc.BackendInstanceID)
+	}
+	if err == nil {
+		attachments, err = s.loadPromptAttachments(ctx, auth.Identity{UserID: jc.OwnerID}, jc.ProjectID, attachmentIDs)
+	}
+	if err != nil {
+		if errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalid) || errors.Is(err, ErrConflict) {
+			message := "The attached files could not be delivered: " + err.Error()
+			if transitionTo(ctx, s.store, jobID, domain.JobFailed, &message) == nil {
+				s.emit(ctx, jc.OwnerID, events.TypeJobFailed, domain.Scope{ProjectID: jc.ProjectID, SessionID: jc.SessionID, RunID: jc.Run.ID, JobID: jobID}, JobEndedPayload{Error: message})
+				s.dispatchNext(ctx, jc.Run.ID)
+			}
+		} else {
+			s.logger.Error("cannot load job attachments", "error", err)
+		}
+		return
+	}
+
 	// The policy travels with the Job: the backend gate enforces it, so a limit
 	// is a limit rather than a request the model may decline to honour.
 	policy, err := s.store.EffectivePolicy(ctx, jobID)
@@ -110,6 +135,7 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 				JobId:           string(jobID),
 				NativeSessionId: derefString(jc.NativeSessionID),
 				Prompt:          prompt,
+				Attachments:     attachments,
 				ProjectContext:  projectContext,
 				ExecutionPolicy: policyToProto(policy),
 			},

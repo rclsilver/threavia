@@ -1,3 +1,5 @@
+import { PromptAttachments } from '@/components/prompt-attachments';
+import { usePromptAttachments } from '@/lib/prompt-attachments';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
@@ -27,6 +29,7 @@ export function DraftView() {
   const backends = useBackends();
   const directories = useDirectories(projectId);
   const start = useStartSession();
+  const attachments = usePromptAttachments(projectId, start.isPending);
 
   const [backendId, setBackendId] = useState('');
   const [directoryId, setDirectoryId] = useState(NONE);
@@ -39,7 +42,7 @@ export function DraftView() {
 
   const submit = () => {
     const text = message.trim();
-    if (!text || !chosenBackend) return;
+    if (start.isPending || attachments.busy || (!text && !attachments.files.length) || !chosenBackend) return;
 
     void start
       .mutateAsync({
@@ -47,10 +50,12 @@ export function DraftView() {
         backendInstanceId: chosenBackend,
         workingDirectoryId: directoryId === NONE ? null : directoryId,
         message: text,
+        artifactIds: attachments.files.map((file) => file.id),
         nativeSessionId: (adopting && nativeSessionId.trim()) || null,
       })
       .then((result) => {
         setMessage('');
+        attachments.clear();
         return navigate({ to: '/sessions/$sessionId', params: { sessionId: result.session.id } });
       });
   };
@@ -136,6 +141,7 @@ export function DraftView() {
         <div className="space-y-1.5">
           <Label htmlFor="draft-message">First message</Label>
           <Textarea
+            onPaste={attachments.paste}
             id="draft-message"
             rows={5}
             value={message}
@@ -152,11 +158,13 @@ export function DraftView() {
           />
         </div>
 
+        <PromptAttachments attachments={attachments} disabled={start.isPending} />
+
         <ActionError error={start.error} outcome="Not started" recovery="Your message is still in the field; send it again." />
 
         <Button
           variant="primary"
-          disabled={start.isPending || !message.trim() || !chosenBackend}
+          disabled={start.isPending || attachments.busy || (!message.trim() && !attachments.files.length) || !chosenBackend}
           onClick={submit}
         >
           Start session

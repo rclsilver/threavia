@@ -1,3 +1,4 @@
+import { ArtifactsView, type ArtifactNode } from './knowledge/artifacts';
 import * as vscode from 'vscode';
 
 import { ApiError } from './api/client';
@@ -63,6 +64,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
   const currentProject = new CurrentProject(cores, context.workspaceState);
   const tasks = new TasksView(currentProject, cores);
   const memory = new MemoryView(currentProject, cores);
+  const artifacts = new ArtifactsView(currentProject, cores);
   const backends = new BackendsView(cores);
   panels.onActiveProject = (coreId, projectId) => currentProject.follow(coreId, projectId);
   const projectEditors = new ProjectEditors((core, project, created) => {
@@ -111,6 +113,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     }),
     tasks,
     memory,
+    artifacts,
     backends,
     new WaitingStatus(cores),
     new Notifier(cores, sessionTitle),
@@ -230,6 +233,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     currentProject.reload();
     tasks.reload();
     memory.reload();
+    artifacts.reload();
     backends.reload();
   });
 
@@ -330,6 +334,11 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     const start = await chooseNewSession(core, cores.several, node?.type === 'project' ? node.project : undefined);
     if (start) panels.openDraft(start);
   });
+
+  command('threavia.openArtifact', (node: ArtifactNode) => artifacts.open(node));
+  command('threavia.saveArtifact', (node: ArtifactNode) => artifacts.save(node));
+  command('threavia.deleteArtifact', (node: ArtifactNode) => artifacts.remove(node));
+  command('threavia.uploadArtifact', () => artifacts.upload());
 
   /** The Project of a row of the Sessions view, so Tasks and Memory follow the selection. */
   const projectOf = (node: Node | undefined): { coreId: string; projectId: string } | undefined => {

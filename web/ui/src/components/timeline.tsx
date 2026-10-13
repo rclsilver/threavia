@@ -722,6 +722,7 @@ function Entry({
           )}
         </p>
         <p className="text-sm whitespace-pre-wrap">{user.text}</p>
+        {user.attachments?.map((attachment) => <ArtifactCard key={attachment.artifactId} {...attachment} />)}
         {jobId && status && <Stop status={status} onStop={() => onStop(jobId)} />}
       </div>
     );

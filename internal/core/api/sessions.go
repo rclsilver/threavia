@@ -38,11 +38,12 @@ func (h *handler) listSessions(w http.ResponseWriter, r *http.Request, identity 
 // all. An Idempotency-Key header makes a retry return the same Session.
 func (h *handler) startSession(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
 	body, ok := decode[struct {
-		ProjectID          string  `json:"projectId"`
-		BackendInstanceID  string  `json:"backendInstanceId"`
-		WorkingDirectoryID *string `json:"workingDirectoryId"`
-		Message            string  `json:"message"`
-		NativeSessionID    *string `json:"nativeSessionId"`
+		ProjectID          string              `json:"projectId"`
+		BackendInstanceID  string              `json:"backendInstanceId"`
+		WorkingDirectoryID *string             `json:"workingDirectoryId"`
+		Message            string              `json:"message"`
+		ArtifactIDs        []domain.ArtifactID `json:"artifactIds"`
+		NativeSessionID    *string             `json:"nativeSessionId"`
 	}](w, r)
 	if !ok {
 		return
@@ -52,6 +53,7 @@ func (h *handler) startSession(w http.ResponseWriter, r *http.Request, identity 
 		ProjectID:         domain.ProjectID(body.ProjectID),
 		BackendInstanceID: domain.BackendInstanceID(body.BackendInstanceID),
 		Message:           body.Message,
+		ArtifactIDs:       body.ArtifactIDs,
 		IdempotencyKey:    r.Header.Get("Idempotency-Key"),
 	}
 	if body.NativeSessionID != nil {
@@ -226,8 +228,9 @@ func (h *handler) workspaceDiff(w http.ResponseWriter, r *http.Request, identity
 // therefore resumes the same provider native session.
 func (h *handler) postMessage(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
 	body, ok := decode[struct {
-		Message  string           `json:"message"`
-		Delivery service.Delivery `json:"delivery"`
+		Message     string              `json:"message"`
+		Delivery    service.Delivery    `json:"delivery"`
+		ArtifactIDs []domain.ArtifactID `json:"artifactIds"`
 	}](w, r)
 	if !ok {
 		return
@@ -235,7 +238,7 @@ func (h *handler) postMessage(w http.ResponseWriter, r *http.Request, identity a
 
 	job, err := h.svc.PostMessage(r.Context(), identity,
 		domain.SessionID(r.PathValue("sessionId")), body.Message,
-		r.Header.Get("Idempotency-Key"), body.Delivery)
+		r.Header.Get("Idempotency-Key"), body.Delivery, body.ArtifactIDs...)
 	if err != nil {
 		h.fail(w, err)
 		return

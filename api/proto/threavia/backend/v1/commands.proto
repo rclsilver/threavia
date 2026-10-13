@@ -169,6 +169,15 @@ message StartJob {
   string prompt = 6;
   ProjectContext project_context = 7;
   ExecutionPolicy execution_policy = 8;
+  // Files explicitly attached by the user, bounded to 3 MiB total by Core.
+  repeated PromptAttachment attachments = 9;
+}
+
+message PromptAttachment {
+  string artifact_id = 1;
+  string filename = 2;
+  string mime_type = 3;
+  bytes content = 4;
 }
 
 // Replaces the policy of a Job that is already running, after the user changed

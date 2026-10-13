@@ -27,6 +27,7 @@ type StartSessionInput struct {
 	BackendInstanceID  domain.BackendInstanceID
 	WorkingDirectoryID *domain.KnownDirectoryID
 	Message            string
+	ArtifactIDs        []domain.ArtifactID
 	// Internal delegation metadata, never accepted from the HTTP start route.
 	ManagerSessionID *domain.SessionID
 	Title            string
@@ -51,7 +52,7 @@ type StartSessionResult struct {
 // so no empty or partially-created Session can ever exist.
 func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in StartSessionInput) (StartSessionResult, error) {
 	message := strings.TrimSpace(in.Message)
-	if message == "" {
+	if message == "" && len(in.ArtifactIDs) == 0 {
 		return StartSessionResult{}, fmt.Errorf("%w: the first message cannot be empty", ErrInvalid)
 	}
 	native, err := adoptedSession(in.NativeSessionID)
@@ -79,6 +80,19 @@ func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in S
 	}
 	if err := s.checkWorkingDirectory(ctx, identity, in.ProjectID, in.BackendInstanceID, in.WorkingDirectoryID); err != nil {
 		return StartSessionResult{}, err
+	}
+
+	attachments, err := s.promptAttachments(ctx, identity, in.ProjectID, in.ArtifactIDs)
+	if err != nil {
+		return StartSessionResult{}, err
+	}
+	if len(attachments) > 0 {
+		if err := s.checkPromptAttachmentsBackend(ctx, in.BackendInstanceID); err != nil {
+			return StartSessionResult{}, err
+		}
+	}
+	if message == "" {
+		message = "Use the attached files."
 	}
 
 	result := StartSessionResult{
@@ -138,7 +152,7 @@ func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in S
 			record{events.TypeRunCreated, domain.Scope{ProjectID: scope.ProjectID, SessionID: scope.SessionID, RunID: scope.RunID},
 				RunCreatedPayload{BackendInstanceID: string(in.BackendInstanceID)}},
 			record{events.TypeJobCreated, scope, JobCreatedPayload{RunID: string(scope.RunID)}},
-			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, ActorJobID: managerJobFrom(ctx)}},
+			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, Attachments: attachments, ActorJobID: managerJobFrom(ctx)}},
 		)
 	})
 	if err != nil {
@@ -174,7 +188,29 @@ func (s *Service) replayStartSession(ctx context.Context, identity auth.Identity
 // PostMessage appends a message to an existing Session. It becomes a new Job on
 // the current Run, which is how a second message resumes the same provider
 // native session.
-func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string, delivery Delivery) (domain.Job, error) {
+func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string, delivery Delivery, artifactIDs ...domain.ArtifactID) (domain.Job, error) {
+	var attachments []ArtifactPayload
+	if len(artifactIDs) > 0 {
+		if delivery != "" && delivery != DeliveryQueue {
+			return domain.Job{}, fmt.Errorf("%w: attachments require QUEUE delivery", ErrInvalid)
+		}
+		if job, found, err := s.replayAttachmentMessage(ctx, identity, sessionID, idempotencyKey); err != nil {
+			return domain.Job{}, err
+		} else if found {
+			return job, nil
+		}
+		session, err := s.store.GetSession(ctx, identity.UserID, sessionID)
+		if err != nil {
+			return domain.Job{}, translate(err)
+		}
+		attachments, err = s.promptAttachments(ctx, identity, session.ProjectID, artifactIDs)
+		if err != nil {
+			return domain.Job{}, err
+		}
+		if strings.TrimSpace(message) == "" {
+			message = "Use the attached files."
+		}
+	}
 	message = strings.TrimSpace(message)
 	if message == "" {
 		return domain.Job{}, fmt.Errorf("%w: the message cannot be empty", ErrInvalid)
@@ -186,13 +222,13 @@ func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessi
 	default:
 		return domain.Job{}, fmt.Errorf("%w: unknown delivery %q", ErrInvalid, delivery)
 	}
-	return s.queueMessage(ctx, identity, sessionID, message, idempotencyKey, "")
+	return s.queueMessage(ctx, identity, sessionID, message, idempotencyKey, "", attachments...)
 }
 
 // queueMessage makes a message a Job of its own on the current Run. A
 // scheduled one carries the Schedule that sent it, so the timeline says it was
 // not typed by anyone.
-func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string, scheduleID domain.ScheduleID) (domain.Job, error) {
+func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string, scheduleID domain.ScheduleID, attachments ...ArtifactPayload) (domain.Job, error) {
 	if idempotencyKey != "" {
 		// Keys are per user, so a Job found here is already the caller's. It
 		// is a replay only if it was made in the Session this request names: the
@@ -227,6 +263,12 @@ func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sess
 		return domain.Job{}, translate(err)
 	}
 
+	if len(attachments) > 0 {
+		if err := s.checkPromptAttachmentsBackend(ctx, run.BackendInstanceID); err != nil {
+			return domain.Job{}, err
+		}
+	}
+
 	job := domain.Job{
 		ID:             domain.NewJobID(),
 		RunID:          run.ID,
@@ -246,7 +288,7 @@ func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sess
 		}
 		return s.appendAll(ctx, tx, b,
 			record{events.TypeJobCreated, scope, JobCreatedPayload{RunID: string(run.ID)}},
-			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, ScheduleID: scheduleID, ActorJobID: managerJobFrom(ctx)}},
+			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, Attachments: attachments, ScheduleID: scheduleID, ActorJobID: managerJobFrom(ctx)}},
 		)
 	})
 	if err != nil {

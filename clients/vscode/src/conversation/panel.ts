@@ -1,3 +1,5 @@
+import { mediaType } from '../../../shared/media';
+import { artifactKind } from './format';
 import * as vscode from 'vscode';
 
 import { ApiError, EARLIER_PAGE } from '../api/client';
@@ -517,7 +519,7 @@ class ConversationPanel {
         return;
 
       case 'send':
-        return this.send(message.text, message.delivery);
+        return this.send(message.text, message.delivery, message.artifactIds);
 
       case 'stop':
         try {
@@ -599,15 +601,35 @@ class ConversationPanel {
         await artifacts.open(message, this.beside);
         return;
 
+      case 'attach': {
+        try {
+          if (!this.projectId) throw new Error('Wait for the session to load.');
+          const content = Buffer.from(message.content, 'base64');
+          if (content.length > 3 * 1024 * 1024) throw new Error('Attachments are limited to 3 MiB per message.');
+          const artifact = await client.uploadArtifact(this.projectId, message.filename, message.mimeType, content, this.sessionId);
+          this.post({type: 'attached', artifact: {artifactId: artifact.id, filename: artifact.filename, mimeType: artifact.mimeType, size: artifact.size}});
+        } catch (error) { this.post({type: 'attachFailed', error: reason(error)}); }
+        return;
+      }
+      case 'loadMedia': {
+        try {
+          const artifact = await client.get<import('../api/types').Artifact>(`/api/v1/artifacts/${message.artifactId}`);
+          const kind = artifactKind(artifact.mimeType, artifact.filename);
+          if (!['image', 'audio', 'video'].includes(kind)) return;
+          const content = await client.artifactContent(artifact.id);
+          this.post({type: 'media', artifactId: artifact.id, source: `data:${mediaType(artifact.mimeType, artifact.filename)};base64,${Buffer.from(content).toString('base64')}`});
+        } catch (error) { this.post({type: 'media', artifactId: message.artifactId, error: reason(error)}); }
+        return;
+      }
       case 'saveArtifact':
         await artifacts.save(message);
         return;
     }
   }
 
-  private async send(text: string, delivery: Delivery) {
+  private async send(text: string, delivery: Delivery, artifactIds?: string[]) {
     const action = onSend(this.target);
-    if (action === 'start') return this.start(text);
+    if (action === 'start') return this.start(text, artifactIds);
     if (action === 'wait') await this.starting;
     const sessionId = this.sessionId;
     if (!sessionId) {
@@ -616,7 +638,7 @@ class ConversationPanel {
       return;
     }
     try {
-      await this.core.client.postMessage(sessionId, text, delivery);
+      await this.core.client.postMessage(sessionId, text, delivery, artifactIds);
       this.post({ type: 'sent' });
       this.scheduleReload();
     } catch (error) {
@@ -629,9 +651,9 @@ class ConversationPanel {
    * its Job at once; then this panel is that Session's, without being closed
    * and opened again.
    */
-  private start(text: string): Promise<void> {
+  private start(text: string, artifactIds?: string[]): Promise<void> {
     if (this.target.kind !== 'draft') return Promise.resolve();
-    const body = startBody(this.target.start, text);
+    const body = { ...startBody(this.target.start, text), artifactIds };
     this.target = sending(this.target);
     this.starting = (async () => {
       try {

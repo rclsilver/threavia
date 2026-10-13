@@ -165,6 +165,7 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 		// Resolved in the job goroutine: it may need the user, which this one
 		// cannot wait for (spec section 11).
 		Prompt:              cmd.GetPrompt(),
+		Attachments:         cmd.GetAttachments(),
 		ProjectName:         cmd.GetProjectContext().GetProjectName(),
 		ProjectDescription:  cmd.GetProjectContext().GetProjectDescription(),
 		CoreTools:           coreTools(cmd.GetProjectContext()),

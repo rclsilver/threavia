@@ -1,3 +1,5 @@
+import { PromptAttachments } from '@/components/prompt-attachments';
+import { usePromptAttachments } from '@/lib/prompt-attachments';
 import { Link, useParams } from '@tanstack/react-router';
 import { ArrowUp, Pin, Settings2, Square } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -182,6 +184,7 @@ export function SessionView() {
       <Composer
         key={sessionId}
         sessionId={sessionId}
+        projectId={data.session.projectId}
         active={active}
         deliveries={deliveries}
         onStop={() => active && cancel.mutate(active.id)}
@@ -348,6 +351,7 @@ function DeliveryChoice({
 
 function Composer({
   sessionId,
+  projectId,
   active,
   deliveries,
   onStop,
@@ -355,6 +359,7 @@ function Composer({
 }: {
   sessionId: string;
   active?: { id: string; status: string };
+  projectId: string;
   /** What the running work can take besides a queued message. */
   deliveries: ('NEXT' | 'NOW')[];
   onStop: () => void;
@@ -362,6 +367,7 @@ function Composer({
   field: React.RefObject<HTMLTextAreaElement | null>;
 }) {
   const send = usePostMessage(sessionId);
+  const attachments = usePromptAttachments(projectId, send.isPending);
   const [message, setMessage] = useDraft(sessionId);
 
   // The field grows with what is written. Where the browser can size it to its
@@ -389,15 +395,15 @@ function Composer({
 
   const submit = () => {
     const text = message.trim();
-    if (!text) return;
+    if (send.isPending || attachments.busy || (!text && attachments.files.length === 0)) return;
     setMessage('');
     send.mutate(
-      { message: text, delivery: chosen },
+      { message: text, delivery: attachments.files.length ? 'QUEUE' : chosen, artifactIds: attachments.files.map((file) => file.id) },
       {
         onError: () => setMessage(text),
         // One message at a time reaches the running work; the next one is
         // queued again unless chosen otherwise.
-        onSuccess: () => setDelivery('QUEUE'),
+        onSuccess: () => { setDelivery('QUEUE'); attachments.clear(); },
       },
     );
   };
@@ -421,8 +427,10 @@ function Composer({
             something runs — a toolbar with how the message goes, what is
             running and its stop. Idle, it is just a field. */}
         <div className="bg-surface border-border focus-within:border-muted/60 rounded-xl border shadow-xs transition-colors">
+          <PromptAttachments attachments={attachments} disabled={send.isPending} />
           <div className="flex items-end gap-2 py-1.5 pr-1.5 pl-3.5">
             <textarea
+              onPaste={attachments.paste}
               ref={field}
               rows={1}
               value={message}
@@ -448,7 +456,7 @@ function Composer({
               className="disabled:bg-surface-2 disabled:text-muted size-11 rounded-md disabled:opacity-100 sm:size-8"
               title="Send (Enter)"
               aria-label="Send"
-              disabled={send.isPending || !message.trim()}
+              disabled={send.isPending || attachments.busy || (!message.trim() && !attachments.files.length)}
             >
               <ArrowUp />
             </Button>

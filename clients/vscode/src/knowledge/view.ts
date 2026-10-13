@@ -35,7 +35,7 @@ export abstract class ProjectView<Data, Node extends { type: string }> implement
     viewId: string,
     protected readonly current: CurrentProject,
     protected readonly cores: Cores,
-    effect: 'tasks' | 'decisions',
+    effect: 'tasks' | 'decisions' | 'artifacts',
   ) {
     this.view = vscode.window.createTreeView(viewId, { treeDataProvider: this, showCollapseAll: true });
     this.describe();

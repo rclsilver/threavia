@@ -52,12 +52,14 @@ export function bytes(size: number): string {
 }
 
 /** What an artifact is, as far as showing it goes. */
-export type ArtifactKind = 'image' | 'html' | 'text' | 'other';
+export type ArtifactKind = 'image' | 'audio' | 'video' | 'html' | 'text' | 'other';
 
 export function artifactKind(mimeType: string, filename: string): ArtifactKind {
   const type = mimeType.toLowerCase();
   const extension = filename.split('.').pop()?.toLowerCase() ?? '';
   if (type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(extension)) return 'image';
+  if (type.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'].includes(extension)) return 'audio';
+  if (type.startsWith('video/') || ['mp4', 'webm', 'mov'].includes(extension)) return 'video';
   if (type.startsWith('text/html') || ['html', 'htm'].includes(extension)) return 'html';
   if (
     type.startsWith('text/') ||

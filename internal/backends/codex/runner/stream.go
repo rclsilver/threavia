@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,11 @@ import (
 
 func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p contract.StartParams, sink contract.Sink, url string, requests *sync.WaitGroup) outcome {
 	out := outcome{code: "PROVIDER_ERROR"}
+	if err := contract.PrepareAttachments(&p, contract.ScratchDir(c.options.Scratch, p.RunID)); err != nil {
+		out.err = err
+		return out
+	}
+	firstInput := true
 	startupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if err := r.call(startupCtx, "initialize", map[string]any{
@@ -196,6 +202,16 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 		approval, reviewer := nativeApproval(currentPolicy)
 		params := map[string]any{"threadId": thread.Thread.ID, "input": skillInput(supervised(currentPolicy, text), skills),
 			"approvalPolicy": approval, "approvalsReviewer": reviewer, "sandboxPolicy": map[string]any{"type": "readOnly", "networkAccess": false}}
+		if firstInput {
+			input := params["input"].([]any)
+			for _, attachment := range p.Attachments {
+				if contract.IsVisualAttachment(attachment) {
+					input = append(input, map[string]any{"type": "image", "url": "data:" + attachment.GetMimeType() + ";base64," + base64.StdEncoding.EncodeToString(attachment.GetContent())})
+				}
+			}
+			params["input"] = input
+			firstInput = false
+		}
 		if c.options.ReasoningEffort != "" {
 			params["effort"] = c.options.ReasoningEffort
 		}

@@ -65,6 +65,12 @@
           "contextualTitle": "Threavia"
         },
         {
+          "id": "threavia.artifacts",
+          "name": "Artifacts",
+          "visibility": "collapsed",
+          "contextualTitle": "Threavia"
+        },
+        {
           "id": "threavia.backends",
           "name": "Backends",
           "visibility": "collapsed",
@@ -116,6 +122,21 @@
       {
         "view": "threavia.memory",
         "contents": "Core does not answer.\n[Try Again](command:threavia.refresh)\n[Set Core URL](command:threavia.setCoreUrl)",
+        "when": "threavia.state == unreachable"
+      },
+      {
+        "view": "threavia.artifacts",
+        "contents": "Add a Core to see your artifacts.\n[Add a Core](command:threavia.addCore)",
+        "when": "threavia.state == unconfigured"
+      },
+      {
+        "view": "threavia.artifacts",
+        "contents": "Sign in to see your artifacts.\n[Sign In](command:threavia.signIn)",
+        "when": "threavia.state == signedOut"
+      },
+      {
+        "view": "threavia.artifacts",
+        "contents": "Core does not answer.\n[Try Again](command:threavia.refresh)",
         "when": "threavia.state == unreachable"
       }
     ],
@@ -345,6 +366,30 @@
         "command": "threavia.deleteDecision",
         "title": "Delete…",
         "category": "Threavia"
+      },
+      {
+        "command": "threavia.openArtifact",
+        "title": "Open Artifact",
+        "category": "Threavia",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "threavia.saveArtifact",
+        "title": "Save Artifact As…",
+        "category": "Threavia",
+        "icon": "$(save-as)"
+      },
+      {
+        "command": "threavia.deleteArtifact",
+        "title": "Delete Artifact…",
+        "category": "Threavia",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "threavia.uploadArtifact",
+        "title": "Upload Artifacts…",
+        "category": "Threavia",
+        "icon": "$(cloud-upload)"
       }
     ],
     "submenus": [
@@ -494,6 +539,22 @@
         {
           "command": "threavia.signOut",
           "when": "threavia.signedIn"
+        },
+        {
+          "command": "threavia.openArtifact",
+          "when": "false"
+        },
+        {
+          "command": "threavia.saveArtifact",
+          "when": "false"
+        },
+        {
+          "command": "threavia.deleteArtifact",
+          "when": "false"
+        },
+        {
+          "command": "threavia.uploadArtifact",
+          "when": "threavia.state == ready && threavia.hasProject"
         }
       ],
       "view/title": [
@@ -552,6 +613,21 @@
         {
           "command": "threavia.refresh",
           "when": "view == threavia.memory",
+          "group": "navigation@3"
+        },
+        {
+          "command": "threavia.uploadArtifact",
+          "when": "view == threavia.artifacts && threavia.state == ready && threavia.hasProject",
+          "group": "navigation@1"
+        },
+        {
+          "command": "threavia.switchProject",
+          "when": "view == threavia.artifacts && threavia.state == ready && threavia.hasProject",
+          "group": "navigation@2"
+        },
+        {
+          "command": "threavia.refresh",
+          "when": "view == threavia.artifacts",
           "group": "navigation@3"
         }
       ],
@@ -743,6 +819,21 @@
         {
           "command": "threavia.deleteDecision",
           "when": "view == threavia.memory && viewItem =~ /^decision\\./",
+          "group": "3_delete"
+        },
+        {
+          "command": "threavia.openArtifact",
+          "when": "view == threavia.artifacts && viewItem == artifact",
+          "group": "inline"
+        },
+        {
+          "command": "threavia.saveArtifact",
+          "when": "view == threavia.artifacts && viewItem == artifact",
+          "group": "inline"
+        },
+        {
+          "command": "threavia.deleteArtifact",
+          "when": "view == threavia.artifacts && viewItem == artifact",
           "group": "3_delete"
         }
       ],

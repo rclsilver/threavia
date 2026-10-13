@@ -7,6 +7,7 @@ import type { components } from './schema';
 
 type Schemas = components['schemas'];
 
+export type Artifact = Schemas['Artifact'];
 export type Project = Schemas['Project'];
 export type Session = Schemas['Session'];
 export type Job = Schemas['Job'];
@@ -58,7 +59,7 @@ export interface EventPayloads {
   'project.updated': { projectId: string; name: string };
   'project.deleted': { projectId: string };
   'session.created': { title: string; managerSessionId?: string };
-  'user.message': { text: string; delivery?: 'NOW' | 'NEXT'; scheduleId?: string; actorJobId?: string };
+  'user.message': { text: string; attachments?: { artifactId: string; filename: string; mimeType: string; size: number }[]; delivery?: 'NOW' | 'NEXT'; scheduleId?: string; actorJobId?: string };
   'schedule.skipped': { scheduleId: string; outcome: string; reason: string; due: string };
   'agent.message': { text: string };
   'tool.started': { toolCallId: string; name: string; input?: Record<string, unknown> };

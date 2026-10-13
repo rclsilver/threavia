@@ -1,4 +1,6 @@
+import { mediaType } from '../../../shared/media';
 import type {
+  Artifact,
   Attention,
   AuthPublic,
   BackendInstance,
@@ -316,15 +318,15 @@ export class CoreClient {
    * The first send: Session, Run, Job and message in one transaction. The key
    * makes a retry after a lost answer start nothing twice.
    */
-  startSession(input: { projectId: string; backendInstanceId: string; workingDirectoryId: string | null; message: string }) {
+  startSession(input: { projectId: string; backendInstanceId: string; workingDirectoryId: string | null; message: string; artifactIds?: string[] }) {
     return this.post<{ session: Session; run: Run; job: Job }>('/api/v1/sessions/start', input, idempotencyKey());
   }
 
   /** A message to a Session. Only a queued one carries a key: Core applies it only to QUEUE. */
-  postMessage(sessionId: string, message: string, delivery: Delivery = 'QUEUE') {
+  postMessage(sessionId: string, message: string, delivery: Delivery = 'QUEUE', artifactIds?: string[]) {
     return this.post<Job>(
       `/api/v1/sessions/${sessionId}/messages`,
-      delivery === 'QUEUE' ? { message } : { message, delivery },
+      { message, delivery, artifactIds },
       delivery === 'QUEUE' ? idempotencyKey() : undefined,
     );
   }
@@ -389,6 +391,23 @@ export class CoreClient {
 
   deleteDecision(decisionId: string) {
     return this.delete<void>(`/api/v1/decisions/${decisionId}`);
+  }
+
+  artifacts(projectId: string) {
+    return this.get<List<Artifact>>(`/api/v1/projects/${projectId}/artifacts?limit=200`).then(items);
+  }
+
+  deleteArtifact(artifactId: string) { return this.delete<void>(`/api/v1/artifacts/${artifactId}`); }
+
+  async uploadArtifact(projectId: string, filename: string, mimeType: string, bytes: Uint8Array, sessionId?: string): Promise<Artifact> {
+    const query = new URLSearchParams({ filename });
+    if (sessionId) query.set('sessionId', sessionId);
+    const response = await this.raw(`/api/v1/projects/${projectId}/artifacts?${query}`, {method: 'POST', headers: {'Content-Type': mimeType || mediaType('', filename)}, body: new Blob([new Uint8Array(bytes)])});
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as ErrorBody | null;
+      throw new ApiError(response.status, body?.error?.code ?? 'unknown', body?.error?.message ?? 'File could not be attached.');
+    }
+    return await response.json() as Artifact;
   }
 
   /** The bytes of an Artifact, read with the client's credential. */

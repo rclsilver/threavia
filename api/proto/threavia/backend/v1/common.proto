@@ -96,6 +96,8 @@ message BackendInfo {
 message FeatureFlags {
   bool job_input_now = 1;
   bool job_input_next = 2;
+  // Understands and forwards StartJob.attachments, including native images.
+  bool prompt_attachments = 3;
 }
 
 message Error {

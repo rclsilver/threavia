@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"net/http"
+	"slices"
 	"sync"
 	"testing"
 
@@ -80,7 +81,7 @@ func TestAMessageReachesTheRunningJob(t *testing.T) {
 		} `json:"items"`
 	}
 	c.mustDo(http.MethodGet, "/api/v1/backends", nil, &backends, http.StatusOK)
-	if len(backends.Items) != 1 || len(backends.Items[0].Features) != 2 {
+	if len(backends.Items) != 1 || !slices.Contains(backends.Items[0].Features, "JOB_INPUT_NOW") || !slices.Contains(backends.Items[0].Features, "JOB_INPUT_NEXT") {
 		t.Fatalf("backends = %+v, want one announcing both deliveries", backends.Items)
 	}
 
