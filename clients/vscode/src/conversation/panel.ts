@@ -41,6 +41,7 @@ import type { HostMessage, PersistedState, SessionView, WebviewMessage } from '.
 import {
   activeJob,
   applyToJobs,
+  applyToAttention,
   currentRun,
   deliveriesFor,
   hasEarlier,
@@ -387,6 +388,7 @@ class ConversationPanel {
         validations: snapshot.attention.validations ?? [],
         userInputs: snapshot.attention.userInputs ?? [],
       };
+      for (const event of this.events) if (event.sequence > snapshot.cursor) this.snapshotAttention = applyToAttention(this.snapshotAttention, event);
       this.events = mergeEvents(this.events, snapshot.events);
       this.panel.title = titleOf(snapshot.session);
       const firstRead = !this.loaded;
@@ -443,6 +445,7 @@ class ConversationPanel {
     this.events = mergeEvents(this.events, [event]);
     if (this.events === before) return;
     this.jobs = applyToJobs(this.jobs, event);
+    this.snapshotAttention = applyToAttention(this.snapshotAttention, event);
     this.post({ type: 'events', events: [event] });
     this.postView();
   }
@@ -638,7 +641,16 @@ class ConversationPanel {
       return;
     }
     try {
-      await this.core.client.postMessage(sessionId, text, delivery, artifactIds);
+      const job = await this.core.client.postMessage(sessionId, text, delivery, artifactIds);
+      if (delivery === 'NOW' && job.status === 'RUNNING') {
+        this.core.attention.dropJob(job.id, job.updatedAt);
+        this.snapshotAttention = {
+          validations: this.snapshotAttention.validations.filter((request) => request.scope.jobId !== job.id || Date.parse(request.createdAt) > Date.parse(job.updatedAt)),
+          userInputs: this.snapshotAttention.userInputs.filter((request) => request.scope.jobId !== job.id || Date.parse(request.createdAt) > Date.parse(job.updatedAt)),
+        };
+        this.postView();
+      }
+      if (delivery === 'NOW') this.core.attention.schedule();
       this.post({ type: 'sent' });
       this.scheduleReload();
     } catch (error) {

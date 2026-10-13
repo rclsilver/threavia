@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 
-import { dropResolvedAttention } from './attention-cache';
+import { dropInterruptedAttention, dropResolvedAttention } from './attention-cache';
 import { announceJobEnded } from '@/lib/job-ended';
 import { isActive, presenceSentWithStream } from '@/lib/presence';
 
@@ -186,6 +186,14 @@ export class EventStream {
     }
 
     switch (event.type) {
+      case 'user.message':
+        if (payloadOf(event, 'user.message')?.delivery === 'NOW' && event.jobId) {
+          dropInterruptedAttention(this.queries, event.sessionId, event.jobId, event.timestamp);
+          void this.queries.invalidateQueries({ queryKey: keys.attention() });
+          void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
+          void this.queries.invalidateQueries({ queryKey: ['sessions'] });
+        }
+        break;
       // Pending attention is current state, not a count of unread events, and
       // a Session carries its own copy in the snapshot it was opened with. Both
       // have to follow, or a request answered elsewhere stays on screen here.
@@ -234,6 +242,9 @@ export class EventStream {
         void this.queries.invalidateQueries({ queryKey: ['sessions'] });
         // Work that ended may have committed, pushed or left files behind.
         if (event.type !== 'job.created' && event.type !== 'job.started') {
+          if (event.jobId) dropInterruptedAttention(this.queries, event.sessionId, event.jobId, event.timestamp);
+          void this.queries.invalidateQueries({ queryKey: keys.attention() });
+          void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
           void this.queries.invalidateQueries({ queryKey: keys.repository(event.sessionId ?? '') });
         }
         // A Job may be a Schedule's doing, which changes what it last did.
@@ -347,7 +358,7 @@ export class EventStream {
  * slower and occasionally disagree.
  */
 function applyToJobs(jobs: Job[], event: Event): Job[] {
-  const status = jobStatusFor(event.type);
+  const status = payloadOf(event, 'user.message')?.delivery === 'NOW' ? 'RUNNING' : jobStatusFor(event.type);
   if (!status || !event.jobId) return jobs;
 
   const known = jobs.some((job) => job.id === event.jobId);

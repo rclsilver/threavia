@@ -30,7 +30,9 @@ from one Threavia Core or from several at once.
   never as zero usage.
 - **Notifications.** An approval or a question pops up once, with Approve and
   Deny, or its choices and Answer…, right there. Work that ends in a session
-  you are not looking at says so quietly.
+  you are not looking at says so quietly. A request's notification disappears
+  when it is answered, including on another device, or abandoned by an interrupt.
+  Dismissing the notification leaves the request in Waiting.
 - **Status bar.** `$(inbox) N` while something waits, on every Core together;
   click it to see what.
 - **Conversation.** Opening a session shows its conversation in an editor tab,

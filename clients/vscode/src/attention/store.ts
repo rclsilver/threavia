@@ -18,6 +18,8 @@ export class AttentionStore {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private inflight: Promise<void> | null = null;
   private again = false;
+  private readonly clearedJobs = new Map<string, number>();
+  private readonly resolved = new Set<string>();
   private readonly listeners = new Set<(pending: Pending) => void>();
   private readonly client: CoreClient;
 
@@ -26,6 +28,7 @@ export class AttentionStore {
     bus.on('effect', (effect) => {
       if (effect.kind === 'attention') this.schedule();
       if (effect.kind === 'resolved') this.drop(effect.validationId, effect.userInputId);
+      if (effect.kind === 'attentionCleared') this.dropJob(effect.jobId, effect.before);
     });
   }
 
@@ -49,6 +52,12 @@ export class AttentionStore {
 
   findUserInput(id: string): UserInputRequest | undefined {
     return this.pending.userInputs.find((request) => request.id === id);
+  }
+
+  /** An event can retire a snapshot request before the global list first loads. */
+  isObsolete(request: ValidationRequest | UserInputRequest): boolean {
+    const cutoff = this.clearedJobs.get(request.scope.jobId);
+    return this.resolved.has(request.id) || (cutoff !== undefined && Date.parse(request.createdAt) <= cutoff);
   }
 
   /**
@@ -87,12 +96,16 @@ export class AttentionStore {
   reset() {
     clearTimeout(this.timer);
     this.loaded = false;
+    this.clearedJobs.clear();
+    this.resolved.clear();
     this.set({ validations: [], userInputs: [] }, false);
   }
 
   /** Takes a request out at once, when this client or the stream resolved it. */
   drop(validationId?: string, userInputId?: string) {
     if (!validationId && !userInputId) return;
+    if (validationId) this.resolved.add(validationId);
+    if (userInputId) this.resolved.add(userInputId);
     const next = {
       validations: this.pending.validations.filter((request) => request.id !== validationId),
       userInputs: this.pending.userInputs.filter((request) => request.id !== userInputId),
@@ -105,10 +118,19 @@ export class AttentionStore {
     }
   }
 
+  /** Retain the cutoff so an older in-flight read cannot resurrect a prompt. */
+  dropJob(jobId: string, before: string) {
+    const cutoff = Date.parse(before);
+    if (!Number.isFinite(cutoff)) return;
+    this.clearedJobs.set(jobId, Math.max(this.clearedJobs.get(jobId) ?? -Infinity, cutoff));
+    this.set(this.pending, this.loaded);
+  }
+
   private set(pending: Pending, loaded = true) {
-    this.pending = pending;
+    const keep = (request: ValidationRequest | UserInputRequest) => !this.isObsolete(request);
+    this.pending = { validations: pending.validations.filter(keep), userInputs: pending.userInputs.filter(keep) };
     this.loaded = loaded;
-    for (const listener of this.listeners) listener(pending);
+    for (const listener of this.listeners) listener(this.pending);
   }
 
   dispose() {

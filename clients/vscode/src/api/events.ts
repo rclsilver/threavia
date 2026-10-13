@@ -19,6 +19,8 @@ export type Effect =
   | { kind: 'repository'; sessionId: string }
   /** A request was answered, here or anywhere else. */
   | { kind: 'resolved'; sessionId?: string; validationId?: string; userInputId?: string }
+  /** An interrupted turn no longer needs its earlier requests answered. */
+  | { kind: 'attentionCleared'; jobId: string; before: string }
   /** Work ended, recently enough to be news. */
   | { kind: 'jobEnded'; sessionId: string; failed: boolean; text: string }
   /** A Project's Tasks changed; without a Project, any list may be stale. */
@@ -35,6 +37,9 @@ export const JOB_ENDED_FRESH_FOR = 2 * 60_000;
 export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
   const sessionId = event.sessionId ?? '';
   switch (event.type) {
+    case 'user.message':
+      if (payloadOf(event, 'user.message')?.delivery !== 'NOW' || !event.jobId) return [];
+      return [{ kind: 'attentionCleared', jobId: event.jobId, before: event.timestamp }, { kind: 'attention' }, { kind: 'sessions' }, ...snapshot(sessionId)];
     case 'artifact.created':
     case 'artifact.deleted':
       return [{ kind: 'artifacts', projectId: event.projectId }];
@@ -91,11 +96,11 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
     case 'job.cancelled':
       // An interrupted turn drops what it was waiting on without an event of
       // its own, and work that stopped may have left files behind.
-      return [{ kind: 'sessions' }, { kind: 'attention' }, ...repository(sessionId)];
+      return [...clearedAttention(event), { kind: 'sessions' }, { kind: 'attention' }, ...repository(sessionId)];
 
     case 'job.completed':
     case 'job.failed': {
-      const effects: Effect[] = [{ kind: 'sessions' }, { kind: 'attention' }, ...repository(sessionId)];
+      const effects: Effect[] = [...clearedAttention(event), { kind: 'sessions' }, { kind: 'attention' }, ...repository(sessionId)];
       // Told as it happens, not as it is replayed: a reconnection resends what
       // was missed, and work that ended an hour ago is not news.
       if (sessionId && now - Date.parse(event.timestamp) < JOB_ENDED_FRESH_FOR) {
@@ -128,6 +133,10 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
     default:
       return [];
   }
+}
+
+function clearedAttention(event: Event): Effect[] {
+  return event.jobId ? [{ kind: 'attentionCleared', jobId: event.jobId, before: event.timestamp }] : [];
 }
 
 function snapshot(sessionId: string): Effect[] {

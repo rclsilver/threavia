@@ -25,6 +25,16 @@ describe('what an event changes', () => {
     expect(kinds(effectsOf(event('validation.requested'), at))).toEqual(['attention', 'sessions', 'snapshot']);
   });
 
+  it('clears the interrupted job and refreshes both clients’ attention views', () => {
+    expect(effectsOf(event('user.message', { jobId: 'j1', payload: { text: 'Change course', delivery: 'NOW' } }), at)).toEqual([
+      { kind: 'attentionCleared', jobId: 'j1', before: new Date(at).toISOString() },
+      { kind: 'attention' }, { kind: 'sessions' }, { kind: 'snapshot', sessionId: 's1' },
+    ]);
+    for (const delivery of ['NEXT', 'QUEUE', undefined]) {
+      expect(effectsOf(event('user.message', { jobId: 'j1', payload: { text: 'Continue', delivery } }), at)).toEqual([]);
+    }
+  });
+
   it('names exactly what a resolution resolved', () => {
     const effects = effectsOf(event('validation.resolved', { payload: { validationId: 'v1', approved: true } }), at);
     expect(effects).toContainEqual({ kind: 'resolved', sessionId: 's1', validationId: 'v1', userInputId: undefined });

@@ -109,7 +109,19 @@ function answer(sessionId: string, text: string, delivery?: string, artifactIds?
     return {artifactId:id, filename:artifact.filename, mimeType:artifact.mimeType, size:artifact.size};
   });
   if (running && delivery && delivery !== 'QUEUE') {
+    if (delivery === 'NOW') {
+      for (const request of [...state.validations, ...state.userInputs]) {
+        if (request.status === 'PENDING' && (request.scope as Json).jobId === running.id) {
+          request.status = 'RESOLVED';
+          request.resolvedChannel = 'system';
+          request.resolvedAt = nowIso();
+        }
+      }
+      running.status = 'RUNNING';
+      running.updatedAt = nowIso();
+    }
     pushEvent(sessionId, 'user.message', { text, delivery }, String(running.id));
+    settle(sessionId);
     return running;
   }
   const jobId = newId();

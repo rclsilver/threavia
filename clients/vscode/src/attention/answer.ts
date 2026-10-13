@@ -44,11 +44,12 @@ export class Answers {
     let value: string | undefined;
     if (choices.length > 0) {
       const other = '$(edit) Something else…';
-      const picked = await vscode.window.showQuickPick(request.freeText ? [...choices, other] : choices, {
-        title: oneLine(request.prompt, 80),
-        placeHolder: request.prompt,
-        ignoreFocusOut: true,
-      });
+      const pick = vscode.window.createQuickPick();
+      pick.items = (request.freeText ? [...choices, other] : choices).map((label) => ({ label }));
+      pick.title = oneLine(request.prompt, 80);
+      pick.placeholder = request.prompt;
+      pick.ignoreFocusOut = true;
+      const picked = await this.waitForAnswer(request, pick, () => pick.selectedItems[0]?.label);
       if (picked === undefined) return;
       value = picked === other ? await this.type(request) : picked;
     } else {
@@ -57,13 +58,39 @@ export class Answers {
     if (value) await this.reply(request, value);
   }
 
-  private type(request: UserInputRequest): Thenable<string | undefined> {
-    return vscode.window.showInputBox({
-      title: 'Answer the agent',
-      prompt: request.prompt,
-      placeHolder: 'Your answer',
-      ignoreFocusOut: true,
-      validateInput: (value) => (value.trim() ? undefined : 'Write an answer.'),
+  private type(request: UserInputRequest): Promise<string | undefined> {
+    const input = vscode.window.createInputBox();
+    input.title = 'Answer the agent';
+    input.prompt = request.prompt;
+    input.placeholder = 'Your answer';
+    input.ignoreFocusOut = true;
+    return this.waitForAnswer(request, input, () => {
+      input.validationMessage = input.value.trim() ? undefined : 'Write an answer.';
+      return input.value.trim() ? input.value : undefined;
+    });
+  }
+
+  /** The picker/text field belongs to this request, including when another device interrupts it. */
+  private waitForAnswer(request: UserInputRequest, input: vscode.InputBox | vscode.QuickPick<vscode.QuickPickItem>, accepted: () => string | undefined): Promise<string | undefined> {
+    return new Promise((resolve) => {
+      const subscriptions: vscode.Disposable[] = [];
+      let finished = false;
+      const finish = (value?: string) => {
+        if (finished) return;
+        finished = true;
+        for (const subscription of subscriptions) subscription.dispose();
+        input.dispose();
+        resolve(value);
+      };
+      subscriptions.push(
+        input.onDidHide(() => finish()),
+        input.onDidAccept(() => { const value = accepted(); if (value !== undefined) finish(value); }),
+        this.attention.onChange(() => {
+          if (this.attention.isObsolete(request) || (this.attention.ready && !this.attention.findUserInput(request.id))) finish();
+        }),
+      );
+      if (this.attention.isObsolete(request) || (this.attention.ready && !this.attention.findUserInput(request.id))) finish();
+      else input.show();
     });
   }
 

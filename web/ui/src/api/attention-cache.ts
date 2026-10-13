@@ -3,6 +3,22 @@ import type { QueryClient } from '@tanstack/react-query';
 import { keys } from './keys';
 import type { Snapshot } from './types';
 
+/** Keeps later questions from the same Job when an interrupt is replayed. */
+export function withoutJobAttention<T extends Snapshot['attention']>(attention: T, jobId: string, before: string): T {
+  const keep = (request: NonNullable<Snapshot['attention']['userInputs']>[number] | NonNullable<Snapshot['attention']['validations']>[number]) =>
+    request.scope.jobId !== jobId || Date.parse(request.createdAt) > Date.parse(before);
+  return { ...attention, validations: (attention.validations ?? []).filter(keep), userInputs: (attention.userInputs ?? []).filter(keep) };
+}
+
+export function dropInterruptedAttention(queries: QueryClient, sessionId: string | undefined, jobId: string, before: string) {
+  // A fetch started before the interrupt must not restore its old prompts.
+  void queries.cancelQueries({ queryKey: keys.attention() }, { revert: false, silent: true });
+  queries.setQueryData<Snapshot['attention']>(keys.attention(), (attention) => attention ? withoutJobAttention(attention, jobId, before) : attention);
+  if (!sessionId) return;
+  void queries.cancelQueries({ queryKey: keys.snapshot(sessionId) }, { revert: false, silent: true });
+  queries.setQueryData<Snapshot>(keys.snapshot(sessionId), (snapshot) => snapshot ? { ...snapshot, attention: withoutJobAttention(snapshot.attention, jobId, before) } : snapshot);
+}
+
 /**
  * Drops a resolved request from the Session that is showing it.
  *

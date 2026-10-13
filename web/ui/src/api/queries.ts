@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 
 import { api, idempotencyKey } from './client';
-import { dropResolvedAttention } from './attention-cache';
+import { dropInterruptedAttention, dropResolvedAttention } from './attention-cache';
 import { keys } from './keys';
 import type {
   Artifact,
@@ -370,10 +370,11 @@ export function usePostMessage(sessionId: string) {
         { message, delivery, artifactIds },
         delivery === 'QUEUE' ? idempotencyKey() : undefined,
       ),
-    onSuccess: (_job, { delivery }) => {
+    onSuccess: (job, { delivery }) => {
       // An interruption drops what the interrupted turn was waiting on, which
       // Core resolves without an event of its own.
       if (delivery === 'NOW') {
+        if (job.status === 'RUNNING') dropInterruptedAttention(queries, sessionId, job.id, job.updatedAt);
         void queries.invalidateQueries({ queryKey: keys.attention() });
         void queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
       }

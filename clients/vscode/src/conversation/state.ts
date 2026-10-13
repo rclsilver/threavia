@@ -1,4 +1,4 @@
-import type { BackendInstance, Event, Job, JobStatus, Run } from '../api/types';
+import { payloadOf, type BackendInstance, type Event, type Job, type JobStatus, type Run, type UserInputRequest, type ValidationRequest } from '../api/types';
 import { humanise } from './format';
 
 /**
@@ -8,6 +8,21 @@ import { humanise } from './format';
  */
 
 export const FINISHED: ReadonlySet<string> = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
+
+export function applyToAttention(attention: { validations: ValidationRequest[]; userInputs: UserInputRequest[] }, event: Event) {
+  const interrupted = payloadOf(event, 'user.message')?.delivery === 'NOW';
+  const ended = ['job.completed', 'job.failed', 'job.cancelled'].includes(event.type);
+  const keep = (request: ValidationRequest | UserInputRequest) => request.scope.jobId !== event.jobId ||
+    Date.parse(request.createdAt) > Date.parse(event.timestamp);
+  if ((interrupted || ended) && event.jobId) {
+    return { validations: attention.validations.filter(keep), userInputs: attention.userInputs.filter(keep) };
+  }
+  if (event.type !== 'validation.resolved' && event.type !== 'user_input.resolved') return attention;
+  return {
+    validations: attention.validations.filter((request) => request.id !== payloadOf(event, 'validation.resolved')?.validationId),
+    userInputs: attention.userInputs.filter((request) => request.id !== payloadOf(event, 'user_input.resolved')?.requestId),
+  };
+}
 
 /**
  * Adds events to a timeline: each one once, by its global sequence, in
@@ -33,7 +48,7 @@ export function mergeEvents(current: readonly Event[], incoming: readonly Event[
  * already being what Core persisted.
  */
 export function applyToJobs(jobs: readonly Job[], event: Event): Job[] {
-  const status = jobStatusFor(event.type);
+  const status = payloadOf(event, 'user.message')?.delivery === 'NOW' ? 'RUNNING' : jobStatusFor(event.type);
   if (!status || !event.jobId) return jobs as Job[];
   if (!jobs.some((job) => job.id === event.jobId)) {
     // A Job created by another client, or by this one before the snapshot was
