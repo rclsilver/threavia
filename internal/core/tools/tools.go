@@ -26,6 +26,10 @@ const (
 	NameProjectHistorySearch     Name = "project_history_search"
 	NameKnownDirectoryRegister   Name = "known_directory_register"
 	NameKnownDirectoryBind       Name = "known_directory_bind"
+	NameKnownDirectoryList       Name = "known_directory_list"
+	NameKnownDirectoryUpdate     Name = "known_directory_update"
+	NameKnownDirectoryUnbind     Name = "known_directory_unbind"
+	NameKnownDirectoryDelete     Name = "known_directory_delete"
 	NameWorkingDirectorySet      Name = "working_directory_set"
 	NameArtifactPublish          Name = "artifact_publish"
 	NameSessionCreate            Name = "session_create"
@@ -164,6 +168,35 @@ func Specs() []Spec {
 				"description": str("What it holds."),
 				"gitRemote":   str("Its git remote, if it has one."),
 			}, "name", "path"),
+		},
+		{
+			Name:        NameKnownDirectoryList,
+			Description: "List this project's known directories and their paths on each backend. Use it to find a directory before registering or binding it again.",
+			InputSchema: object(map[string]any{}),
+		},
+		{
+			Name:        NameKnownDirectoryUpdate,
+			Description: "Change a known directory's name, description or git remote. Omitted fields keep their values; an empty description or git remote clears it. This changes metadata only.",
+			InputSchema: object(map[string]any{
+				"knownDirectoryId": str("Identifier of a directory in this project."),
+				"name":             str("Its new logical name."),
+				"description":      str("What it holds."),
+				"gitRemote":        str("Its git remote."),
+			}, "knownDirectoryId"),
+		},
+		{
+			Name:        NameKnownDirectoryUnbind,
+			Description: "Forget a known directory's path on this backend. Keeps its metadata and paths on other backends; never removes files.",
+			InputSchema: object(map[string]any{
+				"knownDirectoryId": str("Identifier of a directory in this project."),
+			}, "knownDirectoryId"),
+		},
+		{
+			Name:        NameKnownDirectoryDelete,
+			Description: "Forget a known directory and all its bindings. Refuses while a session uses it as its working directory. Never removes files from any machine.",
+			InputSchema: object(map[string]any{
+				"knownDirectoryId": str("Identifier of a directory in this project."),
+			}, "knownDirectoryId"),
 		},
 		{
 			Name:               NameKnownDirectoryBind,

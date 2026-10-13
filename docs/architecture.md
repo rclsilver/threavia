@@ -309,6 +309,14 @@ the agent ask again wastes a turn. And the tool descriptions are written for the
 agent that reads them: they say when to reach for a tool, not what it does
 mechanically, because that is the only instruction an agent gets.
 
+Known-directory Core Tools include `known_directory_register`, `list`, `update`,
+`bind`, `unbind` and `delete` (all names have the `known_directory_` prefix).
+They act only within the calling Job's project; bindings target its own backend.
+Registration stores the metadata and first binding atomically. Update can clear
+description and git remote; unbind forgets only one backend path. Delete refuses
+while any session references the directory. None of these operations removes
+files on backend machines.
+
 ### What a Run context carries
 
 Section 12 asks for a compact structured context, so the budget is spent

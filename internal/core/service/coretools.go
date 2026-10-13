@@ -151,17 +151,15 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 		return map[string]any{"taskId": string(task.ID), "unblocked": summariseTasks(ready)}, nil
 
 	case tools.NameKnownDirectoryRegister:
-		dir, err := s.CreateKnownDirectory(ctx, identity, jc.ProjectID,
-			text(input, "name"), text(input, "description"), optionalString(text(input, "gitRemote")))
-		if err != nil {
-			return nil, err
-		}
-		if _, err := s.BindKnownDirectory(ctx, identity, dir.ID, jc.BackendInstanceID, text(input, "path")); err != nil {
-			return nil, err
-		}
-		return map[string]any{"knownDirectoryId": string(dir.ID)}, nil
+		return s.registerDirectoryTool(ctx, identity, jc, input)
+
+	case tools.NameKnownDirectoryList, tools.NameKnownDirectoryUpdate, tools.NameKnownDirectoryUnbind, tools.NameKnownDirectoryDelete:
+		return s.invokeDirectoryTool(ctx, identity, jc, name, input)
 
 	case tools.NameKnownDirectoryBind:
+		if _, err := s.scopedDirectory(ctx, identity, jc, text(input, "knownDirectoryId")); err != nil {
+			return nil, err
+		}
 		binding, err := s.BindKnownDirectory(ctx, identity,
 			domain.KnownDirectoryID(text(input, "knownDirectoryId")),
 			jc.BackendInstanceID, text(input, "path"))

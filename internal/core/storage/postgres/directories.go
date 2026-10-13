@@ -9,6 +9,40 @@ import (
 const knownDirectoryColumns = `d.id, d.project_id, d.name, d.description, d.git_remote,
 	d.created_at, d.updated_at`
 
+func (s *Store) UpdateKnownDirectory(ctx context.Context, ownerID domain.UserID, id domain.KnownDirectoryID, name, description, gitRemote *string) (domain.KnownDirectory, error) {
+	return scanKnownDirectory(s.q.QueryRow(ctx, `UPDATE known_directories d
+		SET name = COALESCE($3, d.name), description = COALESCE($4, d.description),
+		git_remote = CASE WHEN $5::text IS NULL THEN d.git_remote ELSE NULLIF($5, '') END, updated_at = now()
+		FROM projects p WHERE d.project_id = p.id AND d.id = $1 AND p.owner_id = $2
+		RETURNING `+knownDirectoryColumns, id, ownerID, name, description, gitRemote))
+}
+
+func (s *Store) UnbindKnownDirectory(ctx context.Context, id domain.KnownDirectoryID, instanceID domain.BackendInstanceID) error {
+	_, err := s.q.Exec(ctx, `DELETE FROM known_directory_bindings WHERE known_directory_id = $1 AND backend_instance_id = $2`, id, instanceID)
+	return classify(err, "unbind known directory")
+}
+
+// Lock the directory before checking references so a concurrent session cannot
+// acquire it between the check and deletion (the FK takes a key-share lock).
+func (s *Store) DeleteKnownDirectory(ctx context.Context, ownerID domain.UserID, id domain.KnownDirectoryID) error {
+	return s.WithTx(ctx, func(tx *Store) error {
+		var found domain.KnownDirectoryID
+		if err := tx.q.QueryRow(ctx, `SELECT d.id FROM known_directories d JOIN projects p ON p.id = d.project_id
+			WHERE d.id = $1 AND p.owner_id = $2 FOR UPDATE OF d`, id, ownerID).Scan(&found); err != nil {
+			return classify(err, "lock known directory")
+		}
+		var used bool
+		if err := tx.q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM sessions WHERE working_directory_id = $1)`, id).Scan(&used); err != nil {
+			return classify(err, "check directory use")
+		}
+		if used {
+			return ErrConflict
+		}
+		_, err := tx.q.Exec(ctx, `DELETE FROM known_directories WHERE id = $1`, id)
+		return classify(err, "delete known directory")
+	})
+}
+
 // CreateKnownDirectory inserts a project-level logical directory.
 func (s *Store) CreateKnownDirectory(ctx context.Context, d *domain.KnownDirectory) error {
 	err := s.q.QueryRow(ctx, `
