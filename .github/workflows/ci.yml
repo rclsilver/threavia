@@ -166,7 +166,9 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-          cache-dependency-path: "clients/vscode/package-lock.json"
+          cache-dependency-path: |
+            clients/vscode/package-lock.json
+            web/ui/package-lock.json
 
       # The API types are generated from the contract, so a stale copy fails
       # here like the web client's does.

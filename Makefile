@@ -93,7 +93,8 @@ vscode-generate: $(VSCODE_DEPS) ## Regenerate the VS Code extension's API types 
 	cd clients/vscode && npm run generate:api
 
 .PHONY: vscode-check
-vscode-check: $(VSCODE_DEPS) ## Check the VS Code extension: API types, type-check, lint and tests
+# Cross-client regressions import web cache code and its React Query types.
+vscode-check: $(VSCODE_DEPS) $(WEB_DEPS) ## Check the VS Code extension: API types, type-check, lint and tests
 	@cd clients/vscode && npm run generate:api >/dev/null 2>&1
 	@if ! git diff --quiet -- clients/vscode/src/api/schema.d.ts; then \
 		echo "clients/vscode/src/api/schema.d.ts is stale, run: make vscode-generate"; \
