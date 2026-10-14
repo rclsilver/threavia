@@ -173,13 +173,18 @@ func Specs() []Spec {
 			RequiresValidation: true,
 			Description: "Register a directory worth remembering across machines, and bind " +
 				"it to its path here. Project scope is the default; use global to share it " +
-				"across your projects on this Core. Use it for directories you will come back to.",
+				"across your projects on this Core. Use it for directories you will come back to. " +
+				"When the person asks to work in this directory and remember it for this session, " +
+				"set useForSession=true to register, bind and attach it to this session atomically. " +
+				"The next Job starts there; use the explicit path for work in the current Job. " +
+				"For a directory already known, use working_directory_set instead.",
 			InputSchema: object(map[string]any{
-				"name":        str("A short logical name, such as 'puppet'."),
-				"path":        str("Its absolute path on this machine."),
-				"description": str("What it holds."),
-				"gitRemote":   str("Its git remote, if it has one."),
-				"scope":       map[string]any{"type": "string", "enum": []string{"project", "global"}, "description": "Project (default) remembers it in the current project; global shares it across your projects."},
+				"name":          str("A short logical name, such as 'puppet'."),
+				"path":          str("Its absolute path on this machine."),
+				"description":   str("What it holds."),
+				"gitRemote":     str("Its git remote, if it has one."),
+				"useForSession": map[string]any{"type": "boolean", "description": "Also save this as the current session's working directory. Default false; applies to the next Job."},
+				"scope":         map[string]any{"type": "string", "enum": []string{"project", "global"}, "description": "Project (default) remembers it in the current project; global shares it across your projects."},
 			}, "name", "path"),
 		},
 		{
@@ -241,7 +246,10 @@ func Specs() []Spec {
 			Name:               NameWorkingDirectorySet,
 			RequiresValidation: true,
 			Description: "Change the working directory of this session, durably. This is the " +
-				"initial directory of future runs, not a temporary cd.",
+				"initial directory of the next Job, not a temporary cd. Use it when the person " +
+				"asks to move this session to an already known directory, including one just " +
+				"registered. Find its id with known_directory_list; use the explicit path " +
+				"for work in the current Job because its process keeps its original cwd.",
 			InputSchema: object(map[string]any{
 				"knownDirectoryId": str("Identifier of the known directory to work in."),
 			}, "knownDirectoryId"),

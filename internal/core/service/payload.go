@@ -135,6 +135,8 @@ type JobCreatedPayload struct {
 
 // JobEndedPayload is the body of job.completed, job.failed and job.cancelled.
 type JobEndedPayload struct {
+	Model   string `json:"model,omitempty"`
+	Effort  string `json:"effort,omitempty"`
 	Summary string `json:"summary,omitempty"`
 	Error   string `json:"error,omitempty"`
 	Reason  string `json:"reason,omitempty"`

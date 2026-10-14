@@ -197,6 +197,24 @@ function describe(entry: AuditEntry, context: Context): { Icon: LucideIcon; tone
     };
   }
 
+  if (entry.action === 'session.working_directory_changed') {
+    return {
+      Icon: SlidersHorizontal,
+      tone: TONES.accent,
+      title: <>Changed the working directory of <SessionLink id={entry.sessionId ?? ''} context={context} /></>,
+      body: <p className="text-muted text-sm">{detail.knownDirectoryId ? 'Saved for the next job.' : 'Cleared; the next job uses the backend’s default directory.'}</p>,
+    };
+  }
+
+  if (entry.action === 'session.model_changed') {
+    return {
+      Icon: SlidersHorizontal,
+      tone: TONES.accent,
+      title: <>Changed the model of <SessionLink id={entry.sessionId ?? ''} context={context} /></>,
+      body: <p className="text-muted text-sm">Model: {text(detail.model) || 'Backend default'} · Effort: {text(detail.effort) || 'Backend default'}. Applies to the next job.</p>,
+    };
+  }
+
   if (entry.action === 'execution_policy.set') {
     const after = detail as Policy;
     const before = context.previous.get(entry.id);

@@ -171,6 +171,9 @@ message StartJob {
   ExecutionPolicy execution_policy = 8;
   // Files explicitly attached by the user, bounded to 3 MiB total by Core.
   repeated PromptAttachment attachments = 9;
+  // Session preferences, frozen for this Job. Empty values use backend defaults.
+  string model = 10;
+  string effort = 11;
 }
 
 message PromptAttachment {

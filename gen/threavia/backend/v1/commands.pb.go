@@ -962,7 +962,10 @@ type StartJob struct {
 	ProjectContext  *ProjectContext  `protobuf:"bytes,7,opt,name=project_context,json=projectContext,proto3" json:"project_context,omitempty"`
 	ExecutionPolicy *ExecutionPolicy `protobuf:"bytes,8,opt,name=execution_policy,json=executionPolicy,proto3" json:"execution_policy,omitempty"`
 	// Files explicitly attached by the user, bounded to 3 MiB total by Core.
-	Attachments   []*PromptAttachment `protobuf:"bytes,9,rep,name=attachments,proto3" json:"attachments,omitempty"`
+	Attachments []*PromptAttachment `protobuf:"bytes,9,rep,name=attachments,proto3" json:"attachments,omitempty"`
+	// Session preferences, frozen for this Job. Empty values use backend defaults.
+	Model         string `protobuf:"bytes,10,opt,name=model,proto3" json:"model,omitempty"`
+	Effort        string `protobuf:"bytes,11,opt,name=effort,proto3" json:"effort,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1058,6 +1061,20 @@ func (x *StartJob) GetAttachments() []*PromptAttachment {
 		return x.Attachments
 	}
 	return nil
+}
+
+func (x *StartJob) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *StartJob) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
 }
 
 type PromptAttachment struct {
@@ -2062,7 +2079,7 @@ const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"\x05tools\x18\b \x03(\v2!.threavia.backend.v1.CoreToolSpecR\x05tools\x121\n" +
 	"\x14project_instructions\x18\t \x01(\tR\x13projectInstructions\x129\n" +
 	"\x06skills\x18\n" +
-	" \x03(\v2!.threavia.backend.v1.ProjectSkillR\x06skills\"\xa2\x03\n" +
+	" \x03(\v2!.threavia.backend.v1.ProjectSkillR\x06skills\"\xd0\x03\n" +
 	"\bStartJob\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1d\n" +
@@ -2074,7 +2091,10 @@ const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"\x06prompt\x18\x06 \x01(\tR\x06prompt\x12L\n" +
 	"\x0fproject_context\x18\a \x01(\v2#.threavia.backend.v1.ProjectContextR\x0eprojectContext\x12O\n" +
 	"\x10execution_policy\x18\b \x01(\v2$.threavia.backend.v1.ExecutionPolicyR\x0fexecutionPolicy\x12G\n" +
-	"\vattachments\x18\t \x03(\v2%.threavia.backend.v1.PromptAttachmentR\vattachments\"\x86\x01\n" +
+	"\vattachments\x18\t \x03(\v2%.threavia.backend.v1.PromptAttachmentR\vattachments\x12\x14\n" +
+	"\x05model\x18\n" +
+	" \x01(\tR\x05model\x12\x16\n" +
+	"\x06effort\x18\v \x01(\tR\x06effort\"\x86\x01\n" +
 	"\x10PromptAttachment\x12\x1f\n" +
 	"\vartifact_id\x18\x01 \x01(\tR\n" +
 	"artifactId\x12\x1a\n" +

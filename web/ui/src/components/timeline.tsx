@@ -954,6 +954,8 @@ function JobCost({ event, startedAt }: { event: Event; startedAt?: string }) {
         <span title="Served from the prompt cache">{tokens(usage.cacheReadTokens)} cached</span>
       )}
       {usage?.costUsd ? <span>{cost(usage.costUsd)}</span> : null}
+      {ended.model && <span>{ended.model}</span>}
+      {ended.effort && <span>{ended.effort} effort</span>}
     </span>
   );
 }

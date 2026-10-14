@@ -116,7 +116,34 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 
 	// Reserving the active slot before sending is what keeps a second Job of the
 	// same Run from being dispatched concurrently.
-	if _, err := s.store.TransitionJob(ctx, jobID, from, domain.JobRunning, nil); err != nil {
+	var model, effort string
+	err = s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		session, err := tx.LockSession(ctx, jc.OwnerID, jc.SessionID)
+		if err != nil {
+			return err
+		}
+		backend, err := tx.BackendInstanceByID(ctx, jc.BackendInstanceID)
+		if err != nil {
+			return err
+		}
+		model, effort, err = backend.ResolveModel(session.Model, session.Effort)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrInvalid, err)
+		}
+		if _, err = tx.TransitionJob(ctx, jobID, from, domain.JobRunning, nil); err != nil {
+			return err
+		}
+		return tx.SetJobModel(ctx, jobID, model, effort)
+	})
+	if err != nil {
+		if errors.Is(err, ErrInvalid) {
+			message := "The session model settings cannot run on this backend: " + err.Error()
+			if transitionTo(ctx, s.store, jobID, domain.JobFailed, &message) == nil {
+				s.emit(ctx, jc.OwnerID, events.TypeJobFailed, domain.Scope{ProjectID: jc.ProjectID, SessionID: jc.SessionID, RunID: jc.Run.ID, JobID: jobID}, JobEndedPayload{Error: message})
+				s.dispatchNext(ctx, jc.Run.ID)
+			}
+			return
+		}
 		if errors.Is(err, postgres.ErrJobSlotTaken) || errors.Is(err, postgres.ErrNotFound) {
 			// Another Job holds the slot, or this one already moved on.
 			return
@@ -134,6 +161,8 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 				RunId:           string(jc.Run.ID),
 				JobId:           string(jobID),
 				NativeSessionId: derefString(jc.NativeSessionID),
+				Model:           model,
+				Effort:          effort,
 				Prompt:          prompt,
 				Attachments:     attachments,
 				ProjectContext:  projectContext,

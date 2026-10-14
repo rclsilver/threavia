@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -41,6 +42,8 @@ func (h *handler) startSession(w http.ResponseWriter, r *http.Request, identity 
 		ProjectID          string              `json:"projectId"`
 		BackendInstanceID  string              `json:"backendInstanceId"`
 		WorkingDirectoryID *string             `json:"workingDirectoryId"`
+		Model              string              `json:"model"`
+		Effort             string              `json:"effort"`
 		Message            string              `json:"message"`
 		ArtifactIDs        []domain.ArtifactID `json:"artifactIds"`
 		NativeSessionID    *string             `json:"nativeSessionId"`
@@ -52,6 +55,8 @@ func (h *handler) startSession(w http.ResponseWriter, r *http.Request, identity 
 	in := service.StartSessionInput{
 		ProjectID:         domain.ProjectID(body.ProjectID),
 		BackendInstanceID: domain.BackendInstanceID(body.BackendInstanceID),
+		Model:             body.Model,
+		Effort:            body.Effort,
 		Message:           body.Message,
 		ArtifactIDs:       body.ArtifactIDs,
 		IdempotencyKey:    r.Header.Get("Idempotency-Key"),
@@ -86,10 +91,12 @@ func (h *handler) getSession(w http.ResponseWriter, r *http.Request, identity au
 
 func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
 	body, ok := decode[struct {
-		Title *string `json:"title"`
-		// WorkingDirectoryID is a double pointer so that an explicit null clears
-		// the working directory, while an absent field leaves it alone.
-		WorkingDirectoryID **string `json:"workingDirectoryId"`
+		Model  *string `json:"model"`
+		Effort *string `json:"effort"`
+		Title  *string `json:"title"`
+		// RawMessage distinguishes an explicit null (clear) from an absent
+		// field (leave the session attachment unchanged).
+		WorkingDirectoryID json.RawMessage `json:"workingDirectoryId"`
 		// BackendInstanceID moves the Session to another backend. It is an
 		// explicit act: the timeline stays continuous, but the native provider
 		// session does not travel (spec section 34).
@@ -102,12 +109,25 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 		return
 	}
 
+	if body.BackendInstanceID != nil && (body.Model != nil || body.Effort != nil) {
+		h.fail(w, fmt.Errorf("%w: change the backend and model in separate requests", service.ErrInvalid))
+		return
+	}
 	sessionID := domain.SessionID(r.PathValue("sessionId"))
 	var (
 		session domain.Session
 		err     error
 		changed bool
 	)
+
+	if body.Model != nil || body.Effort != nil {
+		session, err = h.svc.SetSessionModel(r.Context(), identity, sessionID, body.Model, body.Effort)
+		if err != nil {
+			h.fail(w, err)
+			return
+		}
+		changed = true
+	}
 
 	if body.Title != nil {
 		session, err = h.svc.RenameSession(r.Context(), identity, sessionID, *body.Title)
@@ -131,10 +151,15 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 		return
 	}
 
-	if body.WorkingDirectoryID != nil {
+	if len(body.WorkingDirectoryID) > 0 {
+		var raw *string
+		if err := json.Unmarshal(body.WorkingDirectoryID, &raw); err != nil {
+			h.fail(w, fmt.Errorf("%w: workingDirectoryId must be a string or null", service.ErrInvalid))
+			return
+		}
 		var dirID *domain.KnownDirectoryID
-		if *body.WorkingDirectoryID != nil && **body.WorkingDirectoryID != "" {
-			value := domain.KnownDirectoryID(**body.WorkingDirectoryID)
+		if raw != nil && *raw != "" {
+			value := domain.KnownDirectoryID(*raw)
 			dirID = &value
 		}
 		session, err = h.svc.SetSessionWorkingDirectory(r.Context(), identity, sessionID, dirID)

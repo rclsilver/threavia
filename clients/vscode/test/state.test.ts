@@ -35,6 +35,15 @@ describe('mergeEvents', () => {
 });
 
 describe('applyToJobs', () => {
+  it('keeps provider-confirmed model settings while the job moves through its lifecycle', () => {
+    const started = { ...event(1, 'job.started', 'a'), payload: { model: 'opus-v1', effort: 'high' } };
+    let jobs = applyToJobs([job('a', 'QUEUED')], started);
+    expect(jobs[0]).toMatchObject({ model: 'opus-v1', effort: 'high' });
+    jobs = applyToJobs(jobs, event(2, 'job.completed', 'a'));
+    expect(jobs[0]).toMatchObject({ status: 'COMPLETED', model: 'opus-v1', effort: 'high' });
+    expect(applyToJobs([], started)[0]).toMatchObject({ model: 'opus-v1', effort: 'high' });
+  });
+
   it('moves a Job along the timeline and learns Jobs it did not know', () => {
     let jobs = [job('a', 'QUEUED')];
     jobs = applyToJobs(jobs, event(1, 'job.started', 'a'));

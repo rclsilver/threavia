@@ -219,6 +219,7 @@ export class EventStream {
       case 'session.restored':
       case 'session.deleted':
       case 'session.pinned':
+      case 'session.model_changed':
         void this.queries.invalidateQueries({ queryKey: ['sessions'] });
         // The snapshot carries the title too, so a Session open on another
         // screen follows the rename rather than keeping the old one until a
@@ -272,6 +273,7 @@ export class EventStream {
       case 'backend.registered':
       case 'backend.revoked':
       case 'backend.quotas_updated':
+      case 'backend.models_updated':
       case 'backend.default_changed':
         void this.queries.invalidateQueries({ queryKey: keys.backends() });
         break;
@@ -313,6 +315,10 @@ export class EventStream {
 
       case 'working_directory.changed':
         void this.queries.invalidateQueries({ queryKey: ['directories'] });
+        void this.queries.invalidateQueries({ queryKey: ['sessions'] });
+        void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
+        void this.queries.invalidateQueries({ queryKey: keys.repository(event.sessionId ?? '') });
+        void this.queries.invalidateQueries({ queryKey: ['audit'] });
         break;
     }
   }
@@ -363,6 +369,8 @@ export class EventStream {
  * slower and occasionally disagree.
  */
 function applyToJobs(jobs: Job[], event: Event): Job[] {
+  const settings = payloadOf(event, 'job.started');
+  const model = { ...(settings?.model && { model: settings.model }), ...(settings?.effort && { effort: settings.effort }) };
   const status = payloadOf(event, 'user.message')?.delivery === 'NOW' ? 'RUNNING' : jobStatusFor(event.type);
   if (!status || !event.jobId) return jobs;
 
@@ -373,6 +381,7 @@ function applyToJobs(jobs: Job[], event: Event): Job[] {
     return [
       ...jobs,
       {
+        ...model,
         id: event.jobId,
         runId: event.runId ?? '',
         status,
@@ -382,7 +391,7 @@ function applyToJobs(jobs: Job[], event: Event): Job[] {
     ];
   }
   return jobs.map((job) =>
-    job.id === event.jobId ? { ...job, status, updatedAt: event.timestamp } : job,
+    job.id === event.jobId ? { ...job, ...model, status, updatedAt: event.timestamp } : job,
   );
 }
 

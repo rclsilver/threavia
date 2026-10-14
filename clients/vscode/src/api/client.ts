@@ -376,6 +376,10 @@ export class CoreClient {
     );
   }
 
+  setSessionModel(sessionId: string, model: string, effort: string) {
+    return this.request<Session>('PATCH', `/api/v1/sessions/${sessionId}`, { model, effort });
+  }
+
   cancelJob(jobId: string) {
     return this.post<Job>(`/api/v1/jobs/${jobId}/cancel`, { reason: 'cancelled from VS Code' });
   }

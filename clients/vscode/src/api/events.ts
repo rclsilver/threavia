@@ -47,10 +47,13 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
     case 'backend.registered':
     case 'backend.revoked':
     case 'backend.quotas_updated':
+    case 'backend.models_updated':
     case 'backend.default_changed':
       return [{ kind: 'backends' }];
     case 'directory.changed':
       return [{ kind: 'directories' }];
+    case 'working_directory.changed':
+      return [{ kind: 'directories' }, { kind: 'sessions' }, ...snapshot(sessionId), ...repository(sessionId)];
     case 'project.updated':
       return [{ kind: 'projects' }];
     case 'project.deleted':
@@ -84,6 +87,7 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
     case 'session.restored':
     case 'session.deleted':
     case 'session.pinned':
+    case 'session.model_changed':
       return [{ kind: 'sessions' }, ...snapshot(sessionId)];
 
     // A new Run means the Session moved to another backend, which also moves

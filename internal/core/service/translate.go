@@ -20,7 +20,7 @@ import (
 func translateJobEvent(event *backendv1.JobEvent) (events.Type, any, error) {
 	switch body := event.GetBody().(type) {
 	case *backendv1.JobEvent_JobStarted:
-		return events.TypeJobStarted, nil, nil
+		return events.TypeJobStarted, ModelPayload{body.JobStarted.GetModel(), body.JobStarted.GetEffort()}, nil
 
 	case *backendv1.JobEvent_NativeSessionBound:
 		// The native session id is infrastructure, not timeline: it is recorded

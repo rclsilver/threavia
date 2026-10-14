@@ -98,7 +98,7 @@ const settingsIndexRoute = createRoute({
   },
 });
 
-const SETTINGS_TABS: SettingsTab[] = ['permissions', 'schedules', 'backend', 'session'];
+const SETTINGS_TABS: SettingsTab[] = ['permissions', 'schedules', 'backend', 'session', 'model'];
 
 /** A Session's settings, one tab per URL; an unknown tab lands on the first. */
 const sessionSettingsRoute = createRoute({

@@ -38,6 +38,17 @@ func (a *Adapter) JobStarted(ctx context.Context, runID, jobID string) error {
 	})
 }
 
+func (a *Adapter) JobStartedWithModel(ctx context.Context, runID, jobID, model, effort string) error {
+	return a.send(ctx, func() (*backendv1.JobEvent, error) {
+		event, err := a.sdk().Events().JobStarted(ctx, runID, jobID)
+		if err == nil {
+			event.GetJobStarted().Model = model
+			event.GetJobStarted().Effort = effort
+		}
+		return event, err
+	})
+}
+
 // NativeSessionBound implements runner.Sink. It is also recorded locally, so a
 // backend restart still knows which provider session backs the Run.
 func (a *Adapter) NativeSessionBound(ctx context.Context, runID, jobID, nativeSessionID string) error {

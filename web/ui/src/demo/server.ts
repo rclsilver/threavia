@@ -127,6 +127,21 @@ function settle(sessionId: string) {
 }
 
 /** The demo's agent: honest about being one, and quick. */
+function modelSettings(sessionId: string, model?: string, effort?: string) {
+  const session = sessionOf(sessionId);
+  const current = timelineOf(sessionId).runs.at(-1)?.backendInstanceId;
+  const backend = state.backends.find((entry) => entry.id === current);
+  const catalog = backend?.modelCatalog as { defaultModel?: string; defaultEffort?: string; models: { id: string; efforts: string[]; defaultEffort?: string }[] } | undefined;
+  const selected = model ?? text(session.model);
+  const reasoning = effort ?? text(session.effort);
+  const effective = selected || catalog?.defaultModel || '';
+  const option = catalog?.models.find((entry) => entry.id === effective);
+  if ((selected || reasoning) && !(backend?.features as string[] | undefined)?.includes('MODEL_SELECTION')) throw new ApiError(400, 'invalid', 'This backend does not support model selection.');
+  if (selected && !option) throw new ApiError(400, 'invalid', 'This model is unavailable on this backend.');
+  if (reasoning && !option?.efforts.includes(reasoning)) throw new ApiError(400, 'invalid', 'This effort is unavailable for the model.');
+  return { model: effective, effort: reasoning || (selected ? option?.defaultEffort : catalog?.defaultEffort) || option?.defaultEffort || '' };
+}
+
 function answer(sessionId: string, text: string, delivery?: string, artifactIds?: string[]) {
   const timeline = timelineOf(sessionId);
   const running = timeline.jobs.find((job) => !['COMPLETED', 'FAILED', 'CANCELLED'].includes(String(job.status)));
@@ -152,11 +167,12 @@ function answer(sessionId: string, text: string, delivery?: string, artifactIds?
     return running;
   }
   const jobId = newId();
-  const job: Json = { id: jobId, runId: timeline.runs.at(-1)?.id, status: 'COMPLETED', originChannel: 'web', createdAt: nowIso(), updatedAt: nowIso(), startedAt: nowIso(), endedAt: nowIso() };
+  const settings = modelSettings(sessionId);
+  const job: Json = { ...settings, id: jobId, runId: timeline.runs.at(-1)?.id, status: 'COMPLETED', originChannel: 'web', createdAt: nowIso(), updatedAt: nowIso(), startedAt: nowIso(), endedAt: nowIso() };
   timeline.jobs.push(job);
   pushEvent(sessionId, 'job.created', { runId: job.runId }, jobId);
   pushEvent(sessionId, 'user.message', { text, attachments }, jobId);
-  pushEvent(sessionId, 'job.started', {}, jobId);
+  pushEvent(sessionId, 'job.started', settings, jobId);
   pushEvent(
     sessionId,
     'agent.message',
@@ -165,7 +181,7 @@ function answer(sessionId: string, text: string, delivery?: string, artifactIds?
     },
     jobId,
   );
-  pushEvent(sessionId, 'job.completed', { summary: 'Answered (the demo agent).', usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 } }, jobId);
+  pushEvent(sessionId, 'job.completed', { ...settings, summary: 'Answered (the demo agent).', usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 } }, jobId);
   settle(sessionId);
   return job;
 }
@@ -425,7 +441,7 @@ const routes: [string, RegExp, Handler][] = [
     const project = state.projects.find((entry) => entry.id === body.projectId) ?? state.projects[0];
     const sessionId = newId();
     const message = text(body.message);
-    state.sessions.push({ id: sessionId, projectId: project.id, ...(typeof body.workingDirectoryId === 'string' && { workingDirectoryId: body.workingDirectoryId }), title: message.length > 60 ? `${message.slice(0, 60)}…` : message || 'New session', status: 'ACTIVE', createdAt: nowIso(), updatedAt: nowIso() });
+    state.sessions.push({ id: sessionId, projectId: project.id, model: text(body.model), effort: text(body.effort), ...(typeof body.workingDirectoryId === 'string' && { workingDirectoryId: body.workingDirectoryId }), title: message.length > 60 ? `${message.slice(0, 60)}…` : message || 'New session', status: 'ACTIVE', createdAt: nowIso(), updatedAt: nowIso() });
     state.timelines[sessionId] = {
       runs: [{ id: newId(), sessionId, backendInstanceId: body.backendInstanceId ?? data.IDS.laptop, resumeStatus: 'AVAILABLE', createdAt: nowIso(), updatedAt: nowIso() }],
       jobs: [],
@@ -438,6 +454,31 @@ const routes: [string, RegExp, Handler][] = [
   ['GET', /^\/api\/v1\/sessions\/([^/]+)$/, (m) => snapshot(m[1])],
   ['PATCH', /^\/api\/v1\/sessions\/([^/]+)$/, (m, body) => {
     const session = sessionOf(m[1]);
+    if (body.model !== undefined || body.effort !== undefined) {
+      if (body.backendInstanceId) throw new ApiError(400, 'invalid', 'Change the backend and model in separate requests.');
+      modelSettings(m[1], body.model as string | undefined, body.effort as string | undefined);
+      if (body.model !== undefined) session.model = body.model;
+      if (body.effort !== undefined) session.effort = body.effort;
+      session.updatedAt = nowIso();
+      pushEvent(m[1], 'session.model_changed', { model: session.model || '', effort: session.effort || '' });
+      record('session.model_changed', { projectId: session.projectId, sessionId: m[1], subjectId: m[1], detail: { model: session.model || '', effort: session.effort || '' } });
+    }
+    if (body.workingDirectoryId !== undefined) {
+      if (body.workingDirectoryId !== null && typeof body.workingDirectoryId !== 'string') throw new ApiError(400, 'invalid', 'workingDirectoryId must be a string or null.');
+      const id = text(body.workingDirectoryId);
+      if (id) {
+        const directory = directoryOf(id);
+        if (directory.projectId && directory.projectId !== session.projectId) throw new ApiError(400, 'invalid', 'The directory belongs to another project.');
+      }
+      const before = session.workingDirectoryId;
+      if (id) session.workingDirectoryId = id;
+      else delete session.workingDirectoryId;
+      if (before !== session.workingDirectoryId) {
+        session.updatedAt = nowIso();
+        pushEvent(m[1], 'working_directory.changed', id ? { knownDirectoryId: id } : {});
+        record('session.working_directory_changed', { projectId: session.projectId, sessionId: m[1], subjectId: m[1], detail: { fromKnownDirectoryId: before || null, knownDirectoryId: id || null, effectiveFrom: 'next_job' } });
+      }
+    }
     if (body.title !== undefined) session.title = body.title;
     if (body.pinned === true) session.pinnedAt ??= nowIso();
     if (body.pinned === false) delete session.pinnedAt;

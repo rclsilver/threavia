@@ -32,6 +32,8 @@ type Session struct {
 	ManagerSessionID *SessionID `json:"managerSessionId,omitempty"`
 	// Title is generated automatically, user-renamable and has no technical
 	// meaning.
+	Model  string        `json:"model,omitempty"`
+	Effort string        `json:"effort,omitempty"`
 	Title  string        `json:"title"`
 	Status SessionStatus `json:"status"`
 	// WorkingDirectoryID is the optional logical working directory, preferably a
@@ -68,6 +70,8 @@ type Run struct {
 // Job is a complete unit of agent work, from user input until completion,
 // error, cancellation or a waiting interaction (spec section 3.5).
 type Job struct {
+	Model  string    `json:"model,omitempty"`
+	Effort string    `json:"effort,omitempty"`
 	ID     JobID     `json:"id"`
 	RunID  RunID     `json:"runId"`
 	Status JobStatus `json:"status"`
@@ -102,8 +106,9 @@ type BackendInstance struct {
 	Capabilities      []Capability             `json:"capabilities"`
 	// Features are the optional CODE features the backend announced on its
 	// last connection.
-	Features []Feature `json:"features"`
-	Capacity Capacity  `json:"capacity"`
+	Features     []Feature     `json:"features"`
+	ModelCatalog *ModelCatalog `json:"modelCatalog,omitempty"`
+	Capacity     Capacity      `json:"capacity"`
 	// Conditions explain the operational status: why a backend is DEGRADED, in
 	// the vocabulary the backend chose (spec section 7).
 	Conditions      []Condition `json:"conditions,omitempty"`

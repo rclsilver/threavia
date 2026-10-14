@@ -353,7 +353,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	live.policy = params.Policy
 	c.mu.Unlock()
 
-	if err := sink.JobStarted(ctx, params.RunID, params.JobID); err != nil {
+	if err := runner.ReportJobStarted(ctx, sink, params.RunID, params.JobID, params.Model, params.Effort); err != nil {
 		c.logger.Error("cannot report the job start", slog.String("error", err.Error()))
 	}
 	// Reported straight away: Core records it on the Run, so a later message
@@ -507,6 +507,13 @@ func (c *Claude) command(ctx context.Context, params StartParams, scratch, nativ
 		// shell command than anything maintained here — and the permission tool
 		// above hears only what is left.
 		"--permission-mode", native.Mode,
+	}
+
+	if params.Model != "" {
+		args = append(args, "--model", params.Model)
+	}
+	if params.Effort != "" {
+		args = append(args, "--effort", params.Effort)
 	}
 
 	// Which of this machine's settings the provider may read. None, as a rule:

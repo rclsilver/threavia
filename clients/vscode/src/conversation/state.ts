@@ -48,6 +48,8 @@ export function mergeEvents(current: readonly Event[], incoming: readonly Event[
  * already being what Core persisted.
  */
 export function applyToJobs(jobs: readonly Job[], event: Event): Job[] {
+  const settings = payloadOf(event, 'job.started');
+  const model = { ...(settings?.model && { model: settings.model }), ...(settings?.effort && { effort: settings.effort }) };
   const status = payloadOf(event, 'user.message')?.delivery === 'NOW' ? 'RUNNING' : jobStatusFor(event.type);
   if (!status || !event.jobId) return jobs as Job[];
   if (!jobs.some((job) => job.id === event.jobId)) {
@@ -55,10 +57,10 @@ export function applyToJobs(jobs: readonly Job[], event: Event): Job[] {
     // taken. The identifiers are all the list needs to show it as live.
     return [
       ...jobs,
-      { id: event.jobId, runId: event.runId ?? '', status, createdAt: event.timestamp, updatedAt: event.timestamp },
+      { ...model, id: event.jobId, runId: event.runId ?? '', status, createdAt: event.timestamp, updatedAt: event.timestamp },
     ];
   }
-  return jobs.map((job) => (job.id === event.jobId ? { ...job, status, updatedAt: event.timestamp } : job));
+  return jobs.map((job) => (job.id === event.jobId ? { ...job, ...model, status, updatedAt: event.timestamp } : job));
 }
 
 function jobStatusFor(type: string): JobStatus | null {

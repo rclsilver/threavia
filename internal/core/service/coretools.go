@@ -200,14 +200,17 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 
 	case tools.NameWorkingDirectorySet:
 		id := domain.KnownDirectoryID(text(input, "knownDirectoryId"))
-		session, err := s.SetSessionWorkingDirectory(ctx, identity, jc.SessionID, &id)
+		session, err := s.setSessionWorkingDirectory(ctx, identity, jc.SessionID, &id, jc.JobID)
 		if err != nil {
 			return nil, err
 		}
-		// It is the initial directory of future Runs, not of this one.
+		// The running provider process keeps its cwd; the next Job reads the
+		// session attachment when Core builds its ProjectContext.
 		return map[string]any{
-			"sessionId": string(session.ID),
-			"note":      "This takes effect from the next run; it is not a cd for the current one.",
+			"sessionId":        string(session.ID),
+			"knownDirectoryId": *session.WorkingDirectoryID,
+			"effectiveFrom":    "next_job",
+			"note":             "Saved as this session's working directory. The current process keeps its cwd; use the explicit path for work now.",
 		}, nil
 
 	default:

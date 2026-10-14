@@ -73,8 +73,10 @@ export interface EventPayloads {
   // ellipsis; the whole thing stays on the machine that produced it.
   'tool.completed': { toolCallId: string; name: string; output?: { output?: string } };
   'tool.failed': { toolCallId: string; name: string; error?: string };
-  'job.completed': { summary?: string; usage?: Usage };
-  'job.failed': { error?: string; usage?: Usage };
+  'job.started': { model?: string; effort?: string };
+  'session.model_changed': { model: string; effort: string };
+  'job.completed': { summary?: string; usage?: Usage; model?: string; effort?: string };
+  'job.failed': { error?: string; usage?: Usage; model?: string; effort?: string };
   'validation.resolved': { validationId: string; approved: boolean; note?: string; title?: string; actorJobId?: string };
   'user_input.resolved': { requestId: string; value: string; actorJobId?: string };
   'artifact.created': { artifactId: string; filename: string; mimeType: string; size: number; title?: string };

@@ -647,6 +647,7 @@ type FeatureFlags struct {
 	JobInputNext bool                   `protobuf:"varint,2,opt,name=job_input_next,json=jobInputNext,proto3" json:"job_input_next,omitempty"`
 	// Understands and forwards StartJob.attachments, including native images.
 	PromptAttachments bool `protobuf:"varint,3,opt,name=prompt_attachments,json=promptAttachments,proto3" json:"prompt_attachments,omitempty"`
+	ModelSelection    bool `protobuf:"varint,4,opt,name=model_selection,json=modelSelection,proto3" json:"model_selection,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -702,6 +703,142 @@ func (x *FeatureFlags) GetPromptAttachments() bool {
 	return false
 }
 
+func (x *FeatureFlags) GetModelSelection() bool {
+	if x != nil {
+		return x.ModelSelection
+	}
+	return false
+}
+
+// Provider models and the effort values each accepts, discovered by the backend.
+type ModelOption struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Efforts       []string               `protobuf:"bytes,3,rep,name=efforts,proto3" json:"efforts,omitempty"`
+	DefaultEffort string                 `protobuf:"bytes,4,opt,name=default_effort,json=defaultEffort,proto3" json:"default_effort,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ModelOption) Reset() {
+	*x = ModelOption{}
+	mi := &file_threavia_backend_v1_common_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelOption) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelOption) ProtoMessage() {}
+
+func (x *ModelOption) ProtoReflect() protoreflect.Message {
+	mi := &file_threavia_backend_v1_common_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelOption.ProtoReflect.Descriptor instead.
+func (*ModelOption) Descriptor() ([]byte, []int) {
+	return file_threavia_backend_v1_common_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ModelOption) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ModelOption) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ModelOption) GetEfforts() []string {
+	if x != nil {
+		return x.Efforts
+	}
+	return nil
+}
+
+func (x *ModelOption) GetDefaultEffort() string {
+	if x != nil {
+		return x.DefaultEffort
+	}
+	return ""
+}
+
+type ModelCatalog struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Models        []*ModelOption         `protobuf:"bytes,1,rep,name=models,proto3" json:"models,omitempty"`
+	DefaultModel  string                 `protobuf:"bytes,2,opt,name=default_model,json=defaultModel,proto3" json:"default_model,omitempty"`
+	DefaultEffort string                 `protobuf:"bytes,3,opt,name=default_effort,json=defaultEffort,proto3" json:"default_effort,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ModelCatalog) Reset() {
+	*x = ModelCatalog{}
+	mi := &file_threavia_backend_v1_common_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelCatalog) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelCatalog) ProtoMessage() {}
+
+func (x *ModelCatalog) ProtoReflect() protoreflect.Message {
+	mi := &file_threavia_backend_v1_common_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelCatalog.ProtoReflect.Descriptor instead.
+func (*ModelCatalog) Descriptor() ([]byte, []int) {
+	return file_threavia_backend_v1_common_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ModelCatalog) GetModels() []*ModelOption {
+	if x != nil {
+		return x.Models
+	}
+	return nil
+}
+
+func (x *ModelCatalog) GetDefaultModel() string {
+	if x != nil {
+		return x.DefaultModel
+	}
+	return ""
+}
+
+func (x *ModelCatalog) GetDefaultEffort() string {
+	if x != nil {
+		return x.DefaultEffort
+	}
+	return ""
+}
+
 type Error struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
@@ -712,7 +849,7 @@ type Error struct {
 
 func (x *Error) Reset() {
 	*x = Error{}
-	mi := &file_threavia_backend_v1_common_proto_msgTypes[6]
+	mi := &file_threavia_backend_v1_common_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -724,7 +861,7 @@ func (x *Error) String() string {
 func (*Error) ProtoMessage() {}
 
 func (x *Error) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_common_proto_msgTypes[6]
+	mi := &file_threavia_backend_v1_common_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -737,7 +874,7 @@ func (x *Error) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Error.ProtoReflect.Descriptor instead.
 func (*Error) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_common_proto_rawDescGZIP(), []int{6}
+	return file_threavia_backend_v1_common_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Error) GetCode() string {
@@ -776,11 +913,21 @@ const file_threavia_backend_v1_common_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\tR\aversion\";\n" +
 	"\vBackendInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"\x87\x01\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"\xb0\x01\n" +
 	"\fFeatureFlags\x12\"\n" +
 	"\rjob_input_now\x18\x01 \x01(\bR\vjobInputNow\x12$\n" +
 	"\x0ejob_input_next\x18\x02 \x01(\bR\fjobInputNext\x12-\n" +
-	"\x12prompt_attachments\x18\x03 \x01(\bR\x11promptAttachments\"5\n" +
+	"\x12prompt_attachments\x18\x03 \x01(\bR\x11promptAttachments\x12'\n" +
+	"\x0fmodel_selection\x18\x04 \x01(\bR\x0emodelSelection\"r\n" +
+	"\vModelOption\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
+	"\aefforts\x18\x03 \x03(\tR\aefforts\x12%\n" +
+	"\x0edefault_effort\x18\x04 \x01(\tR\rdefaultEffort\"\x94\x01\n" +
+	"\fModelCatalog\x128\n" +
+	"\x06models\x18\x01 \x03(\v2 .threavia.backend.v1.ModelOptionR\x06models\x12#\n" +
+	"\rdefault_model\x18\x02 \x01(\tR\fdefaultModel\x12%\n" +
+	"\x0edefault_effort\x18\x03 \x01(\tR\rdefaultEffort\"5\n" +
 	"\x05Error\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage*p\n" +
@@ -831,7 +978,7 @@ func file_threavia_backend_v1_common_proto_rawDescGZIP() []byte {
 }
 
 var file_threavia_backend_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_threavia_backend_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_threavia_backend_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_threavia_backend_v1_common_proto_goTypes = []any{
 	(Capability)(0),               // 0: threavia.backend.v1.Capability
 	(BackendOperationalStatus)(0), // 1: threavia.backend.v1.BackendOperationalStatus
@@ -845,16 +992,19 @@ var file_threavia_backend_v1_common_proto_goTypes = []any{
 	(*SdkInfo)(nil),               // 9: threavia.backend.v1.SdkInfo
 	(*BackendInfo)(nil),           // 10: threavia.backend.v1.BackendInfo
 	(*FeatureFlags)(nil),          // 11: threavia.backend.v1.FeatureFlags
-	(*Error)(nil),                 // 12: threavia.backend.v1.Error
-	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
+	(*ModelOption)(nil),           // 12: threavia.backend.v1.ModelOption
+	(*ModelCatalog)(nil),          // 13: threavia.backend.v1.ModelCatalog
+	(*Error)(nil),                 // 14: threavia.backend.v1.Error
+	(*timestamppb.Timestamp)(nil), // 15: google.protobuf.Timestamp
 }
 var file_threavia_backend_v1_common_proto_depIdxs = []int32{
-	13, // 0: threavia.backend.v1.Condition.last_transition_time:type_name -> google.protobuf.Timestamp
-	1,  // [1:1] is the sub-list for method output_type
-	1,  // [1:1] is the sub-list for method input_type
-	1,  // [1:1] is the sub-list for extension type_name
-	1,  // [1:1] is the sub-list for extension extendee
-	0,  // [0:1] is the sub-list for field type_name
+	15, // 0: threavia.backend.v1.Condition.last_transition_time:type_name -> google.protobuf.Timestamp
+	12, // 1: threavia.backend.v1.ModelCatalog.models:type_name -> threavia.backend.v1.ModelOption
+	2,  // [2:2] is the sub-list for method output_type
+	2,  // [2:2] is the sub-list for method input_type
+	2,  // [2:2] is the sub-list for extension type_name
+	2,  // [2:2] is the sub-list for extension extendee
+	0,  // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_threavia_backend_v1_common_proto_init() }
@@ -868,7 +1018,7 @@ func file_threavia_backend_v1_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_threavia_backend_v1_common_proto_rawDesc), len(file_threavia_backend_v1_common_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   7,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

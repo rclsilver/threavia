@@ -449,7 +449,10 @@ func (x *EphemeralJobEvent) GetOccurredAt() *timestamppb.Timestamp {
 }
 
 type JobStarted struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Provider-confirmed values, when known. Empty means not reported.
+	Model         string `protobuf:"bytes,1,opt,name=model,proto3" json:"model,omitempty"`
+	Effort        string `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -482,6 +485,20 @@ func (x *JobStarted) ProtoReflect() protoreflect.Message {
 // Deprecated: Use JobStarted.ProtoReflect.Descriptor instead.
 func (*JobStarted) Descriptor() ([]byte, []int) {
 	return file_threavia_backend_v1_events_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *JobStarted) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *JobStarted) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
 }
 
 // Reported once the provider native session backing the Run is known. The Run
@@ -1324,9 +1341,11 @@ const file_threavia_backend_v1_events_proto_rawDesc = "" +
 	"\x04kind\x18\x03 \x01(\tR\x04kind\x12\x16\n" +
 	"\x06detail\x18\x04 \x01(\tR\x06detail\x12;\n" +
 	"\voccurred_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"occurredAt\"\f\n" +
+	"occurredAt\":\n" +
 	"\n" +
-	"JobStarted\"@\n" +
+	"JobStarted\x12\x14\n" +
+	"\x05model\x18\x01 \x01(\tR\x05model\x12\x16\n" +
+	"\x06effort\x18\x02 \x01(\tR\x06effort\"@\n" +
 	"\x12NativeSessionBound\x12*\n" +
 	"\x11native_session_id\x18\x01 \x01(\tR\x0fnativeSessionId\"E\n" +
 	"\fAgentMessage\x12\x12\n" +

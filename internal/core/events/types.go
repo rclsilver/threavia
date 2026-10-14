@@ -12,12 +12,13 @@ type Type string
 // this log is the observable timeline and the realtime synchronization
 // mechanism, not an event-sourcing journal to replay.
 const (
-	TypeSessionCreated  Type = "session.created"
-	TypeSessionRenamed  Type = "session.renamed"
-	TypeSessionArchived Type = "session.archived"
-	TypeSessionRestored Type = "session.restored"
-	TypeSessionDeleted  Type = "session.deleted"
-	TypeSessionPinned   Type = "session.pinned"
+	TypeSessionCreated      Type = "session.created"
+	TypeSessionRenamed      Type = "session.renamed"
+	TypeSessionArchived     Type = "session.archived"
+	TypeSessionRestored     Type = "session.restored"
+	TypeSessionDeleted      Type = "session.deleted"
+	TypeSessionPinned       Type = "session.pinned"
+	TypeSessionModelChanged Type = "session.model_changed"
 
 	TypeRunCreated Type = "run.created"
 
@@ -55,6 +56,7 @@ const (
 	TypeBackendRegistered     Type = "backend.registered"
 	TypeBackendRevoked        Type = "backend.revoked"
 	TypeBackendQuotasUpdated  Type = "backend.quotas_updated"
+	TypeBackendModelsUpdated  Type = "backend.models_updated"
 	TypeProjectUpdated        Type = "project.updated"
 	TypeProjectDeleted        Type = "project.deleted"
 	TypeDirectoryChanged      Type = "directory.changed"
@@ -76,6 +78,7 @@ var persistentTypes = map[Type]bool{
 	TypeSessionRestored:         true,
 	TypeSessionDeleted:          true,
 	TypeSessionPinned:           true,
+	TypeSessionModelChanged:     true,
 	TypeRunCreated:              true,
 	TypeJobCreated:              true,
 	TypeJobStarted:              true,
@@ -105,6 +108,7 @@ var persistentTypes = map[Type]bool{
 	TypeBackendRegistered:       true,
 	TypeBackendRevoked:          true,
 	TypeBackendQuotasUpdated:    true,
+	TypeBackendModelsUpdated:    true,
 	TypeProjectUpdated:          true,
 	TypeProjectDeleted:          true,
 	TypeScheduleSkipped:         true,

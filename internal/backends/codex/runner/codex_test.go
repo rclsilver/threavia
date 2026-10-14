@@ -291,6 +291,18 @@ func TestProviderProcess(t *testing.T) {
 			if scenario == "apikey" && !loggedIn {
 				os.Exit(14)
 			}
+			if strings.HasPrefix(scenario, "session-model") {
+				if p["model"] != "session-model" {
+					os.Exit(41)
+				}
+				config, _ := p["config"].(map[string]any)
+				if config["model_reasoning_effort"] != "high" {
+					os.Exit(42)
+				}
+				if scenario == "session-model-resume" && p["threadId"] != "thread-1" {
+					os.Exit(43)
+				}
+			}
 			// Assert isolation and the actual native wire spellings.
 			config, _ := p["config"].(map[string]any)
 			settings, _ := config["skills.config"].([]any)
@@ -333,6 +345,9 @@ func TestProviderProcess(t *testing.T) {
 			}
 			response(map[string]any{"thread": map[string]any{"id": "thread-1"}})
 		case "turn/start":
+			if strings.HasPrefix(scenario, "session-model") && (p["model"] != "session-model" || p["effort"] != "high") {
+				os.Exit(44)
+			}
 			if id := str(p, "threadId"); strings.HasPrefix(id, "helper-") {
 				response(map[string]any{"turn": map[string]any{"id": "helper-turn"}})
 				text := `{"verdict":"allow","reason":"Within the user's request."}`

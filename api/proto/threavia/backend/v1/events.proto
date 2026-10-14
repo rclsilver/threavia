@@ -49,7 +49,11 @@ message EphemeralJobEvent {
   google.protobuf.Timestamp occurred_at = 5;
 }
 
-message JobStarted {}
+message JobStarted {
+  // Provider-confirmed values, when known. Empty means not reported.
+  string model = 1;
+  string effort = 2;
+}
 
 // Reported once the provider native session backing the Run is known. The Run
 // native session id is nullable until this arrives (spec section 3.4).

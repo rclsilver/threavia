@@ -96,7 +96,8 @@ export const backends = [
     operationalStatus: 'READY',
     providerAuthState: 'AUTHENTICATED',
     capabilities: ['CODE'],
-    features: ['JOB_INPUT_NEXT', 'JOB_INPUT_NOW'],
+    features: ['JOB_INPUT_NEXT', 'JOB_INPUT_NOW', 'MODEL_SELECTION'],
+    modelCatalog: { defaultModel: 'sonnet', defaultEffort: 'high', models: [{ id: 'sonnet', name: 'Sonnet', efforts: ['low', 'medium', 'high'], defaultEffort: 'high' }, { id: 'opus', name: 'Opus', efforts: ['low', 'medium', 'high', 'max'], defaultEffort: 'high' }, { id: 'haiku', name: 'Haiku', efforts: [] }] },
     capacity: { maxConcurrentRuns: 2, activeRuns: 1 },
     protocolVersion: 1,
     lastHeartbeatAt: at(0.2),
@@ -118,7 +119,8 @@ export const backends = [
     operationalStatus: 'READY',
     providerAuthState: 'AUTHENTICATED',
     capabilities: ['CODE'],
-    features: ['JOB_INPUT_NEXT', 'JOB_INPUT_NOW'],
+    features: ['JOB_INPUT_NEXT', 'JOB_INPUT_NOW', 'MODEL_SELECTION'],
+    modelCatalog: { defaultModel: 'demo-codex', defaultEffort: 'medium', models: [{ id: 'demo-codex', name: 'Codex (demo)', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'medium' }, { id: 'demo-codex-mini', name: 'Codex mini (demo)', efforts: ['low', 'medium', 'high'], defaultEffort: 'medium' }] },
     capacity: { maxConcurrentRuns: 1, activeRuns: 0 },
     protocolVersion: 1,
     lastHeartbeatAt: at(0.3),
@@ -170,8 +172,8 @@ const session = (
 });
 
 export const sessions = [
-  session(IDS.certManager, IDS.homelab, 'Upgrade cert-manager to 1.16', 14, 1, { activeJobStatus: 'WAITING_VALIDATION' }),
-  session(IDS.ingress, IDS.homelab, 'Fix the flaky deploy of the ingress controller', 70, 22),
+  session(IDS.certManager, IDS.homelab, 'Upgrade cert-manager to 1.16', 14, 1, { activeJobStatus: 'WAITING_VALIDATION', model: 'opus', effort: 'high' }),
+  session(IDS.ingress, IDS.homelab, 'Fix the flaky deploy of the ingress controller', 70, 22, { model: 'sonnet', effort: 'medium' }),
   session(IDS.ingressCheck, IDS.homelab, 'Check the ingress rollout', 24, 22, { managerSessionId: IDS.ingress }),
   session(IDS.backups, IDS.homelab, 'Check last night’s backups', 60 * 9, 30, { activeJobStatus: 'WAITING_INPUT' }),
   // Pinned, as someone going back and forth between two Projects would.
@@ -214,6 +216,12 @@ class Timeline {
   }
 
   push(type: string, minutesAgo: number, payload: Record<string, unknown> = {}, jobId?: string) {
+    if (['job.started', 'job.completed', 'job.failed'].includes(type)) {
+      const session = sessions.find((entry) => entry.id === this.sessionId);
+      const model = session && 'model' in session ? session.model : undefined;
+      const effort = session && 'effort' in session ? session.effort : undefined;
+      payload = { ...payload, ...(typeof model === 'string' && model ? { model } : {}), ...(typeof effort === 'string' && effort ? { effort } : {}) };
+    }
     this.events.push({
       id: `${this.sessionId.slice(0, 8)}-${this.sequence}`,
       sequence: this.sequence++,
@@ -240,7 +248,10 @@ class Timeline {
   }
 
   job(jobId: string, status: string, startedMinutesAgo: number, endedMinutesAgo?: number) {
+    const session = sessions.find((entry) => entry.id === this.sessionId);
     this.jobs.push({
+      ...(session && 'model' in session && { model: session.model }),
+      ...(session && 'effort' in session && { effort: session.effort }),
       id: jobId,
       runId: this.runId,
       status,
@@ -686,6 +697,7 @@ const audit = (n: number, action: string, minutesAgo: number, rest: Record<strin
 const policyDetail = (overrides: Record<string, unknown>) => ({ ...projectPolicies[IDS.homelab], ...overrides });
 
 export const auditEntries = [
+  audit(21, 'session.model_changed', 1, { projectId: IDS.homelab, sessionId: IDS.certManager, subjectId: IDS.certManager, channel: 'web', detail: { model: 'opus', effort: 'high' } }),
   audit(1, 'validation.resolved', 22.5, { projectId: IDS.homelab, sessionId: IDS.ingress, channel: 'mobile', detail: { approved: true, title: 'Bash: git push origin main', note: '' } }),
   audit(2, 'validation.resolved', 63.5, {
     projectId: IDS.homelab,

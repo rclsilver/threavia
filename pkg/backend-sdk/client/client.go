@@ -274,6 +274,7 @@ func (c *Client) hello() *backendv1.BackendToCore {
 				InstanceName: c.cfg.InstanceName,
 				Capabilities: c.cfg.Capabilities,
 				Features:     c.cfg.featureFlags(),
+				ModelCatalog: c.cfg.ModelCatalog,
 				Capacity:     c.capacity(),
 			},
 		},

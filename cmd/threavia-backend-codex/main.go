@@ -123,6 +123,15 @@ func run() error {
 		return err
 	}
 
+	modelCtx, modelCancel := context.WithTimeout(ctx, 15*time.Second)
+	catalog, modelErr := codex.Models(modelCtx)
+	modelCancel()
+	if modelErr != nil {
+		logger.Warn("model catalog unavailable", slog.String("error", modelErr.Error()))
+	} else {
+		cfg.Client.FeatureModelSelection = true
+		cfg.Client.ModelCatalog = catalog
+	}
 	sdk, err := client.New(cfg.Client, codexAdapter, store, logger)
 	if err != nil {
 		return err

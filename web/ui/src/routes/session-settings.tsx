@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { Archive, ArrowLeft, CalendarClock, Server, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { Archive, ArrowLeft, CalendarClock, Cpu, Server, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
 import {
@@ -10,6 +10,7 @@ import {
   useSessionArtifacts,
   useSnapshot,
 } from '@/api/queries';
+import { SessionModelPanel } from '@/components/session-model-panel';
 import { PolicyPanel } from '@/components/policy-panel';
 import { SchedulesPanel } from '@/components/schedules-panel';
 import { ConfirmLine } from '@/components/record-list';
@@ -21,9 +22,10 @@ import { BackendIcon } from '@/components/backend-info';
 import { cn, humanise } from '@/lib/utils';
 import { useShortcut } from '@/use-shortcut';
 
-export type SettingsTab = 'permissions' | 'schedules' | 'backend' | 'session';
+export type SettingsTab = 'permissions' | 'schedules' | 'backend' | 'session' | 'model';
 
 const TABS: { tab: SettingsTab; label: string; Icon: LucideIcon; detail: string }[] = [
+  { tab: 'model', label: 'Model & effort', Icon: Cpu, detail: 'The model and reasoning effort used by this session. Changes apply when the next job starts.' },
   {
     tab: 'permissions',
     label: 'Permissions',
@@ -114,6 +116,7 @@ export function SessionSettingsView() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl space-y-5 p-4 sm:p-6">
           <p className="text-muted text-sm">{current.detail}</p>
+          {current.tab === 'model' && <SessionModelPanel sessionId={sessionId} />}
           {current.tab === 'permissions' && <PolicyPanel sessionId={sessionId} />}
           {current.tab === 'schedules' && <SchedulesPanel sessionId={sessionId} />}
           {current.tab === 'backend' && <MoveSession sessionId={sessionId} />}

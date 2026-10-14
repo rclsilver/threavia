@@ -141,6 +141,10 @@ export function SessionView() {
             {backend && (
               <BackendInfo backend={backend} />
             )}
+            <Link to="/sessions/$sessionId/settings/$tab" params={{ sessionId, tab: 'model' }} className="inline-flex min-h-11 items-center hover:underline sm:min-h-8" data-tour="session-model">
+              {active && active.status !== 'QUEUED' ? 'Next job · ' : ''}Model: {data.session.model || backend?.modelCatalog?.defaultModel || 'Backend default'} · Effort: {data.session.effort || (data.session.model ? backend?.modelCatalog?.models.find((option) => option.id === data.session.model)?.defaultEffort : backend?.modelCatalog?.defaultEffort) || 'Backend default'}
+            </Link>
+            {active?.model && active.status !== 'QUEUED' && <span>Current job: {active.model} · {active.effort ? `${active.effort} effort` : 'Effort not reported'}</span>}
             <RepositoryStatus sessionId={sessionId} />
             {active && working && (
               // A liveness signal, not history: it says the agent is still

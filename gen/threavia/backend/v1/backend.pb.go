@@ -40,6 +40,7 @@ type Hello struct {
 	Capabilities  []Capability           `protobuf:"varint,5,rep,packed,name=capabilities,proto3,enum=threavia.backend.v1.Capability" json:"capabilities,omitempty"`
 	Features      *FeatureFlags          `protobuf:"bytes,6,opt,name=features,proto3" json:"features,omitempty"`
 	Capacity      *Capacity              `protobuf:"bytes,7,opt,name=capacity,proto3" json:"capacity,omitempty"`
+	ModelCatalog  *ModelCatalog          `protobuf:"bytes,8,opt,name=model_catalog,json=modelCatalog,proto3" json:"model_catalog,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -119,6 +120,13 @@ func (x *Hello) GetFeatures() *FeatureFlags {
 func (x *Hello) GetCapacity() *Capacity {
 	if x != nil {
 		return x.Capacity
+	}
+	return nil
+}
+
+func (x *Hello) GetModelCatalog() *ModelCatalog {
+	if x != nil {
+		return x.ModelCatalog
 	}
 	return nil
 }
@@ -1588,7 +1596,7 @@ var File_threavia_backend_v1_backend_proto protoreflect.FileDescriptor
 
 const file_threavia_backend_v1_backend_proto_rawDesc = "" +
 	"\n" +
-	"!threavia/backend/v1/backend.proto\x12\x13threavia.backend.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"threavia/backend/v1/commands.proto\x1a threavia/backend/v1/common.proto\x1a threavia/backend/v1/events.proto\"\x96\x03\n" +
+	"!threavia/backend/v1/backend.proto\x12\x13threavia.backend.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"threavia/backend/v1/commands.proto\x1a threavia/backend/v1/common.proto\x1a threavia/backend/v1/events.proto\"\xde\x03\n" +
 	"\x05Hello\x12=\n" +
 	"\bprotocol\x18\x01 \x01(\v2!.threavia.backend.v1.ProtocolInfoR\bprotocol\x12.\n" +
 	"\x03sdk\x18\x02 \x01(\v2\x1c.threavia.backend.v1.SdkInfoR\x03sdk\x12:\n" +
@@ -1596,7 +1604,8 @@ const file_threavia_backend_v1_backend_proto_rawDesc = "" +
 	"\rinstance_name\x18\x04 \x01(\tR\finstanceName\x12C\n" +
 	"\fcapabilities\x18\x05 \x03(\x0e2\x1f.threavia.backend.v1.CapabilityR\fcapabilities\x12=\n" +
 	"\bfeatures\x18\x06 \x01(\v2!.threavia.backend.v1.FeatureFlagsR\bfeatures\x129\n" +
-	"\bcapacity\x18\a \x01(\v2\x1d.threavia.backend.v1.CapacityR\bcapacity\"{\n" +
+	"\bcapacity\x18\a \x01(\v2\x1d.threavia.backend.v1.CapacityR\bcapacity\x12F\n" +
+	"\rmodel_catalog\x18\b \x01(\v2!.threavia.backend.v1.ModelCatalogR\fmodelCatalog\"{\n" +
 	"\tHeartbeat\x123\n" +
 	"\asent_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\x129\n" +
 	"\bcapacity\x18\x02 \x01(\v2\x1d.threavia.backend.v1.CapacityR\bcapacity\"\xa8\x02\n" +
@@ -1750,30 +1759,31 @@ var file_threavia_backend_v1_backend_proto_goTypes = []any{
 	(Capability)(0),                 // 19: threavia.backend.v1.Capability
 	(*FeatureFlags)(nil),            // 20: threavia.backend.v1.FeatureFlags
 	(*Capacity)(nil),                // 21: threavia.backend.v1.Capacity
-	(*timestamppb.Timestamp)(nil),   // 22: google.protobuf.Timestamp
-	(BackendOperationalStatus)(0),   // 23: threavia.backend.v1.BackendOperationalStatus
-	(*Condition)(nil),               // 24: threavia.backend.v1.Condition
-	(ProviderAuthState)(0),          // 25: threavia.backend.v1.ProviderAuthState
-	(*structpb.Struct)(nil),         // 26: google.protobuf.Struct
-	(JobStatus)(0),                  // 27: threavia.backend.v1.JobStatus
-	(ResumeStatus)(0),               // 28: threavia.backend.v1.ResumeStatus
-	(*Error)(nil),                   // 29: threavia.backend.v1.Error
-	(*JobEvent)(nil),                // 30: threavia.backend.v1.JobEvent
-	(*EphemeralJobEvent)(nil),       // 31: threavia.backend.v1.EphemeralJobEvent
-	(*Welcome)(nil),                 // 32: threavia.backend.v1.Welcome
-	(*StartJob)(nil),                // 33: threavia.backend.v1.StartJob
-	(*CancelJob)(nil),               // 34: threavia.backend.v1.CancelJob
-	(*ValidationResolution)(nil),    // 35: threavia.backend.v1.ValidationResolution
-	(*UserInputResolution)(nil),     // 36: threavia.backend.v1.UserInputResolution
-	(*JobInputNow)(nil),             // 37: threavia.backend.v1.JobInputNow
-	(*JobInputNext)(nil),            // 38: threavia.backend.v1.JobInputNext
-	(*ReconcileInstruction)(nil),    // 39: threavia.backend.v1.ReconcileInstruction
-	(*EventAck)(nil),                // 40: threavia.backend.v1.EventAck
-	(*CoreToolResponse)(nil),        // 41: threavia.backend.v1.CoreToolResponse
-	(*SkillBundle)(nil),             // 42: threavia.backend.v1.SkillBundle
-	(*UpdateJobPolicy)(nil),         // 43: threavia.backend.v1.UpdateJobPolicy
-	(*WorkspaceDiffRequest)(nil),    // 44: threavia.backend.v1.WorkspaceDiffRequest
-	(*RepositoryStatusRequest)(nil), // 45: threavia.backend.v1.RepositoryStatusRequest
+	(*ModelCatalog)(nil),            // 22: threavia.backend.v1.ModelCatalog
+	(*timestamppb.Timestamp)(nil),   // 23: google.protobuf.Timestamp
+	(BackendOperationalStatus)(0),   // 24: threavia.backend.v1.BackendOperationalStatus
+	(*Condition)(nil),               // 25: threavia.backend.v1.Condition
+	(ProviderAuthState)(0),          // 26: threavia.backend.v1.ProviderAuthState
+	(*structpb.Struct)(nil),         // 27: google.protobuf.Struct
+	(JobStatus)(0),                  // 28: threavia.backend.v1.JobStatus
+	(ResumeStatus)(0),               // 29: threavia.backend.v1.ResumeStatus
+	(*Error)(nil),                   // 30: threavia.backend.v1.Error
+	(*JobEvent)(nil),                // 31: threavia.backend.v1.JobEvent
+	(*EphemeralJobEvent)(nil),       // 32: threavia.backend.v1.EphemeralJobEvent
+	(*Welcome)(nil),                 // 33: threavia.backend.v1.Welcome
+	(*StartJob)(nil),                // 34: threavia.backend.v1.StartJob
+	(*CancelJob)(nil),               // 35: threavia.backend.v1.CancelJob
+	(*ValidationResolution)(nil),    // 36: threavia.backend.v1.ValidationResolution
+	(*UserInputResolution)(nil),     // 37: threavia.backend.v1.UserInputResolution
+	(*JobInputNow)(nil),             // 38: threavia.backend.v1.JobInputNow
+	(*JobInputNext)(nil),            // 39: threavia.backend.v1.JobInputNext
+	(*ReconcileInstruction)(nil),    // 40: threavia.backend.v1.ReconcileInstruction
+	(*EventAck)(nil),                // 41: threavia.backend.v1.EventAck
+	(*CoreToolResponse)(nil),        // 42: threavia.backend.v1.CoreToolResponse
+	(*SkillBundle)(nil),             // 43: threavia.backend.v1.SkillBundle
+	(*UpdateJobPolicy)(nil),         // 44: threavia.backend.v1.UpdateJobPolicy
+	(*WorkspaceDiffRequest)(nil),    // 45: threavia.backend.v1.WorkspaceDiffRequest
+	(*RepositoryStatusRequest)(nil), // 46: threavia.backend.v1.RepositoryStatusRequest
 }
 var file_threavia_backend_v1_backend_proto_depIdxs = []int32{
 	16, // 0: threavia.backend.v1.Hello.protocol:type_name -> threavia.backend.v1.ProtocolInfo
@@ -1782,57 +1792,58 @@ var file_threavia_backend_v1_backend_proto_depIdxs = []int32{
 	19, // 3: threavia.backend.v1.Hello.capabilities:type_name -> threavia.backend.v1.Capability
 	20, // 4: threavia.backend.v1.Hello.features:type_name -> threavia.backend.v1.FeatureFlags
 	21, // 5: threavia.backend.v1.Hello.capacity:type_name -> threavia.backend.v1.Capacity
-	22, // 6: threavia.backend.v1.Heartbeat.sent_at:type_name -> google.protobuf.Timestamp
-	21, // 7: threavia.backend.v1.Heartbeat.capacity:type_name -> threavia.backend.v1.Capacity
-	23, // 8: threavia.backend.v1.StatusUpdate.status:type_name -> threavia.backend.v1.BackendOperationalStatus
-	24, // 9: threavia.backend.v1.StatusUpdate.conditions:type_name -> threavia.backend.v1.Condition
-	21, // 10: threavia.backend.v1.StatusUpdate.capacity:type_name -> threavia.backend.v1.Capacity
-	25, // 11: threavia.backend.v1.StatusUpdate.provider_auth_state:type_name -> threavia.backend.v1.ProviderAuthState
-	26, // 12: threavia.backend.v1.QuotaReport.snapshot:type_name -> google.protobuf.Struct
-	27, // 13: threavia.backend.v1.JobState.status:type_name -> threavia.backend.v1.JobStatus
-	28, // 14: threavia.backend.v1.RunState.resume_status:type_name -> threavia.backend.v1.ResumeStatus
-	4,  // 15: threavia.backend.v1.RunState.jobs:type_name -> threavia.backend.v1.JobState
-	5,  // 16: threavia.backend.v1.ReconcileState.runs:type_name -> threavia.backend.v1.RunState
-	29, // 17: threavia.backend.v1.CommandResult.error:type_name -> threavia.backend.v1.Error
-	26, // 18: threavia.backend.v1.CoreToolRequest.input:type_name -> google.protobuf.Struct
-	0,  // 19: threavia.backend.v1.BackendToCore.hello:type_name -> threavia.backend.v1.Hello
-	1,  // 20: threavia.backend.v1.BackendToCore.heartbeat:type_name -> threavia.backend.v1.Heartbeat
-	2,  // 21: threavia.backend.v1.BackendToCore.status_update:type_name -> threavia.backend.v1.StatusUpdate
-	6,  // 22: threavia.backend.v1.BackendToCore.reconcile_state:type_name -> threavia.backend.v1.ReconcileState
-	30, // 23: threavia.backend.v1.BackendToCore.job_event:type_name -> threavia.backend.v1.JobEvent
-	31, // 24: threavia.backend.v1.BackendToCore.ephemeral_job_event:type_name -> threavia.backend.v1.EphemeralJobEvent
-	7,  // 25: threavia.backend.v1.BackendToCore.command_result:type_name -> threavia.backend.v1.CommandResult
-	8,  // 26: threavia.backend.v1.BackendToCore.core_tool_request:type_name -> threavia.backend.v1.CoreToolRequest
-	12, // 27: threavia.backend.v1.BackendToCore.skill_inventory:type_name -> threavia.backend.v1.SkillInventory
-	13, // 28: threavia.backend.v1.BackendToCore.skill_fetch_request:type_name -> threavia.backend.v1.SkillFetchRequest
-	14, // 29: threavia.backend.v1.BackendToCore.workspace_diff:type_name -> threavia.backend.v1.WorkspaceDiff
-	15, // 30: threavia.backend.v1.BackendToCore.repository_status:type_name -> threavia.backend.v1.RepositoryStatus
-	3,  // 31: threavia.backend.v1.BackendToCore.quota_report:type_name -> threavia.backend.v1.QuotaReport
-	32, // 32: threavia.backend.v1.CoreToBackend.welcome:type_name -> threavia.backend.v1.Welcome
-	33, // 33: threavia.backend.v1.CoreToBackend.start_job:type_name -> threavia.backend.v1.StartJob
-	34, // 34: threavia.backend.v1.CoreToBackend.cancel_job:type_name -> threavia.backend.v1.CancelJob
-	35, // 35: threavia.backend.v1.CoreToBackend.validation_resolution:type_name -> threavia.backend.v1.ValidationResolution
-	36, // 36: threavia.backend.v1.CoreToBackend.user_input_resolution:type_name -> threavia.backend.v1.UserInputResolution
-	37, // 37: threavia.backend.v1.CoreToBackend.job_input_now:type_name -> threavia.backend.v1.JobInputNow
-	38, // 38: threavia.backend.v1.CoreToBackend.job_input_next:type_name -> threavia.backend.v1.JobInputNext
-	39, // 39: threavia.backend.v1.CoreToBackend.reconcile_instruction:type_name -> threavia.backend.v1.ReconcileInstruction
-	40, // 40: threavia.backend.v1.CoreToBackend.event_ack:type_name -> threavia.backend.v1.EventAck
-	41, // 41: threavia.backend.v1.CoreToBackend.core_tool_response:type_name -> threavia.backend.v1.CoreToolResponse
-	42, // 42: threavia.backend.v1.CoreToBackend.skill_bundle:type_name -> threavia.backend.v1.SkillBundle
-	43, // 43: threavia.backend.v1.CoreToBackend.update_job_policy:type_name -> threavia.backend.v1.UpdateJobPolicy
-	44, // 44: threavia.backend.v1.CoreToBackend.workspace_diff_request:type_name -> threavia.backend.v1.WorkspaceDiffRequest
-	45, // 45: threavia.backend.v1.CoreToBackend.repository_status_request:type_name -> threavia.backend.v1.RepositoryStatusRequest
-	11, // 46: threavia.backend.v1.SkillInventory.local:type_name -> threavia.backend.v1.LocalSkill
-	29, // 47: threavia.backend.v1.WorkspaceDiff.error:type_name -> threavia.backend.v1.Error
-	22, // 48: threavia.backend.v1.RepositoryStatus.fetched_at:type_name -> google.protobuf.Timestamp
-	29, // 49: threavia.backend.v1.RepositoryStatus.error:type_name -> threavia.backend.v1.Error
-	9,  // 50: threavia.backend.v1.BackendControl.Connect:input_type -> threavia.backend.v1.BackendToCore
-	10, // 51: threavia.backend.v1.BackendControl.Connect:output_type -> threavia.backend.v1.CoreToBackend
-	51, // [51:52] is the sub-list for method output_type
-	50, // [50:51] is the sub-list for method input_type
-	50, // [50:50] is the sub-list for extension type_name
-	50, // [50:50] is the sub-list for extension extendee
-	0,  // [0:50] is the sub-list for field type_name
+	22, // 6: threavia.backend.v1.Hello.model_catalog:type_name -> threavia.backend.v1.ModelCatalog
+	23, // 7: threavia.backend.v1.Heartbeat.sent_at:type_name -> google.protobuf.Timestamp
+	21, // 8: threavia.backend.v1.Heartbeat.capacity:type_name -> threavia.backend.v1.Capacity
+	24, // 9: threavia.backend.v1.StatusUpdate.status:type_name -> threavia.backend.v1.BackendOperationalStatus
+	25, // 10: threavia.backend.v1.StatusUpdate.conditions:type_name -> threavia.backend.v1.Condition
+	21, // 11: threavia.backend.v1.StatusUpdate.capacity:type_name -> threavia.backend.v1.Capacity
+	26, // 12: threavia.backend.v1.StatusUpdate.provider_auth_state:type_name -> threavia.backend.v1.ProviderAuthState
+	27, // 13: threavia.backend.v1.QuotaReport.snapshot:type_name -> google.protobuf.Struct
+	28, // 14: threavia.backend.v1.JobState.status:type_name -> threavia.backend.v1.JobStatus
+	29, // 15: threavia.backend.v1.RunState.resume_status:type_name -> threavia.backend.v1.ResumeStatus
+	4,  // 16: threavia.backend.v1.RunState.jobs:type_name -> threavia.backend.v1.JobState
+	5,  // 17: threavia.backend.v1.ReconcileState.runs:type_name -> threavia.backend.v1.RunState
+	30, // 18: threavia.backend.v1.CommandResult.error:type_name -> threavia.backend.v1.Error
+	27, // 19: threavia.backend.v1.CoreToolRequest.input:type_name -> google.protobuf.Struct
+	0,  // 20: threavia.backend.v1.BackendToCore.hello:type_name -> threavia.backend.v1.Hello
+	1,  // 21: threavia.backend.v1.BackendToCore.heartbeat:type_name -> threavia.backend.v1.Heartbeat
+	2,  // 22: threavia.backend.v1.BackendToCore.status_update:type_name -> threavia.backend.v1.StatusUpdate
+	6,  // 23: threavia.backend.v1.BackendToCore.reconcile_state:type_name -> threavia.backend.v1.ReconcileState
+	31, // 24: threavia.backend.v1.BackendToCore.job_event:type_name -> threavia.backend.v1.JobEvent
+	32, // 25: threavia.backend.v1.BackendToCore.ephemeral_job_event:type_name -> threavia.backend.v1.EphemeralJobEvent
+	7,  // 26: threavia.backend.v1.BackendToCore.command_result:type_name -> threavia.backend.v1.CommandResult
+	8,  // 27: threavia.backend.v1.BackendToCore.core_tool_request:type_name -> threavia.backend.v1.CoreToolRequest
+	12, // 28: threavia.backend.v1.BackendToCore.skill_inventory:type_name -> threavia.backend.v1.SkillInventory
+	13, // 29: threavia.backend.v1.BackendToCore.skill_fetch_request:type_name -> threavia.backend.v1.SkillFetchRequest
+	14, // 30: threavia.backend.v1.BackendToCore.workspace_diff:type_name -> threavia.backend.v1.WorkspaceDiff
+	15, // 31: threavia.backend.v1.BackendToCore.repository_status:type_name -> threavia.backend.v1.RepositoryStatus
+	3,  // 32: threavia.backend.v1.BackendToCore.quota_report:type_name -> threavia.backend.v1.QuotaReport
+	33, // 33: threavia.backend.v1.CoreToBackend.welcome:type_name -> threavia.backend.v1.Welcome
+	34, // 34: threavia.backend.v1.CoreToBackend.start_job:type_name -> threavia.backend.v1.StartJob
+	35, // 35: threavia.backend.v1.CoreToBackend.cancel_job:type_name -> threavia.backend.v1.CancelJob
+	36, // 36: threavia.backend.v1.CoreToBackend.validation_resolution:type_name -> threavia.backend.v1.ValidationResolution
+	37, // 37: threavia.backend.v1.CoreToBackend.user_input_resolution:type_name -> threavia.backend.v1.UserInputResolution
+	38, // 38: threavia.backend.v1.CoreToBackend.job_input_now:type_name -> threavia.backend.v1.JobInputNow
+	39, // 39: threavia.backend.v1.CoreToBackend.job_input_next:type_name -> threavia.backend.v1.JobInputNext
+	40, // 40: threavia.backend.v1.CoreToBackend.reconcile_instruction:type_name -> threavia.backend.v1.ReconcileInstruction
+	41, // 41: threavia.backend.v1.CoreToBackend.event_ack:type_name -> threavia.backend.v1.EventAck
+	42, // 42: threavia.backend.v1.CoreToBackend.core_tool_response:type_name -> threavia.backend.v1.CoreToolResponse
+	43, // 43: threavia.backend.v1.CoreToBackend.skill_bundle:type_name -> threavia.backend.v1.SkillBundle
+	44, // 44: threavia.backend.v1.CoreToBackend.update_job_policy:type_name -> threavia.backend.v1.UpdateJobPolicy
+	45, // 45: threavia.backend.v1.CoreToBackend.workspace_diff_request:type_name -> threavia.backend.v1.WorkspaceDiffRequest
+	46, // 46: threavia.backend.v1.CoreToBackend.repository_status_request:type_name -> threavia.backend.v1.RepositoryStatusRequest
+	11, // 47: threavia.backend.v1.SkillInventory.local:type_name -> threavia.backend.v1.LocalSkill
+	30, // 48: threavia.backend.v1.WorkspaceDiff.error:type_name -> threavia.backend.v1.Error
+	23, // 49: threavia.backend.v1.RepositoryStatus.fetched_at:type_name -> google.protobuf.Timestamp
+	30, // 50: threavia.backend.v1.RepositoryStatus.error:type_name -> threavia.backend.v1.Error
+	9,  // 51: threavia.backend.v1.BackendControl.Connect:input_type -> threavia.backend.v1.BackendToCore
+	10, // 52: threavia.backend.v1.BackendControl.Connect:output_type -> threavia.backend.v1.CoreToBackend
+	52, // [52:53] is the sub-list for method output_type
+	51, // [51:52] is the sub-list for method input_type
+	51, // [51:51] is the sub-list for extension type_name
+	51, // [51:51] is the sub-list for extension extendee
+	0,  // [0:51] is the sub-list for field type_name
 }
 
 func init() { file_threavia_backend_v1_backend_proto_init() }

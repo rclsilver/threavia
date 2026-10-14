@@ -49,7 +49,7 @@ const STEPS: Step[] = [
   },
   {
     path: PROJECT('directories'), target: '[data-tour="known-directories"]', title: 'Known directories',
-    body: 'Remember a directory for this project or share it globally across your projects. Manage its metadata and paths on each backend; forgetting an entry leaves the files in place.',
+    body: 'Remember a directory for this project or share it globally across your projects. An agent can register a directory and attach its session to it in one approved call; future jobs start there.',
   },
   {
     path: '/settings/backends', title: 'Your default backend',
@@ -78,6 +78,12 @@ const STEPS: Step[] = [
     target: '[data-tour="composer"]',
     title: 'Talk to work in progress',
     body: 'While a job runs, a message can wait its turn, join at the next step, or interrupt. Paste an image or attach a sound to include it in a new queued prompt; Escape stops the job.',
+  },
+  {
+    path: `${SESSION(IDS.certManager)}/settings/model`,
+    target: '[data-tour="model-settings"]',
+    title: 'A model for each session',
+    body: 'Choose a model and reasoning effort for this session from what its backend supports. Settings are saved across devices and apply to the next job; finished work keeps the model it used.',
   },
   {
     path: SESSION(IDS.ingress),

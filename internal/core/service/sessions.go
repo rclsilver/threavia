@@ -26,6 +26,8 @@ type StartSessionInput struct {
 	ProjectID          domain.ProjectID
 	BackendInstanceID  domain.BackendInstanceID
 	WorkingDirectoryID *domain.KnownDirectoryID
+	Model              string
+	Effort             string
 	Message            string
 	ArtifactIDs        []domain.ArtifactID
 	// Internal delegation metadata, never accepted from the HTTP start route.
@@ -82,6 +84,14 @@ func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in S
 		return StartSessionResult{}, err
 	}
 
+	backend, err := s.store.GetBackendInstance(ctx, identity.UserID, in.BackendInstanceID)
+	if err != nil {
+		return StartSessionResult{}, translate(err)
+	}
+	if _, _, err = backend.ResolveModel(in.Model, in.Effort); err != nil {
+		return StartSessionResult{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+
 	attachments, err := s.promptAttachments(ctx, identity, in.ProjectID, in.ArtifactIDs)
 	if err != nil {
 		return StartSessionResult{}, err
@@ -97,6 +107,8 @@ func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in S
 
 	result := StartSessionResult{
 		Session: domain.Session{
+			Model:              in.Model,
+			Effort:             in.Effort,
 			ID:                 domain.NewSessionID(),
 			ProjectID:          in.ProjectID,
 			Title:              deriveTitle(message),
@@ -518,28 +530,49 @@ func (s *Service) DeleteSession(ctx context.Context, identity auth.Identity, ses
 // SetSessionWorkingDirectory changes the initial cwd of a Session. The change is
 // explicit: a temporary cd by the agent never mutates it.
 func (s *Service) SetSessionWorkingDirectory(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, dirID *domain.KnownDirectoryID) (domain.Session, error) {
-	current, err := s.store.GetSession(ctx, identity.UserID, sessionID)
-	if err != nil {
-		return domain.Session{}, translate(err)
-	}
-	if dirID != nil {
-		dir, err := s.store.GetKnownDirectory(ctx, identity.UserID, *dirID)
-		if err != nil {
-			return domain.Session{}, translate(err)
-		}
-		if dir.ProjectID != "" && dir.ProjectID != current.ProjectID {
-			return domain.Session{}, fmt.Errorf("%w: the directory belongs to another project", ErrInvalid)
-		}
-	}
+	return s.setSessionWorkingDirectory(ctx, identity, sessionID, dirID, "")
+}
 
-	session, err := s.store.SetSessionWorkingDirectory(ctx, identity.UserID, sessionID, dirID)
+func (s *Service) setSessionWorkingDirectory(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, dirID *domain.KnownDirectoryID, actorJobID domain.JobID) (domain.Session, error) {
+	var before, session domain.Session
+	b := &batch{ownerID: identity.UserID}
+	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		var err error
+		before, err = tx.LockSession(ctx, identity.UserID, sessionID)
+		if err != nil {
+			return err
+		}
+		if dirID != nil {
+			dir, err := tx.GetKnownDirectory(ctx, identity.UserID, *dirID)
+			if err != nil {
+				return err
+			}
+			if dir.ProjectID != "" && dir.ProjectID != before.ProjectID {
+				return fmt.Errorf("%w: the directory belongs to another project", ErrInvalid)
+			}
+		}
+		if (dirID == nil && before.WorkingDirectoryID == nil) || (dirID != nil && before.WorkingDirectoryID != nil && string(*dirID) == *before.WorkingDirectoryID) {
+			session = before
+			return nil
+		}
+		session, err = tx.SetSessionWorkingDirectory(ctx, identity.UserID, sessionID, dirID)
+		if err != nil {
+			return err
+		}
+		return s.appendAll(ctx, tx, b, record{events.TypeWorkingDirectoryChanged, domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID}, WorkingDirectoryChangedPayload{KnownDirectoryID: session.WorkingDirectoryID}})
+	})
 	if err != nil {
 		return domain.Session{}, translate(err)
 	}
-	s.emit(ctx, identity.UserID, events.TypeWorkingDirectoryChanged,
-		domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID},
-		WorkingDirectoryChangedPayload{KnownDirectoryID: session.WorkingDirectoryID})
+	s.flush(b)
+	if len(b.records) > 0 {
+		s.auditSessionDirectoryChange(ctx, identity, before, session, actorJobID)
+	}
 	return session, nil
+}
+
+func (s *Service) auditSessionDirectoryChange(ctx context.Context, identity auth.Identity, before, after domain.Session, actorJobID domain.JobID) {
+	s.audit(ctx, identity, postgres.AuditEntry{Action: "session.working_directory_changed", ProjectID: string(after.ProjectID), SessionID: string(after.ID), JobID: string(actorJobID), SubjectID: string(after.ID), Detail: mustJSON(map[string]any{"fromKnownDirectoryId": before.WorkingDirectoryID, "knownDirectoryId": after.WorkingDirectoryID, "effectiveFrom": "next_job"})})
 }
 
 // ListSessions returns the Sessions of a Project.

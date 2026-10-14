@@ -159,6 +159,8 @@ func (a *Adapter) OnDisconnected(_ context.Context, cause error) {
 // goroutine and everything it produces travels back as events.
 func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error {
 	params := runner.StartParams{
+		Model:           cmd.GetModel(),
+		Effort:          cmd.GetEffort(),
 		RunID:           cmd.GetRunId(),
 		JobID:           cmd.GetJobId(),
 		NativeSessionID: cmd.GetNativeSessionId(),

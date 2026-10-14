@@ -35,6 +35,33 @@ provider-specific RPCs, and no provider assumption in any message.
 | | `WorkspaceDiffRequest` |
 | | `RepositoryStatusRequest` |
 
+## Session model and reasoning effort
+
+Core persists each Session's model and effort preferences in PostgreSQL. Empty
+preferences use backend defaults. A change applies when the next Job launches,
+including a queued Job; NOW/NEXT messages retain the running Job's settings.
+
+A backend advertising `FeatureFlags.model_selection` includes a
+`Hello.model_catalog`: provider model ids, display names, the efforts each
+model accepts, and defaults when known. Core exposes that catalog to both
+clients and rejects unsupported choices. Legacy backends continue running
+Sessions with default settings; explicit preferences are refused.
+
+`StartJob.model` and `StartJob.effort` carry the configuration frozen at launch.
+The backend applies it on fresh and resumed provider sessions and on every turn
+within that Job. It must fail an unsupported configuration instead of silently
+substituting a model. When known, `JobStarted.model` and `JobStarted.effort`
+confirm the actual provider settings; Core retains them on the Job and in
+completion/failure event payloads. Unknown settings stay absent.
+
+Codex discovers models through app-server `model/list`. Claude advertises the
+stable Sonnet, Opus and Haiku aliases and offers effort only when the installed
+CLI advertises `--effort`. Catalogs are read at backend startup; restarting the
+backend refreshes them. Session changes produce `session.model_changed` events
+and audit entries, so open clients follow changes made on another device.
+A connection also emits owner-scoped `backend.models_updated` with
+`{backendInstanceId}`, prompting clients to refresh the announced catalog.
+
 ## Connection
 
 The backend always dials Core; Core never needs inbound connectivity to a
@@ -172,6 +199,22 @@ allowing these tools like the others, so the guarantee holds only from a backend
 that reads it. What a backend does on its own behalf, such as recording where it
 found a directory the person pointed it to, is not an agent's call and needs no
 validation.
+
+To remember a directory and attach the current Session to it, call
+`known_directory_register` with `{name, path, useForSession: true}` (and optional
+metadata or global scope). Core creates the KnownDirectory, its binding on the
+calling backend and the Session's `workingDirectoryId` in one transaction.
+Without that flag, registration only remembers the directory. For an existing
+directory, use `working_directory_set({knownDirectoryId})`. These tools keep
+their existing validation requirements.
+
+Both attachment tools return `sessionId`, `knownDirectoryId` and
+`effectiveFrom: "next_job"`. The current provider process retains its original
+cwd; the agent uses the explicit requested path for work in that Job. Core
+persists the attachment and resolves it into the next Job's ProjectContext.
+The `working_directory.changed` event refreshes session lists, the Session
+snapshot and repository state in both clients, and
+`session.working_directory_changed` records the change in the audit.
 
 Core also declares the session management tools described in
 [Session management](session-management.md). `session_resolve_validation`

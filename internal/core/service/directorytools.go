@@ -7,6 +7,7 @@ import (
 
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
+	"github.com/rclsilver/threavia/internal/core/events"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 	"github.com/rclsilver/threavia/internal/core/tools"
 )
@@ -106,11 +107,20 @@ func (s *Service) invokeDirectoryTool(ctx context.Context, identity auth.Identit
 	return nil, fmt.Errorf("%w: unknown directory tool", ErrInvalid)
 }
 
-// Registration and its first binding succeed together, or neither is stored.
+// Registration, its first binding and the optional session attachment succeed
+// together, or none is stored.
 func (s *Service) registerDirectoryTool(ctx context.Context, identity auth.Identity, jc jobScope, input map[string]any) (map[string]any, error) {
 	projectID, err := directoryProject(jc, input)
 	if err != nil {
 		return nil, err
+	}
+	useForSession := false
+	if raw, exists := input["useForSession"]; exists {
+		value, ok := raw.(bool)
+		if !ok {
+			return nil, fmt.Errorf("%w: useForSession must be a boolean", ErrInvalid)
+		}
+		useForSession = value
 	}
 	name, path := text(input, "name"), text(input, "path")
 	if name == "" || !strings.HasPrefix(path, "/") {
@@ -125,17 +135,45 @@ func (s *Service) registerDirectoryTool(ctx context.Context, identity auth.Ident
 		return nil, translate(err)
 	}
 	dir := domain.KnownDirectory{ID: domain.NewKnownDirectoryID(), ProjectID: projectID, OwnerID: identity.UserID, Name: name, Description: text(input, "description"), GitRemote: optionalString(text(input, "gitRemote"))}
+	b := &batch{ownerID: identity.UserID}
+	var before, updated domain.Session
 	err = s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		if useForSession {
+			var err error
+			before, err = tx.LockSession(ctx, identity.UserID, jc.SessionID)
+			if err != nil {
+				return err
+			}
+		}
 		if err := tx.CreateKnownDirectory(ctx, &dir); err != nil {
 			return err
 		}
-		return tx.BindKnownDirectory(ctx, &domain.KnownDirectoryBinding{KnownDirectoryID: dir.ID, BackendInstanceID: jc.BackendInstanceID, Path: path})
+		if err := tx.BindKnownDirectory(ctx, &domain.KnownDirectoryBinding{KnownDirectoryID: dir.ID, BackendInstanceID: jc.BackendInstanceID, Path: path}); err != nil {
+			return err
+		}
+		if !useForSession {
+			return nil
+		}
+		var err error
+		updated, err = tx.SetSessionWorkingDirectory(ctx, identity.UserID, jc.SessionID, &dir.ID)
+		if err != nil {
+			return err
+		}
+		return s.appendAll(ctx, tx, b, record{events.TypeWorkingDirectoryChanged, domain.Scope{ProjectID: jc.ProjectID, SessionID: jc.SessionID}, WorkingDirectoryChangedPayload{KnownDirectoryID: updated.WorkingDirectoryID}})
 	})
 	if err != nil {
 		return nil, translate(err)
 	}
 	s.directoryChanged(ctx, identity, dir.ID)
-	return map[string]any{"knownDirectoryId": string(dir.ID), "scope": directoryScope(dir), "projectId": string(dir.ProjectID)}, nil
+	s.flush(b)
+	result := map[string]any{"knownDirectoryId": string(dir.ID), "scope": directoryScope(dir), "projectId": string(dir.ProjectID), "path": path}
+	if useForSession {
+		s.auditSessionDirectoryChange(ctx, identity, before, updated, jc.JobID)
+		result["sessionId"] = string(updated.ID)
+		result["effectiveFrom"] = "next_job"
+		result["note"] = "Saved as this session's working directory. The current process keeps its cwd; use the explicit path for work now."
+	}
+	return result, nil
 }
 
 func directoryProject(jc jobScope, input map[string]any) (domain.ProjectID, error) {

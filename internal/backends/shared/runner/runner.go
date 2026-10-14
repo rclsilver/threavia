@@ -36,6 +36,8 @@ type StartParams struct {
 	// only, never a filesystem boundary: the agent may work elsewhere subject to
 	// real OS permissions.
 	WorkingDirectory string
+	Model            string
+	Effort           string
 	Prompt           string
 	Attachments      []*backendv1.PromptAttachment
 	// ProjectName and ProjectDescription come from the compact ProjectContext

@@ -21,6 +21,7 @@ type streamLine struct {
 	Type      string           `json:"type"`
 	Subtype   string           `json:"subtype"`
 	SessionID string           `json:"session_id"`
+	Model     string           `json:"model"`
 	Message   *providerMessage `json:"message"`
 	IsError   bool             `json:"is_error"`
 	Result    string           `json:"result"`
@@ -125,6 +126,9 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 		case "system":
 			// The init frame confirms the session the provider actually used.
 			if line.Subtype == "init" && line.SessionID != "" {
+				if line.Model != "" {
+					_ = contract.ReportJobModel(ctx, sink, params.RunID, params.JobID, line.Model, params.Effort)
+				}
 				sink.Progress(ctx, params.RunID, params.JobID, "agent.working", "session ready")
 			}
 

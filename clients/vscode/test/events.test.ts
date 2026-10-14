@@ -16,8 +16,19 @@ const event = (type: string, extra: Partial<Event> = {}): Event => ({
 const kinds = (effects: Effect[]) => effects.map((effect) => effect.kind);
 
 describe('what an event changes', () => {
+  it('refreshes session settings changed from another client', () => {
+    expect(effectsOf(event('session.model_changed'), at)).toEqual([{ kind: 'sessions' }, { kind: 'snapshot', sessionId: 's1' }]);
+  });
+
+  it('refreshes the session and repository after its working directory changes', () => {
+    expect(effectsOf(event('working_directory.changed'), at)).toEqual([
+      { kind: 'directories' }, { kind: 'sessions' }, { kind: 'snapshot', sessionId: 's1' }, { kind: 'repository', sessionId: 's1' },
+    ]);
+  });
+
   it('refreshes backends and project lists across clients', () => {
     expect(kinds(effectsOf(event('backend.quotas_updated', { sessionId: undefined }), at))).toEqual(['backends']);
+    expect(kinds(effectsOf(event('backend.models_updated', { sessionId: undefined }), at))).toEqual(['backends']);
     expect(kinds(effectsOf(event('project.updated'), at))).toEqual(['projects']);
     expect(kinds(effectsOf(event('project.deleted', { sessionId: undefined }), at))).toEqual(['projects', 'sessions', 'attention']);
   });

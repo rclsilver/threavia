@@ -291,6 +291,8 @@ function renderHeader() {
     ...(view.backend
       ? [backendMeta(view.backend, view.backendType, view.backendQuotas)]
       : []),
+    h('button', { type: 'button', class: 'meta-item', disabled: !view.modelSettings?.supported, title: 'Change the session model and effort; applies to the next job', onclick: () => post({ type: 'configureModel' }) }, `${view.active && view.active.status !== 'QUEUED' ? 'Next job · ' : ''}Model: ${view.modelSettings?.model ?? 'Backend default'} · Effort: ${view.modelSettings?.effort ?? 'Backend default'}`),
+    ...(view.active?.model && view.active.status !== 'QUEUED' ? [h('span', { class: 'meta-item' }, `Current job: ${view.active.model} · ${view.active.effort ? `${view.active.effort} effort` : 'Effort not reported'}`)] : []),
     ...(view.repository
       ? [repositoryMeta(view.repository)]
       : []),
@@ -637,6 +639,8 @@ function jobCost(event: Event, startedAt?: string): HTMLElement | false {
   const elapsed = startedAt ? Date.parse(event.timestamp) - Date.parse(startedAt) : NaN;
   const usage = ended.usage;
   const parts: HTMLElement[] = [];
+  if (ended.model) parts.push(h('span', {}, ended.model));
+  if (ended.effort) parts.push(h('span', {}, `${ended.effort} effort`));
   if (Number.isFinite(elapsed) && elapsed >= 0) parts.push(h('span', {}, duration(elapsed)));
   if (usage) {
     parts.push(

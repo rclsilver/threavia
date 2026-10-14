@@ -7,6 +7,27 @@ import (
 	"github.com/rclsilver/threavia/internal/backends/shared/workspace"
 )
 
+// ReportJobStarted includes provider settings when a sink supports them.
+func ReportJobStarted(ctx context.Context, sink Sink, runID, jobID, model, effort string) error {
+	if configured, ok := sink.(interface {
+		JobStartedWithModel(context.Context, string, string, string, string) error
+	}); ok {
+		return configured.JobStartedWithModel(ctx, runID, jobID, model, effort)
+	}
+	return sink.JobStarted(ctx, runID, jobID)
+}
+
+// ReportJobModel updates a previously announced start with provider-confirmed
+// values, without announcing a second start to sinks that cannot store them.
+func ReportJobModel(ctx context.Context, sink Sink, runID, jobID, model, effort string) error {
+	if configured, ok := sink.(interface {
+		JobStartedWithModel(context.Context, string, string, string, string) error
+	}); ok {
+		return configured.JobStartedWithModel(ctx, runID, jobID, model, effort)
+	}
+	return nil
+}
+
 // Sink receives everything the provider produces, already normalised into the
 // provider-independent vocabulary of the Threavia protocol.
 //

@@ -38,6 +38,9 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 	}
 
 	var features []domain.Feature
+	if hello.GetFeatures().GetModelSelection() {
+		features = append(features, domain.FeatureModelSelection)
+	}
 	if hello.GetFeatures().GetPromptAttachments() {
 		features = append(features, domain.FeaturePromptAttachments)
 	}
@@ -54,6 +57,24 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 		hello.GetSdk().GetName(), hello.GetSdk().GetVersion(),
 		hello.GetBackend().GetName(), hello.GetBackend().GetVersion(), features); err != nil {
 		return err
+	}
+
+	var catalog *domain.ModelCatalog
+	if wire := hello.GetModelCatalog(); wire != nil {
+		catalog = &domain.ModelCatalog{Models: []domain.ModelOption{}, DefaultModel: wire.GetDefaultModel(), DefaultEffort: wire.GetDefaultEffort()}
+		for _, m := range wire.GetModels() {
+			catalog.Models = append(catalog.Models, domain.ModelOption{ID: m.GetId(), Name: m.GetName(), Efforts: append([]string{}, m.GetEfforts()...), DefaultEffort: m.GetDefaultEffort()})
+		}
+	}
+	if err := s.store.SetBackendModels(ctx, instanceID, catalog); err != nil {
+		return err
+	}
+	backend, err := s.store.BackendInstanceByID(ctx, instanceID)
+	if err != nil {
+		return err
+	}
+	if backend.OwnerID != nil {
+		s.emit(ctx, *backend.OwnerID, events.TypeBackendModelsUpdated, domain.Scope{}, map[string]any{"backendInstanceId": instanceID})
 	}
 
 	// The name follows the backend's configuration, the only place a person
@@ -460,6 +481,11 @@ func (s *Service) JobEvent(ctx context.Context, instanceID domain.BackendInstanc
 		return 0, err
 	}
 
+	if ended, ok := payload.(JobEndedPayload); ok {
+		ended.Model = jc.Job.Model
+		ended.Effort = jc.Job.Effort
+		payload = ended
+	}
 	scope := domain.Scope{ProjectID: jc.ProjectID, SessionID: jc.SessionID, RunID: jc.Run.ID, JobID: jobID}
 	b := &batch{ownerID: jc.OwnerID}
 	duplicate := false
@@ -517,6 +543,16 @@ func (s *Service) JobEvent(ctx context.Context, instanceID domain.BackendInstanc
 func (s *Service) applyEvent(ctx context.Context, tx *postgres.Store, b *batch, jc postgres.JobContext, scope domain.Scope, event *backendv1.JobEvent) error {
 	switch body := event.GetBody().(type) {
 	case *backendv1.JobEvent_JobStarted:
+		model, effort := body.JobStarted.GetModel(), body.JobStarted.GetEffort()
+		if model == "" {
+			model = jc.Job.Model
+		}
+		if effort == "" {
+			effort = jc.Job.Effort
+		}
+		if err := tx.SetJobModel(ctx, scope.JobID, model, effort); err != nil {
+			return err
+		}
 		return transitionTo(ctx, tx, scope.JobID, domain.JobRunning, nil)
 
 	case *backendv1.JobEvent_NativeSessionBound:

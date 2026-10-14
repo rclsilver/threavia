@@ -20,6 +20,7 @@ export interface SessionView {
   backendType?: string;
   backendTooltip?: string;
   backendQuotas?: BackendQuotas;
+  modelSettings: { model: string; effort: string; supported: boolean };
   /** The compact branch label and the Git status shown in its hover panel. */
   repository?: { text: string; status: Repository; fetching?: boolean; error?: string };
   /** A liveness signal, shown only while a Job runs. */
@@ -27,7 +28,7 @@ export interface SessionView {
   /** Every Job still going, so a message can carry its own stop. */
   pending: Record<string, JobStatus>;
   /** The Job Stop and Escape stop. */
-  active?: { id: string; status: JobStatus };
+  active?: { id: string; status: JobStatus; model?: string; effort?: string };
   deliveries: ('NEXT' | 'NOW')[];
   validations: ValidationRequest[];
   questions: UserInputRequest[];
@@ -71,6 +72,7 @@ export type WebviewMessage =
   | { type: 'loadEarlier' }
   | { type: 'copyResponse'; sequence: number }
   | { type: 'refreshRepository' }
+  | { type: 'configureModel' }
   | { type: 'resolvePaths'; paths: string[] }
   | { type: 'openPath'; path: string }
   | { type: 'openLink'; href: string }

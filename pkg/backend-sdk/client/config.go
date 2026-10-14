@@ -63,6 +63,8 @@ type Config struct {
 	FeatureJobInputNow       bool
 	FeatureJobInputNext      bool
 	FeaturePromptAttachments bool
+	FeatureModelSelection    bool
+	ModelCatalog             *backendv1.ModelCatalog
 	MaxConcurrentRuns        int32
 
 	TLS TLSConfig
@@ -172,5 +174,6 @@ func (c Config) featureFlags() *backendv1.FeatureFlags {
 		JobInputNow:       c.FeatureJobInputNow,
 		JobInputNext:      c.FeatureJobInputNext,
 		PromptAttachments: c.FeaturePromptAttachments,
+		ModelSelection:    c.FeatureModelSelection,
 	}
 }

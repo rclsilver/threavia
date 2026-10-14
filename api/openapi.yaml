@@ -661,6 +661,8 @@ paths:
                 workingDirectoryId:
                   type: [string, "null"]
                   format: uuid
+                model: { type: string, maxLength: 200, description: 'Empty uses the backend default.' }
+                effort: { type: string, maxLength: 32, description: 'Provider effort value; empty uses the backend default.' }
                 message: { type: string }
                 artifactIds:
                   type: array
@@ -724,7 +726,14 @@ paths:
         absent field leaves it alone. `backendInstanceId` moves the Session and
         answers with a handoff instead of the Session. `pinned` puts the Session
         among the ones reached from any Project, or takes it out; pinning one
-        already pinned keeps its place.
+        already pinned keeps its place. Changing the working directory is
+        persisted for the next Job; the running process retains its cwd. It
+        emits `working_directory.changed`, and clients refresh the Session and
+        repository state.
+        Model and effort are persisted per
+        Session and apply at the next Job launch; running Jobs keep their values.
+        An unsupported model or effort is refused. Model changes cannot be
+        combined with a backend move in one request.
       parameters:
         - $ref: "#/components/parameters/Channel"
       requestBody:
@@ -740,6 +749,8 @@ paths:
                   format: uuid
                 backendInstanceId: { $ref: "#/components/schemas/UUID" }
                 pinned: { type: boolean }
+                model: { type: string, maxLength: 200, description: 'Empty resets to the backend default; omitted leaves it unchanged.' }
+                effort: { type: string, maxLength: 32, description: 'Empty resets to the backend default; omitted leaves it unchanged.' }
       responses:
         "200":
           description: The updated Session, or the handoff when the backend changed
@@ -2377,6 +2388,8 @@ components:
         title:
           type: string
           description: Generated, user-renamable, and with no technical meaning.
+        model: { type: string, description: 'Session model preference; empty or absent uses the backend default.' }
+        effort: { type: string, description: 'Session effort preference; empty or absent uses the backend default.' }
         managerSessionId:
           type: string
           format: uuid
@@ -2423,6 +2436,8 @@ components:
         id: { $ref: "#/components/schemas/UUID" }
         runId: { $ref: "#/components/schemas/UUID" }
         status: { $ref: "#/components/schemas/JobStatus" }
+        model: { type: string, description: 'Model at launch, updated when the provider confirms it. Absent when unknown.' }
+        effort: { type: string, description: 'Effort at launch, updated when the provider confirms it. Absent when unknown.' }
         originChannel: { $ref: "#/components/schemas/Channel" }
         error: { type: string }
         createdAt: { type: string, format: date-time }
@@ -2450,7 +2465,12 @@ components:
           additionalProperties: true
           description: |
             The shape depends on `type`, and a backend may add one without a
-            Core release, so it is open. The ones a client renders:
+            Core release, so it is open. `session.model_changed` carries
+            `{model, effort}` and invalidates the Session. `job.started` may
+            carry provider-confirmed `{model, effort}`. `backend.models_updated`
+            carries `{backendInstanceId}` and refreshes the backend catalog.
+            Completion/failure events retain the Job's `{model, effort}` when
+            known. The ones a client renders:
 
             - `backend.quotas_updated`: `{ backendInstanceId }`, owner-scoped;
               refresh backend instances to read the complete quota snapshot
@@ -2467,6 +2487,9 @@ components:
               attachments are `{ artifactId, filename, mimeType, size }` references; delivery NOW or
               NEXT for a message that joined a Job already running, scheduleId
               for one a Schedule sent, actorJobId for an agent manager's message
+            - `working_directory.changed`: `{ knownDirectoryId? }`, the Session's
+              new working directory (absent clears it); refresh the Session,
+              session lists and repository state. Applies to the next Job.
             - `session.created`: `{ title, workingDirectoryId?, managerSessionId? }`,
               managerSessionId for delegated work
             - `user_input.resolved`: `{ requestId, value, actorUserId, channel, actorJobId? }`,
@@ -2952,6 +2975,7 @@ components:
         backend:
           type: string
           description: Provider identifier announced in Hello, such as claude or codex. Empty before the first connection; clients must handle unknown providers.
+        modelCatalog: { $ref: "#/components/schemas/ModelCatalog" }
         quotas: { $ref: "#/components/schemas/BackendQuotas" }
         ownershipStatus: { $ref: "#/components/schemas/BackendOwnershipStatus" }
         operationalStatus: { $ref: "#/components/schemas/BackendOperationalStatus" }
@@ -2964,10 +2988,11 @@ components:
           description: |
             The optional CODE features announced on the last connection (spec
             sections 3.5 and 7): whether a message can reach a Job while it
-            runs, after interrupting it or at its next step.
+            runs, after interrupting it or at its next step, prompt attachments,
+            and per-session model selection.
           items:
             type: string
-            enum: [JOB_INPUT_NOW, JOB_INPUT_NEXT]
+            enum: [JOB_INPUT_NOW, JOB_INPUT_NEXT, PROMPT_ATTACHMENTS, MODEL_SELECTION]
         capacity: { $ref: "#/components/schemas/Capacity" }
         conditions:
           type: array
@@ -2977,6 +3002,23 @@ components:
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         revokedAt: { type: string, format: date-time }
+
+    ModelCatalog:
+      type: object
+      required: [models]
+      properties:
+        defaultModel: { type: string }
+        defaultEffort: { type: string }
+        models:
+          type: array
+          items:
+            type: object
+            required: [id, name, efforts]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              efforts: { type: array, items: { type: string } }
+              defaultEffort: { type: string }
 
     BackendQuotas:
       type: object

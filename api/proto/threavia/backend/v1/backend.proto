@@ -29,6 +29,7 @@ message Hello {
   repeated Capability capabilities = 5;
   FeatureFlags features = 6;
   Capacity capacity = 7;
+  ModelCatalog model_catalog = 8;
 }
 
 message Heartbeat {

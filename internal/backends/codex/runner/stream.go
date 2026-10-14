@@ -158,8 +158,19 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 	approval, reviewer := nativeApproval(p.Policy)
 	args := map[string]any{"cwd": p.WorkingDirectory, "approvalPolicy": approval, "sandbox": "read-only", "approvalsReviewer": reviewer,
 		"developerInstructions": instructions(p, c.available, contract.ScratchDir(c.options.Scratch, p.RunID)), "config": config}
-	if c.options.Model != "" {
-		args["model"] = c.options.Model
+	model := p.Model
+	if model == "" {
+		model = c.options.Model
+	}
+	effort := p.Effort
+	if effort == "" && p.Model == "" {
+		effort = c.options.ReasoningEffort
+	}
+	if model != "" {
+		args["model"] = model
+	}
+	if effort != "" {
+		config["model_reasoning_effort"] = effort
 	}
 	method := "thread/start"
 	if p.NativeSessionID != "" {
@@ -167,8 +178,12 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 		args["threadId"] = p.NativeSessionID
 	}
 	var thread struct {
+		Model  string `json:"model"`
+		Effort string `json:"reasoningEffort"`
 		Thread struct {
-			ID string `json:"id"`
+			ID     string `json:"id"`
+			Model  string `json:"model"`
+			Effort string `json:"reasoningEffort"`
 		} `json:"thread"`
 	}
 	if err := r.call(startupCtx, method, args, &thread); err != nil {
@@ -182,7 +197,19 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 	live.mu.Lock()
 	live.threadID = thread.Thread.ID
 	live.mu.Unlock()
-	if err := sink.JobStarted(reportCtx, p.RunID, p.JobID); err != nil {
+	if thread.Model != "" {
+		model = thread.Model
+	}
+	if thread.Effort != "" {
+		effort = thread.Effort
+	}
+	if thread.Thread.Model != "" {
+		model = thread.Thread.Model
+	}
+	if thread.Thread.Effort != "" {
+		effort = thread.Thread.Effort
+	}
+	if err := contract.ReportJobStarted(reportCtx, sink, p.RunID, p.JobID, model, effort); err != nil {
 		out.err = err
 		return out
 	}
@@ -212,8 +239,11 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 			params["input"] = input
 			firstInput = false
 		}
-		if c.options.ReasoningEffort != "" {
-			params["effort"] = c.options.ReasoningEffort
+		if model != "" {
+			params["model"] = model
+		}
+		if effort != "" {
+			params["effort"] = effort
 		}
 		var response struct {
 			Turn struct {

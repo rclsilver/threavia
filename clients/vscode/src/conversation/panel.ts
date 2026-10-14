@@ -535,10 +535,11 @@ class ConversationPanel {
       backendType: this.backend?.backend,
       backendTooltip: this.backend && backendTooltip(this.backend),
       backendQuotas: this.backend?.quotas,
+      modelSettings: { model: this.session.model || this.backend?.modelCatalog?.defaultModel || 'Backend default', effort: this.session.effort || (this.session.model ? this.backend?.modelCatalog?.models.find((model) => model.id === this.session?.model)?.defaultEffort : this.backend?.modelCatalog?.defaultEffort) || 'Backend default', supported: this.backend?.features?.includes('MODEL_SELECTION') ?? false },
       repository: repo && text ? { text, status: repo, fetching: this.fetchingRepository, error: this.repositoryError } : undefined,
       activity: active?.status === 'RUNNING' && fresh ? humanise(fresh) : undefined,
       pending: pendingJobs(this.jobs),
-      active: active && { id: active.id, status: active.status },
+      active: active && { id: active.id, status: active.status, model: active.model, effort: active.effort },
       deliveries: deliveriesFor(active, this.backend),
       validations: requests.validations,
       questions: requests.userInputs,
@@ -557,6 +558,27 @@ class ConversationPanel {
     const { client, answers, artifacts } = this.core;
     const { paths, documents } = this.services;
     switch (message.type) {
+      case 'configureModel': {
+        if (!this.session || !this.backend?.features?.includes('MODEL_SELECTION')) return;
+        const catalog = this.backend.modelCatalog;
+        const selected = await vscode.window.showQuickPick([
+          { label: 'Backend default', description: catalog?.defaultModel, model: '' },
+          ...(catalog?.models ?? []).map((model) => ({ label: model.name, description: model.id, model: model.id })),
+        ], { title: 'Session model', placeHolder: 'Saved on Core; applies when the next job starts' });
+        if (!selected) return;
+        const option = catalog?.models.find((model) => model.id === (selected.model || catalog.defaultModel));
+        const efforts = option?.efforts ?? [];
+        const reasoning = await vscode.window.showQuickPick([
+          { label: 'Backend default', description: option?.defaultEffort, effort: '' },
+          ...efforts.map((effort) => ({ label: effort, effort })),
+        ], { title: 'Session reasoning effort', placeHolder: 'Running work keeps its current settings' });
+        if (!reasoning) return;
+        try {
+          this.session = await client.setSessionModel(this.session.id, selected.model, reasoning.effort);
+          this.postView();
+        } catch (error) { void vscode.window.showErrorMessage(`Model settings not saved: ${error instanceof Error ? error.message : String(error)}`); }
+        return;
+      }
       case 'ready':
         this.ready = true;
         if (this.target.kind !== 'session') {

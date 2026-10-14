@@ -13,7 +13,7 @@ import (
 const backendColumns = `b.id, b.owner_id, b.name, b.ownership_status, b.operational_status,
 	b.provider_auth_state, b.capabilities, b.max_concurrent_runs, b.active_runs,
 	b.protocol_version, b.connection_id, b.last_heartbeat_at, b.features,
-	b.created_at, b.updated_at, b.revoked_at, COALESCE(b.backend_name, ''), b.quotas, b.is_default`
+	b.created_at, b.updated_at, b.revoked_at, COALESCE(b.backend_name, ''), b.quotas, b.is_default, b.model_catalog`
 
 // CreateBackendInstance inserts a BackendInstance, with the SHA-256 of the
 // persistent credential it will present on every connection. The credential
@@ -197,14 +197,20 @@ func scanBackendInstance(row scanner) (domain.BackendInstance, error) {
 		capabilities []string
 		features     []string
 		quotaJSON    []byte
+		modelJSON    []byte
 	)
 	err := row.Scan(&instance.ID, &instance.OwnerID, &instance.Name, &instance.OwnershipStatus,
 		&instance.OperationalStatus, &instance.ProviderAuthState, &capabilities,
 		&instance.Capacity.MaxConcurrentRuns, &instance.Capacity.ActiveRuns,
 		&instance.ProtocolVersion, &instance.ConnectionID, &instance.LastHeartbeatAt, &features,
-		&instance.CreatedAt, &instance.UpdatedAt, &instance.RevokedAt, &instance.Backend, &quotaJSON, &instance.IsDefault)
+		&instance.CreatedAt, &instance.UpdatedAt, &instance.RevokedAt, &instance.Backend, &quotaJSON, &instance.IsDefault, &modelJSON)
 	if err != nil {
 		return instance, classify(err, "read backend instance")
+	}
+	if len(modelJSON) > 0 {
+		if err := json.Unmarshal(modelJSON, &instance.ModelCatalog); err != nil {
+			return instance, fmt.Errorf("read backend models: %w", err)
+		}
 	}
 	if len(quotaJSON) > 0 {
 		if err := json.Unmarshal(quotaJSON, &instance.Quotas); err != nil {

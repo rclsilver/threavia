@@ -1245,6 +1245,10 @@ export interface paths {
                         backendInstanceId: components["schemas"]["UUID"];
                         /** Format: uuid */
                         workingDirectoryId?: string | null;
+                        /** @description Empty uses the backend default. */
+                        model?: string;
+                        /** @description Provider effort value; empty uses the backend default. */
+                        effort?: string;
                         message: string;
                         /** @description Files from this project attached to the prompt (3 MiB total). Requires QUEUE delivery. */
                         artifactIds?: components["schemas"]["UUID"][];
@@ -1365,7 +1369,14 @@ export interface paths {
          *     absent field leaves it alone. `backendInstanceId` moves the Session and
          *     answers with a handoff instead of the Session. `pinned` puts the Session
          *     among the ones reached from any Project, or takes it out; pinning one
-         *     already pinned keeps its place.
+         *     already pinned keeps its place. Changing the working directory is
+         *     persisted for the next Job; the running process retains its cwd. It
+         *     emits `working_directory.changed`, and clients refresh the Session and
+         *     repository state.
+         *     Model and effort are persisted per
+         *     Session and apply at the next Job launch; running Jobs keep their values.
+         *     An unsupported model or effort is refused. Model changes cannot be
+         *     combined with a backend move in one request.
          *
          */
         patch: {
@@ -1397,6 +1408,10 @@ export interface paths {
                         workingDirectoryId?: string | null;
                         backendInstanceId?: components["schemas"]["UUID"];
                         pinned?: boolean;
+                        /** @description Empty resets to the backend default; omitted leaves it unchanged. */
+                        model?: string;
+                        /** @description Empty resets to the backend default; omitted leaves it unchanged. */
+                        effort?: string;
                     };
                 };
             };
@@ -4177,6 +4192,10 @@ export interface components {
             projectId: components["schemas"]["UUID"];
             /** @description Generated, user-renamable, and with no technical meaning. */
             title: string;
+            /** @description Session model preference; empty or absent uses the backend default. */
+            model?: string;
+            /** @description Session effort preference; empty or absent uses the backend default. */
+            effort?: string;
             /**
              * Format: uuid
              * @description The Session that delegated this work. Absent for a conversation started by a person.
@@ -4224,6 +4243,10 @@ export interface components {
             id: components["schemas"]["UUID"];
             runId: components["schemas"]["UUID"];
             status: components["schemas"]["JobStatus"];
+            /** @description Model at launch, updated when the provider confirms it. Absent when unknown. */
+            model?: string;
+            /** @description Effort at launch, updated when the provider confirms it. Absent when unknown. */
+            effort?: string;
             originChannel?: components["schemas"]["Channel"];
             error?: string;
             /** Format: date-time */
@@ -4255,7 +4278,12 @@ export interface components {
             runId?: components["schemas"]["UUID"];
             jobId?: components["schemas"]["UUID"];
             /** @description The shape depends on `type`, and a backend may add one without a
-             *     Core release, so it is open. The ones a client renders:
+             *     Core release, so it is open. `session.model_changed` carries
+             *     `{model, effort}` and invalidates the Session. `job.started` may
+             *     carry provider-confirmed `{model, effort}`. `backend.models_updated`
+             *     carries `{backendInstanceId}` and refreshes the backend catalog.
+             *     Completion/failure events retain the Job's `{model, effort}` when
+             *     known. The ones a client renders:
              *
              *     - `backend.quotas_updated`: `{ backendInstanceId }`, owner-scoped;
              *       refresh backend instances to read the complete quota snapshot
@@ -4272,6 +4300,9 @@ export interface components {
              *       attachments are `{ artifactId, filename, mimeType, size }` references; delivery NOW or
              *       NEXT for a message that joined a Job already running, scheduleId
              *       for one a Schedule sent, actorJobId for an agent manager's message
+             *     - `working_directory.changed`: `{ knownDirectoryId? }`, the Session's
+             *       new working directory (absent clears it); refresh the Session,
+             *       session lists and repository state. Applies to the next Job.
              *     - `session.created`: `{ title, workingDirectoryId?, managerSessionId? }`,
              *       managerSessionId for delegated work
              *     - `user_input.resolved`: `{ requestId, value, actorUserId, channel, actorJobId? }`,
@@ -4659,6 +4690,7 @@ export interface components {
             name: string;
             /** @description Provider identifier announced in Hello, such as claude or codex. Empty before the first connection; clients must handle unknown providers. */
             backend?: string;
+            modelCatalog?: components["schemas"]["ModelCatalog"];
             quotas?: components["schemas"]["BackendQuotas"];
             ownershipStatus: components["schemas"]["BackendOwnershipStatus"];
             operationalStatus: components["schemas"]["BackendOperationalStatus"];
@@ -4666,9 +4698,10 @@ export interface components {
             capabilities: components["schemas"]["Capability"][];
             /** @description The optional CODE features announced on the last connection (spec
              *     sections 3.5 and 7): whether a message can reach a Job while it
-             *     runs, after interrupting it or at its next step.
+             *     runs, after interrupting it or at its next step, prompt attachments,
+             *     and per-session model selection.
              *      */
-            features?: ("JOB_INPUT_NOW" | "JOB_INPUT_NEXT")[];
+            features?: ("JOB_INPUT_NOW" | "JOB_INPUT_NEXT" | "PROMPT_ATTACHMENTS" | "MODEL_SELECTION")[];
             capacity: components["schemas"]["Capacity"];
             conditions?: components["schemas"]["Condition"][];
             protocolVersion: number;
@@ -4680,6 +4713,16 @@ export interface components {
             updatedAt: string;
             /** Format: date-time */
             revokedAt?: string;
+        };
+        ModelCatalog: {
+            defaultModel?: string;
+            defaultEffort?: string;
+            models: {
+                id: string;
+                name: string;
+                efforts: string[];
+                defaultEffort?: string;
+            }[];
         };
         /** @description A complete provider quota snapshot. Every limit and provider-specific threshold is kept independently; absence never means zero usage. Credentials are never included. */
         BackendQuotas: {

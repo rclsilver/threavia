@@ -17,6 +17,7 @@ func TestKnownDirectoryToolsManageMetadataAndBindings(t *testing.T) {
 		backend.callCoreToolExpectingFailure(t, ctx, start.GetRunId(), start.GetJobId(), name, input)
 	}
 	fail("known_directory_register", map[string]any{"name": "invalid", "path": "relative"})
+	fail("known_directory_register", map[string]any{"name": "invalid-option", "path": "/work/invalid-option", "useForSession": "true"})
 	listed := call("known_directory_list", map[string]any{})
 	if len(listed["directories"].([]any)) != 1 {
 		t.Fatalf("failed registration left metadata: %v", listed)

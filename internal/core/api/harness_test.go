@@ -247,7 +247,7 @@ func (c *core) connectBackend(credential string) *fakeBackend {
 	return c.connectBackendWithReconcileGate(credential, nil)
 }
 
-func (c *core) connectBackendWithReconcileGate(credential string, gate <-chan struct{}) *fakeBackend {
+func (c *core) connectBackendWithReconcileGate(credential string, gate <-chan struct{}, catalogs ...*backendv1.ModelCatalog) *fakeBackend {
 	c.t.Helper()
 
 	backend := &fakeBackend{
@@ -267,6 +267,10 @@ func (c *core) connectBackendWithReconcileGate(credential string, gate <-chan st
 	cfg.InstanceName = "test-backend"
 	cfg.BackendName = "fake"
 	cfg.FeaturePromptAttachments = true
+	if len(catalogs) > 0 {
+		cfg.FeatureModelSelection = true
+		cfg.ModelCatalog = catalogs[0]
+	}
 	cfg.BackendVersion = "test"
 	cfg.TLS.Enabled = false
 	cfg.HeartbeatInterval = 200 * time.Millisecond

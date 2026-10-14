@@ -428,6 +428,17 @@ export function usePostMessage(sessionId: string) {
  * The title is how a Session is found again in a list of fifty, and the one the
  * agent wrote is a guess made from the first message.
  */
+export function useSessionModel(sessionId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: { model: string; effort: string }) => api.patch<Session>(`/api/v1/sessions/${sessionId}`, settings),
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
+      void queries.invalidateQueries({ queryKey: ['sessions'] });
+    },
+  });
+}
+
 export function useRenameSession(sessionId: string) {
   const queries = useQueryClient();
   return useMutation({
