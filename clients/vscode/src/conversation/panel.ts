@@ -14,6 +14,7 @@ import type {
   UserInputRequest,
   ValidationRequest,
 } from '../api/types';
+import { payloadOf } from '../api/types';
 import type { Core } from '../cores/core';
 import type { SessionRef } from '../cores/refs';
 import type { Cores } from '../cores/registry';
@@ -573,6 +574,19 @@ class ConversationPanel {
 
       case 'send':
         return this.send(message.text, message.delivery, message.artifactIds);
+
+      case 'copyResponse': {
+        try {
+          const event = this.events.find((event) => event.sequence === message.sequence);
+          const response = event && payloadOf(event, 'agent.message');
+          if (typeof response?.text !== 'string') throw new Error('Reload the conversation and try again.');
+          await vscode.env.clipboard.writeText(response.text);
+          this.post({ type: 'copiedResponse', sequence: message.sequence, ok: true });
+        } catch (error) {
+          this.post({ type: 'copiedResponse', sequence: message.sequence, ok: false, error: `Response not copied: ${reason(error)}` });
+        }
+        return;
+      }
 
       case 'stop':
         try {

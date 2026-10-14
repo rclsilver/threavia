@@ -50,6 +50,7 @@ export type HostMessage =
   | { type: 'paths'; resolved: Record<string, boolean> }
   /** An answer given from this panel: `ok` once it landed, so the card can say so. */
   | { type: 'answered'; id: string; ok: boolean }
+  | { type: 'copiedResponse'; sequence: number; ok: boolean; error?: string }
   | { type: 'media'; artifactId: string; source?: string; error?: string }
   | { type: 'attached'; artifact: ArtifactRef & { size: number } }
   | { type: 'attachFailed'; error: string }
@@ -68,6 +69,7 @@ export type WebviewMessage =
   | { type: 'decide'; id: string; approved: boolean }
   | { type: 'answer'; id: string; value: string }
   | { type: 'loadEarlier' }
+  | { type: 'copyResponse'; sequence: number }
   | { type: 'refreshRepository' }
   | { type: 'resolvePaths'; paths: string[] }
   | { type: 'openPath'; path: string }

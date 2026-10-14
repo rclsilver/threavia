@@ -12,11 +12,13 @@ const host = vi.hoisted(() => ({
   panels: [] as Panel[],
   command: vi.fn<(name: string) => Promise<unknown>>(),
   create: vi.fn(),
+  clipboard: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('vscode', () => ({
   Uri: { joinPath: (base: { path: string }, ...parts: string[]) => ({ toString: () => [base.path, ...parts].join('/') }) },
   commands: { executeCommand: host.command },
+  env: { clipboard: { writeText: host.clipboard } },
   window: {
     createWebviewPanel: host.create,
     registerWebviewPanelSerializer: () => ({ dispose() {} }),
@@ -29,6 +31,7 @@ vi.mock('vscode', () => ({
 
 import * as vscode from 'vscode';
 import { EventBus } from '../src/api/events';
+import type { Event } from '../src/api/types';
 import type { Core } from '../src/cores/core';
 import { ConversationPanels, type Services } from '../src/conversation/panel';
 import type { WebviewMessage } from '../src/conversation/protocol';
@@ -92,6 +95,7 @@ describe('conversation editor groups', () => {
   let services: Services;
   let openPath: ReturnType<typeof vi.fn>;
   let openArtifact: ReturnType<typeof vi.fn>;
+  let history: Event[];
 
   beforeEach(() => {
     host.groups = [];
@@ -112,9 +116,10 @@ describe('conversation editor groups', () => {
     });
     openPath = vi.fn().mockResolvedValue(true);
     openArtifact = vi.fn().mockResolvedValue(undefined);
+    history = [];
     const core = {
       id: 'group-core', bus: new EventBus(),
-      client: { snapshot: vi.fn().mockResolvedValue({ session: { id: 's1', projectId: 'p1', status: 'ACTIVE' }, runs: [], jobs: [], events: [], attention: {}, cursor: 0 }) },
+      client: { snapshot: vi.fn().mockResolvedValue({ session: { id: 's1', projectId: 'p1', status: 'ACTIVE' }, runs: [], jobs: [], events: history, attention: {}, cursor: 0 }) },
       attention: { ready: true, current: { validations: [], userInputs: [] }, onChange: () => ({ dispose() {} }) },
       repositories: { watch: () => ({ dispose() {} }) }, artifacts: { open: openArtifact },
     } as unknown as Core;
@@ -189,5 +194,36 @@ describe('conversation editor groups', () => {
     panel.reveal();
     await vi.waitFor(() => expect(panel.group.locked).toBe(true));
     expect(host.command).not.toHaveBeenCalledWith('workbench.action.toggleEditorGroupLock');
+  });
+
+  it('copies the agent’s complete original Markdown, keeping whitespace, links, tables and fenced code', async () => {
+    const markdown = '  ## Résultat\r\n\r\n- **Fait** : [rapport](https://example.com/a?x=1&y=2)\r\n\r\n| A | B |\r\n| - | - |\r\n| 1 | 2 |\r\n\r\n```ts\r\nconst html = "<strong>texte</strong>";\r\n```\r\n\r\n';
+    history.push({ id: 'response', sequence: 1, type: 'agent.message', timestamp: '2026-10-14T12:00:00Z', payload: { text: markdown } });
+    await conversations.open({ coreId: 'group-core', sessionId: 's1' });
+    host.panels[0].receive({ type: 'copyResponse', sequence: 1 });
+    await vi.waitFor(() => expect(host.panels[0].webview.postMessage).toHaveBeenCalledWith({ type: 'copiedResponse', sequence: 1, ok: true }));
+    expect(host.clipboard).toHaveBeenCalledExactlyOnceWith(markdown);
+  });
+
+  it('leaves the clipboard untouched when a copy names a user message or missing history', async () => {
+    history.push({ id: 'user', sequence: 1, type: 'user.message', timestamp: '2026-10-14T12:00:00Z', payload: { text: 'My prompt' } });
+    await conversations.open({ coreId: 'group-core', sessionId: 's1' });
+    for (const sequence of [1, 99]) {
+      host.panels[0].receive({ type: 'copyResponse', sequence });
+      expect(host.panels[0].webview.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'copiedResponse', sequence, ok: false }));
+    }
+    expect(host.clipboard).not.toHaveBeenCalled();
+  });
+
+  it('reports a clipboard failure and allows the same response to be copied again', async () => {
+    history.push({ id: 'response', sequence: 1, type: 'agent.message', timestamp: '2026-10-14T12:00:00Z', payload: { text: '**Answer**' } });
+    host.clipboard.mockRejectedValueOnce(new Error('Clipboard unavailable'));
+    await conversations.open({ coreId: 'group-core', sessionId: 's1' });
+    const panel = host.panels[0];
+    panel.receive({ type: 'copyResponse', sequence: 1 });
+    await vi.waitFor(() => expect(panel.webview.postMessage).toHaveBeenCalledWith({ type: 'copiedResponse', sequence: 1, ok: false, error: 'Response not copied: Clipboard unavailable' }));
+    panel.receive({ type: 'copyResponse', sequence: 1 });
+    await vi.waitFor(() => expect(panel.webview.postMessage).toHaveBeenCalledWith({ type: 'copiedResponse', sequence: 1, ok: true }));
+    expect(host.clipboard).toHaveBeenCalledTimes(2);
   });
 });

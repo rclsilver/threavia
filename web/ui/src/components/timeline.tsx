@@ -23,7 +23,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Markdown } from '@/components/markdown';
+import { AgentResponse } from '@/components/agent-response';
 import { ArtifactCard } from '@/components/artifact-preview';
 import { Diff } from '@/components/file-change';
 import { ToolCallEntry, type ToolCall } from '@/components/tool-call';
@@ -733,7 +733,7 @@ function Entry({
   // of a long conversation.
   const agent = payloadOf(event, 'agent.message');
   if (agent) {
-    return <Markdown>{agent.text}</Markdown>;
+    return <AgentResponse text={agent.text} />;
   }
 
   const changed = payloadOf(event, 'workspace.changed');

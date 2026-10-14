@@ -78,6 +78,7 @@ let attachments = saved.attachments ?? [];
 const media = new Map<string, { source?: string; error?: string }>();
 const mediaAsked = new Set<string>();
 let fullWidth = saved.fullWidth === true;
+const copyingResponses = new Map<number, (ok: boolean, error?: string) => void>();
 document.body.classList.toggle('full-width', fullWidth);
 
 function persist() {
@@ -245,6 +246,12 @@ window.addEventListener('message', (message: MessageEvent<HostMessage>) => {
       const done = awaiting.get(data.id);
       awaiting.delete(data.id);
       if (done && data.ok) receipt(done.text, done.approved);
+      break;
+    }
+    case 'copiedResponse': {
+      const copied = copyingResponses.get(data.sequence);
+      copyingResponses.delete(data.sequence);
+      copied?.(data.ok, data.error);
       break;
     }
     case 'failed':
@@ -551,7 +558,7 @@ function eventEntry(event: Event, startedAt?: string): HTMLElement {
     // wrote is escaped or turned into markdown's own elements.
     prose.innerHTML = renderMarkdown(agent.text);
     enhanceCode(prose);
-    return prose;
+    return h('div', { class: 'message-agent' }, prose, responseActions(event.sequence));
   }
 
   const changed = payloadOf(event, 'workspace.changed');
@@ -573,6 +580,31 @@ function eventEntry(event: Event, startedAt?: string): HTMLElement {
     ),
     jobCost(event, startedAt),
   );
+}
+
+function responseActions(sequence: number): HTMLElement {
+  const error = h('p', { class: 'copy-error error small', role: 'alert', hidden: true });
+  let reset: ReturnType<typeof setTimeout> | undefined;
+  const copy = button([icon('copy'), 'Copy Markdown'], () => {
+    clearTimeout(reset);
+    copy.disabled = true;
+    copy.setAttribute('aria-label', 'Copy response as Markdown');
+    error.hidden = true;
+    copy.replaceChildren(icon('loading', 'codicon-modifier-spin'), 'Copying…');
+    copyingResponses.set(sequence, (ok, reason) => {
+      copy.disabled = false;
+      copy.replaceChildren(icon(ok ? 'check' : 'copy'), ok ? 'Copied' : 'Copy Markdown');
+      copy.setAttribute('aria-label', ok ? 'Response copied' : 'Copy response as Markdown');
+      error.textContent = reason ?? 'Response not copied. Try again.';
+      error.hidden = ok;
+      if (ok) reset = setTimeout(() => {
+        copy.replaceChildren(icon('copy'), 'Copy Markdown');
+        copy.setAttribute('aria-label', 'Copy response as Markdown');
+      }, 1500);
+    });
+    post({ type: 'copyResponse', sequence });
+  }, { class: 'ghost small copy-response', title: 'Copy response as Markdown', 'aria-label': 'Copy response as Markdown', 'aria-live': 'polite' });
+  return h('div', { class: 'response-actions' }, copy, error);
 }
 
 /**

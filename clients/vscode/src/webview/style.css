@@ -258,6 +258,12 @@ body.full-width { --reading: 100%; }
 
 /* ------------------------------------------------------------ timeline */
 
+.message-agent { min-width: 0; }
+.response-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; }
+.response-actions .copy-response { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; }
+.response-actions .copy-error { margin: 0; }
+@media (pointer: coarse) { .response-actions .copy-response { min-height: 44px; } }
+
 .timeline-frame {
   position: relative;
   flex: 1 1 auto;
