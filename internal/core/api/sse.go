@@ -106,9 +106,11 @@ func (h *handler) stream(w http.ResponseWriter, r *http.Request, identity auth.I
 // catchUp replays everything the client missed, in order, and returns the new
 // cursor.
 func (h *handler) catchUp(w http.ResponseWriter, flusher http.Flusher, r *http.Request, identity auth.Identity, cursor domain.Sequence) (domain.Sequence, bool) {
+	h.svc.Broker().NoteReplay()
 	for {
 		missed, err := h.svc.EventsAfter(r.Context(), identity, cursor, catchUpPage)
 		if err != nil {
+			h.svc.Broker().NoteReplayError()
 			h.logger.Error("cannot replay missed events", "error", err)
 			return cursor, false
 		}

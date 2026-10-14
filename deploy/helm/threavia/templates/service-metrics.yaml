@@ -1,0 +1,19 @@
+{{- if .Values.metrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "threavia.fullname" . }}-metrics
+  labels:
+    {{- include "threavia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics
+spec:
+  # Separate even when the client-facing Service is a LoadBalancer.
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "threavia.selectorLabels" . | nindent 4 }}
+{{- end }}

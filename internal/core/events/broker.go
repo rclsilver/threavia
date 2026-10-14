@@ -22,9 +22,12 @@ const subscriberBuffer = 256
 // than blocking the writer, and catches up by replaying from its cursor. That is
 // why no message bus is required in V1.
 type Broker struct {
-	mu   sync.RWMutex
-	next int64
-	subs map[int64]*Subscription
+	mu           sync.RWMutex
+	next         int64
+	subs         map[int64]*Subscription
+	overflows    atomic.Uint64
+	replays      atomic.Uint64
+	replayErrors atomic.Uint64
 }
 
 // NewBroker returns an empty Broker.
@@ -118,9 +121,17 @@ func (b *Broker) Publish(ownerID domain.UserID, envelope Envelope) {
 		select {
 		case sub.ch <- envelope:
 		default:
+			b.overflows.Add(1)
 			sub.lagged.Store(true)
 		}
 	}
+}
+
+// NoteReplay records one history catch-up attempt, not each database page.
+func (b *Broker) NoteReplay()      { b.replays.Add(1) }
+func (b *Broker) NoteReplayError() { b.replayErrors.Add(1) }
+func (b *Broker) Metrics() (overflows, replays, errors uint64) {
+	return b.overflows.Load(), b.replays.Load(), b.replayErrors.Load()
 }
 
 // Subscribers returns the number of live client streams.

@@ -33,6 +33,7 @@ import (
 	"github.com/rclsilver/threavia/internal/core/skills"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 	"github.com/rclsilver/threavia/internal/core/storage/s3"
+	"github.com/rclsilver/threavia/internal/core/telemetry"
 	"github.com/rclsilver/threavia/internal/logging"
 	"github.com/rclsilver/threavia/web"
 )
@@ -109,7 +110,9 @@ func run() error {
 	}
 
 	registry := backendconn.NewRegistry()
-	svc := service.New(postgres.NewStore(db), events.NewBroker(), registry, logger)
+	store := postgres.NewStore(db)
+	broker := events.NewBroker()
+	svc := service.New(store, broker, registry, logger)
 	svc.SetRegistration(service.RegistrationConfig{SharedKey: cfg.Backend.SharedRegistrationKey})
 
 	if cfg.Backend.SharedRegistrationKey == "" {
@@ -153,17 +156,29 @@ func run() error {
 		return err
 	}
 
+	handler := api.NewRouter(api.Options{
+		Service:       svc,
+		Authenticator: authenticator,
+		Database:      db,
+		Version:       version,
+		Logger:        logger,
+		WebUI:         webUI,
+		AllowedHosts:  cfg.HTTP.AllowedHosts,
+	})
+	var metricsServer *http.Server
+	if cfg.Metrics.Enabled {
+		metrics := telemetry.New(db, store, broker, registry, version)
+		registry.SetObserver(metrics)
+		handler = metrics.Wrap(handler)
+		metricsServer = &http.Server{
+			Addr: cfg.Metrics.Addr, Handler: metrics.Handler(),
+			ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second,
+			WriteTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second,
+		}
+	}
 	httpServer := &http.Server{
-		Addr: cfg.HTTP.Addr,
-		Handler: api.NewRouter(api.Options{
-			Service:       svc,
-			Authenticator: authenticator,
-			Database:      db,
-			Version:       version,
-			Logger:        logger,
-			WebUI:         webUI,
-			AllowedHosts:  cfg.HTTP.AllowedHosts,
-		}),
+		Addr:              cfg.HTTP.Addr,
+		Handler:           handler,
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 		// WriteTimeout stays zero: SSE responses are long-lived by design.
@@ -172,6 +187,19 @@ func run() error {
 	}
 
 	group, groupCtx := errgroup.WithContext(ctx)
+	if metricsServer != nil {
+		group.Go(func() error {
+			listener, err := net.Listen("tcp", cfg.Metrics.Addr)
+			if err != nil {
+				return fmt.Errorf("metrics listener: %w", err)
+			}
+			logger.Info("metrics listening", slog.String("address", listener.Addr().String()))
+			if err := metricsServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				return fmt.Errorf("metrics server: %w", err)
+			}
+			return nil
+		})
+	}
 
 	group.Go(func() error {
 		listener, err := net.Listen("tcp", cfg.GRPC.Addr)
@@ -222,6 +250,11 @@ func run() error {
 		defer cancel()
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
 			logger.Warn("client api did not shut down cleanly", slog.String("error", err.Error()))
+		}
+		if metricsServer != nil {
+			if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+				logger.Warn("metrics did not shut down cleanly", slog.String("error", err.Error()))
+			}
 		}
 
 		// Ending the control streams first lets the graceful stop drain at once.

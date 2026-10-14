@@ -19,6 +19,12 @@ const ProtocolVersion = uint32(backendv1.ProtocolVersion_PROTOCOL_VERSION_V1)
 // before the control stream is considered stalled.
 const sendBuffer = 64
 
+// Observer records bounded operational counters without exposing stream IDs.
+type Observer interface {
+	ConnectionClosed(domain.BackendInstanceID, CloseReason)
+	SendFailed(domain.BackendInstanceID, string)
+}
+
 // CloseReason explains why a control connection was closed.
 type CloseReason string
 
@@ -53,6 +59,7 @@ type Connection struct {
 	reconciled    bool
 	closed        bool
 	reason        CloseReason
+	observer      Observer
 }
 
 // ID returns the connection lease id.
@@ -99,15 +106,24 @@ func (c *Connection) Send(msg *backendv1.CoreToBackend) bool {
 	closed := c.closed
 	c.mu.Unlock()
 	if closed {
+		c.noteSendFailure("closed")
 		return false
 	}
 	select {
 	case c.send <- msg:
 		return true
 	case <-c.done:
+		c.noteSendFailure("closed")
 		return false
 	default:
+		c.noteSendFailure("queue_full")
 		return false
+	}
+}
+
+func (c *Connection) noteSendFailure(reason string) {
+	if c.observer != nil {
+		c.observer.SendFailed(c.instanceID, reason)
 	}
 }
 
@@ -135,16 +151,23 @@ func (c *Connection) close(reason CloseReason) {
 	c.closed = true
 	c.reason = reason
 	close(c.done)
+	if c.observer != nil {
+		c.observer.ConnectionClosed(c.instanceID, reason)
+	}
 }
 
 // Registry holds the live control connections. It is in-memory on purpose: a
 // connection is by definition local to the Core instance terminating it.
 type Registry struct {
-	mu    sync.RWMutex
-	byID  map[domain.BackendInstanceID]*Connection
-	nowFn func() time.Time
-	newID func() string
+	mu       sync.RWMutex
+	byID     map[domain.BackendInstanceID]*Connection
+	nowFn    func() time.Time
+	newID    func() string
+	observer Observer
 }
+
+// SetObserver is called during startup, before accepting any connections.
+func (r *Registry) SetObserver(observer Observer) { r.observer = observer }
 
 // NewRegistry returns an empty Registry.
 func NewRegistry() *Registry {
@@ -164,6 +187,7 @@ func (r *Registry) Register(instanceID domain.BackendInstanceID) (conn *Connecti
 		id:          r.newID(),
 		instanceID:  instanceID,
 		connectedAt: now,
+		observer:    r.observer,
 		send:        make(chan *backendv1.CoreToBackend, sendBuffer),
 		done:        make(chan struct{}),
 	}

@@ -1,5 +1,8 @@
 # Threavia Core Helm chart
 
+Prometheus metrics and an optional ServiceMonitor are configured under
+`metrics`; see [the metric catalog and deployment instructions](../../../docs/metrics.md).
+
 Deploys Threavia Core: the client HTTP/JSON + SSE API and the backend gRPC
 control service.
 

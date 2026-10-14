@@ -1,5 +1,8 @@
 # Threavia
 
+Core can expose [Prometheus metrics](docs/metrics.md) through a dedicated listener,
+with an optional Prometheus Operator ServiceMonitor in the Helm chart.
+
 Threavia is a self-hosted, Kubernetes-friendly control plane for coding agents.
 It owns durable projects, sessions, jobs, events and project knowledge, while
 execution stays on autonomous **BackendInstances** such as a laptop running

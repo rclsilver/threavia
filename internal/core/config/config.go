@@ -44,6 +44,13 @@ type Config struct {
 	Skills   skills.Limits
 	Auth     auth.Config
 	Backend  BackendConfig
+	Metrics  MetricsConfig
+}
+
+// MetricsConfig controls the dedicated, unauthenticated management listener.
+type MetricsConfig struct {
+	Enabled bool
+	Addr    string
 }
 
 // LogConfig controls the structured logger.
@@ -123,6 +130,7 @@ func Default() Config {
 			ShutdownTimeout: 15 * time.Second,
 		},
 		Postgres: postgres.DefaultConfig(),
+		Metrics:  MetricsConfig{Addr: "127.0.0.1:9091"},
 		S3:       s3.DefaultConfig(),
 		Skills:   skills.DefaultLimits(),
 		Auth: auth.Config{
@@ -144,6 +152,8 @@ func Load() (Config, error) {
 
 	cfg.Log.Level = l.String("LOG_LEVEL", cfg.Log.Level)
 	cfg.Log.Format = l.String("LOG_FORMAT", cfg.Log.Format)
+	cfg.Metrics.Enabled = l.Bool("METRICS_ENABLED", cfg.Metrics.Enabled)
+	cfg.Metrics.Addr = l.String("METRICS_ADDR", cfg.Metrics.Addr)
 
 	// The authentication mode decides where the client API listens when no
 	// address is named, so it is read first. Without authentication it stays
@@ -223,6 +233,14 @@ func Load() (Config, error) {
 
 // Validate checks the loaded configuration as a whole.
 func (c Config) Validate() error {
+	if c.Metrics.Enabled {
+		if _, _, err := net.SplitHostPort(c.Metrics.Addr); err != nil {
+			return fmt.Errorf("%sMETRICS_ADDR: invalid listen address: %w", EnvPrefix, err)
+		}
+		if c.Metrics.Addr == c.HTTP.Addr || c.Metrics.Addr == c.GRPC.Addr {
+			return fmt.Errorf("%sMETRICS_ADDR: must use a dedicated listener", EnvPrefix)
+		}
+	}
 	if !logging.ValidLevel(c.Log.Level) {
 		return fmt.Errorf("%sLOG_LEVEL: unknown level %q", EnvPrefix, c.Log.Level)
 	}

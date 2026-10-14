@@ -55,6 +55,16 @@ service:
   grpcPort: 9090
   annotations: {}
 
+metrics:
+  enabled: false
+  port: 9091
+  serviceMonitor:
+    enabled: false
+    # Must match the Prometheus Operator serviceMonitorSelector.
+    labels: {}
+    interval: 30s
+    scrapeTimeout: 5s
+
 ingress:
   # Client API. TLS is required for remote access, and so is authentication:
   # the chart refuses to render this ingress with auth.mode none.

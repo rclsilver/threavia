@@ -38,6 +38,11 @@ spec:
             - name: grpc
               containerPort: 9090
               protocol: TCP
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthz
@@ -47,6 +52,12 @@ spec:
               path: /readyz
               port: http
           env:
+            - name: THREAVIA_METRICS_ENABLED
+              value: {{ .Values.metrics.enabled | quote }}
+            {{- if .Values.metrics.enabled }}
+            - name: THREAVIA_METRICS_ADDR
+              value: {{ printf ":%v" .Values.metrics.port | quote }}
+            {{- end }}
             - name: THREAVIA_LOG_LEVEL
               value: {{ .Values.log.level | quote }}
             - name: THREAVIA_LOG_FORMAT
