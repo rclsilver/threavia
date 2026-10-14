@@ -20,6 +20,7 @@ import type { Cores } from '../cores/registry';
 import type { VirtualDocuments } from '../diff/documents';
 import { openFileDiff } from '../diff/open';
 import { markSessionOpen } from '../sessions';
+import { closeSessionViews, registerSessionPanel } from '../session-views';
 import { repositoryDescription, titleOf, waitingBySession } from '../tree/model';
 import type { PathResolver } from '../workspace/resolve';
 import { humanise } from './format';
@@ -37,6 +38,7 @@ import {
   type Target,
 } from './draft';
 import { conversationPage, nonce } from './html';
+import { documentGroup, newConversationGroup, protectConversationGroup } from './groups';
 import type { HostMessage, PersistedState, SessionView, WebviewMessage } from './protocol';
 import {
   activeJob,
@@ -84,6 +86,8 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
   private readonly panels = new Map<string, ConversationPanel>();
   private active: ConversationPanel | undefined;
   private readonly disposables: vscode.Disposable[];
+  private groupChanges: Promise<void> = Promise.resolve();
+  private disposed = false;
   /**
    * Told the Project of the conversation in front when it comes forward, or
    * once its Session is read: the Tasks and Memory views follow it.
@@ -102,7 +106,12 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
   }
 
   /** Opens a Session's conversation, or brings its panel forward. */
-  open(ref: SessionRef): void {
+  open(ref: SessionRef): Promise<void> {
+    return this.changeGroup(() => this.openSession(ref));
+  }
+
+  private async openSession(ref: SessionRef): Promise<void> {
+    if (this.disposed) return;
     const core = this.services.cores.get(ref.coreId);
     if (!core) {
       void vscode.window.showWarningMessage('That session is on a Core that is no longer configured.');
@@ -114,8 +123,11 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
       existing.panel.reveal();
       return;
     }
-    const panel = vscode.window.createWebviewPanel(VIEW_TYPE, 'Threavia', vscode.ViewColumn.Active, options(this.services));
+    const column = await newConversationGroup();
+    if (this.disposed) return;
+    const panel = vscode.window.createWebviewPanel(VIEW_TYPE, 'Threavia', column, options(this.services));
     this.adopt(panel, core, target);
+    await protectConversationGroup(panel);
   }
 
   /**
@@ -124,7 +136,12 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
    * second "New Session" there brings it forward with the new choice, and
    * what was written in it stays.
    */
-  openDraft(start: DraftStart): void {
+  openDraft(start: DraftStart): Promise<void> {
+    return this.changeGroup(() => this.createDraft(start));
+  }
+
+  private async createDraft(start: DraftStart): Promise<void> {
+    if (this.disposed) return;
     const core = this.services.cores.get(start.coreId);
     if (!core) return;
     const target: Target = { kind: 'draft', start };
@@ -134,8 +151,11 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
       existing.panel.reveal();
       return;
     }
-    const panel = vscode.window.createWebviewPanel(VIEW_TYPE, NEW_SESSION, vscode.ViewColumn.Active, options(this.services));
+    const column = await newConversationGroup();
+    if (this.disposed) return;
+    const panel = vscode.window.createWebviewPanel(VIEW_TYPE, NEW_SESSION, column, options(this.services));
     this.adopt(panel, core, target);
+    await protectConversationGroup(panel);
   }
 
   async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: PersistedState | undefined): Promise<void> {
@@ -165,7 +185,7 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
   }
 
   private adopt(panel: vscode.WebviewPanel, core: Core, target: Target) {
-    const conversation = new ConversationPanel(panel, core, target, this.services, () => {
+    const conversation = new ConversationPanel(panel, core, target, this.services, () => this.documentColumn(), () => {
       if (this.active === conversation) void this.setActive(undefined);
     });
     this.panels.set(conversation.key, conversation);
@@ -175,8 +195,10 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
       if (this.panels.get(conversation.key) === conversation) this.panels.delete(conversation.key);
     });
     panel.onDidChangeViewState(() => {
-      if (panel.active) void this.setActive(conversation);
-      else if (this.active === conversation) void this.setActive(undefined);
+      if (panel.active) {
+        void this.setActive(conversation);
+        this.protectGroup(conversation);
+      } else if (this.active === conversation) void this.setActive(undefined);
     });
     conversation.onPinned = () => {
       if (this.active === conversation) void this.setActive(conversation);
@@ -191,9 +213,36 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
     conversation.onStarted = (draft) => {
       if (this.panels.get(draft) === conversation) this.panels.delete(draft);
       this.panels.set(conversation.key, conversation);
+      if (conversation.sessionId && !registerSessionPanel({ coreId: core.id, sessionId: conversation.sessionId }, panel)) return;
       if (this.active === conversation) void this.setActive(conversation);
     };
-    if (panel.active) void this.setActive(conversation);
+    if (conversation.sessionId && !registerSessionPanel({ coreId: core.id, sessionId: conversation.sessionId }, panel)) return;
+    if (panel.active) {
+      void this.setActive(conversation);
+      this.protectGroup(conversation);
+    }
+  }
+
+  /** Serialize layout changes, including simultaneous requests for the same Session. */
+  private changeGroup<T>(action: () => Promise<T>): Promise<T> {
+    const result = this.groupChanges.then(action);
+    this.groupChanges = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  private protectGroup(conversation: ConversationPanel) {
+    void this.changeGroup(async () => {
+      if (this.disposed || this.panels.get(conversation.key) !== conversation) return;
+      await protectConversationGroup(conversation.panel);
+    }).catch((error: unknown) => {
+      void vscode.window.showWarningMessage(`The conversation group could not be locked: ${reason(error)}`);
+    });
+  }
+
+  private documentColumn(): Promise<vscode.ViewColumn> {
+    return this.changeGroup(() => documentGroup(new Set(
+      [...this.panels.values()].flatMap(({ panel }) => panel.viewColumn === undefined ? [] : [panel.viewColumn]),
+    )));
   }
 
   private async setActive(conversation: ConversationPanel | undefined) {
@@ -207,6 +256,7 @@ export class ConversationPanels implements vscode.WebviewPanelSerializer<Persist
   }
 
   dispose() {
+    this.disposed = true;
     for (const disposable of this.disposables) disposable.dispose();
     for (const panel of this.panels.values()) panel.panel.dispose();
   }
@@ -270,6 +320,7 @@ class ConversationPanel {
     readonly core: Core,
     target: Target,
     private readonly services: Services,
+    private readonly beside: () => Promise<vscode.ViewColumn>,
     onClosed: () => void,
   ) {
     this.target = target;
@@ -376,6 +427,10 @@ class ConversationPanel {
     if (!sessionId) return;
     try {
       const snapshot = await client.snapshot(sessionId);
+      if (snapshot.session.status === 'ARCHIVED') {
+        await closeSessionViews(this.ref(sessionId));
+        return;
+      }
       const wasPinned = this.pinned;
       this.session = snapshot.session;
       this.runs = snapshot.runs;
@@ -497,11 +552,6 @@ class ConversationPanel {
 
   // ------------------------------------------------------------ messages
 
-  /** Where a file or a diff opens: beside the conversation, not over it. */
-  private get beside(): vscode.ViewColumn {
-    return this.panel.viewColumn === vscode.ViewColumn.One ? vscode.ViewColumn.Two : vscode.ViewColumn.One;
-  }
-
   private async receive(message: WebviewMessage) {
     const { client, answers, artifacts } = this.core;
     const { paths, documents } = this.services;
@@ -601,7 +651,7 @@ class ConversationPanel {
         return;
 
       case 'openArtifact':
-        await artifacts.open(message, this.beside);
+        await artifacts.open(message, this.beside, this.sessionId);
         return;
 
       case 'attach': {

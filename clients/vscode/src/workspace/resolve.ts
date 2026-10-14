@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import { candidatesFor, parsePathRef, type PathRef } from './paths';
+import { resolveColumn, type EditorColumn } from './columns';
 
 /**
  * The editor half of finding a file the agent named: tries the candidates
@@ -38,14 +39,14 @@ export class PathResolver implements vscode.Disposable {
   }
 
   /** Opens what the agent named, at its line, or does nothing when it is not in the workspace. */
-  async open(text: string, column: vscode.ViewColumn): Promise<boolean> {
+  async open(text: string, column: EditorColumn): Promise<boolean> {
     const found = await this.resolve(text);
     if (!found) return false;
     const line = Math.max(0, (found.ref.line ?? 1) - 1);
     const character = Math.max(0, (found.ref.column ?? 1) - 1);
     const position = new vscode.Position(line, character);
     await vscode.window.showTextDocument(found.uri, {
-      viewColumn: column,
+      viewColumn: await resolveColumn(column),
       selection: found.ref.line ? new vscode.Range(position, position) : undefined,
       preview: true,
     });

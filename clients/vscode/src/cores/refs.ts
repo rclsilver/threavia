@@ -109,8 +109,9 @@ export function diffPath(coreId: string, sessionId: string, sequence: number, si
   return corePath(coreId, sessionId, String(sequence), side, ...path.split('/').filter(Boolean));
 }
 
-/** Where an Artifact's text lives: `/<core>/<artifact>/<filename>`. */
-export function artifactPath(coreId: string, artifactId: string, filename: string): string {
+/** Session-owned previews carry their Session too, so restored tabs can close with it. */
+export function artifactPath(coreId: string, artifactId: string, filename: string, sessionId?: string): string {
+  if (sessionId) return corePath(coreId, 'sessions', sessionId, 'artifacts', artifactId, filename);
   return corePath(coreId, artifactId, filename);
 }
 

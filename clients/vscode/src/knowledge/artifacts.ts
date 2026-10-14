@@ -36,7 +36,7 @@ export class ArtifactsView extends ProjectView<Artifact[], ArtifactNode> {
   }
   async open(node: ArtifactNode) {
     const core = this.cores.get(node.coreId);
-    if (core) await core.artifacts.open(ref(node.artifact), vscode.ViewColumn.Active);
+    if (core) await core.artifacts.open(ref(node.artifact), vscode.ViewColumn.Active, node.artifact.sessionId);
   }
   async save(node: ArtifactNode) {
     const core = this.cores.get(node.coreId);

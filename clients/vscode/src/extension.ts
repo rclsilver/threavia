@@ -19,6 +19,7 @@ import { TasksView } from './knowledge/tasks';
 import { ProjectEditors } from './projects/editor';
 import { PermissionEditors } from './permissions/editor';
 import { openInBrowser, runOpenSession, setSessionOpener } from './sessions';
+import { closeSessionViews, sessionRestored } from './session-views';
 import { chooseNewSession } from './start/new';
 import { pickBackend, pickProject } from './start/pickers';
 import { BackendsView } from './tree/backends';
@@ -55,10 +56,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
   const paths = new PathResolver();
   const panels = new ConversationPanels({ extensionUri: context.extensionUri, cores, documents, paths });
   setSessionOpener(
-    (ref) => {
-      panels.open(ref);
-      return Promise.resolve();
-    },
+    (ref) => panels.open(ref),
     () => cores.ids,
   );
 
@@ -112,6 +110,11 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     cores.onDidRemove((coreId) => permissionEditors.closeCore(coreId)),
     cores.onDidRemove((coreId) => projectEditors.closeCore(coreId)),
     cores.on('event', (core, event) => {
+      if (event.sessionId) {
+        const ref = { coreId: core.id, sessionId: event.sessionId };
+        if (event.type === 'session.archived') void closeSessionViews(ref);
+        if (event.type === 'session.restored') sessionRestored(ref);
+      }
       if (event.type === 'project.deleted' && typeof event.payload?.projectId === 'string') {
         projectEditors.closeProject(core.id, event.payload.projectId);
       }
@@ -399,7 +402,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     const core = await readyCore('New Session', node);
     if (!core) return;
     const start = await chooseNewSession(core, cores.several, node?.type === 'project' ? node.project : undefined);
-    if (start) panels.openDraft(start);
+    if (start) await panels.openDraft(start);
   });
 
   command('threavia.openArtifact', (node: ArtifactNode) => artifacts.open(node));
@@ -473,6 +476,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     if (!core) return;
     try {
       await core.client.archiveSession(node.session.id);
+      await closeSessionViews({ coreId: core.id, sessionId: node.session.id });
       sidebar.invalidateSessions(core.id);
     } catch (error) {
       return failed(error, 'Not archived');
@@ -481,6 +485,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     if (!choice) return;
     try {
       await core.client.restoreSession(node.session.id);
+      sessionRestored({ coreId: core.id, sessionId: node.session.id });
       sidebar.invalidateSessions(core.id);
     } catch (error) {
       failed(error, 'Not restored');

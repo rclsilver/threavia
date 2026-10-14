@@ -5,6 +5,8 @@ import { diffPath } from '../cores/refs';
 import type { PathResolver } from '../workspace/resolve';
 import type { VirtualDocuments } from './documents';
 import { reconstruct } from './unified';
+import { closeSessionViews, sessionArchived } from '../session-views';
+import { resolveColumn, type EditorColumn } from '../workspace/columns';
 
 /**
  * Opens the change a Job made to one file in the editor's own diff view.
@@ -18,7 +20,7 @@ export async function openFileDiff(
   client: CoreClient,
   documents: VirtualDocuments,
   paths: PathResolver,
-  target: { coreId: string; sessionId: string; sequence: number; path: string; column: vscode.ViewColumn },
+  target: { coreId: string; sessionId: string; sequence: number; path: string; column: EditorColumn },
 ): Promise<void> {
   const { coreId, sessionId, sequence, path, column } = target;
   let diff;
@@ -48,6 +50,8 @@ export async function openFileDiff(
   }
 
   const sides = reconstruct(diff.diff, { binary: diff.binary, truncated: diff.truncated, local });
+  const viewColumn = await resolveColumn(column);
+  if (sessionArchived({ coreId, sessionId })) return;
   const name = path.split('/').pop() ?? path;
   // The Core comes first in every path: two Cores can hold the same ids.
   const at = (side: string, file: string) => diffPath(coreId, sessionId, sequence, side, file);
@@ -58,7 +62,11 @@ export async function openFileDiff(
       return;
     }
     const raw = documents.put(at('raw', `${path}.diff`), diff.diff);
-    await vscode.window.showTextDocument(raw, { viewColumn: column, preview: true });
+    await vscode.window.showTextDocument(raw, { viewColumn, preview: true });
+    if (sessionArchived({ coreId, sessionId })) {
+      await closeSessionViews({ coreId, sessionId });
+      return;
+    }
     void vscode.window.showInformationMessage(`Showing the raw diff of ${name}. ${sides.reason}`);
     return;
   }
@@ -67,5 +75,6 @@ export async function openFileDiff(
   const after = documents.put(at('after', path), sides.after);
   const title =
     sides.kind === 'complete' ? `${name} (changed by the agent)` : `${name} (changed by the agent, changed regions only)`;
-  await vscode.commands.executeCommand('vscode.diff', before, after, title, { viewColumn: column, preview: true });
+  await vscode.commands.executeCommand('vscode.diff', before, after, title, { viewColumn, preview: true });
+  if (sessionArchived({ coreId, sessionId })) await closeSessionViews({ coreId, sessionId });
 }

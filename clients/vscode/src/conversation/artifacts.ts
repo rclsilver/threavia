@@ -6,6 +6,8 @@ import type { VirtualDocuments } from '../diff/documents';
 import { artifactPath } from '../cores/refs';
 import { artifactKind } from './format';
 import type { ArtifactRef } from './protocol';
+import { closeSessionViews, registerSessionPanel, sessionArchived } from '../session-views';
+import { resolveColumn, type EditorColumn } from '../workspace/columns';
 
 /**
  * Showing and saving what an agent published.
@@ -22,28 +24,34 @@ export class Artifacts {
     private readonly coreId: string,
   ) {}
 
-  async open(artifact: ArtifactRef, column: vscode.ViewColumn): Promise<void> {
+  async open(artifact: ArtifactRef, column: EditorColumn, sessionId?: string): Promise<void> {
+    const ref = sessionId ? { coreId: this.coreId, sessionId } : undefined;
     const kind = artifactKind(artifact.mimeType, artifact.filename);
     const bytes = await this.read(artifact);
     if (!bytes) return;
+    if (ref && sessionArchived(ref)) return;
     const title = artifact.title || artifact.filename;
+    const viewColumn = await resolveColumn(column);
+    if (ref && sessionArchived(ref)) return;
 
     if (kind === 'text' || kind === 'other') {
       const uri = this.documents.put(
-        artifactPath(this.coreId, artifact.artifactId, artifact.filename),
+        artifactPath(this.coreId, artifact.artifactId, artifact.filename, sessionId),
         new TextDecoder().decode(bytes),
       );
-      await vscode.window.showTextDocument(uri, { viewColumn: column, preview: true });
+      await vscode.window.showTextDocument(uri, { viewColumn, preview: true });
+      if (ref && sessionArchived(ref)) await closeSessionViews(ref);
       return;
     }
 
-    const panel = vscode.window.createWebviewPanel('threavia.artifact', title, column, {
+    const panel = vscode.window.createWebviewPanel('threavia.artifact', title, viewColumn, {
       // A page an agent wrote runs its scripts — a chart needs them — in a
       // webview that can reach nothing: no network by its policy, no files,
       // and nobody listening to its messages.
       enableScripts: kind === 'html',
       localResourceRoots: [],
     });
+    if (ref && !registerSessionPanel(ref, panel)) return;
     if (kind === 'audio' || kind === 'video') {
       const type = mediaType(artifact.mimeType, artifact.filename);
       panel.webview.html = mediaPage(title, kind, `data:${type};base64,${Buffer.from(bytes).toString('base64')}`);

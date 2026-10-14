@@ -5,13 +5,19 @@ for you, your pinned sessions, every Project's sessions with what each one is
 doing, and a Project's tasks and decisions, kept live from Core's event stream;
 from one Threavia Core or from several at once.
 
+Each conversation, including a new session's draft, opens in its own locked
+editor group. Files, diffs and artifact previews open in a separate group;
+opening the same session again brings its existing conversation forward.
+
 - **Sidebar.** The Threavia view in the activity bar lists what waits for you
   (approvals and questions, across every Project), your pinned sessions, and
   each Project's sessions, waiting ones first. A session's row shows whether it
   is working, queued, or waiting for you; hover or select it to see its branch,
   how far it is from its upstream and what is left to commit. Right-click a
   session to pin, rename, archive, refresh its repository from origin, or open
-  it in the browser.
+  it in the browser. Archiving closes its conversation, permissions, diffs and
+  artifact previews across editor groups, including when archived from another
+  client. Undo restores the session; open it again to resume the conversation.
   **Threavia: Open Threavia** focuses this dedicated activity-bar container,
   independently of Explorer. Tasks, Memory and Backends start collapsed so
   Sessions can use its height; VS Code keeps your later layout choices.

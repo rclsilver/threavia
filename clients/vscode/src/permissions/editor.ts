@@ -4,6 +4,7 @@ import type { ExecutionPolicy } from '../api/types';
 import { nonce } from '../conversation/html';
 import type { Core } from '../cores/core';
 import { permissionsPage } from './page';
+import { registerSessionPanel } from '../session-views';
 
 export class PermissionEditors implements vscode.Disposable {
   private readonly panels = new Map<string, vscode.WebviewPanel>();
@@ -38,6 +39,8 @@ export class PermissionEditors implements vscode.Disposable {
       })();
     });
     const closed = panel.onDidDispose(() => { disposed = true; this.panels.delete(key); received.dispose(); closed.dispose(); });
+    const sessionId = /^\/api\/v1\/sessions\/([^/]+)\/policy$/.exec(path)?.[1];
+    if (sessionId) registerSessionPanel({ coreId: core.id, sessionId }, panel);
   }
 
   closeCore(coreId: string) { for (const [key, panel] of this.panels) if (key.startsWith(`${coreId}/`)) panel.dispose(); }
