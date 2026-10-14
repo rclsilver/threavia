@@ -48,6 +48,14 @@ const STEPS: Step[] = [
     body: 'A project holds its sessions, tasks, memory and rules. This menu also renames or deletes the current project; deletion asks for confirmation and refuses unfinished work.',
   },
   {
+    path: PROJECT('directories'), target: '[data-tour="known-directories"]', title: 'Known directories',
+    body: 'Remember a directory for this project or share it globally across your projects. Manage its metadata and paths on each backend; forgetting an entry leaves the files in place.',
+  },
+  {
+    path: '/settings/backends', title: 'Your default backend',
+    body: 'Use a backend’s menu to choose the default for new sessions. The preference is shared by your projects and clients on this Core; existing sessions keep their backend.',
+  },
+  {
     path: SESSION(IDS.certManager),
     target: '[data-tour="waiting"]',
     title: 'Everything waiting for you',

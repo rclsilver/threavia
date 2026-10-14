@@ -11,6 +11,7 @@ import { coreIdOf, sessionRefOf, type SessionRef } from './cores/refs';
 import { Cores } from './cores/registry';
 import { hostOf, newCoreId } from './cores/settings';
 import { VirtualDocuments } from './diff/documents';
+import { manageDirectories } from './directories/manage';
 import { createIdentity } from './identity';
 import { CurrentProject } from './knowledge/current';
 import { MemoryView } from './knowledge/memory';
@@ -284,6 +285,35 @@ export function activate(context: vscode.ExtensionContext): Threavia {
   };
 
   command('threavia.open', () => vscode.commands.executeCommand('workbench.view.extension.threavia'));
+
+  command('threavia.setDefaultBackend', async (target?: unknown) => {
+    const core = await readyCore('Default backend', target);
+    if (!core?.ready) return;
+    try {
+      const node = target as { type?: string; backend?: { id: string } } | undefined;
+      const backend = node?.type === 'backend' && node.backend ? node.backend : await pickBackend(core.client, 'Default backend');
+      if (!backend) return;
+      await core.client.setDefaultBackend(backend.id);
+      backends.reload();
+    } catch (error) { failed(error, 'Default backend not saved'); }
+  });
+
+  command('threavia.clearDefaultBackend', async (target?: unknown) => {
+    const core = await readyCore('Default backend', target);
+    if (!core?.ready) return;
+    try { await core.client.setDefaultBackend(null); backends.reload(); }
+    catch (error) { failed(error, 'Default backend not cleared'); }
+  });
+
+  command('threavia.manageDirectories', async (target?: unknown) => {
+    const core = await readyCore('Known directories', target);
+    if (!core?.ready) return;
+    try {
+      const node = target as { type?: string; project?: { id: string } } | undefined;
+      const project = node?.type === 'project' && node.project ? await core.client.project(node.project.id) : (currentProject.core?.id === core.id ? currentProject.project : undefined);
+      await manageDirectories(core, project);
+    } catch (error) { failed(error, 'Directories could not be managed'); }
+  });
 
   command('threavia.managePermissions', async (target?: unknown) => {
     const core = await readyCore('Permissions', target);

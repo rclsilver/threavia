@@ -76,10 +76,12 @@ func (s *Service) DeleteProject(ctx context.Context, identity auth.Identity, id 
 	return nil
 }
 
-// CreateKnownDirectory registers a project-level logical directory.
+// CreateKnownDirectory registers a project directory, or a global one with an empty projectID.
 func (s *Service) CreateKnownDirectory(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, name, description string, gitRemote *string) (domain.KnownDirectory, error) {
-	if _, err := s.store.GetProject(ctx, identity.UserID, projectID); err != nil {
-		return domain.KnownDirectory{}, translate(err)
+	if projectID != "" {
+		if _, err := s.store.GetProject(ctx, identity.UserID, projectID); err != nil {
+			return domain.KnownDirectory{}, translate(err)
+		}
 	}
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -89,6 +91,7 @@ func (s *Service) CreateKnownDirectory(ctx context.Context, identity auth.Identi
 	dir := domain.KnownDirectory{
 		ID:          domain.NewKnownDirectoryID(),
 		ProjectID:   projectID,
+		OwnerID:     identity.UserID,
 		Name:        name,
 		Description: strings.TrimSpace(description),
 		GitRemote:   gitRemote,
@@ -96,11 +99,17 @@ func (s *Service) CreateKnownDirectory(ctx context.Context, identity auth.Identi
 	if err := s.store.CreateKnownDirectory(ctx, &dir); err != nil {
 		return domain.KnownDirectory{}, translate(err)
 	}
+	s.directoryChanged(ctx, identity, dir.ID)
 	return dir, nil
 }
 
-// ListKnownDirectories returns the logical directories of a Project.
+// ListKnownDirectories includes the caller's globals; an empty projectID lists only globals.
 func (s *Service) ListKnownDirectories(ctx context.Context, identity auth.Identity, projectID domain.ProjectID) ([]domain.KnownDirectory, error) {
+	if projectID != "" {
+		if _, err := s.store.GetProject(ctx, identity.UserID, projectID); err != nil {
+			return nil, translate(err)
+		}
+	}
 	dirs, err := s.store.ListKnownDirectories(ctx, identity.UserID, projectID)
 	return dirs, translate(err)
 }
@@ -130,11 +139,15 @@ func (s *Service) BindKnownDirectory(ctx context.Context, identity auth.Identity
 	if err := s.store.BindKnownDirectory(ctx, &binding); err != nil {
 		return domain.KnownDirectoryBinding{}, translate(err)
 	}
+	s.directoryChanged(ctx, identity, dirID)
 	return binding, nil
 }
 
 // ListBindings returns every backend binding of a logical directory.
 func (s *Service) ListBindings(ctx context.Context, identity auth.Identity, dirID domain.KnownDirectoryID) ([]domain.KnownDirectoryBinding, error) {
+	if _, err := s.store.GetKnownDirectory(ctx, identity.UserID, dirID); err != nil {
+		return nil, translate(err)
+	}
 	bindings, err := s.store.ListBindings(ctx, identity.UserID, dirID)
 	return bindings, translate(err)
 }

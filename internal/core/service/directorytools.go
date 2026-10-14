@@ -19,7 +19,7 @@ func (s *Service) scopedDirectory(ctx context.Context, identity auth.Identity, j
 	if err != nil {
 		return domain.KnownDirectory{}, translate(err)
 	}
-	if dir.ProjectID != jc.ProjectID {
+	if dir.ProjectID != "" && dir.ProjectID != jc.ProjectID {
 		return domain.KnownDirectory{}, fmt.Errorf("%w: directory belongs to another project", ErrInvalid)
 	}
 	return dir, nil
@@ -40,7 +40,11 @@ func directoryInput(input map[string]any, key string) (*string, error) {
 
 func (s *Service) invokeDirectoryTool(ctx context.Context, identity auth.Identity, jc jobScope, name tools.Name, input map[string]any) (map[string]any, error) {
 	if name == tools.NameKnownDirectoryList {
-		dirs, err := s.ListKnownDirectories(ctx, identity, jc.ProjectID)
+		projectID, err := directoryProject(jc, input)
+		if err != nil {
+			return nil, err
+		}
+		dirs, err := s.ListKnownDirectories(ctx, identity, projectID)
 		if err != nil {
 			return nil, err
 		}
@@ -58,7 +62,7 @@ func (s *Service) invokeDirectoryTool(ctx context.Context, identity auth.Identit
 			if dir.GitRemote != nil {
 				remote = *dir.GitRemote
 			}
-			items = append(items, map[string]any{"knownDirectoryId": string(dir.ID), "name": dir.Name, "description": dir.Description, "gitRemote": remote, "bindings": paths})
+			items = append(items, map[string]any{"knownDirectoryId": string(dir.ID), "projectId": string(dir.ProjectID), "scope": directoryScope(dir), "name": dir.Name, "description": dir.Description, "gitRemote": remote, "bindings": paths})
 		}
 		return map[string]any{"directories": items}, nil
 	}
@@ -83,18 +87,18 @@ func (s *Service) invokeDirectoryTool(ctx context.Context, identity auth.Identit
 		if err != nil {
 			return nil, err
 		}
-		updated, err := s.store.UpdateKnownDirectory(ctx, identity.UserID, dir.ID, name, description, remote)
+		updated, err := s.UpdateKnownDirectory(ctx, identity, dir.ID, name, description, remote)
 		if err != nil {
 			return nil, translate(err)
 		}
 		return map[string]any{"knownDirectoryId": string(updated.ID), "name": updated.Name}, nil
 	case tools.NameKnownDirectoryUnbind:
-		if err := s.store.UnbindKnownDirectory(ctx, dir.ID, jc.BackendInstanceID); err != nil {
+		if err := s.UnbindKnownDirectory(ctx, identity, dir.ID, jc.BackendInstanceID); err != nil {
 			return nil, translate(err)
 		}
 		return map[string]any{"knownDirectoryId": string(dir.ID), "unbound": true}, nil
 	case tools.NameKnownDirectoryDelete:
-		if err := s.store.DeleteKnownDirectory(ctx, identity.UserID, dir.ID); err != nil {
+		if err := s.DeleteKnownDirectory(ctx, identity, dir.ID); err != nil {
 			return nil, translate(err)
 		}
 		return map[string]any{"knownDirectoryId": string(dir.ID), "deleted": true}, nil
@@ -104,18 +108,24 @@ func (s *Service) invokeDirectoryTool(ctx context.Context, identity auth.Identit
 
 // Registration and its first binding succeed together, or neither is stored.
 func (s *Service) registerDirectoryTool(ctx context.Context, identity auth.Identity, jc jobScope, input map[string]any) (map[string]any, error) {
+	projectID, err := directoryProject(jc, input)
+	if err != nil {
+		return nil, err
+	}
 	name, path := text(input, "name"), text(input, "path")
 	if name == "" || !strings.HasPrefix(path, "/") {
 		return nil, fmt.Errorf("%w: a name and absolute path are required", ErrInvalid)
 	}
-	if _, err := s.store.GetProject(ctx, identity.UserID, jc.ProjectID); err != nil {
-		return nil, translate(err)
+	if projectID != "" {
+		if _, err := s.store.GetProject(ctx, identity.UserID, projectID); err != nil {
+			return nil, translate(err)
+		}
 	}
 	if _, err := s.store.GetBackendInstance(ctx, identity.UserID, jc.BackendInstanceID); err != nil {
 		return nil, translate(err)
 	}
-	dir := domain.KnownDirectory{ID: domain.NewKnownDirectoryID(), ProjectID: jc.ProjectID, Name: name, Description: text(input, "description"), GitRemote: optionalString(text(input, "gitRemote"))}
-	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+	dir := domain.KnownDirectory{ID: domain.NewKnownDirectoryID(), ProjectID: projectID, OwnerID: identity.UserID, Name: name, Description: text(input, "description"), GitRemote: optionalString(text(input, "gitRemote"))}
+	err = s.store.WithTx(ctx, func(tx *postgres.Store) error {
 		if err := tx.CreateKnownDirectory(ctx, &dir); err != nil {
 			return err
 		}
@@ -124,5 +134,27 @@ func (s *Service) registerDirectoryTool(ctx context.Context, identity auth.Ident
 	if err != nil {
 		return nil, translate(err)
 	}
-	return map[string]any{"knownDirectoryId": string(dir.ID)}, nil
+	s.directoryChanged(ctx, identity, dir.ID)
+	return map[string]any{"knownDirectoryId": string(dir.ID), "scope": directoryScope(dir), "projectId": string(dir.ProjectID)}, nil
+}
+
+func directoryProject(jc jobScope, input map[string]any) (domain.ProjectID, error) {
+	value, err := directoryInput(input, "scope")
+	if err != nil {
+		return "", err
+	}
+	if value == nil || *value == "project" {
+		return jc.ProjectID, nil
+	}
+	if *value == "global" {
+		return "", nil
+	}
+	return "", fmt.Errorf("%w: scope must be project or global", ErrInvalid)
+}
+
+func directoryScope(dir domain.KnownDirectory) string {
+	if dir.ProjectID == "" {
+		return "global"
+	}
+	return "project"
 }

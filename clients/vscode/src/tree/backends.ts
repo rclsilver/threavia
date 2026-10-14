@@ -64,9 +64,9 @@ export class BackendsView implements vscode.TreeDataProvider<Node>, vscode.Dispo
     if (node.type === 'backend') {
       const item = new vscode.TreeItem(node.backend.name, vscode.TreeItemCollapsibleState.Expanded);
       item.id = `backend/${node.coreId}/${node.backend.id}`;
-      item.contextValue = 'backend';
+      item.contextValue = node.backend.isDefault ? 'backend.default' : 'backend';
       item.iconPath = providerIcon(node.backend.backend);
-      item.description = humanise(node.backend.operationalStatus);
+      item.description = `${node.backend.isDefault ? 'default · ' : ''}${humanise(node.backend.operationalStatus)}`;
       item.tooltip = backendTooltip(node.backend);
       return item;
     }

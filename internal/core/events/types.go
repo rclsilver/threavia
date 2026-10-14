@@ -52,11 +52,13 @@ const (
 	TypeArtifactCreated         Type = "artifact.created"
 	TypeArtifactDeleted         Type = "artifact.deleted"
 
-	TypeBackendRegistered    Type = "backend.registered"
-	TypeBackendRevoked       Type = "backend.revoked"
-	TypeBackendQuotasUpdated Type = "backend.quotas_updated"
-	TypeProjectUpdated       Type = "project.updated"
-	TypeProjectDeleted       Type = "project.deleted"
+	TypeBackendRegistered     Type = "backend.registered"
+	TypeBackendRevoked        Type = "backend.revoked"
+	TypeBackendQuotasUpdated  Type = "backend.quotas_updated"
+	TypeProjectUpdated        Type = "project.updated"
+	TypeProjectDeleted        Type = "project.deleted"
+	TypeDirectoryChanged      Type = "directory.changed"
+	TypeBackendDefaultChanged Type = "backend.default_changed"
 
 	// TypeScheduleSkipped says, in the Session, that a scheduled message was
 	// not sent and why.
@@ -66,6 +68,8 @@ const (
 // persistentTypes is the set of event types Core persists and assigns a global
 // sequence to.
 var persistentTypes = map[Type]bool{
+	TypeBackendDefaultChanged:   true,
+	TypeDirectoryChanged:        true,
 	TypeSessionCreated:          true,
 	TypeSessionRenamed:          true,
 	TypeSessionArchived:         true,

@@ -28,6 +28,14 @@ from one Threavia Core or from several at once.
   every reported quota window, provider status, threshold and reset. Expand a
   quota for its values and provider details. No report is displayed as unknown,
   never as zero usage.
+  Right-click a backend to set or clear the default; **Set Default Backend…**
+  also appears in the command palette. This account's choice is shared with
+  the web client on this Core and proposed first for new sessions.
+- **Known directories.** **Threavia: Manage Known Directories…**, also on a
+  Project or Core's context menu, manages project directories and global
+  directories shared by your projects. Create or edit their metadata, add or
+  update paths on backends, and forget paths or entries. Forgetting never
+  removes files, and a directory used by a session cannot be forgotten.
 - **Permissions.** **Threavia: Manage Permissions…** edits instance, backend,
   project or session permissions in an editor tab. Project, session and backend
   rows also offer it in their context menu. Set the mode, switches, supervision,

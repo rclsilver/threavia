@@ -1,11 +1,12 @@
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Bell, Copy, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Bell, Copy, Folder, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
-import { useBackends, useClaimBackend, useIssueBackendToken, useMe, useRevokeBackend } from '@/api/queries';
+import { useBackends, useClaimBackend, useIssueBackendToken, useMe, useProjects, useRevokeBackend, useSetDefaultBackend } from '@/api/queries';
 import type { BackendInstance } from '@/api/types';
 import { NotificationsPane } from '@/components/notifications-pane';
 import { DefaultPolicyPane } from '@/components/default-policy';
+import { DirectoriesPane } from '@/components/directories-pane';
 import { BackendIcon, BackendQuotas } from '@/components/backend-info';
 import { ConfirmLine, RecordList, RecordRow } from '@/components/record-list';
 import { ActionError } from '@/components/ui/action-error';
@@ -16,14 +17,17 @@ import { CheckboxField } from '@/components/ui/checkbox';
 import { EmptyState } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { MenuItem } from '@/components/ui/menu';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useSelectedProject } from '@/use-project';
 import { cn, humanise, when } from '@/lib/utils';
 import { useWideLayout } from '@/use-layout';
 import { useTheme, type Theme } from '@/use-theme';
 import { useShortcut } from '@/use-shortcut';
 
-export type AccountTab = 'appearance' | 'notifications' | 'backends' | 'permissions';
+export type AccountTab = 'appearance' | 'notifications' | 'backends' | 'permissions' | 'directories';
 
 const TABS: { tab: AccountTab; label: string; Icon: LucideIcon; detail: string }[] = [
+  { tab: 'directories', label: 'Directories', Icon: Folder, detail: 'Manage known directories on this Core, in a project or globally across your projects.' },
   { tab: 'permissions', label: 'Permissions', Icon: ShieldCheck, detail: 'The defaults for all your projects and backends on this instance. Backends, projects and sessions can override them.' },
   { tab: 'appearance', label: 'Appearance', Icon: Monitor, detail: 'How this client looks and lays itself out, on this device.' },
   {
@@ -109,6 +113,7 @@ export function SettingsView() {
           {current.tab === 'notifications' && <NotificationsPane />}
           {current.tab === 'backends' && <BackendsPane />}
           {current.tab === 'permissions' && <DefaultPolicyPane />}
+          {current.tab === 'directories' && <DirectorySettings />}
         </div>
       </div>
     </div>
@@ -121,6 +126,17 @@ const THEMES: { value: Theme; label: string; Icon: LucideIcon }[] = [
   { value: 'light', label: 'Light', Icon: Sun },
   { value: 'dark', label: 'Dark', Icon: Moon },
 ];
+
+function DirectorySettings() {
+  const selected = useSelectedProject();
+  const [projectId, setProjectId] = useState(selected ?? '');
+  const projects = useProjects();
+  return <div className="space-y-4">
+    <div className="space-y-1.5"><label htmlFor="settings-directory-scope" className="text-sm font-medium">Scope</label><Select value={projectId || '__global__'} onValueChange={(value) => setProjectId(value === '__global__' ? '' : value)}><SelectTrigger id="settings-directory-scope"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__global__">Global — all my projects on this Core</SelectItem>{(projects.data ?? []).map((project) => <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>)}</SelectContent></Select></div>
+    <ActionError error={projects.error} outcome="Projects could not be read" />
+    <DirectoriesPane key={projectId} projectId={projectId} />
+  </div>;
+}
 
 function AppearancePane() {
   const [wide, setWide] = useWideLayout();
@@ -199,6 +215,7 @@ function BackendsPane() {
 }
 
 function BackendRow({ backend }: { backend: BackendInstance }) {
+  const setDefault = useSetDefaultBackend();
   const revoke = useRevokeBackend();
   const [asking, setAsking] = useState(false);
   const [permissions, setPermissions] = useState(false);
@@ -215,6 +232,7 @@ function BackendRow({ backend }: { backend: BackendInstance }) {
         <>
           <Badge tone={backendTone(backend)}>{humanise(backend.operationalStatus)}</Badge>
           <Badge>{backend.backend ? humanise(backend.backend) : 'Unknown provider'}</Badge>
+          {backend.isDefault && <Badge tone="accent">Default</Badge>}
           {backend.ownershipStatus !== 'CLAIMED' && <Badge tone="warn">{humanise(backend.ownershipStatus)}</Badge>}
         </>
       }
@@ -234,14 +252,15 @@ function BackendRow({ backend }: { backend: BackendInstance }) {
       action={!revoked && <Button size="sm" onClick={() => setPermissions(!permissions)} aria-expanded={permissions}><ShieldCheck /><span>Permissions</span></Button>}
       menu={
         !revoked && (
-          <MenuItem className="text-danger" onSelect={() => setAsking(true)}>
+          <><MenuItem className="min-h-11 sm:min-h-0" disabled={setDefault.isPending} onSelect={() => setDefault.mutate(backend.isDefault ? null : backend.id)}>{backend.isDefault ? 'Clear default' : 'Use as default'}</MenuItem><MenuItem className="text-danger" onSelect={() => setAsking(true)}>
             <Trash2 className="size-4" />
             Revoke…
-          </MenuItem>
+          </MenuItem></>
         )
       }
       below={
         <div className="space-y-3">
+          <ActionError error={setDefault.error} outcome="Default backend not saved" recovery="Try again." />
           <BackendQuotas snapshot={backend.quotas} />
           {permissions && <DefaultPolicyPane backendId={backend.id} />}
           {(asking || revoke.error) && <>

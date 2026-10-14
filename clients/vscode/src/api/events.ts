@@ -29,6 +29,7 @@ export type Effect =
   | { kind: 'decisions'; projectId?: string }
   | { kind: 'artifacts'; projectId?: string }
   | { kind: 'backends' }
+  | { kind: 'directories' }
   | { kind: 'projects' };
 
 /** How old an ended Job can be and still be told: a replay is not news. */
@@ -46,7 +47,10 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
     case 'backend.registered':
     case 'backend.revoked':
     case 'backend.quotas_updated':
+    case 'backend.default_changed':
       return [{ kind: 'backends' }];
+    case 'directory.changed':
+      return [{ kind: 'directories' }];
     case 'project.updated':
       return [{ kind: 'projects' }];
     case 'project.deleted':

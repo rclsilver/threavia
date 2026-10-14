@@ -26,6 +26,8 @@ const state = {
   validations: clone(data.validations) as Json[],
   userInputs: clone(data.userInputs) as Json[],
   backends: clone(data.backends) as Json[],
+  directories: clone(data.directories) as Json[],
+  bindings: clone(data.directoryBindings) as Json[],
   tasks: clone(data.tasks) as Json[],
   decisions: clone(data.decisions) as Json[],
   artifacts: clone(data.artifacts) as Json[],
@@ -55,6 +57,20 @@ function sessionOf(id: string) {
   const session = state.sessions.find((entry) => entry.id === id);
   if (!session) throw notFound('This session');
   return session;
+}
+
+function directoryOf(id: string) {
+  const directory = state.directories.find((entry) => entry.id === id);
+  if (!directory) throw notFound('This directory');
+  return directory;
+}
+
+function createDirectory(body: Json, projectId?: string) {
+  const name = text(body.name).trim();
+  if (!name) throw new ApiError(400, 'invalid', 'Enter a directory name.');
+  if (state.directories.some((entry) => entry.projectId === projectId && entry.name === name)) throw new ApiError(409, 'conflict', 'This scope already has a directory with that name.');
+  const directory = { id: newId(), ...(projectId && { projectId }), name, description: text(body.description).trim(), ...(text(body.gitRemote).trim() && { gitRemote: text(body.gitRemote).trim() }), createdAt: nowIso(), updatedAt: nowIso() };
+  state.directories.push(directory); return directory;
 }
 
 function timelineOf(id: string) {
@@ -194,6 +210,12 @@ function record(action: string, rest: Json) {
 type Handler = (match: RegExpMatchArray, body: Json, query: URLSearchParams) => unknown;
 
 const routes: [string, RegExp, Handler][] = [
+  ['PUT', /^\/api\/v1\/me\/default-backend$/, (_m, body) => {
+    const id = body.backendInstanceId;
+    if (id !== null && !state.backends.some((backend) => backend.id === id && backend.ownershipStatus === 'CLAIMED')) throw notFound('This backend');
+    for (const backend of state.backends) backend.isDefault = backend.id === id;
+    return undefined;
+  }],
   ['GET', /^\/api\/v1\/me\/policy$/, () => defaultPolicyView(state.instancePolicy)],
   ['PUT', /^\/api\/v1\/me\/policy$/, (_m, body) => {
     state.instancePolicy = body.mode ? body : null;
@@ -253,6 +275,9 @@ const routes: [string, RegExp, Handler][] = [
     state.decisions = state.decisions.filter((entry) => entry.projectId !== m[1]);
     state.artifacts = state.artifacts.filter((entry) => entry.projectId !== m[1]);
     state.skills = state.skills.filter((entry) => entry.projectId !== m[1]);
+    const directoryIds = new Set(state.directories.filter((entry) => entry.projectId === m[1]).map((entry) => entry.id));
+    state.directories = state.directories.filter((entry) => entry.projectId !== m[1]);
+    state.bindings = state.bindings.filter((entry) => !directoryIds.has(entry.knownDirectoryId));
     state.schedules = state.schedules.filter((entry) => !ids.has(String(entry.sessionId)));
     for (const id of ids) { delete state.timelines[id]; delete state.sessionPolicies[id]; }
     delete state.projectPolicies[m[1]];
@@ -264,8 +289,38 @@ const routes: [string, RegExp, Handler][] = [
         .filter((session) => session.projectId === m[1] && (query.get('includeArchived') === 'true' || session.status !== 'ARCHIVED'))
         .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))),
     )],
-  ['GET', /^\/api\/v1\/projects\/([^/]+)\/directories$/, (m) => list(data.directories.filter((entry) => entry.projectId === m[1]))],
-  ['POST', /^\/api\/v1\/projects\/([^/]+)\/directories$/, () => { throw unavailable('Registering a directory'); }],
+  ['GET', /^\/api\/v1\/projects\/([^/]+)\/directories$/, (m) => list(state.directories.filter((entry) => entry.projectId === m[1] || !entry.projectId))],
+  ['POST', /^\/api\/v1\/projects\/([^/]+)\/directories$/, (m, body) => createDirectory(body, m[1])],
+  ['GET', /^\/api\/v1\/directories$/, () => list(state.directories.filter((entry) => !entry.projectId))],
+  ['POST', /^\/api\/v1\/directories$/, (_m, body) => createDirectory(body)],
+  ['PATCH', /^\/api\/v1\/directories\/([^/]+)$/, (m, body) => {
+    const directory = directoryOf(m[1]);
+    if (body.name !== undefined && !text(body.name).trim()) throw new ApiError(400, 'invalid', 'Enter a directory name.');
+    const name = text(body.name, String(directory.name)).trim();
+    if (state.directories.some((entry) => entry.id !== directory.id && entry.projectId === directory.projectId && entry.name === name)) throw new ApiError(409, 'conflict', 'This scope already has a directory with that name.');
+    for (const key of ['name', 'description', 'gitRemote']) if (typeof body[key] === 'string') directory[key] = text(body[key]).trim();
+    if (!directory.gitRemote) delete directory.gitRemote;
+    directory.updatedAt = nowIso(); return directory;
+  }],
+  ['DELETE', /^\/api\/v1\/directories\/([^/]+)$/, (m) => {
+    directoryOf(m[1]);
+    if (state.sessions.some((session) => session.workingDirectoryId === m[1])) throw new ApiError(409, 'conflict', 'A session uses this working directory.');
+    state.directories = state.directories.filter((entry) => entry.id !== m[1]);
+    state.bindings = state.bindings.filter((entry) => entry.knownDirectoryId !== m[1]);
+    return undefined;
+  }],
+  ['GET', /^\/api\/v1\/directories\/([^/]+)\/bindings$/, (m) => { directoryOf(m[1]); return list(state.bindings.filter((entry) => entry.knownDirectoryId === m[1])); }],
+  ['POST', /^\/api\/v1\/directories\/([^/]+)\/bindings$/, (m, body) => {
+    directoryOf(m[1]);
+    if (!text(body.path).startsWith('/')) throw new ApiError(400, 'invalid', 'The binding path must be absolute.');
+    if (!state.backends.some((backend) => backend.id === body.backendInstanceId && backend.ownershipStatus !== 'REVOKED')) throw notFound('This backend');
+    const binding = state.bindings.find((entry) => entry.knownDirectoryId === m[1] && entry.backendInstanceId === body.backendInstanceId);
+    if (binding) { binding.path = body.path; binding.updatedAt = nowIso(); return binding; }
+    const created = { knownDirectoryId: m[1], backendInstanceId: body.backendInstanceId, path: body.path, createdAt: nowIso(), updatedAt: nowIso() }; state.bindings.push(created); return created;
+  }],
+  ['DELETE', /^\/api\/v1\/directories\/([^/]+)\/bindings\/([^/]+)$/, (m) => {
+    directoryOf(m[1]); state.bindings = state.bindings.filter((entry) => entry.knownDirectoryId !== m[1] || entry.backendInstanceId !== m[2]); return undefined;
+  }],
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/policy$/, (m) => defaultPolicyView(state.projectPolicies[m[1]] ?? null, state.instancePolicy).effective],
   ['PUT', /^\/api\/v1\/projects\/([^/]+)\/policy$/, (m, body) => {
     if (body.mode) state.projectPolicies[m[1]] = body;
@@ -339,7 +394,7 @@ const routes: [string, RegExp, Handler][] = [
   ['GET', /^\/api\/v1\/backends\/([^/]+)\/skills$/, () => list([])],
   ['POST', /^\/api\/v1\/backends\/([^/]+)\/revoke$/, (m) => {
     const backend = state.backends.find((entry) => entry.id === m[1]);
-    if (backend) backend.ownershipStatus = 'REVOKED';
+    if (backend) { backend.ownershipStatus = 'REVOKED'; backend.isDefault = false; }
   }],
   ['POST', /^\/api\/v1\/backends\/claim$/, () => { throw unavailable('Claiming a backend'); }],
   ['POST', /^\/api\/v1\/backend-tokens$/, () => ({ token: 'demo-token-not-valid-anywhere', expiresAt: new Date(Date.now() + 3_600_000).toISOString() })],
@@ -348,7 +403,7 @@ const routes: [string, RegExp, Handler][] = [
     const project = state.projects.find((entry) => entry.id === body.projectId) ?? state.projects[0];
     const sessionId = newId();
     const message = text(body.message);
-    state.sessions.push({ id: sessionId, projectId: project.id, title: message.length > 60 ? `${message.slice(0, 60)}…` : message || 'New session', status: 'ACTIVE', createdAt: nowIso(), updatedAt: nowIso() });
+    state.sessions.push({ id: sessionId, projectId: project.id, ...(typeof body.workingDirectoryId === 'string' && { workingDirectoryId: body.workingDirectoryId }), title: message.length > 60 ? `${message.slice(0, 60)}…` : message || 'New session', status: 'ACTIVE', createdAt: nowIso(), updatedAt: nowIso() });
     state.timelines[sessionId] = {
       runs: [{ id: newId(), sessionId, backendInstanceId: body.backendInstanceId ?? data.IDS.laptop, resumeStatus: 'AVAILABLE', createdAt: nowIso(), updatedAt: nowIso() }],
       jobs: [],

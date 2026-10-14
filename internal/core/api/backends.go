@@ -1,8 +1,11 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
@@ -11,10 +14,38 @@ import (
 
 func (h *handler) registerBackends(mux *http.ServeMux) {
 	h.handle(mux, "GET /api/v1/backends", h.listBackends)
+	h.handle(mux, "PUT /api/v1/me/default-backend", h.setDefaultBackend)
 	h.handle(mux, "GET /api/v1/backends/{backendId}", h.getBackend)
 	h.handle(mux, "POST /api/v1/backends/{backendId}/revoke", h.revokeBackend)
 	h.handle(mux, "POST /api/v1/backends/claim", h.claimBackend)
 	h.handle(mux, "POST /api/v1/backend-tokens", h.createBackendToken)
+}
+
+func (h *handler) setDefaultBackend(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	body, ok := decode[struct {
+		BackendInstanceID json.RawMessage `json:"backendInstanceId"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	var id domain.BackendInstanceID
+	var selected *string
+	if err := json.Unmarshal(body.BackendInstanceID, &selected); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid", "choose a backend identifier or null to clear the default")
+		return
+	}
+	if selected != nil {
+		if _, err := uuid.Parse(*selected); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid", "choose a backend identifier or null to clear the default")
+			return
+		}
+		id = domain.BackendInstanceID(*selected)
+	}
+	if err := h.svc.SetDefaultBackend(r.Context(), identity, id); err != nil {
+		h.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // registerRegistration mounts the one route a backend calls before it has any

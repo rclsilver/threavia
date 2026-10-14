@@ -85,6 +85,7 @@ export const backends = [
     id: IDS.laptop,
     ownerId: 'alex',
     name: 'laptop',
+    isDefault: true,
     backend: 'claude',
     quotas: { availability: 'AVAILABLE', observedAt: at(0.2), limits: [
       { id: 'five_hour', label: 'five hour', status: 'allowed', percentUsed: 24, resetsAt: new Date(Date.now() + 2 * 3600000).toISOString(), thresholds: [{ label: 'Provider warning threshold', value: 0.8, unit: 'utilization', status: 'not reached' }] },
@@ -185,6 +186,12 @@ export const sessions = [
 export const directories = [
   { id: id('d0000004', 1), projectId: IDS.homelab, name: 'homelab', createdAt: at(60 * 24 * 40), updatedAt: at(60 * 24 * 40) },
   { id: id('d0000004', 2), projectId: IDS.website, name: 'site', createdAt: at(60 * 24 * 20), updatedAt: at(60 * 24 * 20) },
+  { id: id('d0000004', 3), name: 'docs', description: 'Shared notes and documentation', gitRemote: 'https://example.org/alex/docs.git', createdAt: at(60 * 24 * 10), updatedAt: at(60 * 24 * 2) },
+];
+
+export const directoryBindings = [
+  { knownDirectoryId: directories[0].id, backendInstanceId: IDS.laptop, path: '/home/alex/work/homelab', createdAt: at(60 * 24 * 40), updatedAt: at(60 * 24 * 40) },
+  { knownDirectoryId: directories[2].id, backendInstanceId: IDS.laptop, path: '/home/alex/work/docs', createdAt: at(60 * 24 * 10), updatedAt: at(60 * 24 * 2) },
 ];
 
 // ----------------------------------------------------------------- timelines

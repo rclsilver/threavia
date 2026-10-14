@@ -10,6 +10,7 @@ import {
   ChevronsUpDown,
   Clock,
   FileText,
+  Folder,
   History,
   Inbox,
   ListChecks,
@@ -641,6 +642,7 @@ const SECTIONS = [
   { to: '/projects/$projectId/skills', label: 'Skills', Icon: Sparkles },
   { to: '/projects/$projectId/instructions', label: 'Instructions', Icon: FileText },
   { to: '/projects/$projectId/permissions', label: 'Permissions', Icon: ShieldCheck },
+  { to: '/projects/$projectId/directories', label: 'Directories', Icon: Folder },
   { to: '/projects/$projectId/audit', label: 'Audit', Icon: History },
 ] as const;
 

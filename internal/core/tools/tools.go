@@ -160,25 +160,28 @@ func Specs() []Spec {
 			Name:               NameKnownDirectoryRegister,
 			RequiresValidation: true,
 			Description: "Register a directory worth remembering across machines, and bind " +
-				"it to its path here. Use it for a directory this project will come back " +
-				"to, not for every directory you happen to touch.",
+				"it to its path here. Project scope is the default; use global to share it " +
+				"across your projects on this Core. Use it for directories you will come back to.",
 			InputSchema: object(map[string]any{
 				"name":        str("A short logical name, such as 'puppet'."),
 				"path":        str("Its absolute path on this machine."),
 				"description": str("What it holds."),
 				"gitRemote":   str("Its git remote, if it has one."),
+				"scope":       map[string]any{"type": "string", "enum": []string{"project", "global"}, "description": "Project (default) remembers it in the current project; global shares it across your projects."},
 			}, "name", "path"),
 		},
 		{
 			Name:        NameKnownDirectoryList,
-			Description: "List this project's known directories and their paths on each backend. Use it to find a directory before registering or binding it again.",
-			InputSchema: object(map[string]any{}),
+			Description: "List this project's and your global known directories and their paths on each backend. Use scope global to list only global directories. Find a directory before registering or binding it again.",
+			InputSchema: object(map[string]any{
+				"scope": map[string]any{"type": "string", "enum": []string{"project", "global"}, "description": "Project (default) includes current-project and global directories; global lists only global ones."},
+			}),
 		},
 		{
 			Name:        NameKnownDirectoryUpdate,
 			Description: "Change a known directory's name, description or git remote. Omitted fields keep their values; an empty description or git remote clears it. This changes metadata only.",
 			InputSchema: object(map[string]any{
-				"knownDirectoryId": str("Identifier of a directory in this project."),
+				"knownDirectoryId": str("Identifier of a current-project or global directory."),
 				"name":             str("Its new logical name."),
 				"description":      str("What it holds."),
 				"gitRemote":        str("Its git remote."),
@@ -188,14 +191,14 @@ func Specs() []Spec {
 			Name:        NameKnownDirectoryUnbind,
 			Description: "Forget a known directory's path on this backend. Keeps its metadata and paths on other backends; never removes files.",
 			InputSchema: object(map[string]any{
-				"knownDirectoryId": str("Identifier of a directory in this project."),
+				"knownDirectoryId": str("Identifier of a current-project or global directory."),
 			}, "knownDirectoryId"),
 		},
 		{
 			Name:        NameKnownDirectoryDelete,
 			Description: "Forget a known directory and all its bindings. Refuses while a session uses it as its working directory. Never removes files from any machine.",
 			InputSchema: object(map[string]any{
-				"knownDirectoryId": str("Identifier of a directory in this project."),
+				"knownDirectoryId": str("Identifier of a current-project or global directory."),
 			}, "knownDirectoryId"),
 		},
 		{

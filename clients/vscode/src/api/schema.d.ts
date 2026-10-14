@@ -569,7 +569,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** The KnownDirectories of a Project */
+        /** The KnownDirectories of a Project, including the caller's global directories */
         get: {
             parameters: {
                 query?: never;
@@ -633,6 +633,192 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/directories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's global known directories */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Global directories */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["KnownDirectory"][];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a global known directory shared by the caller's projects */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        name: string;
+                        description?: string;
+                        gitRemote?: string | null;
+                    };
+                };
+            };
+            responses: {
+                /** @description The created directory */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["KnownDirectory"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/directories/{directoryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                directoryId: components["parameters"]["DirectoryID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget a directory and its bindings without removing files
+         * @description Refuses while any session uses the directory.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    directoryId: components["parameters"]["DirectoryID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Edit a known directory's metadata
+         * @description Omitted fields remain unchanged; empty optional fields clear their values. Does not modify backend files.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    directoryId: components["parameters"]["DirectoryID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        name?: string;
+                        description?: string;
+                        gitRemote?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Updated directory */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["KnownDirectory"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+            };
+        };
+        trace?: never;
+    };
+    "/api/v1/directories/{directoryId}/bindings/{backendId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                directoryId: components["parameters"]["DirectoryID"];
+                backendId: components["schemas"]["UUID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Forget a directory's path on one backend without removing files */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    directoryId: components["parameters"]["DirectoryID"];
+                    backendId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Binding removed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["Error"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/directories/{directoryId}/bindings": {
         parameters: {
             query?: never;
@@ -689,7 +875,7 @@ export interface paths {
             };
             responses: {
                 /** @description The binding */
-                201: {
+                200: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -700,6 +886,52 @@ export interface paths {
                 400: components["responses"]["Error"];
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/default-backend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the caller's default backend on this Core
+         * @description Shared by every client and project of this account. Null clears the preference. Revoking the backend clears it too. Offline backends remain selectable defaults; no work is moved automatically.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        backendInstanceId: string | null;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default saved; read isDefault in the backend list */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+            };
+        };
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3907,6 +4139,10 @@ export interface components {
              *
              *     - `backend.quotas_updated`: `{ backendInstanceId }`, owner-scoped;
              *       refresh backend instances to read the complete quota snapshot
+             *     - `backend.default_changed`: `{ backendInstanceId }`, owner-scoped;
+             *       empty identifier clears the preference; refresh the backend list.
+             *     - `directory.changed`: `{ knownDirectoryId }`, owner-scoped; refresh
+             *       directory lists and bindings after metadata or paths change.
              *     - `project.updated`: `{ projectId, name }`, refresh project metadata
              *     - `project.deleted`: `{ projectId }`, owner-scoped without projectId
              *       in the envelope, so the notification survives the deletion
@@ -4251,13 +4487,14 @@ export interface components {
              *      */
             own?: components["schemas"]["ExecutionPolicy"];
         };
-        /** @description A project-level logical directory. Portability and discovery metadata,
+        /** @description A logical directory belonging to a project or, when projectId is absent,
+         *     to the caller globally across their projects. Portability and discovery metadata,
          *     never a sandbox: the agent may work in any directory the backend
          *     filesystem allows.
          *      */
         KnownDirectory: {
             id: components["schemas"]["UUID"];
-            projectId: components["schemas"]["UUID"];
+            projectId?: components["schemas"]["UUID"];
             name: string;
             description?: string;
             gitRemote?: string;
@@ -4294,6 +4531,8 @@ export interface components {
         };
         /** @description An autonomous remote execution participant. It belongs to a User, not to a Project. */
         BackendInstance: {
+            /** @description The caller's default backend across their projects and clients on this Core; absent means false. */
+            isDefault?: boolean;
             id: components["schemas"]["UUID"];
             /** @description Absent while the instance is UNCLAIMED. */
             ownerId?: string;

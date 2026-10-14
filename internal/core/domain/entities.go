@@ -93,6 +93,7 @@ type BackendInstance struct {
 	// OwnerID is nil while the instance is UNCLAIMED.
 	OwnerID           *UserID                  `json:"ownerId,omitempty"`
 	Name              string                   `json:"name"`
+	IsDefault         bool                     `json:"isDefault,omitempty"`
 	Backend           string                   `json:"backend,omitempty"`
 	Quotas            *quotas.Status           `json:"quotas,omitempty"`
 	OwnershipStatus   BackendOwnershipStatus   `json:"ownershipStatus"`

@@ -148,6 +148,9 @@
     ],
     "commands": [
       { "command": "threavia.managePermissions", "title": "Manage Permissions…", "category": "Threavia", "icon": "$(shield)" },
+      { "command": "threavia.manageDirectories", "title": "Manage Known Directories…", "category": "Threavia", "icon": "$(folder)" },
+      { "command": "threavia.setDefaultBackend", "title": "Set Default Backend…", "category": "Threavia", "icon": "$(star)" },
+      { "command": "threavia.clearDefaultBackend", "title": "Clear Default Backend", "category": "Threavia" },
       { "command": "threavia.open", "title": "Open Threavia", "category": "Threavia" },
       { "command": "threavia.newProject", "title": "New Project…", "category": "Threavia", "icon": "$(new-folder)" },
       { "command": "threavia.editProject", "title": "Edit Project…", "category": "Threavia" },
@@ -402,6 +405,9 @@
     "menus": {
       "commandPalette": [
         { "command": "threavia.managePermissions", "when": "threavia.state == ready" },
+        { "command": "threavia.manageDirectories", "when": "threavia.state == ready" },
+        { "command": "threavia.setDefaultBackend", "when": "threavia.state == ready" },
+        { "command": "threavia.clearDefaultBackend", "when": "threavia.state == ready" },
         { "command": "threavia.newProject", "when": "threavia.state == ready" },
         { "command": "threavia.editProject", "when": "threavia.state == ready" },
         { "command": "threavia.renameProject", "when": "threavia.state == ready" },
@@ -634,8 +640,11 @@
         }
       ],
       "view/item/context": [
+        { "command": "threavia.manageDirectories", "when": "view == threavia.sidebar && (viewItem == project || viewItem =~ /^core\\.ready/)", "group": "2_directories" },
         { "command": "threavia.managePermissions", "when": "view == threavia.sidebar && (viewItem == project || viewItem =~ /^session/ || viewItem =~ /^core\\.ready/)", "group": "2_permissions" },
         { "command": "threavia.managePermissions", "when": "view == threavia.backends && viewItem =~ /^backend/", "group": "2_permissions" },
+        { "command": "threavia.setDefaultBackend", "when": "view == threavia.backends && viewItem == backend", "group": "1_default" },
+        { "command": "threavia.clearDefaultBackend", "when": "view == threavia.backends && viewItem == backend.default", "group": "1_default" },
         { "command": "threavia.newProject", "when": "view == threavia.sidebar && viewItem =~ /^core\\.ready/", "group": "2_project@1" },
         { "command": "threavia.editProject", "when": "view == threavia.sidebar && viewItem == project", "group": "2_project@1" },
         { "command": "threavia.renameProject", "when": "view == threavia.sidebar && viewItem == project", "group": "2_project@2" },

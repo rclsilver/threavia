@@ -8,14 +8,15 @@ type KnownDirectoryID string
 // NewKnownDirectoryID returns a fresh KnownDirectoryID.
 func NewKnownDirectoryID() KnownDirectoryID { return KnownDirectoryID(NewUUID()) }
 
-// KnownDirectory is a project-level logical directory (spec section 11).
+// KnownDirectory is a logical directory. Empty ProjectID means owner-global.
 //
 // Git repositories and worktrees are deliberately not Core objects. A
 // KnownDirectory is portability and discovery metadata, never a sandbox: the
 // agent may work in any directory the backend filesystem allows.
 type KnownDirectory struct {
 	ID          KnownDirectoryID `json:"id"`
-	ProjectID   ProjectID        `json:"projectId"`
+	ProjectID   ProjectID        `json:"projectId,omitempty"`
+	OwnerID     UserID           `json:"-"`
 	Name        string           `json:"name"`
 	Description string           `json:"description,omitempty"`
 	GitRemote   *string          `json:"gitRemote,omitempty"`

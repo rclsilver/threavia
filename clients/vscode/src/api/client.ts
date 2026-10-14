@@ -14,6 +14,7 @@ import type {
   FileDiff,
   Job,
   KnownDirectory,
+  KnownDirectoryBinding,
   List,
   Me,
   Project,
@@ -313,6 +314,10 @@ export class CoreClient {
     return this.get<List<BackendInstance>>('/api/v1/backends').then(items);
   }
 
+  setDefaultBackend(backendInstanceId: string | null) {
+    return this.request<void>('PUT', '/api/v1/me/default-backend', { backendInstanceId });
+  }
+
   async policy(path: string): Promise<PolicyView> {
     if (path.startsWith('/api/v1/sessions/')) {
       const view = await this.get<SessionPolicy>(path);
@@ -326,8 +331,32 @@ export class CoreClient {
     return this.policy(path);
   }
 
-  directories(projectId: string) {
-    return this.get<List<KnownDirectory>>(`/api/v1/projects/${projectId}/directories`).then(items);
+  directories(projectId = '') {
+    return this.get<List<KnownDirectory>>(projectId ? `/api/v1/projects/${projectId}/directories` : '/api/v1/directories').then(items);
+  }
+
+  createDirectory(projectId: string, input: { name: string; description?: string; gitRemote?: string }) {
+    return this.post<KnownDirectory>(projectId ? `/api/v1/projects/${projectId}/directories` : '/api/v1/directories', input);
+  }
+
+  updateDirectory(id: string, patch: { name?: string; description?: string; gitRemote?: string }) {
+    return this.request<KnownDirectory>('PATCH', `/api/v1/directories/${id}`, patch);
+  }
+
+  deleteDirectory(id: string) {
+    return this.request<void>('DELETE', `/api/v1/directories/${id}`);
+  }
+
+  bindings(id: string) {
+    return this.get<List<KnownDirectoryBinding>>(`/api/v1/directories/${id}/bindings`).then(items);
+  }
+
+  bindDirectory(id: string, backendInstanceId: string, path: string) {
+    return this.post<KnownDirectoryBinding>(`/api/v1/directories/${id}/bindings`, { backendInstanceId, path });
+  }
+
+  unbindDirectory(id: string, backendId: string) {
+    return this.request<void>('DELETE', `/api/v1/directories/${id}/bindings/${backendId}`);
   }
 
   /**

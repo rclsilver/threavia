@@ -95,8 +95,8 @@ export function useDirectories(projectId: string | undefined) {
   return useQuery({
     queryKey: keys.directories(projectId ?? ''),
     queryFn: () =>
-      api.get<List<KnownDirectory>>(`/api/v1/projects/${projectId}/directories`).then(items),
-    enabled: Boolean(projectId),
+      api.get<List<KnownDirectory>>(projectId ? `/api/v1/projects/${projectId}/directories` : '/api/v1/directories').then(items),
+    enabled: projectId !== undefined,
   });
 }
 
@@ -104,8 +104,40 @@ export function useCreateDirectory(projectId: string) {
   const queries = useQueryClient();
   return useMutation({
     mutationFn: (input: { name: string; description?: string; gitRemote?: string | null }) =>
-      api.post<KnownDirectory>(`/api/v1/projects/${projectId}/directories`, input),
-    onSuccess: () => queries.invalidateQueries({ queryKey: keys.directories(projectId) }),
+      api.post<KnownDirectory>(projectId ? `/api/v1/projects/${projectId}/directories` : '/api/v1/directories', input),
+    onSuccess: () => queries.invalidateQueries({ queryKey: ['directories'] }),
+  });
+}
+
+export function useUpdateDirectory(directoryId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: { name?: string; description?: string; gitRemote?: string }) => api.patch<KnownDirectory>(`/api/v1/directories/${directoryId}`, patch),
+    onSuccess: () => queries.invalidateQueries({ queryKey: ['directories'] }),
+  });
+}
+
+export function useDeleteDirectory(directoryId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete(`/api/v1/directories/${directoryId}`),
+    onSuccess: () => queries.invalidateQueries({ queryKey: ['directories'] }),
+  });
+}
+
+export function useBindDirectory(directoryId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { backendInstanceId: string; path: string }) => api.post<KnownDirectoryBinding>(`/api/v1/directories/${directoryId}/bindings`, input),
+    onSuccess: () => queries.invalidateQueries({ queryKey: keys.bindings(directoryId) }),
+  });
+}
+
+export function useUnbindDirectory(directoryId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (backendId: string) => api.delete(`/api/v1/directories/${directoryId}/bindings/${backendId}`),
+    onSuccess: () => queries.invalidateQueries({ queryKey: keys.bindings(directoryId) }),
   });
 }
 
@@ -126,6 +158,14 @@ export function useBackends() {
   return useQuery({
     queryKey: keys.backends(),
     queryFn: () => api.get<List<BackendInstance>>('/api/v1/backends').then(items),
+  });
+}
+
+export function useSetDefaultBackend() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (backendInstanceId: string | null) => api.put<void>('/api/v1/me/default-backend', { backendInstanceId }),
+    onSuccess: () => queries.invalidateQueries({ queryKey: keys.backends() }),
   });
 }
 

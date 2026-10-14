@@ -52,7 +52,7 @@ const READINESS: Record<string, number> = { READY: 0, DEGRADED: 1, UNAVAILABLE: 
 export async function pickBackend(client: CoreClient, title: string): Promise<BackendInstance | undefined> {
   const backends = (await client.backends())
     .filter((backend) => backend.ownershipStatus !== 'REVOKED')
-    .sort((a, b) => (READINESS[a.operationalStatus] ?? 9) - (READINESS[b.operationalStatus] ?? 9));
+    .sort((a, b) => Number(Boolean(b.isDefault)) - Number(Boolean(a.isDefault)) || (READINESS[a.operationalStatus] ?? 9) - (READINESS[b.operationalStatus] ?? 9));
   if (backends.length === 0) {
     void vscode.window.showInformationMessage('There is no backend to run the work. Connect one to Threavia first.');
     return undefined;
@@ -63,7 +63,7 @@ export async function pickBackend(client: CoreClient, title: string): Promise<Ba
     backends.map((backend) => ({
       label: backend.name,
       iconPath: providerIcon(backend.backend),
-      description: `${backend.backend || 'Unknown provider'} · ${humanise(backend.operationalStatus)}`,
+      description: `${backend.isDefault ? 'default · ' : ''}${backend.backend || 'Unknown provider'} · ${humanise(backend.operationalStatus)}`,
       detail: backendTooltip(backend),
       value: backend,
     })),
@@ -89,7 +89,7 @@ export async function pickDirectory(
   return pick<KnownDirectory | null>(`${title}: Working directory`, 'Where does the agent start?', [
     ...sorted.map((directory) => ({
       label: `$(folder) ${directory.name}`,
-      description: names.has(directory.name.toLowerCase()) ? 'this workspace' : directory.description,
+      description: [directory.projectId ? 'project' : 'global', names.has(directory.name.toLowerCase()) ? 'this workspace' : directory.description].filter(Boolean).join(' · '),
       value: directory,
     })),
     { label: 'None', description: 'the backend’s default', value: null },

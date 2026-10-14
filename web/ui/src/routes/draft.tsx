@@ -40,7 +40,7 @@ export function DraftView() {
   const [nativeSessionId, setNativeSessionId] = useState('');
 
   const usable = (backends.data ?? []).filter((backend) => backend.ownershipStatus !== 'REVOKED');
-  const chosenBackend = backendId || usable[0]?.id || '';
+  const chosenBackend = (usable.some((backend) => backend.id === backendId) && backendId) || usable.find((backend) => backend.isDefault)?.id || usable[0]?.id || '';
 
   const submit = () => {
     const text = message.trim();
@@ -79,7 +79,7 @@ export function DraftView() {
             <SelectContent>
               {usable.map((backend) => (
                 <SelectItem key={backend.id} value={backend.id}>
-                  <span className="flex items-center gap-2"><BackendIcon provider={backend.backend} />{backend.name} ({humanise(backend.operationalStatus)})</span>
+                  <span className="flex items-center gap-2"><BackendIcon provider={backend.backend} />{backend.name}{backend.isDefault && ' · default'} ({humanise(backend.operationalStatus)})</span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -98,7 +98,7 @@ export function DraftView() {
                 <SelectItem value={NONE}>— none —</SelectItem>
                 {(directories.data ?? []).map((directory) => (
                   <SelectItem key={directory.id} value={directory.id}>
-                    {directory.name}
+                    {directory.name}{!directory.projectId && ' (global)'}
                   </SelectItem>
                 ))}
               </SelectContent>

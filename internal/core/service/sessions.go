@@ -527,7 +527,7 @@ func (s *Service) SetSessionWorkingDirectory(ctx context.Context, identity auth.
 		if err != nil {
 			return domain.Session{}, translate(err)
 		}
-		if dir.ProjectID != current.ProjectID {
+		if dir.ProjectID != "" && dir.ProjectID != current.ProjectID {
 			return domain.Session{}, fmt.Errorf("%w: the directory belongs to another project", ErrInvalid)
 		}
 	}
@@ -757,7 +757,7 @@ func (s *Service) checkWorkingDirectory(ctx context.Context, identity auth.Ident
 	if err != nil {
 		return translate(err)
 	}
-	if dir.ProjectID != projectID {
+	if dir.ProjectID != "" && dir.ProjectID != projectID {
 		return fmt.Errorf("%w: the directory belongs to another project", ErrInvalid)
 	}
 	return nil

@@ -338,7 +338,7 @@ paths:
       - $ref: "#/components/parameters/ProjectID"
     get:
       tags: [projects]
-      summary: The KnownDirectories of a Project
+      summary: The KnownDirectories of a Project, including the caller's global directories
       responses:
         "200":
           description: The directories
@@ -374,6 +374,92 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/KnownDirectory" }
 
+  /api/v1/directories:
+    get:
+      tags: [projects]
+      summary: The caller's global known directories
+      responses:
+        "200":
+          description: Global directories
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/KnownDirectory" }
+    post:
+      tags: [projects]
+      summary: Create a global known directory shared by the caller's projects
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                gitRemote: { type: [string, "null"] }
+      responses:
+        "201":
+          description: The created directory
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnownDirectory" }
+
+  /api/v1/directories/{directoryId}:
+    parameters:
+      - $ref: "#/components/parameters/DirectoryID"
+    patch:
+      tags: [projects]
+      summary: Edit a known directory's metadata
+      description: Omitted fields remain unchanged; empty optional fields clear their values. Does not modify backend files.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                gitRemote: { type: string }
+      responses:
+        "200":
+          description: Updated directory
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnownDirectory" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [projects]
+      summary: Forget a directory and its bindings without removing files
+      description: Refuses while any session uses the directory.
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/v1/directories/{directoryId}/bindings/{backendId}:
+    parameters:
+      - $ref: "#/components/parameters/DirectoryID"
+      - name: backendId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    delete:
+      tags: [projects]
+      summary: Forget a directory's path on one backend without removing files
+      responses:
+        "204": { description: Binding removed }
+        "404": { $ref: "#/components/responses/Error" }
+
   /api/v1/directories/{directoryId}/bindings:
     parameters:
       - $ref: "#/components/parameters/DirectoryID"
@@ -408,13 +494,34 @@ paths:
                   type: string
                   description: An absolute path on that backend.
       responses:
-        "201":
+        "200":
           description: The binding
           content:
             application/json:
               schema: { $ref: "#/components/schemas/KnownDirectoryBinding" }
         "400":
           $ref: "#/components/responses/Error"
+
+  /api/v1/me/default-backend:
+    put:
+      tags: [backends]
+      summary: Set the caller's default backend on this Core
+      description: Shared by every client and project of this account. Null clears the preference. Revoking the backend clears it too. Offline backends remain selectable defaults; no work is moved automatically.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [backendInstanceId]
+              properties:
+                backendInstanceId:
+                  type: [string, "null"]
+                  format: uuid
+      responses:
+        "204": { description: Default saved; read isDefault in the backend list }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
 
   /api/v1/backends:
     get:
@@ -2274,6 +2381,10 @@ components:
 
             - `backend.quotas_updated`: `{ backendInstanceId }`, owner-scoped;
               refresh backend instances to read the complete quota snapshot
+            - `backend.default_changed`: `{ backendInstanceId }`, owner-scoped;
+              empty identifier clears the preference; refresh the backend list.
+            - `directory.changed`: `{ knownDirectoryId }`, owner-scoped; refresh
+              directory lists and bindings after metadata or paths change.
             - `project.updated`: `{ projectId, name }`, refresh project metadata
             - `project.deleted`: `{ projectId }`, owner-scoped without projectId
               in the envelope, so the notification survives the deletion
@@ -2709,10 +2820,11 @@ components:
     KnownDirectory:
       type: object
       description: |
-        A project-level logical directory. Portability and discovery metadata,
+        A logical directory belonging to a project or, when projectId is absent,
+        to the caller globally across their projects. Portability and discovery metadata,
         never a sandbox: the agent may work in any directory the backend
         filesystem allows.
-      required: [id, projectId, name, createdAt, updatedAt]
+      required: [id, name, createdAt, updatedAt]
       properties:
         id: { $ref: "#/components/schemas/UUID" }
         projectId: { $ref: "#/components/schemas/UUID" }
@@ -2756,6 +2868,9 @@ components:
       description: An autonomous remote execution participant. It belongs to a User, not to a Project.
       required: [id, name, ownershipStatus, operationalStatus, providerAuthState, capabilities, capacity, protocolVersion, createdAt, updatedAt]
       properties:
+        isDefault:
+          type: boolean
+          description: The caller's default backend across their projects and clients on this Core; absent means false.
         id: { $ref: "#/components/schemas/UUID" }
         ownerId:
           type: string

@@ -163,9 +163,24 @@ where it is only if it cannot (section 11):
 export THREAVIA_BACKEND_DISCOVERY_ROOTS=$HOME/git,$HOME/dev
 ```
 
+Manage known directories in a project's **Directories** page, in account
+settings for global directories, or through **Manage Known Directories…** in
+VS Code. A global directory belongs to your account on this Core and is available
+to all your projects. The session tools `known_directory_list`,
+`known_directory_register`, `known_directory_update`, `known_directory_bind`,
+`known_directory_unbind` and `known_directory_delete` manage the same metadata;
+listing and registration accept `scope: "global"`, with the current project as
+the default. Forgetting metadata never deletes backend files.
+
 On touch devices, including Android, Enter adds a line in new and existing
 messages; tap the send button to send. Desktop keeps Enter to send and
 Shift+Enter for a newline.
+
+In **Settings → Backends**, use a backend's menu to set or clear your default.
+VS Code offers **Set Default Backend…** and the Backends context menu. The
+choice is stored per account on this Core, shared by every project and client,
+and proposed first for new sessions. Existing sessions keep their backend.
+Revoking the default backend clears the preference.
 
 `.env.example` lists every environment variable with its default.
 

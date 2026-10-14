@@ -26,6 +26,7 @@ export type BackendInstance = Schemas['BackendInstance'];
 export type BackendQuotas = Schemas['BackendQuotas'];
 export type BackendQuota = Schemas['BackendQuota'];
 export type KnownDirectory = Schemas['KnownDirectory'];
+export type KnownDirectoryBinding = Schemas['KnownDirectoryBinding'];
 export type ExecutionPolicy = Schemas['ExecutionPolicy'];
 export type PermissionRule = Schemas['PermissionRule'];
 export type PolicyView = Schemas['PolicyView'];

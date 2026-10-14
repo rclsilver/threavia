@@ -19,6 +19,7 @@ import {
   AuditView,
   InstructionsView,
   MemoryView,
+  DirectoriesView,
   PermissionsView,
   SkillsView,
 } from '@/routes/project';
@@ -73,7 +74,7 @@ const sessionRoute = createRoute({
   component: SessionView,
 });
 
-const ACCOUNT_TABS: AccountTab[] = ['appearance', 'notifications', 'backends', 'permissions'];
+const ACCOUNT_TABS: AccountTab[] = ['appearance', 'notifications', 'backends', 'permissions', 'directories'];
 
 /** The person's settings, one tab per URL; an unknown tab lands on the first. */
 const settingsRoute = createRoute({
@@ -181,6 +182,12 @@ const permissionsRoute = createRoute({
   component: PermissionsView,
 });
 
+const directoriesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects/$projectId/directories',
+  component: DirectoriesView,
+});
+
 /**
  * Where the provider sends the browser back.
  *
@@ -210,6 +217,7 @@ const routeTree = rootRoute.addChildren([
   instructionsRoute,
   auditRoute,
   permissionsRoute,
+  directoriesRoute,
   projectRoute,
 ]);
 

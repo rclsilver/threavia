@@ -272,9 +272,14 @@ export class EventStream {
       case 'backend.registered':
       case 'backend.revoked':
       case 'backend.quotas_updated':
+      case 'backend.default_changed':
         void this.queries.invalidateQueries({ queryKey: keys.backends() });
         break;
 
+      case 'directory.changed':
+        void this.queries.invalidateQueries({ queryKey: ['directories'] });
+        void this.queries.invalidateQueries({ queryKey: ['bindings'] });
+        break;
       case 'project.updated':
       case 'project.deleted':
         void this.queries.invalidateQueries({ queryKey: ['projects'] });

@@ -38,6 +38,7 @@ import {
 } from '@/api/queries';
 import type { Artifact, Decision, ExecutionPolicy, Skill, SkillSourceType } from '@/api/types';
 import { AuditTimeline } from '@/components/audit-timeline';
+import { DirectoriesPane } from '@/components/directories-pane';
 import { Markdown } from '@/components/markdown';
 import { ArtifactViewer, DownloadButton } from '@/components/artifact-preview';
 import { kindOf } from '@/lib/artifact';
@@ -238,6 +239,11 @@ export function PermissionsView() {
       <PermissionsPane projectId={projectId} />
     </Section>
   );
+}
+
+export function DirectoriesView() {
+  const projectId = useProjectId();
+  return <Section title="Directories" subtitle="Where this project works, and the directories shared across your projects."><DirectoriesPane key={projectId} projectId={projectId} /></Section>;
 }
 
 /** Copies a value, best effort: the menu item is a convenience, not a promise. */

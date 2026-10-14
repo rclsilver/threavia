@@ -1,0 +1,3 @@
+ALTER TABLE backend_instances DROP CONSTRAINT backend_instances_default_claimed;
+DROP INDEX backend_instances_owner_default_key;
+ALTER TABLE backend_instances DROP COLUMN is_default;

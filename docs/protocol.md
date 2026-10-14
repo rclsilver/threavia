@@ -200,6 +200,13 @@ backend, as metadata. Core never fetches their content, which is what lets a
 backend expose a Skill that only exists behind a corporate network, and what
 lets a handoff report that another backend cannot run it (section 18).
 
+Known-directory tools can list and register owner-global directories with
+`scope: "global"`; the default scope is the current project. The project list
+includes its owner's global directories. Updates, binding and forgetting accept
+current-project or owner-global directory identifiers. The Core enforces owner
+isolation and rejects deletion while any session uses the directory. These tools
+only manage metadata and paths, never delete backend files.
+
 ## Working directory
 
 The working directory stays on the backend. Core asks about it when someone
