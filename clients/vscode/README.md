@@ -28,6 +28,10 @@ from one Threavia Core or from several at once.
   every reported quota window, provider status, threshold and reset. Expand a
   quota for its values and provider details. No report is displayed as unknown,
   never as zero usage.
+- **Permissions.** **Threavia: Manage Permissions…** edits instance, backend,
+  project or session permissions in an editor tab. Project, session and backend
+  rows also offer it in their context menu. Set the mode, switches, supervision,
+  limits and rules, or return to parent defaults; inherited rules stay separate.
 - **Notifications.** An approval or a question pops up once, with Approve and
   Deny, or its choices and Answer…, right there. Work that ends in a session
   you are not looking at says so quietly. A request's notification disappears

@@ -8,6 +8,9 @@ import type {
   DecisionImportance,
   Delivery,
   Event,
+  ExecutionPolicy,
+  PolicyView,
+  SessionPolicy,
   FileDiff,
   Job,
   KnownDirectory,
@@ -308,6 +311,19 @@ export class CoreClient {
 
   backends() {
     return this.get<List<BackendInstance>>('/api/v1/backends').then(items);
+  }
+
+  async policy(path: string): Promise<PolicyView> {
+    if (path.startsWith('/api/v1/sessions/')) {
+      const view = await this.get<SessionPolicy>(path);
+      return { ...view, parent: view.project };
+    }
+    return this.get<PolicyView>(path.startsWith('/api/v1/projects/') ? `${path}/origin` : path);
+  }
+
+  async setPolicy(path: string, policy: ExecutionPolicy | null): Promise<PolicyView> {
+    await this.request<unknown>('PUT', path, policy ?? {});
+    return this.policy(path);
   }
 
   directories(projectId: string) {

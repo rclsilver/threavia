@@ -16,9 +16,10 @@ import { CurrentProject } from './knowledge/current';
 import { MemoryView } from './knowledge/memory';
 import { TasksView } from './knowledge/tasks';
 import { ProjectEditors } from './projects/editor';
+import { PermissionEditors } from './permissions/editor';
 import { openInBrowser, runOpenSession, setSessionOpener } from './sessions';
 import { chooseNewSession } from './start/new';
-import { pickProject } from './start/pickers';
+import { pickBackend, pickProject } from './start/pickers';
 import { BackendsView } from './tree/backends';
 import { UNTITLED, titleOf } from './tree/model';
 import { SidebarProvider, type Node, type RequestNode, type SessionNode } from './tree/provider';
@@ -72,6 +73,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     currentProject.reload();
     if (created) currentProject.follow(core.id, project.id);
   });
+  const permissionEditors = new PermissionEditors();
 
   /** A Session's title from what is already known, asking Core only as a last resort. */
   const sessionTitle = async (core: Core, sessionId: string): Promise<string> => {
@@ -105,6 +107,8 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     }),
     currentProject,
     projectEditors,
+    permissionEditors,
+    cores.onDidRemove((coreId) => permissionEditors.closeCore(coreId)),
     cores.onDidRemove((coreId) => projectEditors.closeCore(coreId)),
     cores.on('event', (core, event) => {
       if (event.type === 'project.deleted' && typeof event.payload?.projectId === 'string') {
@@ -280,6 +284,39 @@ export function activate(context: vscode.ExtensionContext): Threavia {
   };
 
   command('threavia.open', () => vscode.commands.executeCommand('workbench.view.extension.threavia'));
+
+  command('threavia.managePermissions', async (target?: unknown) => {
+    const core = await readyCore('Permissions', target);
+    if (!core?.ready) return;
+    try {
+      const node = target as { type?: string; project?: { id: string; name: string }; backend?: { id: string; name: string }; session?: { id: string; title?: string } } | undefined;
+      let path = '/api/v1/me/policy';
+      let label = 'Instance defaults';
+      if (node?.type === 'project' && node.project) { path = `/api/v1/projects/${node.project.id}/policy`; label = node.project.name; }
+      else if (node?.type === 'backend' && node.backend) { path = `/api/v1/backends/${node.backend.id}/policy`; label = node.backend.name; }
+      else if (node?.type === 'session' && node.session) { path = `/api/v1/sessions/${node.session.id}/policy`; label = node.session.title || 'Session'; }
+      else {
+        const scope = await vscode.window.showQuickPick(['Instance defaults', 'Backend', 'Project', 'Session'], { title: 'Permissions', placeHolder: 'Which level do you want to manage?', ignoreFocusOut: true });
+        if (!scope) return;
+        if (scope === 'Backend') {
+          const backend = await pickBackend(core.client, 'Permissions');
+          if (!backend) return;
+          path = `/api/v1/backends/${backend.id}/policy`; label = backend.name;
+        } else if (scope === 'Project' || scope === 'Session') {
+          const project = await pickProject(core.client, core.projectSetting, 'Permissions', 'Which Project?', core.id);
+          if (!project) return;
+          path = `/api/v1/projects/${project.id}/policy`; label = project.name;
+          if (scope === 'Session') {
+            const sessions = await core.client.sessions(project.id);
+            const selected = await vscode.window.showQuickPick(sessions.map((session) => ({ label: titleOf(session), session })), { title: 'Session permissions', ignoreFocusOut: true });
+            if (!selected) return;
+            path = `/api/v1/sessions/${selected.session.id}/policy`; label = titleOf(selected.session);
+          }
+        }
+      }
+      await permissionEditors.open(core, path, label);
+    } catch (error) { failed(error, 'Permissions could not be opened'); }
+  });
 
   command('threavia.newProject', async (target?: unknown) => {
     const core = await readyCore('New Project', target);

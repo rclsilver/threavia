@@ -147,6 +147,7 @@
       }
     ],
     "commands": [
+      { "command": "threavia.managePermissions", "title": "Manage Permissions…", "category": "Threavia", "icon": "$(shield)" },
       { "command": "threavia.open", "title": "Open Threavia", "category": "Threavia" },
       { "command": "threavia.newProject", "title": "New Project…", "category": "Threavia", "icon": "$(new-folder)" },
       { "command": "threavia.editProject", "title": "Edit Project…", "category": "Threavia" },
@@ -400,6 +401,7 @@
     ],
     "menus": {
       "commandPalette": [
+        { "command": "threavia.managePermissions", "when": "threavia.state == ready" },
         { "command": "threavia.newProject", "when": "threavia.state == ready" },
         { "command": "threavia.editProject", "when": "threavia.state == ready" },
         { "command": "threavia.renameProject", "when": "threavia.state == ready" },
@@ -632,6 +634,8 @@
         }
       ],
       "view/item/context": [
+        { "command": "threavia.managePermissions", "when": "view == threavia.sidebar && (viewItem == project || viewItem =~ /^session/ || viewItem =~ /^core\\.ready/)", "group": "2_permissions" },
+        { "command": "threavia.managePermissions", "when": "view == threavia.backends && viewItem =~ /^backend/", "group": "2_permissions" },
         { "command": "threavia.newProject", "when": "view == threavia.sidebar && viewItem =~ /^core\\.ready/", "group": "2_project@1" },
         { "command": "threavia.editProject", "when": "view == threavia.sidebar && viewItem == project", "group": "2_project@1" },
         { "command": "threavia.renameProject", "when": "view == threavia.sidebar && viewItem == project", "group": "2_project@2" },
