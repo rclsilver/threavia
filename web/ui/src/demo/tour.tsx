@@ -49,7 +49,7 @@ const STEPS: Step[] = [
   },
   {
     path: PROJECT('directories'), target: '[data-tour="known-directories"]', title: 'Known directories',
-    body: 'Remember a directory for this project or share it globally across your projects. An agent can register a directory and attach its session to it in one approved call; future jobs start there.',
+    body: 'Remember a directory for this project, then use Make global in its menu to share it across your projects while keeping its paths. An agent can register a directory and attach its session to it in one approved call; future jobs start there.',
   },
   {
     path: '/settings/backends', title: 'Your default backend',
@@ -137,7 +137,7 @@ const STEPS: Step[] = [
     path: PROJECT('memory'),
     target: 'main ul',
     title: 'Memory that travels',
-    body: 'Decisions an agent must not forget. A pinned one goes with every job of the project; click the mark to pin or unpin.',
+    body: 'A pinned decision goes with every job of the project; click the mark to pin or unpin. Make global in its menu shares the fact across your projects and preserves the project record in history.',
   },
   {
     path: '/settings/memory', target: '[data-tour="global-memory"]', title: 'Memory shared across projects',

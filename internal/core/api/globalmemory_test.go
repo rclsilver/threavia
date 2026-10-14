@@ -65,7 +65,7 @@ func TestGlobalMemorySurvivesProjectsAndKeepsItsReplacementHistory(t *testing.T)
 	}
 }
 
-func TestGlobalMemoryIsOwnerScopedAndCannotReplaceProjectDecisions(t *testing.T) {
+func TestGlobalMemoryIsOwnerScopedAndCannotBeDemoted(t *testing.T) {
 	c := newCore(t)
 	other := c.asUser("another-owner")
 	project := c.createProject("Project")
@@ -78,7 +78,7 @@ func TestGlobalMemoryIsOwnerScopedAndCannotReplaceProjectDecisions(t *testing.T)
 	other.mustDo("PATCH", "/api/v1/decisions/"+string(global.ID), map[string]any{"importance": "IMPORTANT"}, nil, 404)
 	other.mustDo("DELETE", "/api/v1/decisions/"+string(global.ID), nil, nil, 404)
 	other.mustDo("POST", "/api/v1/me/decisions", map[string]any{"title": "Replace foreign memory", "supersedes": global.ID}, nil, 400)
-	c.mustDo("POST", "/api/v1/me/decisions", map[string]any{"title": "Replace local from global", "supersedes": local.ID}, nil, 400)
+	other.mustDo("POST", "/api/v1/me/decisions", map[string]any{"title": "Replace foreign project memory", "supersedes": local.ID}, nil, 400)
 	c.mustDo("POST", "/api/v1/projects/"+project+"/decisions", map[string]any{"title": "Replace global from local", "supersedes": global.ID}, nil, 400)
 	var found struct {
 		Items []domain.Decision `json:"items"`

@@ -26,6 +26,14 @@ func (s *Service) UpdateKnownDirectory(ctx context.Context, identity auth.Identi
 	return dir, translate(err)
 }
 
+func (s *Service) MakeKnownDirectoryGlobal(ctx context.Context, identity auth.Identity, id domain.KnownDirectoryID) (domain.KnownDirectory, error) {
+	dir, err := s.store.MakeKnownDirectoryGlobal(ctx, identity.UserID, id)
+	if err == nil {
+		s.directoryChanged(ctx, identity, id)
+	}
+	return dir, translate(err)
+}
+
 func (s *Service) DeleteKnownDirectory(ctx context.Context, identity auth.Identity, id domain.KnownDirectoryID) error {
 	err := s.store.DeleteKnownDirectory(ctx, identity.UserID, id)
 	if err == nil {

@@ -136,6 +136,16 @@ func (s *Store) ResolveBinding(ctx context.Context, id domain.KnownDirectoryID, 
 	return path, classify(err, "resolve binding")
 }
 
+// MakeKnownDirectoryGlobal keeps bindings and session references intact. The
+// global unique index rejects a name collision without changing the row.
+func (s *Store) MakeKnownDirectoryGlobal(ctx context.Context, ownerID domain.UserID, id domain.KnownDirectoryID) (domain.KnownDirectory, error) {
+	return scanKnownDirectory(s.q.QueryRow(ctx, `
+		UPDATE known_directories d SET project_id = NULL,
+		updated_at = CASE WHEN d.project_id IS NULL THEN d.updated_at ELSE now() END
+		WHERE d.id = $1 AND d.owner_id = $2
+		RETURNING `+knownDirectoryColumns, id, ownerID))
+}
+
 func scanKnownDirectory(row scanner) (domain.KnownDirectory, error) {
 	var dir domain.KnownDirectory
 	err := row.Scan(&dir.ID, &dir.ProjectID, &dir.OwnerID, &dir.Name, &dir.Description, &dir.GitRemote,

@@ -72,6 +72,12 @@ func (s *Service) invokeDirectoryTool(ctx context.Context, identity auth.Identit
 		return nil, err
 	}
 	switch name {
+	case tools.NameKnownDirectoryMakeGlobal:
+		updated, err := s.MakeKnownDirectoryGlobal(ctx, identity, dir.ID)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"knownDirectoryId": string(updated.ID), "name": updated.Name, "scope": "global", "projectId": ""}, nil
 	case tools.NameKnownDirectoryUpdate:
 		name, err := directoryInput(input, "name")
 		if err != nil {

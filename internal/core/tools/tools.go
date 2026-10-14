@@ -27,12 +27,14 @@ const (
 	NameTaskComplete             Name = "task_complete"
 	NameTaskReady                Name = "task_ready"
 	NameDecisionCreate           Name = "decision_create"
+	NameDecisionMakeGlobal       Name = "decision_make_global"
 	NameMemorySearch             Name = "memory_search"
 	NameProjectHistorySearch     Name = "project_history_search"
 	NameKnownDirectoryRegister   Name = "known_directory_register"
 	NameKnownDirectoryBind       Name = "known_directory_bind"
 	NameKnownDirectoryList       Name = "known_directory_list"
 	NameKnownDirectoryUpdate     Name = "known_directory_update"
+	NameKnownDirectoryMakeGlobal Name = "known_directory_make_global"
 	NameKnownDirectoryUnbind     Name = "known_directory_unbind"
 	NameKnownDirectoryDelete     Name = "known_directory_delete"
 	NameWorkingDirectorySet      Name = "working_directory_set"
@@ -110,7 +112,9 @@ func Specs() []Spec {
 				"Project scope is the default. Use global only for facts the user wants shared across all their projects on this Core. " +
 				"Mark it IMPORTANT when every future session must know it; IMPORTANT " +
 				"decisions are injected into the context of every later run. " +
-				"Set supersedes when this replaces an earlier decision.",
+				"Set supersedes when this replaces an earlier decision. " +
+				"Use decision_make_global to share an existing project fact unchanged; the project copy becomes historical. " +
+				"Global decisions cannot be replaced by project decisions.",
 			InputSchema: object(map[string]any{
 				"title":      str("A one-line statement of the decision."),
 				"content":    str("The reasoning, and what it rules out."),
@@ -118,6 +122,13 @@ func Specs() []Spec {
 				"supersedes": str("Identifier of the decision this one replaces."),
 				"scope":      map[string]any{"type": "string", "enum": []string{"project", "global"}, "description": "Project (default) records it here; global shares it across all your projects on this Core."},
 			}, "title"),
+		},
+		{
+			Name:        NameDecisionMakeGlobal,
+			Description: "Make an active decision from this project global without rewriting it. Preserves its title, content and importance; the project record becomes historical. Returns the global decision ID. Already-global active decisions are returned unchanged.",
+			InputSchema: object(map[string]any{
+				"decisionId": str("Identifier of an active current-project or global memory decision, found with memory_search."),
+			}, "decisionId"),
 		},
 		{
 			Name: NameMemorySearch,
@@ -206,6 +217,13 @@ func Specs() []Spec {
 				"name":             str("Its new logical name."),
 				"description":      str("What it holds."),
 				"gitRemote":        str("Its git remote."),
+			}, "knownDirectoryId"),
+		},
+		{
+			Name:        NameKnownDirectoryMakeGlobal,
+			Description: "Make a directory from this project global across your projects on this Core. Keeps its identifier, metadata, paths and session references. Already-global directories stay global. Refuses if a global directory already has that name; rename one first.",
+			InputSchema: object(map[string]any{
+				"knownDirectoryId": str("Identifier of a current-project or global directory, found with known_directory_list."),
 			}, "knownDirectoryId"),
 		},
 		{

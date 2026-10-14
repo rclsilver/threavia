@@ -22,6 +22,7 @@ func (h *handler) registerKnowledge(mux *http.ServeMux) {
 	h.handle(mux, "POST /api/v1/me/decisions", h.createDecision)
 	h.handle(mux, "GET /api/v1/me/memory/search", h.searchGlobalMemory)
 	h.handle(mux, "PATCH /api/v1/decisions/{decisionId}", h.updateDecision)
+	h.handle(mux, "POST /api/v1/decisions/{decisionId}/global", h.makeDecisionGlobal)
 	h.handle(mux, "DELETE /api/v1/decisions/{decisionId}", h.deleteDecision)
 
 	h.handle(mux, "GET /api/v1/projects/{projectId}/search", h.searchProject)
@@ -137,6 +138,15 @@ func (h *handler) updateDecision(w http.ResponseWriter, r *http.Request, identit
 
 	decision, err := h.svc.SetDecisionImportance(r.Context(), identity,
 		domain.DecisionID(r.PathValue("decisionId")), domain.DecisionImportance(body.Importance))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, decision)
+}
+
+func (h *handler) makeDecisionGlobal(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	decision, err := h.svc.MakeDecisionGlobal(r.Context(), identity, domain.DecisionID(r.PathValue("decisionId")), nil)
 	if err != nil {
 		h.fail(w, err)
 		return

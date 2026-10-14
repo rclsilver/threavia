@@ -22,6 +22,7 @@ func (h *handler) registerProjects(mux *http.ServeMux) {
 	h.handle(mux, "GET /api/v1/directories", h.listDirectories)
 	h.handle(mux, "POST /api/v1/directories", h.createDirectory)
 	h.handle(mux, "PATCH /api/v1/directories/{directoryId}", h.updateDirectory)
+	h.handle(mux, "POST /api/v1/directories/{directoryId}/global", h.makeDirectoryGlobal)
 	h.handle(mux, "DELETE /api/v1/directories/{directoryId}", h.deleteDirectory)
 	h.handle(mux, "DELETE /api/v1/directories/{directoryId}/bindings/{backendId}", h.unbindDirectory)
 	h.handle(mux, "GET /api/v1/directories/{directoryId}/bindings", h.listBindings)

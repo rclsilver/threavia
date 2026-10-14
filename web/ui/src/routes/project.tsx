@@ -4,6 +4,7 @@ import {
   Check,
   Copy,
   Eye,
+  Globe,
   Pencil,
   File as FileIcon,
   FileArchive,
@@ -26,6 +27,7 @@ import {
   useDeleteArtifact,
   useDeleteDecision,
   useInstallSkill,
+  useMakeDecisionGlobal,
   useProject,
   useProjectPolicy,
   useProjectPolicyOrigin,
@@ -365,6 +367,7 @@ function DecisionList({ decisions }: { decisions: Decision[] }) {
  */
 function DecisionRow({ decision }: { decision: Decision }) {
   const remove = useDeleteDecision();
+  const makeGlobal = useMakeDecisionGlobal();
   const pin = useSetDecisionImportance(decision.projectId);
   const [asking, setAsking] = useState(false);
   const important = decision.importance === 'IMPORTANT';
@@ -394,6 +397,7 @@ function DecisionRow({ decision }: { decision: Decision }) {
             <Copy className="text-muted size-4" />
             Copy
           </MenuItem>
+          {decision.projectId && <MenuItem disabled={makeGlobal.isPending} onSelect={() => makeGlobal.mutate(decision.id)}><Globe className="size-4" />Make global — all my projects</MenuItem>}
           <MenuSeparator />
           <MenuItem className="text-danger" onSelect={() => setAsking(true)}>
             <Trash2 className="size-4" />
@@ -418,11 +422,11 @@ function DecisionRow({ decision }: { decision: Decision }) {
           </>
         ) : (
           // A pin that did not hold goes back on its own; this says why.
-          pin.error && (
+          (pin.error || makeGlobal.error) && (
             <ActionError
-              error={pin.error}
-              outcome={important ? 'Not unpinned' : 'Not pinned'}
-              recovery="Press the mark again."
+              error={makeGlobal.error ?? pin.error}
+              outcome={makeGlobal.error ? 'Decision not made global' : important ? 'Not unpinned' : 'Not pinned'}
+              recovery={makeGlobal.error ? 'It is still recorded here; try again.' : 'Press the mark again.'}
               className="text-xs"
             />
           )

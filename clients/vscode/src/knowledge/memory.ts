@@ -136,7 +136,7 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
     item.id = `decision:${decision.id}`;
     const mark = ICONS[kind];
     item.iconPath = new vscode.ThemeIcon(mark.icon, mark.color ? new vscode.ThemeColor(mark.color) : undefined);
-    item.contextValue = CONTEXT[kind];
+    item.contextValue = CONTEXT[kind] + (decision.projectId ? '.project' : '');
     const replacement = kind === 'SUPERSEDED' ? replacementOf(decision, this.data ?? []) : undefined;
     item.description =
       [
@@ -160,6 +160,7 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
     command('threavia.pinDecision', (node: DecisionRow) => this.pin(node.coreId, node.decision));
     command('threavia.unpinDecision', (node: DecisionRow) => this.pin(node.coreId, node.decision));
     command('threavia.supersedeDecision', (node: DecisionRow) => this.record(node.decision, node.coreId));
+    command('threavia.makeDecisionGlobal', (node: DecisionRow) => this.makeGlobal(node));
     command('threavia.deleteDecision', (node: DecisionRow) => this.remove(node.coreId, node.decision));
   }
 
@@ -177,6 +178,13 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
     return this.act(importance === 'IMPORTANT' ? 'Not pinned' : 'Not unpinned', () =>
       this.clientOf(coreId).setDecisionImportance(decision.id, importance),
     );
+  }
+
+  private async makeGlobal(node: DecisionRow) {
+    if (!node.decision.projectId || node.decision.status !== 'ACTIVE') return;
+    if (await this.act('Decision not made global', () => this.clientOf(node.coreId).makeDecisionGlobal(node.decision.id))) {
+      vscode.window.setStatusBarMessage('Decision is now in global memory, shared across all your projects on this Core.', 5000);
+    }
   }
 
   /**

@@ -77,8 +77,9 @@ function createDirectory(body: Json, projectId?: string) {
 function recordDecision(body: Json, projectId?: string) {
   const title = text(body.title).trim();
   if (!title) throw new ApiError(400, 'invalid', 'Enter a decision title.');
-  const previous = body.supersedes ? state.decisions.find((entry) => entry.id === body.supersedes && entry.projectId === projectId) : undefined;
-  if (body.supersedes && (!previous || previous.status !== 'ACTIVE')) throw new ApiError(400, 'invalid', 'Choose an active decision in the same memory scope.');
+  const previous = body.supersedes ? state.decisions.find((entry) => entry.id === body.supersedes && (!projectId || entry.projectId === projectId)) : undefined;
+  if (body.supersedes && !previous) throw new ApiError(400, 'invalid', 'Choose a decision in this scope, or promote a project decision to global memory.');
+  if (previous && previous.status !== 'ACTIVE') throw new ApiError(409, 'conflict', 'This decision has already been replaced.');
   const decision = { id: newId(), ...(projectId && { projectId }), title, content: text(body.content).trim(), importance: body.importance ?? 'NORMAL', status: 'ACTIVE', ...(previous && { supersedes: previous.id }), createdAt: nowIso(), updatedAt: nowIso() };
   if (previous) previous.status = 'SUPERSEDED';
   state.decisions.unshift(decision);
@@ -328,6 +329,14 @@ const routes: [string, RegExp, Handler][] = [
   ['POST', /^\/api\/v1\/projects\/([^/]+)\/directories$/, (m, body) => createDirectory(body, m[1])],
   ['GET', /^\/api\/v1\/directories$/, () => list(state.directories.filter((entry) => !entry.projectId))],
   ['POST', /^\/api\/v1\/directories$/, (_m, body) => createDirectory(body)],
+  ['POST', /^\/api\/v1\/directories\/([^/]+)\/global$/, (m) => {
+    const directory = directoryOf(m[1]);
+    if (!directory.projectId) return directory;
+    if (state.directories.some((entry) => entry.id !== directory.id && !entry.projectId && entry.name === directory.name)) throw new ApiError(409, 'conflict', 'A global directory already has that name. Rename one first.');
+    delete directory.projectId;
+    directory.updatedAt = nowIso();
+    return directory;
+  }],
   ['PATCH', /^\/api\/v1\/directories\/([^/]+)$/, (m, body) => {
     const directory = directoryOf(m[1]);
     if (body.name !== undefined && !text(body.name).trim()) throw new ApiError(400, 'invalid', 'Enter a directory name.');
@@ -406,6 +415,13 @@ const routes: [string, RegExp, Handler][] = [
     if (!terms) throw new ApiError(400, 'invalid', 'Enter a search query.');
     return list(state.decisions.filter((entry) => !entry.projectId && entry.status === 'ACTIVE' && `${text(entry.title)} ${text(entry.content)}`.toLowerCase().includes(terms)));
   }],
+  ['POST', /^\/api\/v1\/decisions\/([^/]+)\/global$/, (m) => {
+    const decision = state.decisions.find((entry) => entry.id === m[1]);
+    if (!decision) throw notFound('This decision');
+    if (decision.status !== 'ACTIVE') throw new ApiError(409, 'conflict', 'This decision has already been replaced.');
+    if (!decision.projectId) return decision;
+    return recordDecision({ title: decision.title, content: decision.content, importance: decision.importance, supersedes: decision.id });
+  }],
   ['PATCH', /^\/api\/v1\/decisions\/([^/]+)$/, (m, body) => {
     const decision = state.decisions.find((entry) => entry.id === m[1]);
     if (!decision) throw notFound('This decision');
@@ -417,7 +433,7 @@ const routes: [string, RegExp, Handler][] = [
     if (!removed) throw notFound('This decision');
     if (removed.supersedes) {
       const previous = state.decisions.find((entry) => entry.id === removed.supersedes);
-      if (previous) previous.status = 'ACTIVE';
+      if (previous && previous.projectId === removed.projectId) previous.status = 'ACTIVE';
     }
     state.decisions = state.decisions.filter((entry) => entry.id !== m[1]);
     for (const entry of state.decisions) if (entry.supersedes === m[1]) delete entry.supersedes;

@@ -310,12 +310,23 @@ agent that reads them: they say when to reach for a tool, not what it does
 mechanically, because that is the only instruction an agent gets.
 
 Known-directory Core Tools include `known_directory_register`, `list`, `update`,
-`bind`, `unbind` and `delete` (all names have the `known_directory_` prefix).
-They act only within the calling Job's project; bindings target its own backend.
+`make_global`, `bind`, `unbind` and `delete` (all names have the
+`known_directory_` prefix). They act on the calling Job's project and the owner's
+global directories; bindings target its own backend.
 Registration stores the metadata and first binding atomically. Update can clear
 description and git remote; unbind forgets only one backend path. Delete refuses
 while any session references the directory. None of these operations removes
 files on backend machines.
+
+`known_directory_make_global` shares an existing directory across the owner's
+projects without changing its identifier, metadata, bindings or session references.
+A global name collision refuses the change atomically. `decision_make_global`
+promotes an active project fact using the existing decision supersession transaction:
+the global record keeps the title, content and importance, while the project record
+becomes historical. Both tools refuse objects from another project. The web row
+menus and VS Code's Memory menu and directory manager expose **Make global** through
+`POST /api/v1/decisions/{decisionId}/global` and
+`POST /api/v1/directories/{directoryId}/global`.
 
 ### What a Run context carries
 

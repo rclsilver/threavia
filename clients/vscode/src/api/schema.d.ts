@@ -778,6 +778,51 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/v1/directories/{directoryId}/global": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                directoryId: components["parameters"]["DirectoryID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make a known directory global
+         * @description Shares it across the owner's projects, preserving its identifier, metadata, bindings and session references. Already-global directories are returned unchanged. Refuses a global name collision.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    directoryId: components["parameters"]["DirectoryID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Global directory */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["KnownDirectory"];
+                    };
+                };
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/directories/{directoryId}/bindings/{backendId}": {
         parameters: {
             query?: never;
@@ -3595,6 +3640,51 @@ export interface paths {
                 404: components["responses"]["Error"];
             };
         };
+        trace?: never;
+    };
+    "/api/v1/decisions/{decisionId}/global": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                decisionId: components["schemas"]["UUID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make a memory decision global
+         * @description Creates a global decision with the same title, content and importance, superseding the project decision atomically. The project record remains historical. An active global decision is returned unchanged; a superseded decision cannot be promoted.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    decisionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Global decision */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Decision"];
+                    };
+                };
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/projects/{projectId}/search": {

@@ -313,8 +313,14 @@ func (s *Server) handle(ctx context.Context, instanceID domain.BackendInstanceID
 			if err != nil {
 				// Answering with an explicit error keeps the agent from waiting
 				// forever on a tool Core cannot run.
+				code := status.Code(err)
+				if errors.Is(err, ErrCoreToolUnavailable) {
+					code = codes.Unimplemented
+				} else if code == codes.Unknown {
+					code = codes.Internal
+				}
 				response.Error = &backendv1.Error{
-					Code:    codes.Unimplemented.String(),
+					Code:    code.String(),
 					Message: fmt.Sprintf("core tool %q: %v", request.GetName(), err),
 				}
 			}

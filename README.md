@@ -61,6 +61,11 @@ projects on that instance. Manage them in **Settings → Core memory** on the we
 or **Switch Memory Scope… → Global** in VS Code's Memory view. Important facts
 are loaded before every job; other facts are available through `memory_search`.
 Agents record a shared fact with `decision_create` and `scope: global`.
+To share an existing record, use **Make global — all my projects** in the web
+row menu or VS Code's Memory menu and directory manager. Agents use
+`decision_make_global` or `known_directory_make_global` with the record's ID.
+Memory promotion keeps the project record in history; directory promotion keeps
+its paths and session references, and refuses a global name collision.
 Session history stays project-specific, and each user's memory stays private.
 
 What is deliberately not implemented, matching the non-goals of section 33:

@@ -24,6 +24,15 @@ func (h *handler) updateDirectory(w http.ResponseWriter, r *http.Request, identi
 	writeJSON(w, http.StatusOK, dir)
 }
 
+func (h *handler) makeDirectoryGlobal(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	dir, err := h.svc.MakeKnownDirectoryGlobal(r.Context(), identity, domain.KnownDirectoryID(r.PathValue("directoryId")))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, dir)
+}
+
 func (h *handler) deleteDirectory(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
 	if err := h.svc.DeleteKnownDirectory(r.Context(), identity, domain.KnownDirectoryID(r.PathValue("directoryId"))); err != nil {
 		h.fail(w, err)

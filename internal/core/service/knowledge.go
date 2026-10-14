@@ -232,8 +232,19 @@ func (s *Service) CreateDecision(ctx context.Context, identity auth.Identity, pr
 			if err != nil {
 				return fmt.Errorf("%w: unknown decision %s", ErrInvalid, *supersedes)
 			}
-			if previous.ProjectID != projectID || previous.OwnerID != identity.UserID {
+			if previous.OwnerID != identity.UserID || (projectID != "" && previous.ProjectID != projectID) {
 				return fmt.Errorf("%w: decision %s belongs to another memory scope", ErrInvalid, *supersedes)
+			}
+			// A person can promote any owned project fact. An agent can only
+			// promote a fact from the project of its calling Job.
+			if projectID == "" && previous.ProjectID != "" && createdBy != nil {
+				jc, err := tx.LoadJobContext(ctx, *createdBy)
+				if err != nil {
+					return err
+				}
+				if jc.OwnerID != identity.UserID || jc.ProjectID != previous.ProjectID {
+					return fmt.Errorf("%w: decision %s belongs to another project", ErrInvalid, *supersedes)
+				}
 			}
 			if err := tx.CreateDecision(ctx, &decision); err != nil {
 				return err
@@ -260,7 +271,7 @@ func (s *Service) CreateDecision(ctx context.Context, identity auth.Identity, pr
 		Importance: decision.Importance.String(),
 	})
 	if superseded != nil {
-		s.emit(ctx, identity.UserID, events.TypeDecisionSuperseded, scope, DecisionPayload{
+		s.emit(ctx, identity.UserID, events.TypeDecisionSuperseded, domain.Scope{ProjectID: superseded.ProjectID}, DecisionPayload{
 			DecisionID: string(superseded.ID), Title: superseded.Title,
 			Importance:   superseded.Importance.String(),
 			SupersededBy: string(decision.ID),
@@ -292,11 +303,13 @@ func (s *Service) SetDecisionImportance(ctx context.Context, identity auth.Ident
 // ListDecisions returns the Decisions of a Project.
 // DeleteDecision removes a Decision from the Project memory.
 //
-// Whatever it had superseded becomes current again: a Decision is marked
+// Within the same scope, whatever it had superseded becomes current again: a Decision is marked
 // superseded because something replaced it, and if that something is gone the
 // Project would otherwise be left with a record it no longer reads and nothing
 // in its place. Superseding remains the honest move when a decision was
-// changed; deleting is for one that should never have been recorded.
+// changed; deleting is for one that should never have been recorded. Deleting
+// a promoted global fact leaves its project predecessor historical, so a
+// removed fact cannot silently return to the project's active memory.
 func (s *Service) DeleteDecision(ctx context.Context, identity auth.Identity, id domain.DecisionID) error {
 	decision, err := s.store.GetDecision(ctx, identity.UserID, id)
 	if err != nil {
@@ -305,8 +318,14 @@ func (s *Service) DeleteDecision(ctx context.Context, identity auth.Identity, id
 
 	err = s.store.WithTx(ctx, func(tx *postgres.Store) error {
 		if decision.Supersedes != nil {
-			if err := tx.ReviveDecision(ctx, *decision.Supersedes); err != nil {
+			previous, err := tx.GetDecision(ctx, identity.UserID, *decision.Supersedes)
+			if err != nil && !errors.Is(err, postgres.ErrNotFound) {
 				return err
+			}
+			if err == nil && previous.ProjectID == decision.ProjectID {
+				if err := tx.ReviveDecision(ctx, previous.ID); err != nil {
+					return err
+				}
 			}
 		}
 		return tx.DeleteDecision(ctx, identity.UserID, id)

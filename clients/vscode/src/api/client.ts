@@ -347,6 +347,10 @@ export class CoreClient {
     return this.request<void>('DELETE', `/api/v1/directories/${id}`);
   }
 
+  makeDirectoryGlobal(id: string) {
+    return this.post<KnownDirectory>(`/api/v1/directories/${id}/global`);
+  }
+
   bindings(id: string) {
     return this.get<List<KnownDirectoryBinding>>(`/api/v1/directories/${id}/bindings`).then(items);
   }
@@ -436,6 +440,10 @@ export class CoreClient {
   /** Pins a Decision to every Job, or unpins it: the only thing about one that changes. */
   setDecisionImportance(decisionId: string, importance: DecisionImportance) {
     return this.patch<Decision>(`/api/v1/decisions/${decisionId}`, { importance });
+  }
+
+  makeDecisionGlobal(decisionId: string) {
+    return this.post<Decision>(`/api/v1/decisions/${decisionId}/global`);
   }
 
   deleteDecision(decisionId: string) {

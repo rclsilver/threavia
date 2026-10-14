@@ -41,13 +41,15 @@ export async function manageDirectories(core: Core, project?: Project) {
       if (input) await core.client.createDirectory(targetProjectId, input);
       continue;
     }
-    const action = await vscode.window.showQuickPick(['Edit metadata', 'Manage paths on backends', 'Forget directory'], { title: `${directory.name} (${directory.projectId ? 'project' : 'global'})`, ignoreFocusOut: true });
+    const action = await vscode.window.showQuickPick(['Edit metadata', ...(directory.projectId ? ['Make global — all my projects'] : []), 'Manage paths on backends', 'Forget directory'], { title: `${directory.name} (${directory.projectId ? 'project' : 'global'})`, ignoreFocusOut: true });
     if (action === 'Edit metadata') {
       const input = await fields(directory);
       if (input) {
         const patch = { ...(input.name !== directory.name && { name: input.name }), ...(input.description !== (directory.description ?? '') && { description: input.description }), ...(input.gitRemote !== (directory.gitRemote ?? '') && { gitRemote: input.gitRemote }) };
         if (Object.keys(patch).length) await core.client.updateDirectory(directory.id, patch);
       }
+    } else if (action === 'Make global — all my projects') {
+      await core.client.makeDirectoryGlobal(directory.id);
     } else if (action === 'Manage paths on backends') {
       await managePaths(core, directory);
     } else if (action === 'Forget directory') {

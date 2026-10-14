@@ -117,6 +117,14 @@ export function useUpdateDirectory(directoryId: string) {
   });
 }
 
+export function useMakeDirectoryGlobal(directoryId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<KnownDirectory>(`/api/v1/directories/${directoryId}/global`),
+    onSuccess: () => queries.invalidateQueries({ queryKey: ['directories'] }),
+  });
+}
+
 export function useDeleteDirectory(directoryId: string) {
   const queries = useQueryClient();
   return useMutation({
@@ -759,6 +767,14 @@ export function useDecisions(projectId: string | undefined) {
     queryKey: keys.decisions(projectId ?? ''),
     queryFn: () => api.get<List<Decision>>(projectId ? `/api/v1/projects/${projectId}/decisions` : '/api/v1/me/decisions').then(items),
     enabled: projectId !== undefined,
+  });
+}
+
+export function useMakeDecisionGlobal() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<Decision>(`/api/v1/decisions/${id}/global`),
+    onSuccess: () => queries.invalidateQueries({ queryKey: ['decisions'] }),
   });
 }
 

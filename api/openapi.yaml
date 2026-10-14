@@ -446,6 +446,22 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
 
+  /api/v1/directories/{directoryId}/global:
+    parameters:
+      - $ref: "#/components/parameters/DirectoryID"
+    post:
+      tags: [projects]
+      summary: Make a known directory global
+      description: Shares it across the owner's projects, preserving its identifier, metadata, bindings and session references. Already-global directories are returned unchanged. Refuses a global name collision.
+      responses:
+        "200":
+          description: Global directory
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnownDirectory" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
   /api/v1/directories/{directoryId}/bindings/{backendId}:
     parameters:
       - $ref: "#/components/parameters/DirectoryID"
@@ -1876,6 +1892,25 @@ paths:
           description: Deleted
         "404":
           $ref: "#/components/responses/Error"
+
+  /api/v1/decisions/{decisionId}/global:
+    parameters:
+      - name: decisionId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    post:
+      tags: [knowledge]
+      summary: Make a memory decision global
+      description: Creates a global decision with the same title, content and importance, superseding the project decision atomically. The project record remains historical. An active global decision is returned unchanged; a superseded decision cannot be promoted.
+      responses:
+        "200":
+          description: Global decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Decision" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
 
   /api/v1/projects/{projectId}/search:
     parameters:

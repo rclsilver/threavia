@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
@@ -20,13 +23,14 @@ import (
 // Project it may touch and the user it acts for are read from that Job, never
 // from the request. An agent therefore cannot reach another project's knowledge
 // by asking nicely, and a backend cannot speak for a Run it does not execute.
-func (s *Service) CoreToolRequest(ctx context.Context, instanceID domain.BackendInstanceID, request *backendv1.CoreToolRequest) (*structpb.Struct, error) {
+func (s *Service) CoreToolRequest(ctx context.Context, instanceID domain.BackendInstanceID, request *backendv1.CoreToolRequest) (result *structpb.Struct, err error) {
+	defer func() { err = coreToolError(err) }()
 	jc, err := s.store.LoadJobContext(ctx, domain.JobID(request.GetJobId()))
 	if err != nil {
-		return nil, fmt.Errorf("unknown job %s", request.GetJobId())
+		return nil, translate(err)
 	}
 	if jc.BackendInstanceID != instanceID {
-		return nil, fmt.Errorf("backend %s does not own job %s", instanceID, request.GetJobId())
+		return nil, status.Errorf(codes.PermissionDenied, "backend %s does not own job %s", instanceID, request.GetJobId())
 	}
 	if request.GetRunId() != string(jc.Run.ID) {
 		return nil, fmt.Errorf("%w: run does not own the job", ErrInvalid)
@@ -49,11 +53,37 @@ func (s *Service) CoreToolRequest(ctx context.Context, instanceID domain.Backend
 		slog.String("jobId", request.GetJobId()),
 		slog.String("projectId", string(jc.ProjectID)))
 
-	result, err := s.invokeTool(ctx, identity, scope, tools.Name(request.GetName()), input, request.GetFile())
+	toolResult, err := s.invokeTool(ctx, identity, scope, tools.Name(request.GetName()), input, request.GetFile())
 	if err != nil {
 		return nil, err
 	}
-	return structpb.NewStruct(result)
+	return structpb.NewStruct(toolResult)
+}
+
+// Map service errors at the gRPC boundary while keeping HTTP's service errors.
+func coreToolError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := status.FromError(err); ok {
+		return err
+	}
+	code := codes.Internal
+	switch {
+	case errors.Is(err, ErrInvalid):
+		code = codes.InvalidArgument
+	case errors.Is(err, ErrNotFound):
+		code = codes.NotFound
+	case errors.Is(err, ErrConflict):
+		code = codes.FailedPrecondition
+	case errors.Is(err, ErrBackendUnavailable):
+		code = codes.Unavailable
+	case errors.Is(err, context.Canceled):
+		code = codes.Canceled
+	case errors.Is(err, context.DeadlineExceeded):
+		code = codes.DeadlineExceeded
+	}
+	return status.Error(code, err.Error())
 }
 
 // invokeTool dispatches one Core Tool call.
@@ -104,6 +134,24 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 			scope = "global"
 		}
 		return map[string]any{"decisionId": string(decision.ID), "status": decision.Status.String(), "scope": scope}, nil
+
+	case tools.NameDecisionMakeGlobal:
+		id := domain.DecisionID(text(input, "decisionId"))
+		if id == "" {
+			return nil, fmt.Errorf("%w: a decision identifier is required", ErrInvalid)
+		}
+		previous, err := s.store.GetDecision(ctx, identity.UserID, id)
+		if err != nil {
+			return nil, translate(err)
+		}
+		if previous.ProjectID != "" && previous.ProjectID != jc.ProjectID {
+			return nil, fmt.Errorf("%w: decision belongs to another project", ErrInvalid)
+		}
+		decision, err := s.MakeDecisionGlobal(ctx, identity, id, &jc.JobID)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"decisionId": string(decision.ID), "status": decision.Status.String(), "scope": "global"}, nil
 
 	case tools.NameMemorySearch:
 		projectID, err := memoryProject(jc.ProjectID, text(input, "scope"))
@@ -185,7 +233,7 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 	case tools.NameKnownDirectoryRegister:
 		return s.registerDirectoryTool(ctx, identity, jc, input)
 
-	case tools.NameKnownDirectoryList, tools.NameKnownDirectoryUpdate, tools.NameKnownDirectoryUnbind, tools.NameKnownDirectoryDelete:
+	case tools.NameKnownDirectoryList, tools.NameKnownDirectoryUpdate, tools.NameKnownDirectoryMakeGlobal, tools.NameKnownDirectoryUnbind, tools.NameKnownDirectoryDelete:
 		return s.invokeDirectoryTool(ctx, identity, jc, name, input)
 
 	case tools.NameKnownDirectoryBind:

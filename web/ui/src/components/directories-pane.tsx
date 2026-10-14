@@ -1,7 +1,7 @@
-import { Folder, Pencil, Trash2 } from 'lucide-react';
+import { Folder, Globe, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
-import { useBackends, useBindDirectory, useBindings, useCreateDirectory, useDeleteDirectory, useDirectories, useUnbindDirectory, useUpdateDirectory } from '@/api/queries';
+import { useBackends, useBindDirectory, useBindings, useCreateDirectory, useDeleteDirectory, useDirectories, useMakeDirectoryGlobal, useUnbindDirectory, useUpdateDirectory } from '@/api/queries';
 import type { KnownDirectory } from '@/api/types';
 import { ConfirmLine, NewButton, RecordList, RecordRow } from '@/components/record-list';
 import { ActionError } from '@/components/ui/action-error';
@@ -50,12 +50,13 @@ function DirectoryFields({ name, onName, description, onDescription, remote, onR
 
 function DirectoryRow({ directory }: { directory: KnownDirectory }) {
   const remove = useDeleteDirectory(directory.id);
+  const makeGlobal = useMakeDirectoryGlobal(directory.id);
   const [editing, setEditing] = useState(false);
   const [asking, setAsking] = useState(false);
   return <RecordRow icon={Folder} title={directory.name} body={directory.description} meta={directory.gitRemote} badges={<Badge>{directory.projectId ? 'Project' : 'Global'}</Badge>}
     action={<Button variant="ghost" size="lg" aria-expanded={editing} onClick={() => setEditing(!editing)}>Manage</Button>}
-    menuLabel={`Actions for ${directory.name}`} menu={<><MenuItem onSelect={() => setEditing(true)}><Pencil />Edit metadata and paths</MenuItem><MenuItem className="text-danger" onSelect={() => setAsking(true)}><Trash2 />Forget directory</MenuItem></>}
-    below={(editing || asking || Boolean(remove.error)) && <div className="space-y-3">{asking && <ConfirmLine question="Forget this directory and all its paths? Files stay on their machines. Sessions using it must choose another directory first." confirm="Forget" pending={remove.isPending} onCancel={() => setAsking(false)} onConfirm={() => remove.mutate()} />}<ActionError error={remove.error} outcome="Directory not forgotten" recovery="If a session uses it, change its working directory first." />{editing && <DirectoryEditor directory={directory} done={() => setEditing(false)} />}</div>}
+    menuLabel={`Actions for ${directory.name}`} menu={<><MenuItem onSelect={() => setEditing(true)}><Pencil />Edit metadata and paths</MenuItem>{directory.projectId && <MenuItem disabled={makeGlobal.isPending} onSelect={() => makeGlobal.mutate()}><Globe />Make global — all my projects</MenuItem>}<MenuItem className="text-danger" onSelect={() => setAsking(true)}><Trash2 />Forget directory</MenuItem></>}
+    below={(editing || asking || Boolean(remove.error) || Boolean(makeGlobal.error)) && <div className="space-y-3">{asking && <ConfirmLine question="Forget this directory and all its paths? Files stay on their machines. Sessions using it must choose another directory first." confirm="Forget" pending={remove.isPending} onCancel={() => setAsking(false)} onConfirm={() => remove.mutate()} />}<ActionError error={remove.error} outcome="Directory not forgotten" recovery="If a session uses it, change its working directory first." /><ActionError error={makeGlobal.error} outcome="Directory not made global" recovery="If a global directory has this name, rename one and try again." />{editing && <DirectoryEditor directory={directory} done={() => setEditing(false)} />}</div>}
   />;
 }
 

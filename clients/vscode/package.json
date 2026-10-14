@@ -400,6 +400,12 @@
         "title": "Upload Artifacts…",
         "category": "Threavia",
         "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "threavia.makeDecisionGlobal",
+        "title": "Make Global — All My Projects",
+        "category": "Threavia",
+        "icon": "$(globe)"
       }
     ],
     "submenus": [
@@ -573,6 +579,10 @@
         {
           "command": "threavia.uploadArtifact",
           "when": "threavia.state == ready && threavia.hasProject"
+        },
+        {
+          "command": "threavia.makeDecisionGlobal",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -816,27 +826,27 @@
         },
         {
           "command": "threavia.pinDecision",
-          "when": "view == threavia.memory && viewItem == decision.normal",
+          "when": "view == threavia.memory && viewItem =~ /^decision\\.normal(\\.project)?$/",
           "group": "inline"
         },
         {
           "command": "threavia.unpinDecision",
-          "when": "view == threavia.memory && viewItem == decision.important",
+          "when": "view == threavia.memory && viewItem =~ /^decision\\.important(\\.project)?$/",
           "group": "inline"
         },
         {
           "command": "threavia.pinDecision",
-          "when": "view == threavia.memory && viewItem == decision.normal",
+          "when": "view == threavia.memory && viewItem =~ /^decision\\.normal(\\.project)?$/",
           "group": "1_pin"
         },
         {
           "command": "threavia.unpinDecision",
-          "when": "view == threavia.memory && viewItem == decision.important",
+          "when": "view == threavia.memory && viewItem =~ /^decision\\.important(\\.project)?$/",
           "group": "1_pin"
         },
         {
           "command": "threavia.supersedeDecision",
-          "when": "view == threavia.memory && viewItem =~ /^decision\\.(important|normal)$/",
+          "when": "view == threavia.memory && viewItem =~ /^decision\\.(important|normal)(\\.project)?$/",
           "group": "2_change"
         },
         {
@@ -858,6 +868,11 @@
           "command": "threavia.deleteArtifact",
           "when": "view == threavia.artifacts && viewItem == artifact",
           "group": "3_delete"
+        },
+        {
+          "command": "threavia.makeDecisionGlobal",
+          "when": "view == threavia.memory && viewItem =~ /^decision\\.(important|normal)\\.project$/",
+          "group": "2_change@2"
         }
       ],
       "editor/title": [
