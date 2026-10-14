@@ -12,6 +12,7 @@ import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui
 import { Input, Label, Textarea } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useDraft } from '@/lib/draft';
+import { sendsMessage, useTouchKeyboard } from '@/lib/message-keyboard';
 import { humanise } from '@/lib/utils';
 
 const NONE = '__none__';
@@ -23,6 +24,7 @@ const NONE = '__none__';
  * once: Session, Run, Job and the message, in one transaction.
  */
 export function DraftView() {
+  const touchKeyboard = useTouchKeyboard();
   const { projectId } = useSearch({ from: '/sessions/new' });
   const navigate = useNavigate();
 
@@ -144,17 +146,16 @@ export function DraftView() {
             onPaste={attachments.paste}
             id="draft-message"
             rows={5}
+            enterKeyHint={touchKeyboard ? 'enter' : 'send'}
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             onKeyDown={(event) => {
-              // The same reflex as the Session composer: Enter sends, Shift
-              // keeps writing.
-              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+              if (sendsMessage(event, touchKeyboard)) {
                 event.preventDefault();
                 submit();
               }
             }}
-            placeholder="Analyse ce projet (Shift+Enter for a newline)"
+            placeholder={touchKeyboard ? 'Analyse ce projet' : 'Analyse ce projet (Shift+Enter for a newline)'}
           />
         </div>
 

@@ -25,6 +25,7 @@ import { Timeline, type Pending } from '@/components/timeline';
 import { Button } from '@/components/ui/button';
 import { useStream } from '@/use-stream';
 import { useDraft } from '@/lib/draft';
+import { sendsMessage, useTouchKeyboard } from '@/lib/message-keyboard';
 import { cn, humanise } from '@/lib/utils';
 
 const FINISHED = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
@@ -366,6 +367,7 @@ function Composer({
   /** The field, so a click elsewhere on the page can hand it the focus. */
   field: React.RefObject<HTMLTextAreaElement | null>;
 }) {
+  const touchKeyboard = useTouchKeyboard();
   const send = usePostMessage(sessionId);
   const attachments = usePromptAttachments(projectId, send.isPending);
   const [message, setMessage] = useDraft(sessionId);
@@ -433,14 +435,11 @@ function Composer({
               onPaste={attachments.paste}
               ref={field}
               rows={1}
+              enterKeyHint={touchKeyboard ? 'enter' : 'send'}
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               onKeyDown={(event) => {
-                // Enter sends, as in every chat. A newline is still reachable
-                // with Shift, which is where a person already looks for it. An
-                // Enter that closes an input method is composing text, not
-                // sending it.
-                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                if (sendsMessage(event, touchKeyboard)) {
                   event.preventDefault();
                   submit();
                 }
@@ -454,7 +453,7 @@ function Composer({
               variant="primary"
               size="icon"
               className="disabled:bg-surface-2 disabled:text-muted size-11 rounded-md disabled:opacity-100 sm:size-8"
-              title="Send (Enter)"
+              title={touchKeyboard ? 'Send' : 'Send (Enter)'}
               aria-label="Send"
               disabled={send.isPending || attachments.busy || (!message.trim() && !attachments.files.length)}
             >
@@ -500,7 +499,7 @@ function Composer({
         className="mt-2"
       />
       <p className="text-muted/70 mt-2 hidden text-center text-xs sm:block">
-        Enter sends · Shift+Enter for a newline{active && ' · Esc stops'}
+        {touchKeyboard ? 'Enter for a newline · Tap the arrow to send' : 'Enter sends · Shift+Enter for a newline'}{active && ' · Esc stops'}
       </p>
     </div>
   );

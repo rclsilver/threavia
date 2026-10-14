@@ -163,6 +163,10 @@ where it is only if it cannot (section 11):
 export THREAVIA_BACKEND_DISCOVERY_ROOTS=$HOME/git,$HOME/dev
 ```
 
+On touch devices, including Android, Enter adds a line in new and existing
+messages; tap the send button to send. Desktop keeps Enter to send and
+Shift+Enter for a newline.
+
 `.env.example` lists every environment variable with its default.
 
 ### Working on the web client
