@@ -121,8 +121,10 @@ func (s *Store) SearchDecisions(ctx context.Context, projectID domain.ProjectID,
 	rows, err := s.q.Query(ctx, `
 		SELECT `+decisionColumns+`
 		FROM decisions d
-		WHERE d.project_id = $1 AND d.search @@ websearch_to_tsquery('simple', $2)
-		ORDER BY ts_rank(d.search, websearch_to_tsquery('simple', $2)) DESC, d.created_at DESC
+		CROSS JOIN (SELECT memory_search_query($2) AS query, memory_search_terms($2) AS terms) q
+		WHERE d.project_id = $1 AND d.search @@ q.query
+		ORDER BY memory_search_coverage(d.search, q.terms) DESC,
+		         ts_rank(d.search, q.query) DESC, d.created_at DESC, d.id
 		LIMIT $3`, projectID, query, limit)
 	if err != nil {
 		return nil, classify(err, "search decisions")
@@ -157,9 +159,11 @@ func (s *Store) ImportantGlobalDecisions(ctx context.Context, ownerID domain.Use
 // facts. With no Project, only globals match; other Projects stay private.
 func (s *Store) SearchMemory(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID, query string, limit int) ([]domain.Decision, error) {
 	rows, err := s.q.Query(ctx, `SELECT `+decisionColumns+` FROM decisions d
+		CROSS JOIN (SELECT memory_search_query($3) AS query, memory_search_terms($3) AS terms) q
 		WHERE d.owner_id = $1 AND (d.project_id IS NULL OR d.project_id = NULLIF($2::text, '')::uuid)
-		  AND d.status = 'ACTIVE' AND d.search @@ websearch_to_tsquery('simple', $3)
-		ORDER BY ts_rank(d.search, websearch_to_tsquery('simple', $3)) DESC, d.created_at DESC
+		  AND d.status = 'ACTIVE' AND d.search @@ q.query
+		ORDER BY memory_search_coverage(d.search, q.terms) DESC,
+		         ts_rank(d.search, q.query) DESC, d.created_at DESC, d.id
 		LIMIT $4`, ownerID, projectID, query, limit)
 	if err != nil {
 		return nil, classify(err, "search memory")

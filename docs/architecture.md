@@ -339,6 +339,14 @@ important.
 
 Everything else is found on demand, which is why the search tools exist at all.
 
+Memory and session history use PostgreSQL full-text search with the multilingual
+`simple` configuration. Technical punctuation is split consistently in stored
+text and queries, while underscores in names such as `SSH_AUTH_SOCK` are kept.
+Queries match any of their words and rank distinct word coverage before repeated
+occurrences, so extra words in a natural-language question do not hide a fact.
+Memory search returns active facts in the requested scopes; the Project's
+decision search also retains superseded facts for historical lookup.
+
 ### ExecutionPolicy
 
 Permissions inherit in this order: instance → the Run's backend → project →

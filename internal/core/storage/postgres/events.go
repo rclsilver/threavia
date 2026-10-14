@@ -220,11 +220,12 @@ func (s *Store) SearchHistory(ctx context.Context, projectID domain.ProjectID, q
 		SELECT `+eventColumns+`,
 		       ts_headline('simple',
 		           coalesce(e.payload->>'text', coalesce(e.payload->>'summary', '')),
-		           websearch_to_tsquery('simple', $2),
+		           q.query,
 		           'MaxFragments=1,MaxWords=40,MinWords=10')
 		FROM events e
-		WHERE e.project_id = $1 AND e.search @@ websearch_to_tsquery('simple', $2)
-		ORDER BY ts_rank(e.search, websearch_to_tsquery('simple', $2)) DESC,
+		CROSS JOIN (SELECT memory_search_query($2) AS query, memory_search_terms($2) AS terms) q
+		WHERE e.project_id = $1 AND e.search @@ q.query
+		ORDER BY memory_search_coverage(e.search, q.terms) DESC, ts_rank(e.search, q.query) DESC,
 		         e.global_sequence DESC
 		LIMIT $3`, projectID, query, limit)
 	if err != nil {
