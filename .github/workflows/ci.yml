@@ -348,6 +348,12 @@ jobs:
 
       - name: "Set up Buildx"
         uses: "docker/setup-buildx-action@v4.4.1"
+        with:
+          # Serve cached Official Images without Docker Hub's anonymous quota.
+          # BuildKit falls back to Hub when the public mirror has no copy.
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
 
       # Images and the chart are published on a tag only; every other run still
       # builds them, so a broken Dockerfile is caught before release day.
