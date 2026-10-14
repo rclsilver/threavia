@@ -60,6 +60,7 @@ export interface ChangedFile {
  * same as the web client's (web/ui/src/api/types.ts).
  */
 export interface EventPayloads {
+  'backend.status_changed': { backendInstanceId: string; operationalStatus: BackendInstance['operationalStatus']; providerAuthState: BackendInstance['providerAuthState'] };
   'backend.quotas_updated': { backendInstanceId: string };
   'project.updated': { projectId: string; name: string };
   'project.deleted': { projectId: string };

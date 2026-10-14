@@ -490,6 +490,10 @@ class ConversationPanel {
   }
 
   private onEvent(event: Event) {
+    if (event.type === 'backend.status_changed') {
+      if (payloadOf(event, 'backend.status_changed')?.backendInstanceId === currentRun(this.runs)?.backendInstanceId) this.scheduleReload();
+      return;
+    }
     if (event.type === 'project.deleted') {
       const projectId = typeof event.payload?.projectId === 'string' ? event.payload.projectId : undefined;
       const shown = this.target.kind === 'session' ? this.session?.projectId : this.target.start.projectId;

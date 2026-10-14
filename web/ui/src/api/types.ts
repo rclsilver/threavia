@@ -61,6 +61,7 @@ export interface List<T> {
  * line.
  */
 export interface EventPayloads {
+  'backend.status_changed': { backendInstanceId: string; operationalStatus: BackendInstance['operationalStatus']; providerAuthState: BackendInstance['providerAuthState'] };
   'backend.quotas_updated': { backendInstanceId: string };
   'project.updated': { projectId: string; name: string };
   'project.deleted': { projectId: string };

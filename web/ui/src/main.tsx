@@ -31,7 +31,7 @@ if (!root) throw new Error('the page has no mount point');
 
 /**
  * The demo is the same client with Core played in the browser: no sign-in, no
- * stream, no worker, and every request answered from fictitious data. Loaded
+ * remote stream, no worker, and every request answered from fictitious data. Loaded
  * only on its own path, so the real client carries none of it.
  */
 async function demo(mount: HTMLElement) {

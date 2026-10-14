@@ -16,7 +16,7 @@ const ACTIVITY_TTL = 15_000;
  */
 export function StreamProvider({ children, demo = false }: { children: ReactNode; demo?: boolean }) {
   const queries = useQueryClient();
-  // The demo has no Core to stream from; what it shows is already all there.
+  // The demo plays Core events locally through the same cache updates.
   const [connected, setConnected] = useState(demo);
   const [activity, setActivity] = useState<Record<string, Activity>>({});
   const stream = useRef<EventStream | null>(null);
@@ -24,8 +24,15 @@ export function StreamProvider({ children, demo = false }: { children: ReactNode
   stream.current ??= new EventStream(queries);
 
   useEffect(() => {
-    if (demo) return;
     const live = stream.current!;
+    if (demo) {
+      let cancelled = false;
+      let stop = () => {};
+      void import('./demo/server').then((server) => {
+        if (!cancelled) stop = server.demoBackendLifecycle((event) => live.deliver(event));
+      });
+      return () => { cancelled = true; stop(); };
+    }
     followPresence();
     live.open(setConnected, (signal) => {
       setActivity((current) => ({ ...current, [signal.sessionId]: signal }));

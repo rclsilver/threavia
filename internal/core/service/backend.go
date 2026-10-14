@@ -51,11 +51,13 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 		features = append(features, domain.FeatureJobInputNext)
 	}
 
-	if err := s.store.MarkBackendConnected(ctx, instanceID, connectionID,
-		int(hello.GetProtocol().GetVersion()), capabilities,
-		int(hello.GetCapacity().GetMaxConcurrentRuns()),
-		hello.GetSdk().GetName(), hello.GetSdk().GetVersion(),
-		hello.GetBackend().GetName(), hello.GetBackend().GetVersion(), features); err != nil {
+	if err := s.changeBackendState(ctx, instanceID, func(tx *postgres.Store, _ domain.BackendInstance) error {
+		return tx.MarkBackendConnected(ctx, instanceID, connectionID,
+			int(hello.GetProtocol().GetVersion()), capabilities,
+			int(hello.GetCapacity().GetMaxConcurrentRuns()),
+			hello.GetSdk().GetName(), hello.GetSdk().GetVersion(),
+			hello.GetBackend().GetName(), hello.GetBackend().GetVersion(), features)
+	}); err != nil {
 		return err
 	}
 
@@ -97,27 +99,33 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 // They are not failed: the backend may well be finishing them locally, and it
 // reports what actually happened when it comes back.
 func (s *Service) Disconnected(ctx context.Context, instanceID domain.BackendInstanceID, connectionID string) {
-	if err := s.store.MarkBackendDisconnected(ctx, instanceID, connectionID); err != nil {
+	err := s.changeBackendState(ctx, instanceID, func(tx *postgres.Store, backend domain.BackendInstance) error {
+		if backend.ConnectionID == nil || *backend.ConnectionID != connectionID {
+			return nil
+		}
+		if err := tx.MarkBackendDisconnected(ctx, instanceID, connectionID); err != nil {
+			return err
+		}
+		active, err := tx.ActiveJobsForBackend(ctx, instanceID)
+		if err != nil {
+			return err
+		}
+		for _, job := range active {
+			// A cancellation in flight stays CANCELLING: it is reissued on
+			// reconnection, as specification section 3.5 requires.
+			if job.Status == domain.JobCancelling {
+				continue
+			}
+			if _, err := tx.TransitionJob(ctx, job.ID, job.Status, domain.JobWaitingBackend, nil); err != nil &&
+				!errors.Is(err, postgres.ErrNotFound) {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
 		s.logger.Error("cannot record the backend disconnection",
 			slog.String("backendInstanceId", string(instanceID)), slog.String("error", err.Error()))
-	}
-
-	active, err := s.store.ActiveJobsForBackend(ctx, instanceID)
-	if err != nil {
-		s.logger.Error("cannot read the active jobs of a disconnected backend",
-			slog.String("backendInstanceId", string(instanceID)), slog.String("error", err.Error()))
-		return
-	}
-	for _, job := range active {
-		// A cancellation in flight stays CANCELLING: it is reissued on
-		// reconnection, as specification section 3.5 requires.
-		if job.Status == domain.JobCancelling {
-			continue
-		}
-		if _, err := s.store.TransitionJob(ctx, job.ID, job.Status, domain.JobWaitingBackend, nil); err != nil &&
-			!errors.Is(err, postgres.ErrNotFound) {
-			s.logger.Error("cannot park a job", slog.String("jobId", string(job.ID)), slog.String("error", err.Error()))
-		}
 	}
 }
 
@@ -138,17 +146,18 @@ func (s *Service) StatusUpdate(ctx context.Context, instanceID domain.BackendIns
 			slog.String("backendInstanceId", string(instanceID)), slog.String("status", status.String()))
 		return
 	}
-	if err := s.store.UpdateBackendStatus(ctx, instanceID, status,
-		providerAuthFromProto(update.GetProviderAuthState()), capacityFromProto(update.GetCapacity())); err != nil {
-		s.logger.Error("cannot record a backend status",
-			slog.String("backendInstanceId", string(instanceID)), slog.String("error", err.Error()))
-	}
-
 	// Why it is in that state. Without this, the only place the answer existed
 	// was a line in the Core log, where the person who has to fix it never
 	// looks.
-	if err := s.store.ReplaceBackendConditions(ctx, instanceID, conditionsFromProto(update.GetConditions())); err != nil {
-		s.logger.Error("cannot record the backend conditions",
+	err := s.changeBackendState(ctx, instanceID, func(tx *postgres.Store, _ domain.BackendInstance) error {
+		if err := tx.UpdateBackendStatus(ctx, instanceID, status,
+			providerAuthFromProto(update.GetProviderAuthState()), capacityFromProto(update.GetCapacity())); err != nil {
+			return err
+		}
+		return tx.ReplaceBackendConditions(ctx, instanceID, conditionsFromProto(update.GetConditions()))
+	})
+	if err != nil {
+		s.logger.Error("cannot record the backend status and conditions",
 			slog.String("backendInstanceId", string(instanceID)), slog.String("error", err.Error()))
 	}
 }

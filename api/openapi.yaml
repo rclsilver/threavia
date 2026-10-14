@@ -2472,6 +2472,11 @@ components:
             Completion/failure events retain the Job's `{model, effort}` when
             known. The ones a client renders:
 
+            - `backend.status_changed`: `{ backendInstanceId, operationalStatus, providerAuthState }`,
+              owner-scoped and persistent; emitted after connection, disconnection,
+              or a changed operational/authentication state, capacity or condition.
+              Repeated reports and heartbeat timestamps do not emit events.
+              Refresh backend instances, session lists, snapshots and attention.
             - `backend.quotas_updated`: `{ backendInstanceId }`, owner-scoped;
               refresh backend instances to read the complete quota snapshot
             - `backend.default_changed`: `{ backendInstanceId }`, owner-scoped;

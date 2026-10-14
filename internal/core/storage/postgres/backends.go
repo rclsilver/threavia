@@ -48,6 +48,13 @@ func (s *Store) BackendInstanceByID(ctx context.Context, id domain.BackendInstan
 		`SELECT `+backendColumns+` FROM backend_instances b WHERE b.id = $1`, id))
 }
 
+// LockBackendInstance serializes lifecycle changes and their events. Call it
+// inside WithTx so the lease and conditions stay stable until commit.
+func (s *Store) LockBackendInstance(ctx context.Context, id domain.BackendInstanceID) (domain.BackendInstance, error) {
+	return scanBackendInstance(s.q.QueryRow(ctx,
+		`SELECT `+backendColumns+` FROM backend_instances b WHERE b.id = $1 FOR UPDATE`, id))
+}
+
 // GetBackendInstance returns a BackendInstance owned by ownerID.
 func (s *Store) GetBackendInstance(ctx context.Context, ownerID domain.UserID, id domain.BackendInstanceID) (domain.BackendInstance, error) {
 	return scanBackendInstance(s.q.QueryRow(ctx, `
@@ -252,24 +259,25 @@ func (s *Store) UpdateBackendQuotas(ctx context.Context, id domain.BackendInstan
 // a resolved problem must stop being shown, which is the whole reason this is
 // current state rather than a log.
 func (s *Store) ReplaceBackendConditions(ctx context.Context, id domain.BackendInstanceID, conditions []domain.Condition) error {
-	return s.WithTx(ctx, func(tx *Store) error {
-		if _, err := tx.q.Exec(ctx,
-			`DELETE FROM backend_conditions WHERE backend_instance_id = $1`, id); err != nil {
-			return classify(err, "replace backend conditions")
-		}
-		for _, condition := range conditions {
-			if _, err := tx.q.Exec(ctx, `
+	if s.pool != nil {
+		return s.WithTx(ctx, func(tx *Store) error { return tx.ReplaceBackendConditions(ctx, id, conditions) })
+	}
+	if _, err := s.q.Exec(ctx,
+		`DELETE FROM backend_conditions WHERE backend_instance_id = $1`, id); err != nil {
+		return classify(err, "replace backend conditions")
+	}
+	for _, condition := range conditions {
+		if _, err := s.q.Exec(ctx, `
 				INSERT INTO backend_conditions (backend_instance_id, type, status, reason, message)
 				VALUES ($1, $2, $3, $4, $5)
 				ON CONFLICT (backend_instance_id, type) DO UPDATE SET
 					status = EXCLUDED.status, reason = EXCLUDED.reason,
 					message = EXCLUDED.message, observed_at = now()`,
-				id, condition.Type, condition.Status, condition.Reason, condition.Message); err != nil {
-				return classify(err, "replace backend conditions")
-			}
+			id, condition.Type, condition.Status, condition.Reason, condition.Message); err != nil {
+			return classify(err, "replace backend conditions")
 		}
-		return nil
-	})
+	}
+	return nil
 }
 
 // BackendConditions returns the conditions of several BackendInstances at once,

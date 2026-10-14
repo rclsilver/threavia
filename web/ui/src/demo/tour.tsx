@@ -53,7 +53,7 @@ const STEPS: Step[] = [
   },
   {
     path: '/settings/backends', title: 'Your default backend',
-    body: 'Use a backend’s menu to choose the default for new sessions. The preference is shared by your projects and clients on this Core; existing sessions keep their backend.',
+    body: 'Use a backend’s menu to choose the default for new sessions. The demo CI runner cycles through disconnection, starting, ready and sign-in required; badges update without a reload, as they do across your clients.',
   },
   {
     path: SESSION(IDS.certManager),

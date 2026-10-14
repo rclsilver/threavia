@@ -1,5 +1,6 @@
 import { ApiError } from '@/api/client';
 import { announceJobEnded } from '@/lib/job-ended';
+import type { Event } from '@/api/types';
 
 import * as data from './data';
 
@@ -610,6 +611,31 @@ export async function demoRequest(method: string, path: string, body: unknown): 
     if (match) return clone(handler(match, json, url.searchParams) ?? null);
   }
   throw unavailable(`${method} ${url.pathname}`);
+}
+
+/** Play a backend reconnecting, using the same event path as a real Core. */
+export function demoBackendLifecycle(receive: (event: Event) => void): () => void {
+  const backend = state.backends.find((entry) => entry.id === data.IDS.ci);
+  if (!backend) return () => {};
+  const initial = clone(backend);
+  const statuses = ['OFFLINE', 'STARTING', 'READY', 'DEGRADED'] as const;
+  let stage = 0;
+  const timer = setInterval(() => {
+    if (!state.backends.includes(backend)) return;
+    const operationalStatus = statuses[stage++ % statuses.length];
+    const providerAuthState = operationalStatus === 'READY' ? 'AUTHENTICATED' : initial.providerAuthState;
+    Object.assign(backend, { operationalStatus, providerAuthState, updatedAt: nowIso(),
+      conditions: operationalStatus === 'READY' ? [] : clone(initial.conditions),
+    });
+    if (operationalStatus !== 'OFFLINE') backend.lastHeartbeatAt = nowIso();
+    receive({ id: newId(), sequence: sequence++, timestamp: nowIso(), type: 'backend.status_changed',
+      payload: { backendInstanceId: String(backend.id), operationalStatus, providerAuthState },
+    });
+  }, 8_000);
+  return () => {
+    clearInterval(timer);
+    if (state.backends.includes(backend)) Object.assign(backend, initial);
+  };
 }
 
 /** The content of a demo file, from memory: what data.ts made up, or what was dropped. */

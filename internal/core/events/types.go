@@ -54,6 +54,7 @@ const (
 	TypeArtifactDeleted         Type = "artifact.deleted"
 
 	TypeBackendRegistered     Type = "backend.registered"
+	TypeBackendStatusChanged  Type = "backend.status_changed"
 	TypeBackendRevoked        Type = "backend.revoked"
 	TypeBackendQuotasUpdated  Type = "backend.quotas_updated"
 	TypeBackendModelsUpdated  Type = "backend.models_updated"
@@ -106,6 +107,7 @@ var persistentTypes = map[Type]bool{
 	TypeArtifactCreated:         true,
 	TypeArtifactDeleted:         true,
 	TypeBackendRegistered:       true,
+	TypeBackendStatusChanged:    true,
 	TypeBackendRevoked:          true,
 	TypeBackendQuotasUpdated:    true,
 	TypeBackendModelsUpdated:    true,

@@ -170,8 +170,7 @@ export class EventStream {
 
     const payload = JSON.parse(data) as Event;
     if (name === 'event') {
-      this.seen(payload.sequence);
-      this.apply(payload);
+      this.deliver(payload);
       return;
     }
     if (name === 'ephemeral' && payload.sessionId) {
@@ -180,6 +179,11 @@ export class EventStream {
   }
 
   /** Routes one event onto the cache. */
+  deliver(event: Event) {
+    this.seen(event.sequence);
+    this.apply(event);
+  }
+
   private apply(event: Event) {
     if (event.sessionId) {
       this.appendToSession(event.sessionId, event);
@@ -270,6 +274,12 @@ export class EventStream {
         void this.queries.invalidateQueries({ queryKey: keys.schedules(event.sessionId ?? '') });
         break;
 
+      case 'backend.status_changed':
+        void this.queries.invalidateQueries({ queryKey: keys.backends() });
+        void this.queries.invalidateQueries({ queryKey: ['sessions'] });
+        void this.queries.invalidateQueries({ queryKey: ['snapshot'] });
+        void this.queries.invalidateQueries({ queryKey: keys.attention() });
+        break;
       case 'backend.registered':
       case 'backend.revoked':
       case 'backend.quotas_updated':

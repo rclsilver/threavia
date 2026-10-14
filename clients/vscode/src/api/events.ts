@@ -38,6 +38,8 @@ export const JOB_ENDED_FRESH_FOR = 2 * 60_000;
 export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
   const sessionId = event.sessionId ?? '';
   switch (event.type) {
+    case 'backend.status_changed':
+      return [{ kind: 'backends' }, { kind: 'sessions' }, { kind: 'attention' }];
     case 'user.message':
       if (payloadOf(event, 'user.message')?.delivery !== 'NOW' || !event.jobId) return [];
       return [{ kind: 'attentionCleared', jobId: event.jobId, before: event.timestamp }, { kind: 'attention' }, { kind: 'sessions' }, ...snapshot(sessionId)];

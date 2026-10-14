@@ -18,6 +18,15 @@ func backendInstance(t *testing.T, c *core) domain.BackendInstanceID {
 	return domain.BackendInstanceID(c.backendID)
 }
 
+func backendConnection(t *testing.T, c *core) string {
+	t.Helper()
+	backend, err := c.store.BackendInstanceByID(context.Background(), backendInstance(t, c))
+	if err != nil || backend.ConnectionID == nil {
+		t.Fatalf("reading the current backend lease: %v", err)
+	}
+	return *backend.ConnectionID
+}
+
 // TestJobFinishedDuringAnOutageIsNotRerun pins the rule of specification
 // section 9 at its sharpest: Core owns desired state, but the backend owns what
 // actually happened.
@@ -39,7 +48,7 @@ func TestJobFinishedDuringAnOutageIsNotRerun(t *testing.T) {
 		t.Fatalf("building the completion event: %v", err)
 	}
 	// Core loses the connection and parks the Job.
-	c.svc.Disconnected(ctx, backendInstance(t, c), "stale-connection")
+	c.svc.Disconnected(ctx, backendInstance(t, c), backendConnection(t, c))
 	waitUntil(t, "the job to be parked", func() bool {
 		return c.jobStatus(session, start.GetJobId()) == "WAITING_BACKEND"
 	})
@@ -78,7 +87,7 @@ func TestJobTheBackendLostIsRequeued(t *testing.T) {
 	start := receive(t, "the dispatched job", backend.starts)
 
 	ctx := context.Background()
-	c.svc.Disconnected(ctx, backendInstance(t, c), "stale-connection")
+	c.svc.Disconnected(ctx, backendInstance(t, c), backendConnection(t, c))
 	waitUntil(t, "the job to be parked", func() bool {
 		return c.jobStatus(session, start.GetJobId()) == "WAITING_BACKEND"
 	})
@@ -103,7 +112,7 @@ func TestParkedJobIsNotReleasedOnConnectAlone(t *testing.T) {
 	start := receive(t, "the dispatched job", backend.starts)
 
 	ctx := context.Background()
-	c.svc.Disconnected(ctx, backendInstance(t, c), "stale-connection")
+	c.svc.Disconnected(ctx, backendInstance(t, c), backendConnection(t, c))
 	waitUntil(t, "the job to be parked", func() bool {
 		return c.jobStatus(session, start.GetJobId()) == "WAITING_BACKEND"
 	})
@@ -202,7 +211,7 @@ func TestAJobTheBackendAlreadyEndedIsSettled(t *testing.T) {
 	c.mustDo(http.MethodPost, "/api/v1/sessions/"+session+"/messages",
 		map[string]any{"message": "deuxieme"}, &second, http.StatusCreated)
 
-	c.svc.Disconnected(ctx, backendInstance(t, c), "stale-connection")
+	c.svc.Disconnected(ctx, backendInstance(t, c), backendConnection(t, c))
 	waitUntil(t, "the job to be parked", func() bool {
 		return c.jobStatus(session, first.GetJobId()) == "WAITING_BACKEND"
 	})
@@ -305,7 +314,7 @@ func TestADecisionLostWithTheStreamIsSentAgain(t *testing.T) {
 		map[string]any{"approved": true, "channel": "web"}, nil, http.StatusOK)
 	receive(t, "the decision Core sends once", backend.validations)
 
-	c.svc.Disconnected(ctx, backendInstance(t, c), "stale-connection")
+	c.svc.Disconnected(ctx, backendInstance(t, c), backendConnection(t, c))
 	waitUntil(t, "the job to be parked", func() bool {
 		return c.jobStatus(session, start.GetJobId()) == "WAITING_BACKEND"
 	})
@@ -357,7 +366,7 @@ func TestADispatchOutlivesTheRequestThatAskedForIt(t *testing.T) {
 		})
 
 	// Park it, so dispatching it again is a thing Core will do.
-	c.svc.Disconnected(ctx, backendInstance(t, c), "stale-connection")
+	c.svc.Disconnected(ctx, backendInstance(t, c), backendConnection(t, c))
 	waitUntil(t, "the job to be parked", func() bool {
 		return c.jobStatus(session, start.GetJobId()) == "WAITING_BACKEND"
 	})

@@ -229,6 +229,16 @@ manager must not block worker events or heartbeats on the same connection;
 responses remain correlated by request_id and use the connection's single
 writer. Pending waits are cancelled when the control stream ends.
 
+## Backend lifecycle
+
+Core emits the persistent, owner-scoped `backend.status_changed` client event
+after a connection, disconnection, or a changed status report. Its payload is
+`{ backendInstanceId, operationalStatus, providerAuthState }`. Clients refresh
+backend metadata, session lists, snapshots and attention; disconnection parks
+unfinished jobs before the event is published. Repeated status reports and
+heartbeat timestamps create no events. Superseded connection leases cannot
+announce an offline state or park their replacement's jobs.
+
 ## Skills
 
 `ProjectContext` names the Core-managed Project Skills of a Run — identity,
