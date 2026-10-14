@@ -471,21 +471,23 @@ export function activate(context: vscode.ExtensionContext): Threavia {
 
   // Archiving is not deleting, so it asks for no confirmation: the message
   // that says it happened carries the way back.
-  command('threavia.archiveSession', async (node: SessionNode) => {
-    const core = coreOf(node);
-    if (!core) return;
+  command('threavia.archiveSession', async (target: unknown) => {
+    const ref = targetSession(target);
+    const core = cores.get(ref?.coreId);
+    if (!ref || !core) return;
+    const title = await sessionTitle(core, ref.sessionId);
     try {
-      await core.client.archiveSession(node.session.id);
-      await closeSessionViews({ coreId: core.id, sessionId: node.session.id });
+      await core.client.archiveSession(ref.sessionId);
+      await closeSessionViews(ref);
       sidebar.invalidateSessions(core.id);
     } catch (error) {
       return failed(error, 'Not archived');
     }
-    const choice = await vscode.window.showInformationMessage(`Archived “${titleOf(node.session)}”.`, 'Undo');
+    const choice = await vscode.window.showInformationMessage(`Archived “${title}”.`, 'Undo');
     if (!choice) return;
     try {
-      await core.client.restoreSession(node.session.id);
-      sessionRestored({ coreId: core.id, sessionId: node.session.id });
+      await core.client.restoreSession(ref.sessionId);
+      sessionRestored(ref);
       sidebar.invalidateSessions(core.id);
     } catch (error) {
       failed(error, 'Not restored');

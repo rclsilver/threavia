@@ -75,6 +75,8 @@ pinned global decisions are read by agents in all your projects on that Core.
   - **Copy Markdown.** Copy an agent response with its original headings,
     lists, links and fenced code blocks, ready to paste into another application.
   - **Pin, unpin, open in the browser** from the tab's title bar.
+  - **Archive.** The header's Archive button closes the session's views and
+    offers Undo, just like archiving from the sidebar.
   - **Quotas.** Hover or focus the backend in the header, or click it, to see
     its full quota report. Claude and Codex refresh account quotas through their CLI every minute
     while connected, and forward quota events during jobs. The

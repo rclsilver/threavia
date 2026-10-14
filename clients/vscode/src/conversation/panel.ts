@@ -558,6 +558,16 @@ class ConversationPanel {
     const { client, answers, artifacts } = this.core;
     const { paths, documents } = this.services;
     switch (message.type) {
+      case 'archive': {
+        if (!this.sessionId) return;
+        try {
+          await vscode.commands.executeCommand('threavia.archiveSession', this.ref(this.sessionId));
+        } finally {
+          // A failed archive leaves the conversation open and lets it retry.
+          this.post({ type: 'archiveFinished' });
+        }
+        return;
+      }
       case 'configureModel': {
         if (!this.session || !this.backend?.features?.includes('MODEL_SELECTION')) return;
         const catalog = this.backend.modelCatalog;

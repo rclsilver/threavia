@@ -106,7 +106,12 @@ const widthToggle = button(icon(fullWidth ? 'screen-normal' : 'screen-full'), ()
   widthToggle.replaceChildren(icon(fullWidth ? 'screen-normal' : 'screen-full'));
   persist();
 }, { class: 'icon-button width-toggle', title: 'Full width', 'aria-label': 'Full width', 'aria-pressed': String(fullWidth) });
-const header = h('header', { class: 'header' }, h('div', { class: 'header-title' }, title, widthToggle), meta);
+const archive = button([icon('archive'), 'Archive'], () => {
+  if (!sessionId || !view || archive.disabled) return;
+  archive.disabled = true;
+  post({ type: 'archive' });
+}, { class: 'ghost small', title: 'Archive this session', hidden: true });
+const header = h('header', { class: 'header' }, h('div', { class: 'header-title' }, title, archive, widthToggle), meta);
 
 const list = h('div', { class: 'timeline', role: 'list', 'aria-label': 'Conversation' });
 const stickySlot = h('div', { class: 'sticky-slot' });
@@ -254,6 +259,9 @@ window.addEventListener('message', (message: MessageEvent<HostMessage>) => {
       copied?.(data.ok, data.error);
       break;
     }
+    case 'archiveFinished':
+      archive.disabled = false;
+      break;
     case 'failed':
       list.replaceChildren(h('p', { class: 'empty error' }, data.message));
       break;
@@ -277,6 +285,7 @@ function renderMeta(children: HTMLElement[]) {
 }
 
 function renderHeader() {
+  archive.hidden = !sessionId || !view;
   if (!view && start) return renderDraftHeader(start);
   if (!view) return;
   title.textContent = view.title;

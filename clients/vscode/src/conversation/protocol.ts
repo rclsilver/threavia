@@ -57,6 +57,7 @@ export type HostMessage =
   | { type: 'attachFailed'; error: string }
   | { type: 'sent' }
   | { type: 'sendFailed'; text: string; error: string }
+  | { type: 'archiveFinished' }
   | { type: 'failed'; message: string };
 
 export type ArtifactRef = { artifactId: string; filename: string; mimeType: string; title?: string };
@@ -73,6 +74,7 @@ export type WebviewMessage =
   | { type: 'copyResponse'; sequence: number }
   | { type: 'refreshRepository' }
   | { type: 'configureModel' }
+  | { type: 'archive' }
   | { type: 'resolvePaths'; paths: string[] }
   | { type: 'openPath'; path: string }
   | { type: 'openLink'; href: string }
