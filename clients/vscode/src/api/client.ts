@@ -421,12 +421,12 @@ export class CoreClient {
    */
   decisions(projectId: string, includeSuperseded: boolean) {
     return this.get<List<Decision>>(
-      `/api/v1/projects/${projectId}/decisions${includeSuperseded ? '?includeSuperseded=true' : ''}`,
+      `${projectId ? `/api/v1/projects/${projectId}/decisions` : '/api/v1/me/decisions'}${includeSuperseded ? '?includeSuperseded=true' : ''}`,
     ).then(items);
   }
 
   createDecision(projectId: string, body: NewDecisionBody) {
-    return this.post<Decision>(`/api/v1/projects/${projectId}/decisions`, body);
+    return this.post<Decision>(projectId ? `/api/v1/projects/${projectId}/decisions` : '/api/v1/me/decisions', body);
   }
 
   /** Pins a Decision to every Job, or unpins it: the only thing about one that changes. */

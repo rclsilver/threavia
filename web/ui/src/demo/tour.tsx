@@ -87,6 +87,12 @@ const STEPS: Step[] = [
   },
   {
     path: SESSION(IDS.ingress),
+    target: '[data-tour="copy-response"]',
+    title: 'Take an answer with you',
+    body: 'Copy Markdown copies the agent’s original response, including headings, links, lists and code blocks. Paste it into another application without losing the Markdown source.',
+  },
+  {
+    path: SESSION(IDS.ingress),
     target: '[data-tour="delegated-message"]',
     title: 'One conversation, several agents',
     body: 'A manager delegates checks and fixes, answers worker questions and gathers their results here. Messages between agents say Agent; permissions still need your approval in the manager conversation.',
@@ -126,6 +132,10 @@ const STEPS: Step[] = [
     target: 'main ul',
     title: 'Memory that travels',
     body: 'Decisions an agent must not forget. A pinned one goes with every job of the project; click the mark to pin or unpin.',
+  },
+  {
+    path: '/settings/memory', target: '[data-tour="global-memory"]', title: 'Memory shared across projects',
+    body: 'Record facts and decisions once for all your projects on this Core. Pin one to have every agent read it before work starts, or leave it on record to search when needed.',
   },
   {
     path: PROJECT('artifacts'),

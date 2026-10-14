@@ -78,6 +78,10 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 		return map[string]any{"results": found}, nil
 
 	case tools.NameDecisionCreate:
+		projectID, err := memoryProject(jc.ProjectID, text(input, "scope"))
+		if err != nil {
+			return nil, err
+		}
 		var supersedes *domain.DecisionID
 		if raw := text(input, "supersedes"); raw != "" {
 			id := domain.DecisionID(raw)
@@ -87,13 +91,39 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 		// reaches every later run, so whoever reads it must be able to tell it
 		// was not a person who decided.
 		jobID := jc.JobID
-		decision, err := s.CreateDecision(ctx, identity, jc.ProjectID,
+		decision, err := s.CreateDecision(ctx, identity, projectID,
 			text(input, "title"), text(input, "content"),
 			domain.DecisionImportance(strings.ToUpper(text(input, "importance"))), supersedes, &jobID)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"decisionId": string(decision.ID), "status": decision.Status.String()}, nil
+		scope := "project"
+		if decision.ProjectID == "" {
+			scope = "global"
+		}
+		return map[string]any{"decisionId": string(decision.ID), "status": decision.Status.String(), "scope": scope}, nil
+
+	case tools.NameMemorySearch:
+		projectID, err := memoryProject(jc.ProjectID, text(input, "scope"))
+		if err != nil {
+			return nil, err
+		}
+		decisions, err := s.SearchMemory(ctx, identity, projectID, text(input, "query"), 0)
+		if err != nil {
+			return nil, err
+		}
+		found := make([]any, 0, len(decisions))
+		for _, decision := range decisions {
+			scope := "project"
+			if decision.ProjectID == "" {
+				scope = "global"
+			}
+			found = append(found, map[string]any{
+				"decisionId": string(decision.ID), "title": decision.Title, "content": decision.Content,
+				"importance": decision.Importance.String(), "scope": scope,
+			})
+		}
+		return map[string]any{"decisions": found}, nil
 
 	case tools.NameTaskCreate:
 		var dependsOn []domain.TaskID

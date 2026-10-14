@@ -25,7 +25,7 @@ Typical flow:
 - Session is provider/backend independent.
 - Run is the binding between a Session and one BackendInstance/native provider session.
 - Run is mostly an infrastructure detail and should be nearly invisible in normal UX.
-- Project memory is project-scoped; no global memory in V1.
+- Project memory is complemented by owner-global Core facts and decisions, shared across that user's projects. Session history remains project-scoped.
 - No automatic backend scheduling, migration or failover in V1.
 - Explicit behavior over magic.
 - PostgreSQL stores current state, metadata and persistent events.
@@ -623,7 +623,7 @@ Do not inject all Jobs/Events/files/completed Tasks/NORMAL Decisions. Everything
 ```yaml
 Decision:
   id: ...
-  projectId: ...
+  projectId: ... # optional: absent for owner-global Core memory
   title: ...
   content: ...
   importance: IMPORTANT | NORMAL
@@ -636,10 +636,18 @@ Decision:
 Rules:
 
 - NORMAL is default
-- active IMPORTANT decisions are automatically included in new Run context
+- a Decision belongs either to a Project or to the owner's global Core memory
+- global memory is shared across that owner's Projects on the same Core, never across users
+- active IMPORTANT decisions from both scopes are automatically included in new Run context, with separate limits of 20 per scope
 - NORMAL decisions are searchable
-- a new Decision may supersede an older Decision
+- a new Decision may supersede an older Decision within the same scope and owner
 - superseded Decisions remain historical but are not current/injected by default
+
+Global facts are managed through `/api/v1/me/decisions` and searched through
+`/api/v1/me/memory/search`. Agents use `decision_create` with `scope: global` to
+record shared facts; the default remains `project`. `memory_search` returns active
+facts from the current Project and global memory, or only globals with
+`scope: global`. Project session history remains isolated to its Project.
 
 ## 14. Tasks
 

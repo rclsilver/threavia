@@ -3303,6 +3303,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Global memory shared by all the user's projects on this Core
+         * @description Global decisions belong to the authenticated user and survive project deletion.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    includeSuperseded?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The global Decisions */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["Decision"][];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Record a global Decision
+         * @description Active IMPORTANT global decisions travel with every Job across the user's projects. A replacement must have the same global scope and owner.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        title: string;
+                        content?: string;
+                        importance?: components["schemas"]["DecisionImportance"];
+                        /** Format: uuid */
+                        supersedes?: string | null;
+                    };
+                };
+            };
+            responses: {
+                /** @description The recorded Decision */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Decision"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/memory/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search the user's active global facts and decisions
+         * @description Searches global decisions only. Session history remains scoped to its project.
+         */
+        get: {
+            parameters: {
+                query: {
+                    q: string;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Matching Decisions */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["Decision"][];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{projectId}/decisions": {
         parameters: {
             query?: never;
@@ -3427,7 +3547,7 @@ export interface paths {
         head?: never;
         /**
          * Pin or unpin a Decision
-         * @description Changes whether the Decision travels with every Job of its Project. Only the importance can change: what was decided is not edited, a decision that changed is superseded by a new one.
+         * @description Changes whether the Decision travels with every Job of its Project, or all the user's projects when the Decision is global. Only the importance can change: what was decided is not edited, a decision that changed is superseded by a new one.
          *
          */
         patch: {
@@ -4621,9 +4741,11 @@ export interface components {
             /** Format: date-time */
             completedAt?: string;
         };
+        /** @description A durable fact or decision. Without a projectId it is global to the authenticated user's projects on this Core. */
         Decision: {
             id: components["schemas"]["UUID"];
-            projectId: components["schemas"]["UUID"];
+            /** @description Absent for a global Decision. */
+            projectId?: components["schemas"]["UUID"];
             title: string;
             content?: string;
             importance: components["schemas"]["DecisionImportance"];

@@ -75,10 +75,11 @@ func (s DecisionStatus) Transition(to DecisionStatus) (DecisionStatus, error) {
 	return to, nil
 }
 
-// Decision is a durable project ruling (spec section 13).
+// Decision is a durable fact or ruling, global to its owner or scoped to a Project.
 type Decision struct {
 	ID         DecisionID         `json:"id"`
-	ProjectID  ProjectID          `json:"projectId"`
+	ProjectID  ProjectID          `json:"projectId,omitempty"`
+	OwnerID    UserID             `json:"-"`
 	Title      string             `json:"title"`
 	Content    string             `json:"content,omitempty"`
 	Importance DecisionImportance `json:"importance"`

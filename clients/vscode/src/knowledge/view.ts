@@ -1,13 +1,13 @@
 import * as vscode from 'vscode';
 
 import { ApiError } from '../api/client';
-import type { Project } from '../api/types';
 import type { Core } from '../cores/core';
 import type { Cores } from '../cores/registry';
 import type { CurrentProject } from './current';
 
 /** A row that only says something: an empty list, an error. */
 export type MessageNode = { type: 'message'; text: string; icon?: string };
+export type ViewSelection = { core: Core; projectId: string; label: string };
 
 /**
  * What the Tasks and Memory views share: one Project at a time, the one
@@ -47,14 +47,15 @@ export abstract class ProjectView<Data, Node extends { type: string }> implement
         this.changed.fire(undefined);
       }),
       cores.on('effect', (core, change) => {
-        if (change.kind !== effect || core.id !== this.current.core?.id) return;
+        const selection = this.selection();
+        if (change.kind !== effect || core.id !== selection?.core.id) return;
         // An event without a Project could be about any of them.
-        if (change.projectId && change.projectId !== this.current.project?.id) return;
+        if (change.projectId && change.projectId !== selection?.projectId) return;
         this.invalidate();
       }),
       // A stream that came back may have missed changes it does not replay.
       cores.on('connection', (core, connected) => {
-        if (connected && core.id === this.current.core?.id) this.invalidate();
+        if (connected && core.id === this.selection()?.core.id) this.invalidate();
       }),
       // No Core to ask, or one again: the welcome shows, or goes.
       cores.onDidChange(() => this.changed.fire(undefined)),
@@ -62,12 +63,20 @@ export abstract class ProjectView<Data, Node extends { type: string }> implement
   }
 
   private describe() {
-    const { project, core } = this.current;
-    this.view.description = project && core ? (this.cores.several ? `${project.name} · ${core.name}` : project.name) : undefined;
+    const selected = this.selection();
+    this.view.description = selected ? (this.cores.several ? `${selected.label} · ${selected.core.name}` : selected.label) : undefined;
   }
+
+  protected selection(): ViewSelection | undefined {
+    const { project, core } = this.current;
+    return project && core ? { core, projectId: project.id, label: project.name } : undefined;
+  }
+
+  protected emptyText(): string { return 'Create a project to begin.'; }
 
   /** Drops what was read and draws again. */
   reload() {
+    this.describe();
     this.forget();
     this.changed.fire(undefined);
   }
@@ -80,12 +89,12 @@ export abstract class ProjectView<Data, Node extends { type: string }> implement
   invalidate() {
     clearTimeout(this.timer);
     this.timer = setTimeout(() => {
-      const { core, project } = this.current;
-      if (!core?.ready || !project) return;
+      const selected = this.selection();
+      if (!selected?.core.ready) return;
       // A read already under way may have started before the change.
       this.generation++;
       this.loading = undefined;
-      void this.load(core, project).then(() => this.changed.fire(undefined));
+      void this.load(selected.core, selected.projectId).then(() => this.changed.fire(undefined));
     }, 150);
   }
 
@@ -97,15 +106,15 @@ export abstract class ProjectView<Data, Node extends { type: string }> implement
     this.loading = undefined;
   }
 
-  private load(core: Core, project: Project): Promise<void> {
+  private load(core: Core, projectId: string): Promise<void> {
     const generation = this.generation;
-    this.loading ??= this.fetch(core, project.id)
+    this.loading ??= this.fetch(core, projectId)
       .then((data) => {
         if (generation !== this.generation) return;
         this.data = data;
-        this.dataFor = keyOf(core, project);
+        this.dataFor = keyOf(core, projectId);
         this.error = undefined;
-        this.loaded(core, project.id, data);
+        this.loaded(core, projectId, data);
       })
       .catch((error: unknown) => {
         if (generation !== this.generation) return;
@@ -119,13 +128,14 @@ export abstract class ProjectView<Data, Node extends { type: string }> implement
 
   async getChildren(node?: Node | MessageNode): Promise<(Node | MessageNode)[]> {
     if (this.cores.ready().length === 0) return [];
-    const { project, core } = this.current;
-    if (!project || !core) {
+    const selected = this.selection();
+    if (!selected) {
       // Until the Projects are read, there is nothing to say yet.
-      return node || !this.current.settled ? [] : [{ type: 'message', text: 'Create a project to begin.' }];
+      return node || !this.current.settled ? [] : [{ type: 'message', text: this.emptyText() }];
     }
-    const key = keyOf(core, project);
-    if (this.dataFor !== key) await this.load(core, project);
+    const { core, projectId } = selected;
+    const key = keyOf(core, projectId);
+    if (this.dataFor !== key) await this.load(core, projectId);
     if (this.data === undefined || this.dataFor !== key) {
       return node ? [] : [{ type: 'message', text: this.error ?? 'Core did not answer.', icon: 'error' }];
     }
@@ -147,10 +157,11 @@ export abstract class ProjectView<Data, Node extends { type: string }> implement
    * from the palette may come before the view was ever opened.
    */
   protected async dataNow(): Promise<Data | undefined> {
-    const { project, core } = this.current;
-    if (!project || !core) return undefined;
-    const key = keyOf(core, project);
-    if (this.dataFor !== key) await this.load(core, project);
+    const selected = this.selection();
+    if (!selected) return undefined;
+    const { core, projectId } = selected;
+    const key = keyOf(core, projectId);
+    if (this.dataFor !== key) await this.load(core, projectId);
     return this.dataFor === key ? this.data : undefined;
   }
 
@@ -205,6 +216,6 @@ function isMessage(node: { type: string }): node is MessageNode {
   return node.type === 'message';
 }
 
-function keyOf(core: Core, project: Project): string {
-  return `${core.id}/${project.id}`;
+function keyOf(core: Core, projectId: string): string {
+  return `${core.id}/${projectId}`;
 }

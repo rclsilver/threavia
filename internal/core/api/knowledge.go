@@ -18,6 +18,9 @@ func (h *handler) registerKnowledge(mux *http.ServeMux) {
 
 	h.handle(mux, "GET /api/v1/projects/{projectId}/decisions", h.listDecisions)
 	h.handle(mux, "POST /api/v1/projects/{projectId}/decisions", h.createDecision)
+	h.handle(mux, "GET /api/v1/me/decisions", h.listDecisions)
+	h.handle(mux, "POST /api/v1/me/decisions", h.createDecision)
+	h.handle(mux, "GET /api/v1/me/memory/search", h.searchGlobalMemory)
 	h.handle(mux, "PATCH /api/v1/decisions/{decisionId}", h.updateDecision)
 	h.handle(mux, "DELETE /api/v1/decisions/{decisionId}", h.deleteDecision)
 
@@ -147,6 +150,15 @@ func (h *handler) deleteDecision(w http.ResponseWriter, r *http.Request, identit
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *handler) searchGlobalMemory(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	decisions, err := h.svc.SearchMemory(r.Context(), identity, "", r.URL.Query().Get("q"), queryInt(r, "limit", 0))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeList(w, decisions)
 }
 
 func (h *handler) listDecisions(w http.ResponseWriter, r *http.Request, identity auth.Identity) {

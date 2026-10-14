@@ -53,6 +53,13 @@ automatic local memory is disabled for each Threavia process, including resumed
 sessions; this does not change the user's Claude settings. Credential references
 retain the file location and purpose, never the secret values.
 
+Core also stores global facts and decisions shared across all of an owner's
+projects on that instance. Manage them in **Settings → Core memory** on the web,
+or **Switch Memory Scope… → Global** in VS Code's Memory view. Important facts
+are loaded before every job; other facts are available through `memory_search`.
+Agents record a shared fact with `decision_create` and `scope: global`.
+Session history stays project-specific, and each user's memory stays private.
+
 What is deliberately not implemented, matching the non-goals of section 33:
 
 - the Android and Voice clients: Core is client-agnostic, and the clients

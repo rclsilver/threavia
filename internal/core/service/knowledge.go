@@ -197,8 +197,10 @@ func (s *Service) SearchTasks(ctx context.Context, identity auth.Identity, proje
 // CreateDecision records a Decision, superseding an earlier one when asked.
 // createdBy is the Job whose agent recorded it, and nil when a person did.
 func (s *Service) CreateDecision(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, title, content string, importance domain.DecisionImportance, supersedes *domain.DecisionID, createdBy *domain.JobID) (domain.Decision, error) {
-	if _, err := s.store.GetProject(ctx, identity.UserID, projectID); err != nil {
-		return domain.Decision{}, translate(err)
+	if projectID != "" {
+		if _, err := s.store.GetProject(ctx, identity.UserID, projectID); err != nil {
+			return domain.Decision{}, translate(err)
+		}
 	}
 	title = strings.TrimSpace(title)
 	if title == "" {
@@ -214,6 +216,7 @@ func (s *Service) CreateDecision(ctx context.Context, identity auth.Identity, pr
 	decision := domain.Decision{
 		ID:             domain.NewDecisionID(),
 		ProjectID:      projectID,
+		OwnerID:        identity.UserID,
 		Title:          title,
 		Content:        strings.TrimSpace(content),
 		Importance:     importance,
@@ -229,8 +232,8 @@ func (s *Service) CreateDecision(ctx context.Context, identity auth.Identity, pr
 			if err != nil {
 				return fmt.Errorf("%w: unknown decision %s", ErrInvalid, *supersedes)
 			}
-			if previous.ProjectID != projectID {
-				return fmt.Errorf("%w: decision %s belongs to another project", ErrInvalid, *supersedes)
+			if previous.ProjectID != projectID || previous.OwnerID != identity.UserID {
+				return fmt.Errorf("%w: decision %s belongs to another memory scope", ErrInvalid, *supersedes)
 			}
 			if err := tx.CreateDecision(ctx, &decision); err != nil {
 				return err
@@ -335,6 +338,21 @@ func (s *Service) SearchDecisions(ctx context.Context, identity auth.Identity, p
 		return nil, fmt.Errorf("%w: a search needs a query", ErrInvalid)
 	}
 	decisions, err := s.store.SearchDecisions(ctx, projectID, query, searchLimit(limit))
+	return decisions, translate(err)
+}
+
+// SearchMemory reads active global facts plus this Project's facts, or only
+// global facts with an empty Project. Session history is never broadened.
+func (s *Service) SearchMemory(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, query string, limit int) ([]domain.Decision, error) {
+	if projectID != "" {
+		if _, err := s.store.GetProject(ctx, identity.UserID, projectID); err != nil {
+			return nil, translate(err)
+		}
+	}
+	if strings.TrimSpace(query) == "" {
+		return nil, fmt.Errorf("%w: a search needs a query", ErrInvalid)
+	}
+	decisions, err := s.store.SearchMemory(ctx, identity.UserID, projectID, query, searchLimit(limit))
 	return decisions, translate(err)
 }
 

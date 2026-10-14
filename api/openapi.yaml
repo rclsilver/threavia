@@ -1698,6 +1698,78 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
 
+  /api/v1/me/decisions:
+    get:
+      tags: [knowledge]
+      summary: Global memory shared by all the user's projects on this Core
+      description: Global decisions belong to the authenticated user and survive project deletion.
+      parameters:
+        - name: includeSuperseded
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: The global Decisions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Decision" }
+    post:
+      tags: [knowledge]
+      summary: Record a global Decision
+      description: Active IMPORTANT global decisions travel with every Job across the user's projects. A replacement must have the same global scope and owner.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                content: { type: string }
+                importance: { $ref: "#/components/schemas/DecisionImportance" }
+                supersedes:
+                  type: [string, "null"]
+                  format: uuid
+      responses:
+        "201":
+          description: The recorded Decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Decision" }
+
+  /api/v1/me/memory/search:
+    get:
+      tags: [knowledge]
+      summary: Search the user's active global facts and decisions
+      description: Searches global decisions only. Session history remains scoped to its project.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Matching Decisions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Decision" }
+
   /api/v1/projects/{projectId}/decisions:
     parameters:
       - $ref: "#/components/parameters/ProjectID"
@@ -1758,7 +1830,8 @@ paths:
       tags: [knowledge]
       summary: Pin or unpin a Decision
       description: >
-        Changes whether the Decision travels with every Job of its Project.
+        Changes whether the Decision travels with every Job of its Project,
+        or all the user's projects when the Decision is global.
         Only the importance can change: what was decided is not edited, a
         decision that changed is superseded by a new one.
       requestBody:
@@ -2984,10 +3057,13 @@ components:
 
     Decision:
       type: object
-      required: [id, projectId, title, importance, status, createdAt, updatedAt]
+      description: A durable fact or decision. Without a projectId it is global to the authenticated user's projects on this Core.
+      required: [id, title, importance, status, createdAt, updatedAt]
       properties:
         id: { $ref: "#/components/schemas/UUID" }
-        projectId: { $ref: "#/components/schemas/UUID" }
+        projectId:
+          allOf: [{ $ref: "#/components/schemas/UUID" }]
+          description: Absent for a global Decision.
         title: { type: string }
         content: { type: string }
         importance: { $ref: "#/components/schemas/DecisionImportance" }

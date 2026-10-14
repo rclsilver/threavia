@@ -21,7 +21,7 @@ import {
   type DecisionGroup,
   type DecisionGroupKind,
 } from './model';
-import { ProjectView, type MessageNode } from './view';
+import { ProjectView, type MessageNode, type ViewSelection } from './view';
 
 export type DecisionNode =
   | { type: 'group'; group: DecisionGroup }
@@ -53,6 +53,7 @@ const RECORD = 'Record Decision';
  * never have been recorded.
  */
 export class MemoryView extends ProjectView<Decision[], DecisionNode> {
+  private globalCoreId: string | undefined;
   private readonly documents = new LiveDocuments(
     'threavia-decision',
     'This decision is no longer recorded. Open it again from the Memory view.\n',
@@ -62,6 +63,24 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
 
   constructor(current: CurrentProject, cores: Cores) {
     super('threavia.memory', current, cores, 'decisions');
+  }
+
+  protected override selection(): ViewSelection | undefined {
+    if (!this.globalCoreId) return super.selection();
+    const core = this.cores.get(this.globalCoreId);
+    return core ? { core, projectId: '', label: 'Global memory' } : undefined;
+  }
+
+  protected override emptyText(): string { return 'Choose project or global memory with Switch Memory Scope….'; }
+
+  private async switchScope() {
+    const items: (vscode.QuickPickItem & { coreId?: string })[] = [];
+    if (this.current.project && this.current.core) items.push({ label: `Project — ${this.current.project.name}`, description: this.current.core.name });
+    for (const core of this.cores.ready()) items.push({ label: `Global — ${core.name}`, description: 'Shared across all your projects on this Core', coreId: core.id });
+    const picked = await vscode.window.showQuickPick(items, { title: 'Memory scope', placeHolder: 'Choose a project or global Core memory' });
+    if (!picked) return;
+    this.globalCoreId = picked.coreId;
+    this.reload();
   }
 
   protected fetch(core: Core, projectId: string): Promise<Decision[]> {
@@ -83,7 +102,7 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
     if (node?.type === 'group') {
       const { kind } = node.group;
       const group = groups.find((entry) => entry.kind === kind);
-      return (group?.decisions ?? []).map((decision): DecisionNode => ({ type: 'decision', coreId: this.current.core?.id ?? '', decision, kind }));
+      return (group?.decisions ?? []).map((decision): DecisionNode => ({ type: 'decision', coreId: this.selection()?.core.id ?? '', decision, kind }));
     }
     if (groups.length === 0) {
       return [
@@ -137,6 +156,7 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
     disposables.push(this.documents);
     command('threavia.openDecision', (target: unknown) => this.open(target));
     command('threavia.recordDecision', () => this.record());
+    command('threavia.switchMemoryScope', () => this.switchScope());
     command('threavia.pinDecision', (node: DecisionRow) => this.pin(node.coreId, node.decision));
     command('threavia.unpinDecision', (node: DecisionRow) => this.pin(node.coreId, node.decision));
     command('threavia.supersedeDecision', (node: DecisionRow) => this.record(node.decision, node.coreId));
@@ -145,10 +165,10 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
 
   /** Opens a Decision: `{ coreId, id }` from a row, or an id alone from an earlier version. */
   private async open(target: unknown) {
-    const ref = recordRefOf(target, this.current.core?.id);
+    const ref = recordRefOf(target, this.selection()?.core.id);
     if (!ref) return;
     const decision =
-      ref.coreId === this.current.core?.id ? (await this.dataNow())?.find((entry) => entry.id === ref.id) : undefined;
+      ref.coreId === this.selection()?.core.id ? (await this.dataNow())?.find((entry) => entry.id === ref.id) : undefined;
     await this.documents.open(ref.coreId, ref.id, documentName(decision?.title ?? 'Decision'));
   }
 
@@ -166,12 +186,12 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
    * and a document to write it in would be one more tab to find and close.
    */
   private async record(replaced?: Decision, coreId?: string) {
-    const { project, core } = this.current;
-    if (!project || !core) {
-      void vscode.window.showInformationMessage('Choose a Project first, with Switch Project….');
-      return;
-    }
-    const heading = replaced ? `Supersede “${oneLine(replaced.title, 60)}”` : `${RECORD} in ${project.name}`;
+    if (!this.selection() && !replaced) await this.switchScope();
+    const selected = this.selection();
+    const core = this.cores.get(coreId ?? selected?.core.id);
+    if (!core || (!selected && !replaced)) return;
+    const projectId = replaced ? replaced.projectId ?? '' : selected!.projectId;
+    const heading = replaced ? `Supersede “${oneLine(replaced.title, 60)}”` : `${RECORD} in ${selected!.label}`;
     const title = await vscode.window.showInputBox({
       title: `${heading} (1/3)`,
       placeHolder: 'What was decided?',
@@ -191,7 +211,7 @@ export class MemoryView extends ProjectView<Decision[], DecisionNode> {
     if (importance === undefined) return;
 
     const body = newDecisionBody(title, content, importance, replaced?.id);
-    if (await this.act(replaced ? 'Not superseded' : 'Not recorded', () => this.clientOf(coreId ?? core.id).createDecision(project.id, body), true)) {
+    if (await this.act(replaced ? 'Not superseded' : 'Not recorded', () => this.clientOf(core.id).createDecision(projectId, body), true)) {
       vscode.window.setStatusBarMessage(`Recorded: ${body.title}.`, 4000);
     }
   }

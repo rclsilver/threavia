@@ -74,7 +74,7 @@ const sessionRoute = createRoute({
   component: SessionView,
 });
 
-const ACCOUNT_TABS: AccountTab[] = ['appearance', 'notifications', 'backends', 'permissions', 'directories'];
+const ACCOUNT_TABS: AccountTab[] = ['appearance', 'notifications', 'backends', 'permissions', 'directories', 'memory'];
 
 /** The person's settings, one tab per URL; an unknown tab lands on the first. */
 const settingsRoute = createRoute({

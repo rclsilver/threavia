@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Bell, Copy, Folder, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Bell, BookText, Copy, Folder, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
 import { useBackends, useClaimBackend, useIssueBackendToken, useMe, useProjects, useRevokeBackend, useSetDefaultBackend } from '@/api/queries';
@@ -8,7 +8,8 @@ import { NotificationsPane } from '@/components/notifications-pane';
 import { DefaultPolicyPane } from '@/components/default-policy';
 import { DirectoriesPane } from '@/components/directories-pane';
 import { BackendIcon, BackendQuotas } from '@/components/backend-info';
-import { ConfirmLine, RecordList, RecordRow } from '@/components/record-list';
+import { ConfirmLine, NewButton, RecordList, RecordRow } from '@/components/record-list';
+import { DecisionsPane } from '@/routes/project';
 import { ActionError } from '@/components/ui/action-error';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
@@ -24,9 +25,10 @@ import { useWideLayout } from '@/use-layout';
 import { useTheme, type Theme } from '@/use-theme';
 import { useShortcut } from '@/use-shortcut';
 
-export type AccountTab = 'appearance' | 'notifications' | 'backends' | 'permissions' | 'directories';
+export type AccountTab = 'appearance' | 'notifications' | 'backends' | 'permissions' | 'directories' | 'memory';
 
 const TABS: { tab: AccountTab; label: string; Icon: LucideIcon; detail: string }[] = [
+  { tab: 'memory', label: 'Core memory', Icon: BookText, detail: 'Facts and decisions shared across all your projects on this Core. Pinned ones travel with every Job; the others remain searchable.' },
   { tab: 'directories', label: 'Directories', Icon: Folder, detail: 'Manage known directories on this Core, in a project or globally across your projects.' },
   { tab: 'permissions', label: 'Permissions', Icon: ShieldCheck, detail: 'The defaults for all your projects and backends on this instance. Backends, projects and sessions can override them.' },
   { tab: 'appearance', label: 'Appearance', Icon: Monitor, detail: 'How this client looks and lays itself out, on this device.' },
@@ -114,6 +116,7 @@ export function SettingsView() {
           {current.tab === 'backends' && <BackendsPane />}
           {current.tab === 'permissions' && <DefaultPolicyPane />}
           {current.tab === 'directories' && <DirectorySettings />}
+          {current.tab === 'memory' && <CoreMemorySettings />}
         </div>
       </div>
     </div>
@@ -126,6 +129,15 @@ const THEMES: { value: Theme; label: string; Icon: LucideIcon }[] = [
   { value: 'light', label: 'Light', Icon: Sun },
   { value: 'dark', label: 'Dark', Icon: Moon },
 ];
+
+function CoreMemorySettings() {
+  const [creating, setCreating] = useState(false);
+  useShortcut('n', useCallback(() => setCreating(true), []));
+  return <section data-tour="global-memory" className="space-y-4">
+    <div className="flex justify-end">{!creating && <NewButton label="Record decision" onClick={() => setCreating(true)} />}</div>
+    <DecisionsPane projectId="" creating={creating} onCreatingChange={setCreating} />
+  </section>;
+}
 
 function DirectorySettings() {
   const selected = useSelectedProject();

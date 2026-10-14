@@ -23,6 +23,7 @@ const (
 	NameTaskComplete             Name = "task_complete"
 	NameTaskReady                Name = "task_ready"
 	NameDecisionCreate           Name = "decision_create"
+	NameMemorySearch             Name = "memory_search"
 	NameProjectHistorySearch     Name = "project_history_search"
 	NameKnownDirectoryRegister   Name = "known_directory_register"
 	NameKnownDirectoryBind       Name = "known_directory_bind"
@@ -100,8 +101,9 @@ func Specs() []Spec {
 		},
 		{
 			Name: NameDecisionCreate,
-			Description: "Record durable facts, preferences and decisions in Threavia project memory. " +
+			Description: "Record durable facts, preferences and decisions in Threavia memory. " +
 				"Use this when the user asks you to remember something, instead of writing a local memory file. " +
+				"Project scope is the default. Use global only for facts the user wants shared across all their projects on this Core. " +
 				"Mark it IMPORTANT when every future session must know it; IMPORTANT " +
 				"decisions are injected into the context of every later run. " +
 				"Set supersedes when this replaces an earlier decision.",
@@ -110,7 +112,17 @@ func Specs() []Spec {
 				"content":    str("The reasoning, and what it rules out."),
 				"importance": map[string]any{"type": "string", "enum": []string{"IMPORTANT", "NORMAL"}},
 				"supersedes": str("Identifier of the decision this one replaces."),
+				"scope":      map[string]any{"type": "string", "enum": []string{"project", "global"}, "description": "Project (default) records it here; global shares it across all your projects on this Core."},
 			}, "title"),
+		},
+		{
+			Name: NameMemorySearch,
+			Description: "Find active facts and decisions in the current project's memory and your global Core memory. " +
+				"NORMAL facts are searched on demand; IMPORTANT ones also travel with each job. Use scope global to search only shared facts. Session history remains project-scoped through project_history_search.",
+			InputSchema: object(map[string]any{
+				"query": str("The fact or decision to look for."),
+				"scope": map[string]any{"type": "string", "enum": []string{"project", "global"}, "description": "Project (default) includes this project and global memory; global searches only shared facts."},
+			}, "query"),
 		},
 		{
 			Name: NameTaskCreate,

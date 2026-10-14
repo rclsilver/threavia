@@ -199,6 +199,17 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) (*
 	// Active IMPORTANT decisions only. A superseded or NORMAL one is searchable
 	// on demand, and injecting either would spend context on something that is
 	// no longer true or not important enough to have been marked so.
+	globals, err := s.store.ImportantGlobalDecisions(ctx, jc.OwnerID, contextDecisionLimit)
+	if err != nil {
+		return nil, fmt.Errorf("read the global decisions: %w", err)
+	}
+	for _, decision := range globals {
+		// Keep using the established context field so existing backends read
+		// global memory too, while making its wider scope visible to the agent.
+		pc.Decisions = append(pc.Decisions, &backendv1.ContextDecision{
+			Id: string(decision.ID), Title: "[Core memory] " + decision.Title, Content: decision.Content,
+		})
+	}
 	decisions, err := s.store.ImportantDecisions(ctx, jc.ProjectID, contextDecisionLimit)
 	if err != nil {
 		return nil, fmt.Errorf("read the project decisions: %w", err)

@@ -9,6 +9,10 @@ Each conversation, including a new session's draft, opens in its own locked
 editor group. Files, diffs and artifact previews open in a separate group;
 opening the same session again brings its existing conversation forward.
 
+The Memory view's **Switch Memory Scope…** button selects the current project
+or **Global** memory on a Core. Global facts survive deleting a project, and
+pinned global decisions are read by agents in all your projects on that Core.
+
 - **Sidebar.** The Threavia view in the activity bar lists what waits for you
   (approvals and questions, across every Project), your pinned sessions, and
   each Project's sessions, waiting ones first. A session's row shows whether it
@@ -68,6 +72,8 @@ opening the same session again brings its existing conversation forward.
   - **Write.** Enter sends, Shift+Enter is a newline. While a job runs, choose
     Queue, Next step or Interrupt (as far as the backend allows), and Stop it
     with the button or Escape. What you were writing is kept until sent.
+  - **Copy Markdown.** Copy an agent response with its original headings,
+    lists, links and fenced code blocks, ready to paste into another application.
   - **Pin, unpin, open in the browser** from the tab's title bar.
   - **Quotas.** Hover or focus the backend in the header, or click it, to see
     its full quota report. Claude and Codex refresh account quotas through their CLI every minute

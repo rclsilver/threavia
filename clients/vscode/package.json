@@ -345,6 +345,12 @@
         "icon": "$(add)"
       },
       {
+        "command": "threavia.switchMemoryScope",
+        "title": "Switch Memory Scope…",
+        "category": "Threavia",
+        "icon": "$(globe)"
+      },
+      {
         "command": "threavia.openDecision",
         "title": "Open Decision",
         "category": "Threavia"
@@ -534,7 +540,11 @@
         },
         {
           "command": "threavia.recordDecision",
-          "when": "threavia.state == ready && threavia.hasProject"
+          "when": "threavia.state == ready"
+        },
+        {
+          "command": "threavia.switchMemoryScope",
+          "when": "threavia.state == ready"
         },
         {
           "command": "threavia.renameCore",
@@ -610,11 +620,11 @@
         },
         {
           "command": "threavia.recordDecision",
-          "when": "view == threavia.memory && threavia.state == ready && threavia.hasProject",
+          "when": "view == threavia.memory && threavia.state == ready",
           "group": "navigation@1"
         },
         {
-          "command": "threavia.switchProject",
+          "command": "threavia.switchMemoryScope",
           "when": "view == threavia.memory && threavia.state == ready",
           "group": "navigation@2"
         },

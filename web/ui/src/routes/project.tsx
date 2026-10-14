@@ -124,6 +124,10 @@ export function MemoryView() {
       subtitle="What was decided, and why."
       action={!creating && <NewButton label="Record decision" onClick={() => setCreating(true)} />}
     >
+      <p className="text-muted text-sm">
+        <Link to="/settings/$tab" params={{ tab: 'memory' }} className="text-accent underline underline-offset-2">Core memory</Link>
+        {' '}holds facts shared across all your projects.
+      </p>
       <DecisionsPane projectId={projectId} creating={creating} onCreatingChange={setCreating} />
     </Section>
   );
@@ -258,7 +262,7 @@ function copy(text: string) {
  * Job, then what is on record. Core lists only what is current; a superseded
  * decision lives on in the one that replaced it.
  */
-function DecisionsPane({
+export function DecisionsPane({
   projectId,
   creating,
   onCreatingChange,
@@ -268,17 +272,19 @@ function DecisionsPane({
   onCreatingChange: (open: boolean) => void;
 }) {
   const decisions = useDecisions(projectId);
-  const all = decisions.data ?? [];
+  const [query, setQuery] = useState('');
+  const all = (decisions.data ?? []).filter((decision) => `${decision.title}\n${decision.content ?? ''}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   const important = all.filter((decision) => decision.importance === 'IMPORTANT');
   const recorded = all.filter((decision) => decision.importance !== 'IMPORTANT');
 
   return (
     <>
+      <ActionError error={decisions.error} outcome="Memory could not be read" recovery="Refresh to try again." />
+      <Input aria-label="Search memory" placeholder="Find a fact or decision…" value={query} onChange={(event) => setQuery(event.target.value)} />
       {creating && <NewDecision projectId={projectId} onClose={() => onCreatingChange(false)} />}
       {decisions.isPending ? null : all.length === 0 && !creating ? (
         <EmptyState>
-          Nothing recorded yet. Agents record what they decide as they work; a decision of your own
-          goes in with <span className="text-text font-medium">Record decision</span>.
+          {query ? 'No facts or decisions match this search.' : <>Nothing recorded yet. Agents record what they decide as they work; a decision of your own goes in with <span className="text-text font-medium">Record decision</span>.</>}
         </EmptyState>
       ) : null}
       {important.length > 0 && (

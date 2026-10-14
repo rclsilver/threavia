@@ -6,18 +6,19 @@ import (
 	"github.com/rclsilver/threavia/internal/core/domain"
 )
 
-const decisionColumns = `d.id, d.project_id, d.title, d.content, d.importance,
-	d.status, d.supersedes, d.created_by_job_id, d.created_at, d.updated_at`
+const decisionColumns = `d.id, COALESCE(d.project_id::text, ''), d.title, d.content, d.importance,
+	d.status, d.supersedes, d.created_by_job_id, d.created_at, d.updated_at, d.owner_id`
 
 // CreateDecision inserts a Decision.
 func (s *Store) CreateDecision(ctx context.Context, decision *domain.Decision) error {
 	err := s.q.QueryRow(ctx, `
-		INSERT INTO decisions (id, project_id, title, content, importance, status, supersedes, created_by_job_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING created_at, updated_at`,
+		INSERT INTO decisions (id, project_id, title, content, importance, status, supersedes, created_by_job_id, owner_id)
+		VALUES ($1, NULLIF($2::text, '')::uuid, $3, $4, $5, $6, $7, $8,
+			COALESCE(NULLIF($9::text, ''), (SELECT owner_id FROM projects WHERE id = NULLIF($2::text, '')::uuid)))
+		RETURNING created_at, updated_at, owner_id`,
 		decision.ID, decision.ProjectID, decision.Title, decision.Content,
-		decision.Importance, decision.Status, decision.Supersedes, decision.CreatedByJobID,
-	).Scan(&decision.CreatedAt, &decision.UpdatedAt)
+		decision.Importance, decision.Status, decision.Supersedes, decision.CreatedByJobID, decision.OwnerID,
+	).Scan(&decision.CreatedAt, &decision.UpdatedAt, &decision.OwnerID)
 	return classify(err, "create decision")
 }
 
@@ -45,8 +46,7 @@ func (s *Store) ReviveDecision(ctx context.Context, id domain.DecisionID) error 
 func (s *Store) SetDecisionImportance(ctx context.Context, ownerID domain.UserID, id domain.DecisionID, importance domain.DecisionImportance) (domain.Decision, error) {
 	return scanDecision(s.q.QueryRow(ctx, `
 		UPDATE decisions d SET importance = $3, updated_at = now()
-		FROM projects p
-		WHERE d.id = $1 AND d.project_id = p.id AND p.owner_id = $2
+		WHERE d.id = $1 AND d.owner_id = $2
 		RETURNING `+decisionColumns, id, ownerID, importance))
 }
 
@@ -57,8 +57,7 @@ func (s *Store) SetDecisionImportance(ctx context.Context, ownerID domain.UserID
 func (s *Store) DeleteDecision(ctx context.Context, ownerID domain.UserID, id domain.DecisionID) error {
 	tag, err := s.q.Exec(ctx, `
 		DELETE FROM decisions d
-		USING projects p
-		WHERE d.id = $1 AND d.project_id = p.id AND p.owner_id = $2`, id, ownerID)
+		WHERE d.id = $1 AND d.owner_id = $2`, id, ownerID)
 	if err != nil {
 		return classify(err, "delete a decision")
 	}
@@ -72,8 +71,8 @@ func (s *Store) DeleteDecision(ctx context.Context, ownerID domain.UserID, id do
 func (s *Store) GetDecision(ctx context.Context, ownerID domain.UserID, id domain.DecisionID) (domain.Decision, error) {
 	return scanDecision(s.q.QueryRow(ctx, `
 		SELECT `+decisionColumns+`
-		FROM decisions d JOIN projects p ON p.id = d.project_id
-		WHERE d.id = $1 AND p.owner_id = $2`, id, ownerID))
+		FROM decisions d
+		WHERE d.id = $1 AND d.owner_id = $2`, id, ownerID))
 }
 
 // DecisionByID returns a Decision without an ownership check, for the
@@ -87,8 +86,9 @@ func (s *Store) DecisionByID(ctx context.Context, id domain.DecisionID) (domain.
 func (s *Store) ListDecisions(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID, includeSuperseded bool) ([]domain.Decision, error) {
 	rows, err := s.q.Query(ctx, `
 		SELECT `+decisionColumns+`
-		FROM decisions d JOIN projects p ON p.id = d.project_id
-		WHERE d.project_id = $1 AND p.owner_id = $2 AND ($3 OR d.status = 'ACTIVE')
+		FROM decisions d
+		WHERE (d.project_id = NULLIF($1::text, '')::uuid OR ($1 = '' AND d.project_id IS NULL))
+		  AND d.owner_id = $2 AND ($3 OR d.status = 'ACTIVE')
 		ORDER BY d.created_at DESC`, projectID, ownerID, includeSuperseded)
 	if err != nil {
 		return nil, classify(err, "list decisions")
@@ -135,6 +135,35 @@ func (s *Store) SearchDecisions(ctx context.Context, projectID domain.ProjectID,
 func scanDecision(row scanner) (domain.Decision, error) {
 	var d domain.Decision
 	err := row.Scan(&d.ID, &d.ProjectID, &d.Title, &d.Content, &d.Importance,
-		&d.Status, &d.Supersedes, &d.CreatedByJobID, &d.CreatedAt, &d.UpdatedAt)
+		&d.Status, &d.Supersedes, &d.CreatedByJobID, &d.CreatedAt, &d.UpdatedAt, &d.OwnerID)
 	return d, classify(err, "read decision")
+}
+
+// ImportantGlobalDecisions is a separate budget, so shared memory cannot push
+// a Project's important decisions out of its existing context allowance.
+func (s *Store) ImportantGlobalDecisions(ctx context.Context, ownerID domain.UserID, limit int) ([]domain.Decision, error) {
+	rows, err := s.q.Query(ctx, `SELECT `+decisionColumns+` FROM decisions d
+		WHERE d.owner_id = $1 AND d.project_id IS NULL
+		  AND d.status = 'ACTIVE' AND d.importance = 'IMPORTANT'
+		ORDER BY d.created_at DESC LIMIT $2`, ownerID, limit)
+	if err != nil {
+		return nil, classify(err, "list important global decisions")
+	}
+	defer rows.Close()
+	return collect(rows, scanDecision, "list important global decisions")
+}
+
+// SearchMemory includes the owner's global facts and the current Project's
+// facts. With no Project, only globals match; other Projects stay private.
+func (s *Store) SearchMemory(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID, query string, limit int) ([]domain.Decision, error) {
+	rows, err := s.q.Query(ctx, `SELECT `+decisionColumns+` FROM decisions d
+		WHERE d.owner_id = $1 AND (d.project_id IS NULL OR d.project_id = NULLIF($2::text, '')::uuid)
+		  AND d.status = 'ACTIVE' AND d.search @@ websearch_to_tsquery('simple', $3)
+		ORDER BY ts_rank(d.search, websearch_to_tsquery('simple', $3)) DESC, d.created_at DESC
+		LIMIT $4`, ownerID, projectID, query, limit)
+	if err != nil {
+		return nil, classify(err, "search memory")
+	}
+	defer rows.Close()
+	return collect(rows, scanDecision, "search memory")
 }

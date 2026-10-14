@@ -538,9 +538,9 @@ export const tasks = [
 ];
 
 // createdByJobId marks a decision an agent recorded through decision_create.
-const decision = (n: number, projectId: string, title: string, content: string, importance: string, minutesAgo: number, createdByJobId?: string) => ({
+const decision = (n: number, projectId: string | undefined, title: string, content: string, importance: string, minutesAgo: number, createdByJobId?: string) => ({
   id: id('d000000b', n),
-  projectId,
+  ...(projectId ? { projectId } : {}),
   title,
   content,
   importance,
@@ -551,6 +551,8 @@ const decision = (n: number, projectId: string, title: string, content: string, 
 });
 
 export const decisions = [
+  decision(6, undefined, 'Keep public documentation in English', 'Shared across the infrastructure and website projects. Use the project’s terminology and keep examples fictitious.', 'IMPORTANT', 60 * 24 * 20),
+  decision(7, undefined, 'Reports use Markdown', 'A shared convention for notes that move between projects.', 'NORMAL', 60 * 24 * 12),
   // Recorded by the agent of the ingress session, at the end of its first job.
   decision(1, IDS.homelab, 'Ingress goes through MetalLB, never the host network', 'Two ingress controllers cannot both hold host port 443 on one node. Every ingress is a LoadBalancer service on the 192.168.1.240–250 pool.', 'IMPORTANT', 61.9, id('d0000006', 1)),
   decision(2, IDS.homelab, 'Helm charts are pinned to an exact version', 'A floating chart version broke the ingress rollout once. Upgrades are a commit, never a side effect of a sync.', 'IMPORTANT', 60 * 24 * 2),

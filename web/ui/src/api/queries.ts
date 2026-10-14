@@ -746,8 +746,8 @@ export function useDeleteDecision() {
 export function useDecisions(projectId: string | undefined) {
   return useQuery({
     queryKey: keys.decisions(projectId ?? ''),
-    queryFn: () => api.get<List<Decision>>(`/api/v1/projects/${projectId}/decisions`).then(items),
-    enabled: Boolean(projectId),
+    queryFn: () => api.get<List<Decision>>(projectId ? `/api/v1/projects/${projectId}/decisions` : '/api/v1/me/decisions').then(items),
+    enabled: projectId !== undefined,
   });
 }
 
@@ -755,7 +755,7 @@ export function useCreateDecision(projectId: string) {
   const queries = useQueryClient();
   return useMutation({
     mutationFn: (input: { title: string; content: string; importance: string }) =>
-      api.post<Decision>(`/api/v1/projects/${projectId}/decisions`, input),
+      api.post<Decision>(projectId ? `/api/v1/projects/${projectId}/decisions` : '/api/v1/me/decisions', input),
     onSuccess: () => queries.invalidateQueries({ queryKey: ['decisions'] }),
   });
 }
@@ -766,9 +766,9 @@ export function useCreateDecision(projectId: string) {
  * Shown at once: the row moves between its groups as the mark is pressed, and
  * goes back if Core refuses.
  */
-export function useSetDecisionImportance(projectId: string) {
+export function useSetDecisionImportance(projectId: string | undefined) {
   const queries = useQueryClient();
-  const key = keys.decisions(projectId);
+  const key = keys.decisions(projectId ?? '');
   return useMutation({
     mutationFn: ({ id, importance }: { id: string; importance: Decision['importance'] }) =>
       api.patch<Decision>(`/api/v1/decisions/${id}`, { importance }),

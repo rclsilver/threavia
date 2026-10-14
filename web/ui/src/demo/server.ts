@@ -73,6 +73,17 @@ function createDirectory(body: Json, projectId?: string) {
   state.directories.push(directory); return directory;
 }
 
+function recordDecision(body: Json, projectId?: string) {
+  const title = text(body.title).trim();
+  if (!title) throw new ApiError(400, 'invalid', 'Enter a decision title.');
+  const previous = body.supersedes ? state.decisions.find((entry) => entry.id === body.supersedes && entry.projectId === projectId) : undefined;
+  if (body.supersedes && (!previous || previous.status !== 'ACTIVE')) throw new ApiError(400, 'invalid', 'Choose an active decision in the same memory scope.');
+  const decision = { id: newId(), ...(projectId && { projectId }), title, content: text(body.content).trim(), importance: body.importance ?? 'NORMAL', status: 'ACTIVE', ...(previous && { supersedes: previous.id }), createdAt: nowIso(), updatedAt: nowIso() };
+  if (previous) previous.status = 'SUPERSEDED';
+  state.decisions.unshift(decision);
+  return decision;
+}
+
 function timelineOf(id: string) {
   sessionOf(id);
   return (state.timelines[id] ??= { runs: [], jobs: [], events: [] });
@@ -360,12 +371,16 @@ const routes: [string, RegExp, Handler][] = [
     return task;
   }],
 
-  ['GET', /^\/api\/v1\/projects\/([^/]+)\/decisions$/, (m) =>
-    list(state.decisions.filter((entry) => entry.projectId === m[1] && entry.status === 'ACTIVE'))],
-  ['POST', /^\/api\/v1\/projects\/([^/]+)\/decisions$/, (m, body) => {
-    const decision = { id: newId(), projectId: m[1], title: body.title, content: body.content ?? '', importance: body.importance ?? 'NORMAL', status: 'ACTIVE', createdAt: nowIso(), updatedAt: nowIso() };
-    state.decisions.unshift(decision);
-    return decision;
+  ['GET', /^\/api\/v1\/projects\/([^/]+)\/decisions$/, (m, _b, query) =>
+    list(state.decisions.filter((entry) => entry.projectId === m[1] && (query.get('includeSuperseded') === 'true' || entry.status === 'ACTIVE')))],
+  ['POST', /^\/api\/v1\/projects\/([^/]+)\/decisions$/, (m, body) => recordDecision(body, m[1])],
+  ['GET', /^\/api\/v1\/me\/decisions$/, (_m, _b, query) =>
+    list(state.decisions.filter((entry) => !entry.projectId && (query.get('includeSuperseded') === 'true' || entry.status === 'ACTIVE')))],
+  ['POST', /^\/api\/v1\/me\/decisions$/, (_m, body) => recordDecision(body)],
+  ['GET', /^\/api\/v1\/me\/memory\/search$/, (_m, _b, query) => {
+    const terms = (query.get('q') ?? '').toLowerCase().trim();
+    if (!terms) throw new ApiError(400, 'invalid', 'Enter a search query.');
+    return list(state.decisions.filter((entry) => !entry.projectId && entry.status === 'ACTIVE' && `${text(entry.title)} ${text(entry.content)}`.toLowerCase().includes(terms)));
   }],
   ['PATCH', /^\/api\/v1\/decisions\/([^/]+)$/, (m, body) => {
     const decision = state.decisions.find((entry) => entry.id === m[1]);
@@ -374,7 +389,14 @@ const routes: [string, RegExp, Handler][] = [
     return decision;
   }],
   ['DELETE', /^\/api\/v1\/decisions\/([^/]+)$/, (m) => {
+    const removed = state.decisions.find((entry) => entry.id === m[1]);
+    if (!removed) throw notFound('This decision');
+    if (removed.supersedes) {
+      const previous = state.decisions.find((entry) => entry.id === removed.supersedes);
+      if (previous) previous.status = 'ACTIVE';
+    }
     state.decisions = state.decisions.filter((entry) => entry.id !== m[1]);
+    for (const entry of state.decisions) if (entry.supersedes === m[1]) delete entry.supersedes;
   }],
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/search$/, () => ({ tasks: [], decisions: [], history: [] })],
 
