@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -37,12 +38,15 @@ type ScheduleInput struct {
 
 // CreateSchedule adds a Schedule to a Session.
 func (s *Service) CreateSchedule(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, in ScheduleInput) (domain.Schedule, error) {
-	if _, err := s.store.GetSession(ctx, identity.UserID, sessionID); err != nil {
+	session, err := s.store.GetSession(ctx, identity.UserID, sessionID)
+	if err != nil {
 		return domain.Schedule{}, translate(err)
 	}
 	created := domain.Schedule{
 		ID:        domain.ScheduleID(domain.NewUUID()),
 		SessionID: sessionID,
+		ProjectID: session.ProjectID,
+		OwnerID:   identity.UserID,
 		Enabled:   true,
 		Timezone:  "Europe/Paris",
 	}
@@ -52,9 +56,16 @@ func (s *Service) CreateSchedule(ctx context.Context, identity auth.Identity, se
 	if err := s.planNext(&created, s.now()); err != nil {
 		return domain.Schedule{}, err
 	}
-	if err := s.store.CreateSchedule(ctx, &created); err != nil {
+	b := &batch{ownerID: identity.UserID}
+	if err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		if err := tx.CreateSchedule(ctx, &created); err != nil {
+			return err
+		}
+		return s.recordScheduleChange(ctx, tx, b, created, events.TypeScheduleCreated)
+	}); err != nil {
 		return domain.Schedule{}, translate(err)
 	}
+	s.flush(b)
 	return s.withUpcoming(created), nil
 }
 
@@ -77,26 +88,70 @@ func (s *Service) ListSchedules(ctx context.Context, identity auth.Identity, ses
 // next run is worked out again from now: an edited time applies from the
 // next occurrence, never to one already past.
 func (s *Service) UpdateSchedule(ctx context.Context, identity auth.Identity, id domain.ScheduleID, in ScheduleInput) (domain.Schedule, error) {
-	current, err := s.store.GetSchedule(ctx, identity.UserID, id)
+	var current domain.Schedule
+	b := &batch{ownerID: identity.UserID}
+	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		var err error
+		current, err = tx.LockSchedule(ctx, identity.UserID, id)
+		if err != nil {
+			return err
+		}
+		if err := applyScheduleInput(&current, in); err != nil {
+			return err
+		}
+		if err := s.planNext(&current, s.now()); err != nil {
+			return err
+		}
+		if err := tx.UpdateSchedule(ctx, &current); err != nil {
+			return err
+		}
+		return s.recordScheduleChange(ctx, tx, b, current, events.TypeScheduleUpdated)
+	})
 	if err != nil {
 		return domain.Schedule{}, translate(err)
 	}
-	if err := applyScheduleInput(&current, in); err != nil {
-		return domain.Schedule{}, err
-	}
-	if err := s.planNext(&current, s.now()); err != nil {
-		return domain.Schedule{}, err
-	}
-	if err := s.store.UpdateSchedule(ctx, &current); err != nil {
-		return domain.Schedule{}, translate(err)
-	}
+	s.flush(b)
 	return s.withUpcoming(current), nil
 }
 
 // DeleteSchedule removes a Schedule. What it already sent stays in the
 // Session.
 func (s *Service) DeleteSchedule(ctx context.Context, identity auth.Identity, id domain.ScheduleID) error {
-	return translate(s.store.DeleteSchedule(ctx, identity.UserID, id))
+	b := &batch{ownerID: identity.UserID}
+	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		current, err := tx.LockSchedule(ctx, identity.UserID, id)
+		if err != nil {
+			return err
+		}
+		if err := tx.DeleteSchedule(ctx, identity.UserID, id); err != nil {
+			return err
+		}
+		return s.recordScheduleChange(ctx, tx, b, current, events.TypeScheduleDeleted)
+	})
+	if err != nil {
+		return translate(err)
+	}
+	s.flush(b)
+	return nil
+}
+
+// The state, audit and persistent session event commit together.
+func (s *Service) recordScheduleChange(ctx context.Context, tx *postgres.Store, b *batch, sc domain.Schedule, kind events.Type) error {
+	jobID := managerJobFrom(ctx)
+	payload := map[string]any{"scheduleId": sc.ID, "cron": sc.Cron, "timezone": sc.Timezone, "message": sc.Message, "enabled": sc.Enabled}
+	actor := string(sc.OwnerID)
+	if jobID != "" {
+		payload["actorJobId"] = jobID
+		actor = "agent"
+	}
+	detail, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	if err := tx.RecordAudit(ctx, postgres.AuditEntry{OwnerID: sc.OwnerID, ActorID: actor, Action: string(kind), ProjectID: string(sc.ProjectID), SessionID: string(sc.SessionID), JobID: string(jobID), SubjectID: string(sc.ID), Channel: domain.ChannelFrom(ctx).String(), Detail: detail}); err != nil {
+		return err
+	}
+	return s.appendAll(ctx, tx, b, record{eventType: kind, scope: domain.Scope{ProjectID: sc.ProjectID, SessionID: sc.SessionID, JobID: jobID}, payload: payload})
 }
 
 // RunScheduleNow sends a Schedule's message at once, as a person trying it

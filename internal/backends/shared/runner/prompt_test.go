@@ -25,3 +25,14 @@ func TestMemoryRequestsUseProjectToolsInsteadOfLocalFiles(t *testing.T) {
 		t.Error("a job without Core tools was told to save through unavailable memory tools")
 	}
 }
+
+func TestSchedulingUsesPersistentThreaviaTools(t *testing.T) {
+	for _, params := range []StartParams{{}, {CoreTools: []mcp.CoreTool{{Name: "schedule_create"}}}} {
+		prompt := SystemPrompt(params, nil, "")
+		for _, want := range []string{"mcp__threavia__schedule_list", "schedule_create", "schedule_update", "schedule_delete", "busy", "offline", "never accumulated or sent late", "CronCreate", "ScheduleWakeup", "tools are unavailable"} {
+			if !strings.Contains(prompt, want) {
+				t.Errorf("missing %q", want)
+			}
+		}
+	}
+}

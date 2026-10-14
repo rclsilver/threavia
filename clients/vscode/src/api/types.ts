@@ -67,6 +67,9 @@ export interface EventPayloads {
   'session.created': { title: string; managerSessionId?: string };
   'user.message': { text: string; attachments?: { artifactId: string; filename: string; mimeType: string; size: number }[]; delivery?: 'NOW' | 'NEXT'; scheduleId?: string; actorJobId?: string };
   'schedule.skipped': { scheduleId: string; outcome: string; reason: string; due: string };
+  'schedule.created': { scheduleId: string; cron: string; timezone: string; message: string; enabled: boolean; actorJobId?: string };
+  'schedule.updated': { scheduleId: string; cron: string; timezone: string; message: string; enabled: boolean; actorJobId?: string };
+  'schedule.deleted': { scheduleId: string; cron: string; timezone: string; message: string; enabled: boolean; actorJobId?: string };
   'agent.message': { text: string };
   'tool.started': { toolCallId: string; name: string; input?: Record<string, unknown> };
   // The backend keeps a bounded excerpt of the output and marks it with an

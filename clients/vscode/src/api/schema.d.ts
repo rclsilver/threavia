@@ -4314,6 +4314,10 @@ export interface components {
              *       channel agent and actorJobId for an agent manager's answer
              *     - `schedule.skipped`: `{ scheduleId, outcome, reason, due }`, a
              *       scheduled message that was not sent
+             *     - `schedule.created`, `schedule.updated`, `schedule.deleted`:
+             *       `{ scheduleId, cron, timezone, message, enabled, actorJobId? }`,
+             *       session-scoped schedule changes. Refresh schedules and audit.
+             *       actorJobId identifies the originating agent Job when present.
              *     - `agent.message`: `{ text }`
              *     - `tool.started`: `{ toolCallId, name, input }`
              *     - `tool.completed`: `{ toolCallId, name, output }`, the output a

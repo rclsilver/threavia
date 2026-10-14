@@ -125,7 +125,7 @@ const STEPS: Step[] = [
     path: `${SESSION(IDS.backups)}/settings/schedules`,
     target: 'main .max-w-3xl > :last-child',
     title: 'Work on a schedule',
-    body: 'A session can be sent the same message every morning. A run that would land on busy work is skipped, and the conversation says so.',
+    body: 'Ask the agent to schedule a recurring message, or manage it here. Creation, changes and deletion appear in the conversation and audit. A run that would land on busy work is skipped.',
   },
   {
     path: PROJECT('tasks'),

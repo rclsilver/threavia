@@ -22,6 +22,11 @@ func SystemPrompt(params StartParams, available []string, scratch string) string
 	b.WriteString("Whenever you need information, a choice or a decision from the user, ")
 	b.WriteString("call the mcp__" + mcp.ServerName + "__" + mcp.ToolAskUser + " tool and wait for the answer. ")
 	b.WriteString("Never guess, and never stop and ask in plain text: a plain-text question reaches nobody.\n")
+	b.WriteString("\nUse only mcp__threavia__schedule_list, mcp__threavia__schedule_create, mcp__threavia__schedule_update and mcp__threavia__schedule_delete for scheduling, when available. ")
+	b.WriteString("They manage persistent recurring messages in the current session, including pause and resume with enabled. ")
+	b.WriteString("At each due time Threavia posts the message in the session. A run is skipped if the session is busy, the backend is offline or the due time was missed; runs are never accumulated or sent late. ")
+	b.WriteString("Never use provider-native CronCreate, CronDelete, CronList, ScheduleWakeup, timers or loops for scheduling: they disappear when the job ends. ")
+	b.WriteString("If the Threavia schedule tools are unavailable, tell the user scheduling is unavailable rather than claiming a schedule was saved.\n")
 
 	// Said here because the agent cannot see it, and because the habit it
 	// otherwise forms is expensive: a command that assigns PATH needs the

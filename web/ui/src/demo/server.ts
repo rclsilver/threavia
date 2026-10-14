@@ -235,6 +235,13 @@ function record(action: string, rest: Json) {
   state.audit.unshift({ id: newId(), ownerId: 'alex', actorId: 'alex', action, channel: 'web', createdAt: nowIso(), ...rest });
 }
 
+function recordScheduleChange(schedule: Json, action: string) {
+  const sessionId = String(schedule.sessionId);
+  const detail = { scheduleId: schedule.id, cron: schedule.cron, timezone: schedule.timezone, message: schedule.message, enabled: schedule.enabled };
+  pushEvent(sessionId, action, detail);
+  record(action, { projectId: sessionOf(sessionId).projectId, sessionId, subjectId: schedule.id, detail });
+}
+
 type Handler = (match: RegExpMatchArray, body: Json, query: URLSearchParams) => unknown;
 
 const routes: [string, RegExp, Handler][] = [
@@ -524,8 +531,9 @@ const routes: [string, RegExp, Handler][] = [
   }],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/schedules$/, (m) => list(state.schedules.filter((entry) => entry.sessionId === m[1]))],
   ['POST', /^\/api\/v1\/sessions\/([^/]+)\/schedules$/, (m, body) => {
-    const schedule = { id: newId(), sessionId: m[1], cron: body.cron, timezone: body.timezone ?? 'Europe/Paris', message: body.message, enabled: true, upcoming: [], createdAt: nowIso(), updatedAt: nowIso() };
+    const schedule = { id: newId(), sessionId: m[1], cron: body.cron, timezone: body.timezone ?? 'Europe/Paris', message: body.message, enabled: body.enabled ?? true, upcoming: [], createdAt: nowIso(), updatedAt: nowIso() };
     state.schedules.push(schedule);
+    recordScheduleChange(schedule, 'schedule.created');
     return schedule;
   }],
   ['PATCH', /^\/api\/v1\/schedules\/([^/]+)$/, (m, body) => {
@@ -533,9 +541,13 @@ const routes: [string, RegExp, Handler][] = [
     if (!schedule) throw notFound('This schedule');
     Object.assign(schedule, body, { updatedAt: nowIso() });
     if (body.enabled === false) delete schedule.nextRunAt;
+    recordScheduleChange(schedule, 'schedule.updated');
     return schedule;
   }],
   ['DELETE', /^\/api\/v1\/schedules\/([^/]+)$/, (m) => {
+    const schedule = state.schedules.find((entry) => entry.id === m[1]);
+    if (!schedule) throw notFound('This schedule');
+    recordScheduleChange(schedule, 'schedule.deleted');
     state.schedules = state.schedules.filter((entry) => entry.id !== m[1]);
   }],
   ['POST', /^\/api\/v1\/schedules\/([^/]+)\/run$/, (m) => {

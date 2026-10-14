@@ -150,7 +150,7 @@ function Entry({ entry, context, last }: { entry: AuditEntry; context: Context; 
   );
 }
 
-const CHANNELS: Record<string, string> = { web: 'the web', api: 'the API', mobile: 'the phone', cli: 'the command line' };
+const CHANNELS: Record<string, string> = { web: 'the web', api: 'the API', mobile: 'the phone', cli: 'the command line', agent: 'the agent' };
 
 function SessionLink({ id, context }: { id: string; context: Context }) {
   const session = context.session(id);
@@ -212,6 +212,15 @@ function describe(entry: AuditEntry, context: Context): { Icon: LucideIcon; tone
       tone: TONES.accent,
       title: <>Changed the model of <SessionLink id={entry.sessionId ?? ''} context={context} /></>,
       body: <p className="text-muted text-sm">Model: {text(detail.model) || 'Backend default'} · Effort: {text(detail.effort) || 'Backend default'}. Applies to the next job.</p>,
+    };
+  }
+
+  if (['schedule.created', 'schedule.updated', 'schedule.deleted'].includes(entry.action)) {
+    return {
+      Icon: SlidersHorizontal,
+      tone: TONES.accent,
+      title: <>{humanise(entry.action.slice(9))} a schedule in <SessionLink id={entry.sessionId ?? ''} context={context} /></>,
+      body: <p className="text-muted text-sm">{text(detail.cron)} ({text(detail.timezone)}) · {detail.enabled ? 'Enabled' : 'Paused'} · {text(detail.message)}</p>,
     };
   }
 

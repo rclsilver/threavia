@@ -127,6 +127,11 @@ var networkTools = map[string]bool{
 // rules this policy gave it, so there is no classifying left to do here: either
 // the action is refused, or it is the kind of thing this mode asks about.
 func (p Policy) Evaluate(tool string, input map[string]any) Decision {
+	for _, name := range nativeScheduleTools {
+		if tool == name {
+			return Decision{Deny, "Use mcp__threavia__schedule_list/create/update/delete for scheduling. Provider timers disappear when the job ends; Threavia schedules persist."}
+		}
+	}
 	switch {
 	case writeTools[tool]:
 		if !p.AllowFilesystemWrite {

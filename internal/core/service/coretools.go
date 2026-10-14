@@ -59,6 +59,8 @@ func (s *Service) CoreToolRequest(ctx context.Context, instanceID domain.Backend
 // invokeTool dispatches one Core Tool call.
 func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc jobScope, name tools.Name, input map[string]any, file []byte) (map[string]any, error) {
 	switch name {
+	case tools.NameScheduleList, tools.NameScheduleCreate, tools.NameScheduleUpdate, tools.NameScheduleDelete:
+		return s.scheduleTool(ctx, identity, jc, name, input)
 	case tools.NameArtifactPublish:
 		return s.publishArtifact(ctx, identity, jc, input, file)
 

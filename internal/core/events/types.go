@@ -66,11 +66,17 @@ const (
 	// TypeScheduleSkipped says, in the Session, that a scheduled message was
 	// not sent and why.
 	TypeScheduleSkipped Type = "schedule.skipped"
+	TypeScheduleCreated Type = "schedule.created"
+	TypeScheduleUpdated Type = "schedule.updated"
+	TypeScheduleDeleted Type = "schedule.deleted"
 )
 
 // persistentTypes is the set of event types Core persists and assigns a global
 // sequence to.
 var persistentTypes = map[Type]bool{
+	TypeScheduleCreated:         true,
+	TypeScheduleUpdated:         true,
+	TypeScheduleDeleted:         true,
 	TypeBackendDefaultChanged:   true,
 	TypeDirectoryChanged:        true,
 	TypeSessionCreated:          true,

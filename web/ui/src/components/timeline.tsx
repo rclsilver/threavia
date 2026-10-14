@@ -48,6 +48,7 @@ const RENDERED = new Set([
   'workspace.changed',
   'artifact.created',
   'schedule.skipped',
+  'schedule.created', 'schedule.updated', 'schedule.deleted',
   'validation.resolved',
   'user_input.resolved',
   'job.completed',
@@ -1106,6 +1107,12 @@ function describe(event: Event): {
           </span>
         ),
       };
+    case 'schedule.created':
+    case 'schedule.updated':
+    case 'schedule.deleted': {
+      const p = payloadOf(event, event.type);
+      return { Icon: CalendarX, text: `${p?.actorJobId ? 'Agent' : 'You'} ${event.type.slice(9)} a schedule: ${p?.cron} (${p?.timezone})${event.type !== 'schedule.deleted' && !p?.enabled ? ' · paused' : ''}. ${p?.message ?? ''}` };
+    }
     case 'schedule.skipped':
       return {
         Icon: CalendarX,

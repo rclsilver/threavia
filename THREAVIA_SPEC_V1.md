@@ -175,6 +175,16 @@ late and runs never stack up. A run is claimed in PostgreSQL, so replicas never
 send it twice. This is not a Job scheduler: it only decides when a message is
 posted, and the Job it creates follows every rule above.
 
+Agents manage the calling Session's schedules through `schedule_list`,
+`schedule_create`, `schedule_update` and `schedule_delete` Core Tools. They
+reuse the same cron/timezone validation and persistence as the client API;
+`enabled: false` pauses a schedule. Provider-native timers (`CronCreate`,
+`CronDelete`, `CronList`, `ScheduleWakeup`) are denied in every execution mode,
+because their state dies with the provider process. Scheduling changes commit
+atomically with an audit entry and a session event (`schedule.created`,
+`schedule.updated`, `schedule.deleted`); an agent change identifies its
+originating Job via `actorJobId` and audit `jobId`/channel `agent`.
+
 ### 3.6 Event
 
 Events form the observable timeline and realtime synchronization mechanism.

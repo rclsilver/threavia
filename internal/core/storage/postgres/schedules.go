@@ -53,20 +53,20 @@ func (s *Store) GetSchedule(ctx context.Context, ownerID domain.UserID, id domai
 		WHERE sc.id = $1 AND p.owner_id = $2`, id, ownerID))
 }
 
+// LockSchedule reads a schedule for an atomic edit within a transaction.
+func (s *Store) LockSchedule(ctx context.Context, ownerID domain.UserID, id domain.ScheduleID) (domain.Schedule, error) {
+	return scanSchedule(s.q.QueryRow(ctx, `SELECT `+scheduleColumns+` `+scheduleFrom+`
+		WHERE sc.id = $1 AND p.owner_id = $2 FOR UPDATE OF sc`, id, ownerID))
+}
+
 // UpdateSchedule replaces what a person can change on a Schedule.
 func (s *Store) UpdateSchedule(ctx context.Context, schedule *domain.Schedule) error {
-	tag, err := s.q.Exec(ctx, `
+	err := s.q.QueryRow(ctx, `
 		UPDATE schedules SET cron = $2, timezone = $3, message = $4, enabled = $5,
 		       next_run_at = $6, updated_at = now()
-		WHERE id = $1`,
-		schedule.ID, schedule.Cron, schedule.Timezone, schedule.Message, schedule.Enabled, schedule.NextRunAt)
-	if err != nil {
-		return classify(err, "update schedule")
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
+		WHERE id = $1 RETURNING updated_at`,
+		schedule.ID, schedule.Cron, schedule.Timezone, schedule.Message, schedule.Enabled, schedule.NextRunAt).Scan(&schedule.UpdatedAt)
+	return classify(err, "update schedule")
 }
 
 // DeleteSchedule removes a Schedule the user can access.

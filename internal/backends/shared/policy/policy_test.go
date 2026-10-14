@@ -185,9 +185,9 @@ func TestEverySwitchBecomesAProviderRefusal(t *testing.T) {
 		}
 	}
 
-	// And a policy that withholds nothing refuses nothing.
-	if open := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED).Native(); len(open.Deny) != 0 {
-		t.Errorf("a policy that forbids nothing produced %v", open.Deny)
+	// Provider timers are structurally forbidden even under an open policy.
+	if open := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED).Native(); len(open.Deny) != 4 {
+		t.Errorf("an open policy should only refuse the four native scheduling tools: %v", open.Deny)
 	}
 }
 

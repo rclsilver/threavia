@@ -803,5 +803,10 @@ func TestAToolThatNeedsValidationIsAskedInEveryMode(t *testing.T) {
 		if strings.Contains(settings, "task_create") {
 			t.Errorf("%s: settings %s must not ask about task_create", mode, settings)
 		}
+		for _, name := range []string{"CronCreate", "CronDelete", "CronList", "ScheduleWakeup"} {
+			if !strings.Contains(settings, `"`+name+`"`) {
+				t.Errorf("%s: settings must deny %s: %s", mode, name, settings)
+			}
+		}
 	}
 }

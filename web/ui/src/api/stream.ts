@@ -270,7 +270,11 @@ export class EventStream {
         }
         break;
 
+      case 'schedule.created':
+      case 'schedule.updated':
+      case 'schedule.deleted':
       case 'schedule.skipped':
+        void this.queries.invalidateQueries({ queryKey: keys.audit() });
         void this.queries.invalidateQueries({ queryKey: keys.schedules(event.sessionId ?? '') });
         break;
 

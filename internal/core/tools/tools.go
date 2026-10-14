@@ -17,6 +17,10 @@ type Name string
 
 // The Core Tools of specification section 12.
 const (
+	NameScheduleList             Name = "schedule_list"
+	NameScheduleCreate           Name = "schedule_create"
+	NameScheduleUpdate           Name = "schedule_update"
+	NameScheduleDelete           Name = "schedule_delete"
 	NameTaskCreate               Name = "task_create"
 	NameTaskSearch               Name = "task_search"
 	NameTaskUpdate               Name = "task_update"
@@ -254,5 +258,5 @@ func Specs() []Spec {
 				"knownDirectoryId": str("Identifier of the known directory to work in."),
 			}, "knownDirectoryId"),
 		},
-	}, sessionSpecs()...)
+	}, append(sessionSpecs(), scheduleSpecs()...)...)
 }
