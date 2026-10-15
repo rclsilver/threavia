@@ -141,6 +141,9 @@ native names, descriptions and instructions for automatic discovery; explicit
 skills are disabled for the Job. No AGENTS.md or persistent configuration is
 modified.
 
+See the [Agent Skills compatibility matrix](skills.md) for scripts,
+references/assets, local skill discovery and permissions in both backends.
+
 ## Feature parity
 
 | Claude Code | Codex |
