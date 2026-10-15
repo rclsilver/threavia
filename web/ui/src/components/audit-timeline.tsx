@@ -8,6 +8,7 @@ import { ActionError } from '@/components/ui/action-error';
 import { EmptyState } from '@/components/ui/card';
 import { clock, cn, humanise } from '@/lib/utils';
 import { knowledgeAudit } from '@/lib/knowledge-audit';
+import { backendAudit } from '@/lib/backend-audit';
 
 /**
  * Who changed what an agent may do, and who answered what it asked — read as a
@@ -109,7 +110,7 @@ function kindOf(entry: AuditEntry): Kind {
   if (knowledge) return knowledge.kind;
   if (entry.action === 'validation.resolved') return 'APPROVAL';
   if (entry.action === 'execution_policy.set') return 'PERMISSIONS';
-  if (entry.action === 'session.backend_changed') return 'BACKEND';
+  if (entry.action === 'session.backend_changed' || entry.action.startsWith('backend.')) return 'BACKEND';
   if (entry.action.startsWith('session.')) return 'SESSION';
   if (entry.action.startsWith('skill.')) return 'SKILL';
   return 'OTHER';
@@ -160,7 +161,7 @@ function Entry({ entry, context, last }: { entry: AuditEntry; context: Context; 
   );
 }
 
-const CHANNELS: Record<string, string> = { web: 'the web', api: 'the API', mobile: 'the phone', cli: 'the command line', agent: 'the agent' };
+const CHANNELS: Record<string, string> = { web: 'the web', api: 'the API', mobile: 'the phone', cli: 'the command line', agent: 'the agent', backend: 'the backend', core: 'Core' };
 
 function SessionLink({ id, context }: { id: string; context: Context }) {
   const session = context.session(id);
@@ -176,6 +177,9 @@ function SessionLink({ id, context }: { id: string; context: Context }) {
 const TONES = { ok: 'text-ok', danger: 'text-danger', accent: 'text-accent', muted: 'text-muted' };
 
 function describe(entry: AuditEntry, context: Context): { Icon: LucideIcon; tone: string; title: ReactNode; body?: ReactNode } {
+  const backend = backendAudit(entry);
+  if (backend) return { Icon: Server, tone: TONES[backend.tone], title: backend.title,
+    body: backend.detail ? <p className="text-muted text-sm">{backend.detail}</p> : undefined };
   const knowledge = knowledgeAudit(entry);
   if (knowledge) return { Icon: Circle, tone: TONES[knowledge.tone], title: knowledge.title,
     body: knowledge.detail ? <p className="text-muted text-sm">{knowledge.detail}</p> : undefined };

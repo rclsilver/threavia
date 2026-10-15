@@ -28,7 +28,8 @@ type AuditEntry struct {
 	CreatedAt     time.Time       `json:"createdAt"`
 }
 
-// RecordAudit appends an audit entry.
+// RecordAudit appends an audit entry. Use wall time rather than transaction
+// start time so related entries (registration, then claim) retain their order.
 func (s *Store) RecordAudit(ctx context.Context, entry AuditEntry) error {
 	detail := entry.Detail
 	if len(detail) == 0 {
@@ -37,9 +38,9 @@ func (s *Store) RecordAudit(ctx context.Context, entry AuditEntry) error {
 	_, err := s.q.Exec(ctx, `
 		INSERT INTO audit_entries (id, owner_id, actor_id, action, project_id,
 		                           session_id, job_id, subject_id, channel,
-		                           payload_sha256, detail)
+		                           payload_sha256, detail, created_at)
 		VALUES ($1, $2, $3, $4, NULLIF($5,''), NULLIF($6,''), NULLIF($7,''),
-		        NULLIF($8,''), $9, $10, $11)`,
+		        NULLIF($8,''), $9, $10, $11, clock_timestamp())`,
 		domain.NewUUID(), entry.OwnerID, entry.ActorID, entry.Action,
 		entry.ProjectID, entry.SessionID, entry.JobID, entry.SubjectID,
 		entry.Channel, entry.PayloadSHA256, detail)

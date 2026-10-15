@@ -270,7 +270,15 @@ func TestPolicyChangesAreAudited(t *testing.T) {
 		} `json:"items"`
 	}
 	c.mustDo("GET", "/api/v1/me/audit", nil, &audit, 200)
-	if len(audit.Items) != 3 || audit.Items[0].Action != "execution_policy.set" || audit.Items[1].Action != "session.created" || audit.Items[2].Action != "project.created" {
+	// Other lifecycle actions are audited too; this test concerns policy.
+	policies := audit.Items[:0]
+	for _, entry := range audit.Items {
+		if entry.Action == "execution_policy.set" {
+			policies = append(policies, entry)
+		}
+	}
+	audit.Items = policies
+	if len(audit.Items) != 1 {
 		t.Fatalf("audit = %+v, want the policy change", audit.Items)
 	}
 	if audit.Items[0].SubjectID != session {

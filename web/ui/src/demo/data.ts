@@ -717,6 +717,9 @@ const audit = (n: number, action: string, minutesAgo: number, rest: Record<strin
 const policyDetail = (overrides: Record<string, unknown>) => ({ ...projectPolicies[IDS.homelab], ...overrides });
 
 export const auditEntries = [
+  audit(60, 'backend.registered', 60 * 24 * 5, { subjectId: IDS.ci, actorId: `backend:${IDS.ci}`, channel: 'backend', detail: { name: 'CI runner', registrationFlow: 'shared_key', registeredAt: at(60 * 24 * 5) } }),
+  audit(61, 'backend.claimed', 60 * 24 * 5 - 1, { subjectId: IDS.ci, channel: 'web', detail: { name: 'CI runner' } }),
+  audit(62, 'backend.revoked', 60 * 24 * 4, { subjectId: id('d0000002', 90), channel: 'web', detail: { name: 'Old workstation' } }),
   audit(50, 'project.created', 60 * 24 * 40, { projectId: IDS.homelab, subjectId: IDS.homelab, channel: 'web', detail: { projectId: IDS.homelab, name: 'homelab', status: 'ACTIVE' } }),
   audit(51, 'project.updated', 60 * 24, { projectId: IDS.homelab, subjectId: IDS.homelab, channel: 'web', detail: { projectId: IDS.homelab, name: 'homelab', status: 'ACTIVE', changedFields: ['instructions'] } }),
   audit(52, 'task.updated', 60, { projectId: IDS.homelab, subjectId: id('d000000a', 1), actorId: 'agent', channel: 'agent', jobId: id('d0000006', 1), detail: { taskId: id('d000000a', 1), title: 'Check the ingress rollout', previousStatus: 'IN_PROGRESS', status: 'DONE', changedFields: ['status'] } }),

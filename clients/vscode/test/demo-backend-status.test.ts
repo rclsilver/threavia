@@ -25,10 +25,18 @@ it('plays backend transitions, changes the data clients read and stops on cleanu
     expect(ready.conditions).toEqual([]);
     expect(events.map((event) => event.payload?.operationalStatus)).toEqual(['OFFLINE', 'STARTING', 'READY']);
     expect(events.every((event) => !event.sessionId && event.type === 'backend.status_changed' && event.payload?.backendInstanceId === IDS.ci)).toBe(true);
+    const readAudit = async () => {
+      const request = demoRequest('GET', '/api/v1/me/audit', null);
+      await vi.advanceTimersByTimeAsync(60);
+      return (await request as { items: { action: string; subjectId?: string; detail?: { to?: string } }[] }).items
+        .filter((entry) => entry.action === 'backend.availability_changed' && entry.subjectId === IDS.ci);
+    };
+    expect((await readAudit()).map((entry) => entry.detail?.to)).toEqual(['READY', 'OFFLINE']);
     stop();
     await vi.advanceTimersByTimeAsync(32_000);
     expect(events).toHaveLength(3);
     expect((await read()).operationalStatus).toBe(before.operationalStatus);
+    expect(await readAudit()).toEqual([]);
   } finally {
     stop();
     vi.useRealTimers();

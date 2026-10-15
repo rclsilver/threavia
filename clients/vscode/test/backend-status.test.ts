@@ -20,5 +20,5 @@ it('refreshes backend, session and attention state in both clients on a global l
   editor.publish(event);
   expect(web.position).toBe(17);
   expect(effects).toEqual(['backends', 'sessions', 'attention']);
-  expect(invalidated).toEqual([['backends'], ['sessions'], ['snapshot'], ['attention']]);
+  expect(invalidated).toEqual([['audit'], ['backends'], ['sessions'], ['snapshot'], ['attention']]);
 });

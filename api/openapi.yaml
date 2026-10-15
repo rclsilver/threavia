@@ -3285,6 +3285,12 @@ components:
         One recorded decision or privileged action. Its subject identifiers are
         plain text rather than foreign keys, so the record survives the deletion
         of what it describes.
+        Account-scoped backend actions include backend.registered, backend.claimed,
+        backend.revoked and backend.availability_changed. The backend actor uses
+        backend:<id> and channel backend; Core-inferred OFFLINE uses actor/channel
+        core. Detail retains name and, for availability, from/to/providerAuthState.
+        Shared-key registration history is attached at claim with registeredAt.
+        Credentials, registration tokens and claim codes are never included.
       required: [id, ownerId, actorId, action, createdAt]
       properties:
         id: { $ref: "#/components/schemas/UUID" }

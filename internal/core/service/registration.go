@@ -106,6 +106,7 @@ func (s *Service) RegisterBackend(ctx context.Context, in RegisterBackendInput) 
 		Capacity:          domain.Capacity{MaxConcurrentRuns: 1},
 	}
 	result := RegisterBackendResult{Credential: credential}
+	b := &batch{}
 
 	switch {
 	case in.Token != "":
@@ -120,7 +121,14 @@ func (s *Service) RegisterBackend(ctx context.Context, in RegisterBackendInput) 
 				return err
 			}
 			instance.OwnerID = &ownerID
-			return tx.CreateBackendInstance(ctx, &instance, hashToken(credential), nil, nil)
+			b.ownerID = ownerID
+			if err := tx.CreateBackendInstance(ctx, &instance, hashToken(credential), nil, nil); err != nil {
+				return err
+			}
+			if err := recordBackendAudit(ctx, tx, instance, "backend:"+string(instance.ID), "backend", "backend.registered", map[string]any{"registrationFlow": "token"}); err != nil {
+				return err
+			}
+			return s.appendAll(ctx, tx, b, record{eventType: events.TypeBackendRegistered, payload: map[string]any{"backendInstanceId": instance.ID, "name": instance.Name}})
 		})
 		if err != nil {
 			return RegisterBackendResult{}, translate(err)
@@ -153,6 +161,7 @@ func (s *Service) RegisterBackend(ctx context.Context, in RegisterBackendInput) 
 	}
 
 	result.BackendInstanceID = instance.ID
+	s.flush(b)
 	s.logger.Info("backend registered",
 		"backendInstanceId", instance.ID, "name", name, "claimed", result.Claimed)
 	return result, nil
@@ -166,7 +175,24 @@ func (s *Service) ClaimBackend(ctx context.Context, identity auth.Identity, clai
 		return domain.BackendInstance{}, fmt.Errorf("%w: a claim code is required", ErrInvalid)
 	}
 
-	instance, err := s.store.ClaimBackendInstance(ctx, identity.UserID, hashToken(claimCode))
+	var instance domain.BackendInstance
+	b := &batch{ownerID: identity.UserID}
+	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		var err error
+		instance, err = tx.ClaimBackendInstance(ctx, identity.UserID, hashToken(claimCode))
+		if err != nil {
+			return err
+		}
+		// Shared-key registration has no owner yet. Attach its history only
+		// when a person claims it, preserving when it was registered.
+		if err := recordBackendAudit(ctx, tx, instance, "backend:"+string(instance.ID), "backend", "backend.registered", map[string]any{"registrationFlow": "shared_key", "registeredAt": instance.CreatedAt}); err != nil {
+			return err
+		}
+		if err := recordBackendAudit(ctx, tx, instance, string(identity.UserID), domain.ChannelFrom(ctx).String(), "backend.claimed", map[string]any{}); err != nil {
+			return err
+		}
+		return s.appendAll(ctx, tx, b, record{eventType: events.TypeBackendRegistered, payload: map[string]any{"backendInstanceId": instance.ID, "name": instance.Name}})
+	})
 	if err != nil {
 		if errors.Is(err, postgres.ErrNotFound) {
 			return domain.BackendInstance{}, fmt.Errorf("%w: unknown or expired claim code", ErrNotFound)
@@ -174,10 +200,7 @@ func (s *Service) ClaimBackend(ctx context.Context, identity auth.Identity, clai
 		return domain.BackendInstance{}, translate(err)
 	}
 
-	s.emit(ctx, identity.UserID, events.TypeBackendRegistered, domain.Scope{}, map[string]string{
-		"backendInstanceId": string(instance.ID),
-		"name":              instance.Name,
-	})
+	s.flush(b)
 	return instance, nil
 }
 
@@ -255,15 +278,30 @@ func (s *Service) GetBackendInstance(ctx context.Context, identity auth.Identity
 // RevokeBackendInstance invalidates the persistent credential. The record stays
 // for historical references, and a returning backend must register anew.
 func (s *Service) RevokeBackendInstance(ctx context.Context, identity auth.Identity, id domain.BackendInstanceID) error {
-	if err := s.store.RevokeBackendInstance(ctx, identity.UserID, id); err != nil {
+	b := &batch{ownerID: identity.UserID}
+	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		instance, err := tx.LockBackendInstance(ctx, id)
+		if err != nil {
+			return err
+		}
+		if instance.OwnerID == nil || *instance.OwnerID != identity.UserID {
+			return postgres.ErrNotFound
+		}
+		if err := tx.RevokeBackendInstance(ctx, identity.UserID, id); err != nil {
+			return err
+		}
+		if err := recordBackendAudit(ctx, tx, instance, string(identity.UserID), domain.ChannelFrom(ctx).String(), "backend.revoked", map[string]any{}); err != nil {
+			return err
+		}
+		return s.appendAll(ctx, tx, b, record{eventType: events.TypeBackendRevoked, payload: map[string]any{"backendInstanceId": id}})
+	})
+	if err != nil {
 		return translate(err)
 	}
 	if conn, ok := s.backends.Lookup(id); ok {
 		s.backends.Release(conn)
 	}
-	s.emit(ctx, identity.UserID, events.TypeBackendRevoked, domain.Scope{}, map[string]string{
-		"backendInstanceId": string(id),
-	})
+	s.flush(b)
 	return nil
 }
 

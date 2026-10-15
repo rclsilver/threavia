@@ -765,22 +765,31 @@ export function demoBackendLifecycle(receive: (event: Event) => void): () => voi
   const backend = state.backends.find((entry) => entry.id === data.IDS.ci);
   if (!backend) return () => {};
   const initial = clone(backend);
+  const auditIds = new Set<string>();
   const statuses = ['OFFLINE', 'STARTING', 'READY', 'DEGRADED'] as const;
   let stage = 0;
   const timer = setInterval(() => {
     if (!state.backends.includes(backend)) return;
     const operationalStatus = statuses[stage++ % statuses.length];
     const providerAuthState = operationalStatus === 'READY' ? 'AUTHENTICATED' : initial.providerAuthState;
+    const from = backend.operationalStatus;
     Object.assign(backend, { operationalStatus, providerAuthState, updatedAt: nowIso(),
       conditions: operationalStatus === 'READY' ? [] : clone(initial.conditions),
     });
     if (operationalStatus !== 'OFFLINE') backend.lastHeartbeatAt = nowIso();
+    if (from !== operationalStatus && operationalStatus !== 'STARTING') {
+      const id = newId();
+      auditIds.add(id);
+      record('backend.availability_changed', { id, actorId: operationalStatus === 'OFFLINE' ? 'core' : `backend:${String(backend.id)}`, channel: operationalStatus === 'OFFLINE' ? 'core' : 'backend', subjectId: backend.id,
+        detail: { name: backend.name, from, to: operationalStatus, providerAuthState } });
+    }
     receive({ id: newId(), sequence: sequence++, timestamp: nowIso(), type: 'backend.status_changed',
       payload: { backendInstanceId: String(backend.id), operationalStatus, providerAuthState },
     });
   }, 8_000);
   return () => {
     clearInterval(timer);
+    state.audit = state.audit.filter((entry) => !auditIds.has(String(entry.id)));
     if (state.backends.includes(backend)) Object.assign(backend, initial);
   };
 }

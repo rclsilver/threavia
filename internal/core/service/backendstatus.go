@@ -38,6 +38,21 @@ func (s *Service) changeBackendState(ctx context.Context, id domain.BackendInsta
 			return nil
 		}
 		b.ownerID = *after.OwnerID
+		// Keep STARTING, lease replacement and repeated reports out of the
+		// audit. Record loss of availability and arrival at READY.
+		if before.OperationalStatus != after.OperationalStatus &&
+			(after.OperationalStatus == domain.BackendDegraded || after.OperationalStatus == domain.BackendOffline ||
+				after.OperationalStatus == domain.BackendReady) {
+			actor, channel := "backend:"+string(id), "backend"
+			if after.OperationalStatus == domain.BackendOffline {
+				actor, channel = "core", "core"
+			}
+			if err := recordBackendAudit(ctx, tx, after, actor, channel, "backend.availability_changed", map[string]any{
+				"from": before.OperationalStatus, "to": after.OperationalStatus, "providerAuthState": after.ProviderAuthState,
+			}); err != nil {
+				return err
+			}
+		}
 		return s.appendAll(ctx, tx, b, record{
 			eventType: events.TypeBackendStatusChanged,
 			payload: map[string]any{

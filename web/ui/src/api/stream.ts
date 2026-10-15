@@ -293,6 +293,7 @@ export class EventStream {
         break;
 
       case 'backend.status_changed':
+        void this.queries.invalidateQueries({ queryKey: keys.audit() });
         void this.queries.invalidateQueries({ queryKey: keys.backends() });
         void this.queries.invalidateQueries({ queryKey: ['sessions'] });
         void this.queries.invalidateQueries({ queryKey: ['snapshot'] });
@@ -300,6 +301,9 @@ export class EventStream {
         break;
       case 'backend.registered':
       case 'backend.revoked':
+        void this.queries.invalidateQueries({ queryKey: keys.audit() });
+        void this.queries.invalidateQueries({ queryKey: keys.backends() });
+        break;
       case 'backend.quotas_updated':
       case 'backend.models_updated':
       case 'backend.default_changed':
