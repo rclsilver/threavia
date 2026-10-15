@@ -29,7 +29,11 @@ export function StreamProvider({ children, demo = false }: { children: ReactNode
       let cancelled = false;
       let stop = () => {};
       void import('./demo/server').then((server) => {
-        if (!cancelled) stop = server.demoBackendLifecycle((event) => live.deliver(event));
+        if (!cancelled) {
+          const stopBackend = server.demoBackendLifecycle((event) => live.deliver(event));
+          const stopLifecycle = server.demoLifecycleEvents((event) => live.deliver(event));
+          stop = () => { stopBackend(); stopLifecycle(); };
+        }
       });
       return () => { cancelled = true; stop(); };
     }

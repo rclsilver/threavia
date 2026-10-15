@@ -46,6 +46,30 @@ const state = {
 let sequence = 9000;
 const nowIso = () => new Date().toISOString();
 const newId = () => crypto.randomUUID();
+const lifecycleListeners = new Set<(event: Event) => void>();
+
+/** Reuse the real clients' event path for changes made in the playable demo. */
+export function demoLifecycleEvents(receive: (event: Event) => void): () => void {
+  lifecycleListeners.add(receive);
+  return () => { lifecycleListeners.delete(receive); };
+}
+
+function emitLifecycle(type: string, projectId: string, payload: Json, sessionId?: string) {
+  const event: Event = { id: newId(), sequence: sequence++, timestamp: nowIso(), type, projectId, payload, ...(sessionId && { sessionId }) };
+  for (const receive of lifecycleListeners) receive(event);
+}
+
+function recordSessionLifecycle(session: Json, action: string, detail: Json) {
+  record(action, { projectId: session.projectId, sessionId: session.id, subjectId: session.id, detail });
+  if (action !== 'session.deleted') {
+    const saved = state.timelines[String(session.id)]?.events.slice().reverse().find((event) => event.type === action);
+    if (saved) {
+      for (const receive of lifecycleListeners) receive(clone(saved) as Event);
+      return;
+    }
+  }
+  emitLifecycle(action, String(session.projectId), detail, action === 'session.deleted' ? undefined : String(session.id));
+}
 
 const notFound = (what = 'that') => new ApiError(404, 'not_found', `${what} is not in the demo`);
 const unavailable = (what: string) => new ApiError(503, 'demo', `${what} is not available in the demo: nothing here reaches a server.`);
@@ -448,7 +472,12 @@ const routes: [string, RegExp, Handler][] = [
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/skills$/, (m) => list(state.skills.filter((entry) => entry.projectId === m[1]))],
   ['POST', /^\/api\/v1\/projects\/([^/]+)\/skills$/, () => { throw unavailable('Installing a skill'); }],
   ['DELETE', /^\/api\/v1\/skills\/([^/]+)$/, (m) => {
+    const skill = state.skills.find((entry) => entry.id === m[1]);
+    if (!skill) throw notFound('This skill');
     state.skills = state.skills.filter((entry) => entry.id !== m[1]);
+    const detail = { skillId: skill.id, name: skill.name, installedRevision: skill.installedRevision };
+    record('skill.removed', { projectId: skill.projectId, subjectId: skill.id, detail });
+    emitLifecycle('skill.removed', String(skill.projectId), detail);
   }],
   ['GET', /^\/api\/v1\/skills\/([^/]+)\/files$/, (m) => list(data.skillFiles[m[1]] ?? [])],
 
@@ -471,8 +500,9 @@ const routes: [string, RegExp, Handler][] = [
       jobs: [],
       events: [],
     };
-    pushEvent(sessionId, 'session.created', {});
+    pushEvent(sessionId, 'session.created', { title: sessionOf(sessionId).title });
     const job = answer(sessionId, message, undefined, body.artifactIds as string[] | undefined);
+    recordSessionLifecycle(sessionOf(sessionId), 'session.created', { title: sessionOf(sessionId).title, backendInstanceId: body.backendInstanceId ?? data.IDS.laptop });
     return { session: sessionOf(sessionId), run: state.timelines[sessionId].runs[0], job };
   }],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)$/, (m) => snapshot(m[1])],
@@ -518,14 +548,27 @@ const routes: [string, RegExp, Handler][] = [
   }],
   ['POST', /^\/api\/v1\/sessions\/([^/]+)\/(archive|restore)$/, (m) => {
     const session = sessionOf(m[1]);
-    session.status = m[2] === 'archive' ? 'ARCHIVED' : 'ACTIVE';
+    const status = m[2] === 'archive' ? 'ARCHIVED' : 'ACTIVE';
+    if (session.status === status) throw new ApiError(409, 'conflict', 'The session already has this status.');
+    const fromStatus = session.status;
+    session.status = status;
+    session.updatedAt = nowIso();
+    const action = m[2] === 'archive' ? 'session.archived' : 'session.restored';
+    pushEvent(m[1], action, {});
+    recordSessionLifecycle(session, action, { title: session.title, fromStatus, status });
     return session;
   }],
   ['DELETE', /^\/api\/v1\/sessions\/([^/]+)$/, (m, _b, query) => {
+    const session = sessionOf(m[1]);
+    const busy = state.timelines[m[1]]?.jobs.some((job) => !['COMPLETED', 'FAILED', 'CANCELLED'].includes(String(job.status)));
+    if (busy) throw new ApiError(409, 'conflict', 'Stop the unfinished jobs before deleting this session.');
     state.sessions = state.sessions.filter((session) => session.id !== m[1]);
     // Its files go with it when asked; otherwise they stay, attached to nothing.
     if (query.get('artifacts') === 'delete') state.artifacts = state.artifacts.filter((entry) => entry.sessionId !== m[1]);
     else for (const entry of state.artifacts) if (entry.sessionId === m[1]) delete entry.sessionId;
+    state.schedules = state.schedules.filter((entry) => entry.sessionId !== m[1]);
+    delete state.timelines[m[1]];
+    recordSessionLifecycle(session, 'session.deleted', { sessionId: session.id, title: session.title, artifactsDeleted: query.get('artifacts') === 'delete' });
   }],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/events$/, () => list([])],
   ['POST', /^\/api\/v1\/sessions\/([^/]+)\/messages$/, (m, body) => answer(m[1], text(body.message), body.delivery as string | undefined, body.artifactIds as string[] | undefined)],

@@ -153,7 +153,7 @@ const STEPS: Step[] = [
     path: PROJECT('skills'),
     target: 'main ul',
     title: 'Skills',
-    body: 'Instructions and scripts an agent may use here, installed from git or an archive. View one to read exactly what the agent is given.',
+    body: 'Instructions and scripts an agent may use here, installed from git or an archive. View their contents; installations, replacements and removals are recorded in the audit.',
   },
   {
     path: PROJECT('instructions'),
@@ -171,7 +171,7 @@ const STEPS: Step[] = [
     path: PROJECT('audit'),
     target: 'main ol',
     title: 'Who decided what',
-    body: 'Every approval, refusal and change of permissions, said as a sentence, with who did it and from which device.',
+    body: 'Approvals, permissions, sessions and Skills, with who changed them and from which device. Session records keep their names after deletion; filters help you find each kind.',
   },
   {
     path: '/settings/backends',

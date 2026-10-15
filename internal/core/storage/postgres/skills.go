@@ -11,6 +11,14 @@ const skillColumns = `s.id, s.owner_id, s.project_id, s.name, s.description,
 	s.installed_revision, s.installed_at, s.artifact_id, s.bundle_sha256,
 	s.created_at, s.updated_at`
 
+// LockProjectSkills serializes installs and removals, including an absent
+// skill's first install, so replacement metadata describes the committed row.
+func (s *Store) LockProjectSkills(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID) error {
+	var id domain.ProjectID
+	err := s.q.QueryRow(ctx, `SELECT id FROM projects WHERE id = $1 AND owner_id = $2 FOR UPDATE`, projectID, ownerID).Scan(&id)
+	return classify(err, "lock project skills")
+}
+
 // UpsertSkill installs a Skill, replacing an earlier version of the same name in
 // the same Project.
 //

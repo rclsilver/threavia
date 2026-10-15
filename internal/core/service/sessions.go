@@ -158,6 +158,10 @@ func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in S
 		if err := tx.CreateJob(ctx, &result.Job); err != nil {
 			return err
 		}
+		if err := s.recordLifecycleAudit(ctx, tx, identity, events.TypeSessionCreated, scope, string(result.Session.ID),
+			map[string]any{"title": result.Session.Title, "backendInstanceId": in.BackendInstanceID, "managerSessionId": in.ManagerSessionID}); err != nil {
+			return err
+		}
 		return s.appendAll(ctx, tx, b,
 			record{events.TypeSessionCreated, domain.Scope{ProjectID: scope.ProjectID, SessionID: scope.SessionID},
 				SessionCreatedPayload{Title: result.Session.Title, WorkingDirectoryID: result.Session.WorkingDirectoryID, ManagerSessionID: in.ManagerSessionID}},
@@ -456,25 +460,35 @@ func (s *Service) PinnedSessions(ctx context.Context, identity auth.Identity) ([
 
 // SetSessionStatus archives or restores a Session.
 func (s *Service) SetSessionStatus(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, status domain.SessionStatus) (domain.Session, error) {
-	current, err := s.store.GetSession(ctx, identity.UserID, sessionID)
-	if err != nil {
-		return domain.Session{}, translate(err)
-	}
-	if _, err := current.Status.Transition(status); err != nil {
-		return domain.Session{}, fmt.Errorf("%w: %s", ErrConflict, err)
-	}
-
-	session, err := s.store.SetSessionStatus(ctx, identity.UserID, sessionID, status)
-	if err != nil {
-		return domain.Session{}, translate(err)
-	}
-
 	eventType := events.TypeSessionArchived
 	if status == domain.SessionActive {
 		eventType = events.TypeSessionRestored
 	}
-	s.emit(ctx, identity.UserID, eventType,
-		domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID}, nil)
+	var session domain.Session
+	b := &batch{ownerID: identity.UserID}
+	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		current, err := tx.LockSession(ctx, identity.UserID, sessionID)
+		if err != nil {
+			return err
+		}
+		if _, err := current.Status.Transition(status); err != nil {
+			return fmt.Errorf("%w: %s", ErrConflict, err)
+		}
+		session, err = tx.SetSessionStatus(ctx, identity.UserID, sessionID, status)
+		if err != nil {
+			return err
+		}
+		scope := domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID}
+		if err := s.recordLifecycleAudit(ctx, tx, identity, eventType, scope, string(session.ID),
+			map[string]any{"title": session.Title, "fromStatus": current.Status, "status": session.Status}); err != nil {
+			return err
+		}
+		return s.appendAll(ctx, tx, b, record{eventType: eventType, scope: scope})
+	})
+	if err != nil {
+		return domain.Session{}, translate(err)
+	}
+	s.flush(b)
 	return session, nil
 }
 
@@ -490,41 +504,59 @@ func (s *Service) SetSessionStatus(ctx context.Context, identity auth.Identity, 
 // the Session. Keeping is the default, because a file someone downloaded a
 // link to should not vanish as a side effect.
 //
-// The event goes out before the rows are gone, because afterwards there is no
-// Session left to attribute it to.
+// The deletion notice is project-scoped, so it outlives the deleted history.
+// State, audit and notice commit together; object bytes are removed afterwards.
 func (s *Service) DeleteSession(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, withArtifacts bool) error {
-	session, err := s.store.GetSession(ctx, identity.UserID, sessionID)
-	if err != nil {
-		return translate(err)
-	}
-
-	jobs, err := s.store.ListJobs(ctx, sessionID)
-	if err != nil {
-		return translate(err)
-	}
-	for _, job := range jobs {
-		if !job.Status.Terminal() {
-			return fmt.Errorf("%w: this session has a job that is still %s; stop it first",
-				ErrConflict, strings.ToLower(job.Status.String()))
-		}
-	}
-
-	if withArtifacts {
-		ids, err := s.store.SessionArtifactIDs(ctx, identity.UserID, sessionID)
+	b := &batch{ownerID: identity.UserID}
+	var objectKeys []string
+	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		session, err := tx.LockSession(ctx, identity.UserID, sessionID)
 		if err != nil {
-			return translate(err)
+			return err
 		}
-		for _, id := range ids {
-			if err := s.DeleteArtifact(ctx, identity, id); err != nil && !errors.Is(err, ErrNotFound) {
-				return err
+		jobs, err := tx.ListJobs(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		for _, job := range jobs {
+			if !job.Status.Terminal() {
+				return fmt.Errorf("%w: this session has a job that is still %s; stop it first",
+					ErrConflict, strings.ToLower(job.Status.String()))
 			}
 		}
+		if withArtifacts {
+			ids, err := tx.SessionArtifactIDs(ctx, identity.UserID, sessionID)
+			if err != nil {
+				return err
+			}
+			for _, id := range ids {
+				key, err := tx.DeleteArtifact(ctx, identity.UserID, id)
+				if err != nil {
+					return err
+				}
+				objectKeys = append(objectKeys, key)
+				if err := s.appendAll(ctx, tx, b, record{eventType: events.TypeArtifactDeleted, scope: domain.Scope{ProjectID: session.ProjectID}, payload: map[string]any{"artifactId": id}}); err != nil {
+					return err
+				}
+			}
+		}
+		payload := map[string]any{"sessionId": session.ID, "title": session.Title, "artifactsDeleted": withArtifacts}
+		if err := s.recordLifecycleAudit(ctx, tx, identity, events.TypeSessionDeleted, domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID}, string(session.ID), payload); err != nil {
+			return err
+		}
+		if err := tx.DeleteSession(ctx, identity.UserID, sessionID); err != nil {
+			return err
+		}
+		return s.appendAll(ctx, tx, b, record{eventType: events.TypeSessionDeleted, scope: domain.Scope{ProjectID: session.ProjectID}, payload: payload})
+	})
+	if err != nil {
+		return translate(err)
 	}
-
-	s.emit(ctx, identity.UserID, events.TypeSessionDeleted,
-		domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID}, nil)
-
-	return translate(s.store.DeleteSession(ctx, identity.UserID, sessionID))
+	s.flush(b)
+	for _, key := range objectKeys {
+		s.removeArtifactBytes(ctx, key)
+	}
+	return nil
 }
 
 // SetSessionWorkingDirectory changes the initial cwd of a Session. The change is

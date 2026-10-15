@@ -28,6 +28,7 @@ export type Effect =
   /** A Project's Decisions changed; without a Project, any list may be stale. */
   | { kind: 'decisions'; projectId?: string }
   | { kind: 'artifacts'; projectId?: string }
+  | { kind: 'skills'; projectId?: string; skillId?: string }
   | { kind: 'backends' }
   | { kind: 'directories' }
   | { kind: 'projects' };
@@ -46,6 +47,11 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
     case 'artifact.created':
     case 'artifact.deleted':
       return [{ kind: 'artifacts', projectId: event.projectId }];
+    case 'skill.installed':
+    case 'skill.removed': {
+      const payload = payloadOf(event, 'skill.installed') ?? payloadOf(event, 'skill.removed');
+      return [{ kind: 'skills', projectId: event.projectId, skillId: payload?.skillId }];
+    }
     case 'backend.registered':
     case 'backend.revoked':
     case 'backend.quotas_updated':
@@ -83,11 +89,14 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
         },
       ];
 
+    case 'session.deleted': {
+      const id = sessionId || payloadOf(event, 'session.deleted')?.sessionId || '';
+      return [{ kind: 'sessions' }, { kind: 'attention' }, ...snapshot(id)];
+    }
     case 'session.created':
     case 'session.renamed':
     case 'session.archived':
     case 'session.restored':
-    case 'session.deleted':
     case 'session.pinned':
     case 'session.model_changed':
       return [{ kind: 'sessions' }, ...snapshot(sessionId)];

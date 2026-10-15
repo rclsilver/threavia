@@ -241,6 +241,12 @@ announce an offline state or park their replacement's jobs.
 
 ## Skills
 
+Core persists project-scoped `skill.installed` (including replacement) and
+`skill.removed` events together with the skill mutation and its audit entry.
+Payloads identify the skill, name and installed revision; installation also
+reports `replaced`. No skill content is broadcast. Clients refresh skill lists,
+open skill files and the audit. Backend-local inventory reports are unchanged.
+
 `ProjectContext` names the Core-managed Project Skills of a Run — identity,
 revision and bundle checksum, never content. A backend that has a revision
 cached uses it; otherwise it sends `SkillFetchRequest` and Core answers with a

@@ -217,13 +217,23 @@ export class EventStream {
         this.dropResolved(event);
         break;
 
+      case 'session.deleted': {
+        const id = event.sessionId || payloadOf(event, 'session.deleted')?.sessionId || '';
+        void this.queries.invalidateQueries({ queryKey: ['sessions'] });
+        void this.queries.invalidateQueries({ queryKey: keys.snapshot(id) });
+        void this.queries.invalidateQueries({ queryKey: keys.attention() });
+        void this.queries.invalidateQueries({ queryKey: keys.audit() });
+        break;
+      }
       case 'session.created':
       case 'session.renamed':
       case 'session.archived':
       case 'session.restored':
-      case 'session.deleted':
       case 'session.pinned':
       case 'session.model_changed':
+        if (['session.created', 'session.archived', 'session.restored'].includes(event.type)) {
+          void this.queries.invalidateQueries({ queryKey: keys.audit() });
+        }
         void this.queries.invalidateQueries({ queryKey: ['sessions'] });
         // The snapshot carries the title too, so a Session open on another
         // screen follows the rename rather than keeping the old one until a
@@ -313,6 +323,15 @@ export class EventStream {
       case 'task.deleted':
         void this.queries.invalidateQueries({ queryKey: ['tasks'] });
         break;
+
+      case 'skill.installed':
+      case 'skill.removed': {
+        const payload = payloadOf(event, 'skill.installed') ?? payloadOf(event, 'skill.removed');
+        void this.queries.invalidateQueries({ queryKey: event.projectId ? keys.skills(event.projectId) : ['skills'] });
+        void this.queries.invalidateQueries({ queryKey: payload?.skillId ? ['skill-files', payload.skillId] : ['skill-files'] });
+        void this.queries.invalidateQueries({ queryKey: keys.audit() });
+        break;
+      }
 
       // An agent published a file: the project's list has one more.
       case 'artifact.created':

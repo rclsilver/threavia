@@ -10,7 +10,9 @@ import (
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
+	"github.com/rclsilver/threavia/internal/core/events"
 	"github.com/rclsilver/threavia/internal/core/skills"
+	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 )
 
 // skillMimeType is what a packed Skill bundle is stored as.
@@ -75,7 +77,20 @@ func (s *Service) InstallSkill(ctx context.Context, identity auth.Identity, proj
 		ArtifactID:        artifact.ID,
 		BundleSHA256:      bundle.SHA256,
 	}
-	replaced, err := s.store.UpsertSkill(ctx, &skill)
+	var replaced *domain.ArtifactID
+	b := &batch{ownerID: identity.UserID}
+	err = s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		if err := tx.LockProjectSkills(ctx, identity.UserID, project.ID); err != nil {
+			return err
+		}
+		var err error
+		replaced, err = tx.UpsertSkill(ctx, &skill)
+		if err != nil {
+			return err
+		}
+		payload := map[string]any{"skillId": skill.ID, "name": skill.Name, "installedRevision": skill.InstalledRevision, "replaced": replaced != nil}
+		return s.recordSkillChange(ctx, tx, b, identity, skill, events.TypeSkillInstalled, payload)
+	})
 	if err != nil {
 		// The bundle is already stored; an orphaned blob is worse than a failed
 		// request, and the Artifact is the user's to keep or drop otherwise.
@@ -85,6 +100,7 @@ func (s *Service) InstallSkill(ctx context.Context, identity auth.Identity, proj
 		}
 		return domain.Skill{}, translate(err)
 	}
+	s.flush(b)
 	// A new version supersedes the old bundle: nothing points at it any more, and
 	// keeping every version a Project ever installed is not what was asked for.
 	if replaced != nil {
@@ -134,15 +150,43 @@ func (s *Service) SkillFiles(ctx context.Context, identity auth.Identity, id dom
 // UninstallSkill removes a Skill. The bundle it referenced goes with it: nothing
 // else can point at it, because a Skill owns its own Artifact.
 func (s *Service) UninstallSkill(ctx context.Context, identity auth.Identity, id domain.SkillID) error {
-	artifactID, err := s.store.DeleteSkill(ctx, identity.UserID, id)
+	skill, err := s.store.GetSkill(ctx, identity.UserID, id)
 	if err != nil {
 		return translate(err)
 	}
-	if err := s.DeleteArtifact(ctx, identity, artifactID); err != nil && !errors.Is(err, ErrNotFound) {
+	b := &batch{ownerID: identity.UserID}
+	err = s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		if err := tx.LockProjectSkills(ctx, identity.UserID, skill.ProjectID); err != nil {
+			return err
+		}
+		var err error
+		skill, err = tx.GetSkill(ctx, identity.UserID, id)
+		if err != nil {
+			return err
+		}
+		if _, err = tx.DeleteSkill(ctx, identity.UserID, id); err != nil {
+			return err
+		}
+		payload := map[string]any{"skillId": skill.ID, "name": skill.Name, "installedRevision": skill.InstalledRevision}
+		return s.recordSkillChange(ctx, tx, b, identity, skill, events.TypeSkillRemoved, payload)
+	})
+	if err != nil {
+		return translate(err)
+	}
+	s.flush(b)
+	if err := s.DeleteArtifact(ctx, identity, skill.ArtifactID); err != nil && !errors.Is(err, ErrNotFound) {
 		s.logger.Error("cannot remove the bundle of an uninstalled skill",
-			"artifactId", artifactID, "error", err)
+			"artifactId", skill.ArtifactID, "error", err)
 	}
 	return nil
+}
+
+func (s *Service) recordSkillChange(ctx context.Context, tx *postgres.Store, b *batch, identity auth.Identity, skill domain.Skill, kind events.Type, payload map[string]any) error {
+	scope := domain.Scope{ProjectID: skill.ProjectID}
+	if err := s.recordLifecycleAudit(ctx, tx, identity, kind, scope, string(skill.ID), payload); err != nil {
+		return err
+	}
+	return s.appendAll(ctx, tx, b, record{eventType: kind, scope: scope, payload: payload})
 }
 
 // OpenSkillBundle opens the packed bundle of a Skill, for distribution to a
