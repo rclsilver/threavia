@@ -66,6 +66,9 @@ export interface EventPayloads {
   'project.updated': { projectId: string; name: string };
   'project.deleted': { projectId: string };
   'session.created': { title: string; managerSessionId?: string };
+  'session.deleted': { sessionId?: string; title?: string; artifactsDeleted?: boolean };
+  'skill.installed': { skillId: string; name: string; installedRevision: string; replaced: boolean };
+  'skill.removed': { skillId: string; name: string; installedRevision: string };
   'user.message': { text: string; attachments?: { artifactId: string; filename: string; mimeType: string; size: number }[]; delivery?: 'NOW' | 'NEXT'; scheduleId?: string; actorJobId?: string };
   'schedule.skipped': { scheduleId: string; outcome: string; reason: string; due: string };
   'schedule.created': { scheduleId: string; cron: string; timezone: string; message: string; enabled: boolean; actorJobId?: string };

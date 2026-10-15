@@ -52,6 +52,8 @@ const (
 	TypeWorkspaceChanged        Type = "workspace.changed"
 	TypeArtifactCreated         Type = "artifact.created"
 	TypeArtifactDeleted         Type = "artifact.deleted"
+	TypeSkillInstalled          Type = "skill.installed"
+	TypeSkillRemoved            Type = "skill.removed"
 
 	TypeBackendRegistered     Type = "backend.registered"
 	TypeBackendStatusChanged  Type = "backend.status_changed"
@@ -112,6 +114,8 @@ var persistentTypes = map[Type]bool{
 	TypeWorkspaceChanged:        true,
 	TypeArtifactCreated:         true,
 	TypeArtifactDeleted:         true,
+	TypeSkillInstalled:          true,
+	TypeSkillRemoved:            true,
 	TypeBackendRegistered:       true,
 	TypeBackendStatusChanged:    true,
 	TypeBackendRevoked:          true,

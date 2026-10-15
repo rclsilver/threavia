@@ -210,8 +210,13 @@ func (s *Service) DeleteArtifact(ctx context.Context, identity auth.Identity, id
 		return translate(err)
 	}
 	s.emit(ctx, identity.UserID, events.TypeArtifactDeleted, domain.Scope{ProjectID: artifact.ProjectID}, map[string]any{"artifactId": string(id)})
+	s.removeArtifactBytes(ctx, key)
+	return nil
+}
+
+func (s *Service) removeArtifactBytes(ctx context.Context, key string) {
 	if s.objects == nil {
-		return nil
+		return
 	}
 	if err := s.objects.Delete(ctx, key); err != nil && !errors.Is(err, s3.ErrObjectNotFound) {
 		// The metadata is gone, so the Artifact is gone as far as a client is
@@ -220,7 +225,6 @@ func (s *Service) DeleteArtifact(ctx context.Context, identity auth.Identity, id
 		s.logger.Error("cannot remove the bytes of a deleted artifact",
 			"objectKey", key, "error", err)
 	}
-	return nil
 }
 
 // sanitiseFilename keeps a filename usable as a label without letting it carry a

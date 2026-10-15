@@ -263,6 +263,7 @@ export function useArchiveSession() {
     onSuccess: (_session, { sessionId }) => {
       void queries.invalidateQueries({ queryKey: ['sessions'] });
       void queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
+      void queries.invalidateQueries({ queryKey: keys.audit() });
     },
   });
 }
@@ -402,7 +403,10 @@ export function useStartSession() {
         input,
         idempotencyKey(),
       ),
-    onSuccess: () => queries.invalidateQueries({ queryKey: ['sessions'] }),
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: ['sessions'] });
+      void queries.invalidateQueries({ queryKey: keys.audit() });
+    },
   });
 }
 
@@ -512,6 +516,7 @@ export function useDeleteSession() {
     onSuccess: () => {
       void queries.invalidateQueries({ queryKey: ['sessions'] });
       void queries.invalidateQueries({ queryKey: ['artifacts'] });
+      void queries.invalidateQueries({ queryKey: keys.audit() });
     },
   });
 }
@@ -898,7 +903,11 @@ export function useInstallSkill(projectId: string) {
             name: input.name,
             source: input.source,
           }),
-    onSuccess: () => queries.invalidateQueries({ queryKey: keys.skills(projectId) }),
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: keys.skills(projectId) });
+      void queries.invalidateQueries({ queryKey: ['skill-files'] });
+      void queries.invalidateQueries({ queryKey: keys.audit() });
+    },
   });
 }
 
@@ -906,7 +915,11 @@ export function useUninstallSkill(projectId: string) {
   const queries = useQueryClient();
   return useMutation({
     mutationFn: (skillId: string) => api.delete(`/api/v1/skills/${skillId}`),
-    onSuccess: () => queries.invalidateQueries({ queryKey: keys.skills(projectId) }),
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: keys.skills(projectId) });
+      void queries.invalidateQueries({ queryKey: ['skill-files'] });
+      void queries.invalidateQueries({ queryKey: keys.audit() });
+    },
   });
 }
 

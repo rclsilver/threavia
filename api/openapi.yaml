@@ -2523,6 +2523,15 @@ components:
               in the envelope, so the notification survives the deletion
 
             - `artifact.deleted`: `{ artifactId }`, project-scoped metadata removal
+            - `skill.installed`: `{ skillId, name, installedRevision, replaced }`,
+              project-scoped installation or replacement. Refresh skills, open
+              skill files and audit; skill content is never in the event.
+            - `skill.removed`: `{ skillId, name, installedRevision }`,
+              project-scoped removal. Refresh skills and audit.
+            - `session.deleted`: `{ sessionId, title, artifactsDeleted }`,
+              project-scoped so it survives deletion of the session history.
+              Older events may carry the session id in the envelope instead.
+              Session creation, archival, restoration and deletion are audited.
             - `user.message`: `{ text, attachments?, delivery?, scheduleId?, actorJobId? }`,
               attachments are `{ artifactId, filename, mimeType, size }` references; delivery NOW or
               NEXT for a message that joined a Job already running, scheduleId

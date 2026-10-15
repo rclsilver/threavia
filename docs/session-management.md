@@ -75,6 +75,22 @@ possible for recovery. First resolution wins.
 
 ## Activation and clients
 
+Session creation, archival, restoration and deletion record the actor, channel,
+scope and compact details in the audit, atomically with the mutation and
+persistent event. Agent-managed actions identify the originating manager Job;
+an idempotent creation replay does not create another audit entry. Titles remain
+in the audit after the Session is deleted. The `session.deleted` notice is
+project-scoped with `{sessionId, title, artifactsDeleted}`, so reconnecting
+clients can replay it after the Session history has gone. Clients also accept
+older deletion notices with a Session id in the envelope.
+
+Deleting artifacts along with a Session removes their metadata and stages their
+notifications in that same transaction. Stored bytes are cleaned up only after
+commit; storage cleanup failures are logged as for ordinary artifact deletion.
+The Web audit follows these changes and offers Sessions and Skills filters.
+VS Code follows session deletion from either event shape and exposes skill
+changes on its event bus; it has no native Skills or audit view to refresh.
+
 Build and restart Core, apply migration `000015_managed_sessions`, then start
 a new Job to receive the tool catalogue. No backend protocol change is needed.
 Existing Jobs retain the tools they received when they started.

@@ -32,8 +32,8 @@ export function AuditTimeline({ projectId }: { projectId: string }) {
   if (entries.length === 0) {
     return (
       <EmptyState>
-        Nothing recorded yet. Every approval, refusal and change of permissions in this project will
-        be written here, with who did it and from where.
+        Nothing recorded yet. Approvals, permissions, session and Skill changes in this project
+        will be written here, with who did it and from where.
       </EmptyState>
     );
   }
@@ -89,12 +89,14 @@ export function AuditTimeline({ projectId }: { projectId: string }) {
   );
 }
 
-type Kind = 'APPROVAL' | 'PERMISSIONS' | 'BACKEND' | 'OTHER';
+type Kind = 'APPROVAL' | 'PERMISSIONS' | 'BACKEND' | 'SESSION' | 'SKILL' | 'OTHER';
 
 const KINDS: { kind: Kind; label: string }[] = [
   { kind: 'APPROVAL', label: 'Approvals' },
   { kind: 'PERMISSIONS', label: 'Permissions' },
   { kind: 'BACKEND', label: 'Backends' },
+  { kind: 'SESSION', label: 'Sessions' },
+  { kind: 'SKILL', label: 'Skills' },
   { kind: 'OTHER', label: 'Other' },
 ];
 
@@ -102,6 +104,8 @@ function kindOf(entry: AuditEntry): Kind {
   if (entry.action === 'validation.resolved') return 'APPROVAL';
   if (entry.action === 'execution_policy.set') return 'PERMISSIONS';
   if (entry.action === 'session.backend_changed') return 'BACKEND';
+  if (entry.action.startsWith('session.')) return 'SESSION';
+  if (entry.action.startsWith('skill.')) return 'SKILL';
   return 'OTHER';
 }
 
@@ -138,7 +142,7 @@ function Entry({ entry, context, last }: { entry: AuditEntry; context: Context; 
         <p className="text-muted mt-1.5 text-xs">
           {entry.actorId}
           {entry.channel && <> · from {CHANNELS[entry.channel] ?? humanise(entry.channel)}</>}
-          {entry.sessionId && entry.action !== 'execution_policy.set' && entry.action !== 'session.backend_changed' && (
+          {entry.sessionId && entry.action !== 'execution_policy.set' && !entry.action.startsWith('session.') && (
             <>
               {' · in '}
               <SessionLink id={entry.sessionId} context={context} />
@@ -168,6 +172,29 @@ const TONES = { ok: 'text-ok', danger: 'text-danger', accent: 'text-accent', mut
 function describe(entry: AuditEntry, context: Context): { Icon: LucideIcon; tone: string; title: ReactNode; body?: ReactNode } {
   const detail = (entry.detail ?? {}) as Record<string, unknown>;
   const text = (value: unknown) => (typeof value === 'string' ? value : '');
+
+  if (['session.created', 'session.archived', 'session.restored', 'session.deleted'].includes(entry.action)) {
+    const name = context.session(entry.sessionId ?? '')
+      ? <SessionLink id={entry.sessionId ?? ''} context={context} />
+      : <span className="font-medium">{text(detail.title) || 'an untitled session'}</span>;
+    return {
+      Icon: Circle,
+      tone: entry.action === 'session.deleted' ? TONES.danger : TONES.accent,
+      title: <>{humanise(entry.action.slice(8))} session {name}</>,
+      body: entry.action === 'session.deleted'
+        ? <p className="text-muted text-sm">{detail.artifactsDeleted ? 'Its artifacts were deleted too.' : 'Its artifacts were kept with the project.'}</p>
+        : undefined,
+    };
+  }
+
+  if (entry.action === 'skill.installed' || entry.action === 'skill.removed') {
+    return {
+      Icon: SlidersHorizontal,
+      tone: entry.action === 'skill.removed' ? TONES.muted : TONES.accent,
+      title: <>{entry.action === 'skill.removed' ? 'Removed' : detail.replaced ? 'Replaced' : 'Installed'} skill <span className="font-medium">{text(detail.name) || 'an unnamed skill'}</span></>,
+      body: <p className="text-muted text-sm">Revision {text(detail.installedRevision).slice(0, 12)}.</p>,
+    };
+  }
 
   if (entry.action === 'validation.resolved') {
     const approved = detail.approved === true;
