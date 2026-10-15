@@ -1332,6 +1332,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{sessionId}/handoff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Review a destination before moving the session
+         * @description Read-only, owner-scoped preview of the target backend, its capacity,
+         *     capabilities, missing local Skills and working directory resolution.
+         *     Offline targets may be chosen explicitly; work waits for reconnection.
+         *     Full or draining targets cannot be selected. No files or native session
+         *     are copied. State is rechecked on move; use fromRunId as expectedRunId.
+         *
+         */
+        get: {
+            parameters: {
+                query: {
+                    backendInstanceId: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path: {
+                    sessionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Destination and any reasons preventing the move */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HandoffPreview"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{sessionId}": {
         parameters: {
             query?: never;
@@ -1422,6 +1472,12 @@ export interface paths {
          *     Session and apply at the next Job launch; running Jobs keep their values.
          *     An unsupported model or effort is refused. Model changes cannot be
          *     combined with a backend move in one request.
+         *     Backend moves also cannot be combined with title, pin or directory changes.
+         *     Optional expectedRunId refuses a move if another client already moved the
+         *     session. Pending work (including queued Jobs), full/draining targets and
+         *     incompatible model/effort preferences prevent a move. The new Run starts
+         *     with bounded recent Core history; workspace files and native sessions stay
+         *     on the source backend.
          *
          */
         patch: {
@@ -1452,6 +1508,7 @@ export interface paths {
                         /** Format: uuid */
                         workingDirectoryId?: string | null;
                         backendInstanceId?: components["schemas"]["UUID"];
+                        expectedRunId?: components["schemas"]["UUID"];
                         pinned?: boolean;
                         /** @description Empty resets to the backend default; omitted leaves it unchanged. */
                         model?: string;
@@ -4395,6 +4452,10 @@ export interface components {
              *       or a changed operational/authentication state, capacity or condition.
              *       Repeated reports and heartbeat timestamps do not emit events.
              *       Refresh backend instances, session lists, snapshots and attention.
+             *     - `run.created`: `{ backendInstanceId, fromBackendInstanceId?, backendName? }`.
+             *       A fromBackendInstanceId marks an explicit move: render a destination
+             *       notice explaining the fresh provider session and bounded Core history.
+             *       Refresh the snapshot, repository and audit. Initial runs remain silent.
              *     - `backend.quotas_updated`: `{ backendInstanceId }`, owner-scoped;
              *       refresh backend instances to read the complete quota snapshot
              *     - `backend.default_changed`: `{ backendInstanceId }`, owner-scoped;
@@ -4903,6 +4964,23 @@ export interface components {
             /** @description All other information reported for this quota, without folding different windows or models together. */
             details?: {
                 [key: string]: unknown;
+            };
+        };
+        HandoffPreview: {
+            fromRunId: components["schemas"]["UUID"];
+            backend: components["schemas"]["BackendInstance"];
+            canMove: boolean;
+            reasons: string[];
+            warnings: string[];
+            missingSkills: string[];
+            /** @constant */
+            nativeSessionTransferred: false;
+            workingDirectory: {
+                knownDirectoryId?: components["schemas"]["UUID"];
+                name?: string;
+                path?: string;
+                /** @enum {string} */
+                resolution: "bound" | "resolve" | "backend_default";
             };
         };
         /** @description What moving a Session to another BackendInstance produced. */

@@ -244,6 +244,8 @@ export class EventStream {
       // A new Run means the Session moved to another backend, which the cached
       // snapshot cannot derive from the event alone.
       case 'run.created':
+        void this.queries.invalidateQueries({ queryKey: keys.audit() });
+        void this.queries.invalidateQueries({ queryKey: keys.repository(event.sessionId ?? '') });
         void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
         break;
 

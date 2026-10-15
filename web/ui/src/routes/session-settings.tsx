@@ -7,6 +7,7 @@ import {
   useBackends,
   useDeleteSession,
   useMoveSession,
+  useHandoffPreview,
   useSessionArtifacts,
   useSnapshot,
 } from '@/api/queries';
@@ -148,6 +149,8 @@ function MoveSession({ sessionId }: { sessionId: string }) {
 
   const runs = [...(snapshot.data?.runs ?? [])].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const currentId = runs.at(-1)?.backendInstanceId;
+  const preview = useHandoffPreview(sessionId, target === currentId ? '' : target);
+  const destination = preview.data;
   const current = backends.data?.find((backend) => backend.id === currentId);
   const usable = (backends.data ?? []).filter(
     (backend) => backend.ownershipStatus !== 'REVOKED' && backend.id !== currentId,
@@ -175,20 +178,38 @@ function MoveSession({ sessionId }: { sessionId: string }) {
           <p className="text-muted text-sm">No other backend is available.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            <Select value={target} onValueChange={setTarget}>
+            <Select value={target} onValueChange={(value) => { setTarget(value); move.reset(); }}>
               <SelectTrigger className="h-11 min-w-56 flex-1 sm:h-9">
                 <SelectValue placeholder="Choose a backend" />
               </SelectTrigger>
               <SelectContent>
                 {usable.map((backend) => (
-                  <SelectItem key={backend.id} value={backend.id}>
-                    <span className="flex items-center gap-2"><BackendIcon provider={backend.backend} />{backend.name} ({humanise(backend.operationalStatus)})</span>
+                  <SelectItem key={backend.id} value={backend.id} disabled={backend.capacity.maxConcurrentRuns <= 0 || backend.capacity.activeRuns >= backend.capacity.maxConcurrentRuns}>
+                    <span className="flex items-center gap-2"><BackendIcon provider={backend.backend} />{backend.name} ({backend.capacity.maxConcurrentRuns <= 0 ? 'Draining' : backend.capacity.activeRuns >= backend.capacity.maxConcurrentRuns ? 'Full' : humanise(backend.operationalStatus)})</span>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Button size="lg" disabled={!target || move.isPending} onClick={() => move.mutate(target)}>
-              {move.isPending ? 'Moving…' : 'Move'}
+          </div>
+        )}
+        {target && preview.isPending && <p className="text-muted text-sm">Checking the destination…</p>}
+        <ActionError error={preview.error} outcome="Destination could not be checked" recovery="Choose the backend again or reload." />
+        {destination && target !== currentId && (
+          <div className="bg-surface border-border space-y-3 rounded-(--radius-card) border p-4 text-sm">
+            <h4 className="font-medium">Destination: {destination.backend.name}</h4>
+            <p className="text-muted">{destination.backend.backend || 'Provider not reported'} · {humanise(destination.backend.operationalStatus)} · {destination.backend.capacity.activeRuns}/{destination.backend.capacity.maxConcurrentRuns} runs</p>
+            <p>Capabilities: {destination.backend.capabilities.map(humanise).join(', ') || 'None reported'}. Features: {destination.backend.features?.map(humanise).join(', ') || 'Queued messages only'}.</p>
+            <p>Working directory: {destination.workingDirectory.resolution === 'bound'
+              ? <><span>{destination.workingDirectory.name}</span> · <code className="break-all">{destination.workingDirectory.path}</code></>
+              : destination.workingDirectory.resolution === 'resolve'
+                ? `${destination.workingDirectory.name} — the backend must find or confirm its path before work starts.`
+                : 'The destination backend’s default directory, selected when the job starts.'}</p>
+            {destination.missingSkills.length > 0 && <p className="text-warn-text">Local skills missing there: {destination.missingSkills.join(', ')}.</p>}
+            <p className="text-muted">Recent exchanges, work summaries and changed-file names will accompany the next message. The provider session starts fresh. Workspace files must already exist on the destination.</p>
+            {destination.warnings.map((warning) => <p key={warning} className="text-warn-text">{warning}</p>)}
+            {destination.reasons.map((reason) => <p key={reason} className="text-danger">{reason}</p>)}
+            <Button size="lg" disabled={!destination.canMove || Boolean(preview.error) || preview.isFetching || move.isPending} onClick={() => move.mutate({ backendInstanceId: target, expectedRunId: destination.fromRunId }, { onSuccess: () => setTarget('') })}>
+              {move.isPending ? 'Moving…' : `Move to ${destination.backend.name}`}
             </Button>
           </div>
         )}

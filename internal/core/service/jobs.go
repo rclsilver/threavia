@@ -230,8 +230,8 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 }
 
 // projectContext builds the compact structured context of specification
-// section 12. It never carries the project history: everything else is
-// searchable on demand.
+// section 12. A fresh Run after a move also receives bounded recent session
+// excerpts. Other history remains searchable on demand.
 //
 // A read that fails is returned rather than logged and skipped. An agent has no
 // way to tell an empty project from one whose memory could not be read: it
@@ -317,6 +317,11 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) (*
 		})
 	}
 
+	handoff, err := s.handoffContext(ctx, jc)
+	if err != nil {
+		return nil, fmt.Errorf("read the session transfer context: %w", err)
+	}
+	pc.ProjectInstructions += handoff
 	return pc, nil
 }
 

@@ -296,6 +296,17 @@ func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sess
 	b := &batch{ownerID: identity.UserID}
 
 	err = s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		locked, err := tx.LockSession(ctx, identity.UserID, sessionID)
+		if err != nil {
+			return err
+		}
+		latest, err := tx.LatestRun(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		if locked.Status != domain.SessionActive || latest.ID != run.ID {
+			return fmt.Errorf("%w: the session changed while sending; retry the message", ErrConflict)
+		}
 		if err := tx.CreateJob(ctx, &job); err != nil {
 			return err
 		}

@@ -18,6 +18,7 @@ import type {
   FileDiff,
   SessionPolicy,
   Handoff,
+  HandoffPreview,
   Job,
   KnownDirectory,
   KnownDirectoryBinding,
@@ -521,12 +522,22 @@ export function useDeleteSession() {
   });
 }
 
+export function useHandoffPreview(sessionId: string, backendInstanceId: string) {
+  return useQuery({
+    queryKey: [...keys.snapshot(sessionId), 'handoff', backendInstanceId],
+    queryFn: () => api.get<HandoffPreview>(`/api/v1/sessions/${sessionId}/handoff?backendInstanceId=${encodeURIComponent(backendInstanceId)}`),
+    enabled: Boolean(backendInstanceId),
+    refetchInterval: 5000,
+  });
+}
+
 export function useMoveSession(sessionId: string) {
   const queries = useQueryClient();
   return useMutation({
-    mutationFn: (backendInstanceId: string) =>
-      api.patch<Handoff>(`/api/v1/sessions/${sessionId}`, { backendInstanceId }),
+    mutationFn: (input: { backendInstanceId: string; expectedRunId: string }) =>
+      api.patch<Handoff>(`/api/v1/sessions/${sessionId}`, input),
     onSuccess: () => queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) }),
+    onError: () => queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) }),
   });
 }
 

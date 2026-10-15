@@ -177,7 +177,7 @@ export function rowsOf(events: Event[], now: Date = new Date()): Row[] {
       continue;
     }
 
-    if (RENDERED.has(event.type)) {
+    if (RENDERED.has(event.type) || (event.type === 'run.created' && typeof event.payload?.fromBackendInstanceId === 'string')) {
       openDay(event);
       rows.push({
         kind: 'event',
@@ -385,6 +385,8 @@ export function describe(event: Event): { icon: string; tone?: 'ok' | 'danger' |
   switch (event.type) {
     case 'session.created':
       return { icon: 'flag', text: 'Session created.' };
+    case 'run.created':
+      return { icon: 'flag', text: `Moved to ${typeof event.payload?.backendName === 'string' ? event.payload.backendName : 'another backend'}. The next message starts a fresh provider session with recent Core history. Workspace files stay on the source machine.` };
     // The provider result repeats the last agent message, so only the fact
     // that the turn ended is worth showing.
     case 'job.completed':

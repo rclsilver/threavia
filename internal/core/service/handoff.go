@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
@@ -12,120 +12,177 @@ import (
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 )
 
-// Handoff is what moving a Session to another BackendInstance produced.
 type Handoff struct {
-	Run domain.Run `json:"run"`
-	// MissingSkills are the backend-local Skills the previous backend had and
-	// the new one does not. Core knows their names and never their content, so
-	// this is the most it can say — and saying it is the point of recording that
-	// metadata at all (spec section 18).
-	MissingSkills []string `json:"missingSkills,omitempty"`
+	Run           domain.Run `json:"run"`
+	MissingSkills []string   `json:"missingSkills,omitempty"`
 }
 
-// MoveSessionToBackend starts a new Run of a Session on another
-// BackendInstance.
-//
-// A backend change is explicit and visible (spec section 34): the timeline
-// stays continuous, the native provider session does not travel — it belongs to
-// the machine that holds it — and the new Run starts fresh. Core refuses while
-// work is in flight rather than leaving a Job behind on a backend nobody is
-// watching any more.
-func (s *Service) MoveSessionToBackend(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, instanceID domain.BackendInstanceID) (Handoff, error) {
-	session, err := s.store.GetSession(ctx, identity.UserID, sessionID)
-	if err != nil {
-		return Handoff{}, translate(err)
-	}
-	if session.Status != domain.SessionActive {
-		return Handoff{}, fmt.Errorf("%w: the session is archived", ErrConflict)
-	}
-	if err := s.checkBackendUsable(ctx, identity, instanceID); err != nil {
-		return Handoff{}, err
-	}
+// HandoffPreview describes the destination before an explicit move. Paths and
+// skills are metadata only; Core neither reads nor copies the source workspace.
+type HandoffPreview struct {
+	FromRunID                domain.RunID           `json:"fromRunId"`
+	Backend                  domain.BackendInstance `json:"backend"`
+	CanMove                  bool                   `json:"canMove"`
+	Reasons                  []string               `json:"reasons"`
+	Warnings                 []string               `json:"warnings"`
+	MissingSkills            []string               `json:"missingSkills"`
+	WorkingDirectory         HandoffDirectory       `json:"workingDirectory"`
+	NativeSessionTransferred bool                   `json:"nativeSessionTransferred"`
+}
 
-	current, err := s.store.LatestRun(ctx, sessionID)
+type HandoffDirectory struct {
+	KnownDirectoryID domain.KnownDirectoryID `json:"knownDirectoryId,omitempty"`
+	Name             string                  `json:"name,omitempty"`
+	Path             string                  `json:"path,omitempty"`
+	Resolution       string                  `json:"resolution"`
+}
+
+func (s *Service) PreviewHandoff(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, instanceID domain.BackendInstanceID) (HandoffPreview, error) {
+	p, err := s.previewHandoff(ctx, s.store, identity, sessionID, instanceID)
+	return p, translate(err)
+}
+
+func (s *Service) previewHandoff(ctx context.Context, store *postgres.Store, identity auth.Identity, sessionID domain.SessionID, instanceID domain.BackendInstanceID) (HandoffPreview, error) {
+	p := HandoffPreview{Reasons: []string{}, Warnings: []string{}, MissingSkills: []string{}, WorkingDirectory: HandoffDirectory{Resolution: "backend_default"}}
+	session, err := store.GetSession(ctx, identity.UserID, sessionID)
 	if err != nil {
-		return Handoff{}, translate(err)
+		return p, err
+	}
+	backend, err := store.GetBackendInstance(ctx, identity.UserID, instanceID)
+	if err != nil {
+		return p, err
+	}
+	current, err := store.LatestRun(ctx, sessionID)
+	if err != nil {
+		return p, err
+	}
+	p.FromRunID, p.Backend = current.ID, backend
+	if session.Status != domain.SessionActive {
+		p.Reasons = append(p.Reasons, "The session is archived.")
 	}
 	if current.BackendInstanceID == instanceID {
-		return Handoff{}, fmt.Errorf("%w: the session already runs on this backend", ErrConflict)
+		p.Reasons = append(p.Reasons, "The session already uses this backend.")
 	}
-	if active, err := s.store.ActiveJob(ctx, current.ID); err == nil {
-		return Handoff{}, fmt.Errorf("%w: job %s is still running, cancel it first", ErrConflict, active.ID)
-	} else if !errors.Is(err, postgres.ErrNotFound) {
-		return Handoff{}, translate(err)
+	if backend.OwnershipStatus == domain.BackendRevoked {
+		p.Reasons = append(p.Reasons, "The backend is revoked.")
 	}
-
-	handoff := Handoff{
-		Run: domain.Run{
-			ID:                domain.NewRunID(),
-			SessionID:         sessionID,
-			BackendInstanceID: instanceID,
-			// A native provider session belongs to the machine that holds it, so
-			// the new Run has none until the new backend binds one.
-			ResumeStatus: domain.ResumeUnknown,
-		},
+	if !backend.HasCapability(domain.CapabilityCode) {
+		p.Reasons = append(p.Reasons, "The backend does not support CODE work.")
 	}
-	handoff.MissingSkills = s.skillsLostInHandoff(ctx, current.BackendInstanceID, instanceID)
-
-	scope := domain.Scope{ProjectID: session.ProjectID, SessionID: sessionID, RunID: handoff.Run.ID}
-	b := &batch{ownerID: identity.UserID}
-
-	err = s.store.WithTx(ctx, func(tx *postgres.Store) error {
-		if err := tx.CreateRun(ctx, &handoff.Run); err != nil {
-			return err
-		}
-		return s.appendAll(ctx, tx, b, record{
-			events.TypeRunCreated, scope,
-			RunCreatedPayload{BackendInstanceID: string(instanceID)},
-		})
-	})
+	if backend.Capacity.MaxConcurrentRuns <= 0 {
+		p.Reasons = append(p.Reasons, "The backend is draining and accepts no new work.")
+	} else if backend.Capacity.ActiveRuns >= backend.Capacity.MaxConcurrentRuns {
+		p.Reasons = append(p.Reasons, "The backend is full.")
+	}
+	if _, _, err := backend.ResolveModel(session.Model, session.Effort); err != nil {
+		p.Reasons = append(p.Reasons, "Session model or effort is incompatible: "+err.Error())
+	}
+	pending, err := store.SessionHasPendingJobs(ctx, sessionID)
 	if err != nil {
-		return Handoff{}, translate(err)
+		return p, err
 	}
-
-	s.flush(b)
-	s.audit(ctx, identity, postgres.AuditEntry{
-		Action:    "session.backend_changed",
-		ProjectID: string(session.ProjectID),
-		SessionID: string(sessionID),
-		SubjectID: string(instanceID),
-		Detail: mustJSON(map[string]any{
-			"from":          string(current.BackendInstanceID),
-			"to":            string(instanceID),
-			"missingSkills": handoff.MissingSkills,
-		}),
-	})
-	return handoff, nil
+	if pending {
+		p.Reasons = append(p.Reasons, "Finish or cancel all running and queued jobs before moving.")
+	}
+	if _, connected := s.backends.Lookup(instanceID); !connected {
+		p.Backend.OperationalStatus = domain.BackendOffline
+	}
+	if p.Backend.OperationalStatus != domain.BackendReady {
+		p.Warnings = append(p.Warnings, "The backend is "+strings.ToLower(string(p.Backend.OperationalStatus))+"; the next job may wait for it.")
+	}
+	if backend.ProviderAuthState == domain.ProviderAuthenticationRequired {
+		p.Warnings = append(p.Warnings, "Provider sign-in is required on the destination backend.")
+	}
+	if session.WorkingDirectoryID != nil {
+		dir, err := store.GetKnownDirectory(ctx, identity.UserID, domain.KnownDirectoryID(*session.WorkingDirectoryID))
+		if err != nil {
+			return p, err
+		}
+		p.WorkingDirectory = HandoffDirectory{KnownDirectoryID: dir.ID, Name: dir.Name, Resolution: "resolve"}
+		bindings, err := store.ListBindings(ctx, identity.UserID, dir.ID)
+		if err != nil {
+			return p, err
+		}
+		for _, binding := range bindings {
+			if binding.BackendInstanceID == instanceID {
+				p.WorkingDirectory.Path, p.WorkingDirectory.Resolution = binding.Path, "bound"
+				break
+			}
+		}
+	}
+	p.MissingSkills, err = skillsLostInHandoff(ctx, store, current.BackendInstanceID, instanceID)
+	if err != nil {
+		return p, err
+	}
+	p.CanMove = len(p.Reasons) == 0
+	return p, nil
 }
 
-// skillsLostInHandoff names the backend-local Skills the previous backend had
-// and the new one does not.
-//
-// Core compares metadata only: it never held the content of either, which is
-// exactly what lets a backend expose a Skill that only exists behind a corporate
-// network and still have Core warn that moving the work loses it.
-func (s *Service) skillsLostInHandoff(ctx context.Context, from, to domain.BackendInstanceID) []string {
-	before, err := s.store.ListBackendSkills(ctx, from)
-	if err != nil || len(before) == 0 {
-		return nil
-	}
-	after, err := s.store.ListBackendSkills(ctx, to)
+// The expected Run guards a reviewed destination against a move from another
+// client. Empty is retained for older API clients; all state is still rechecked.
+func (s *Service) MoveSessionToBackend(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, instanceID domain.BackendInstanceID, expectedRunID domain.RunID) (Handoff, error) {
+	var result Handoff
+	b := &batch{ownerID: identity.UserID}
+	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		session, err := tx.LockSession(ctx, identity.UserID, sessionID)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.LockBackendInstance(ctx, instanceID); err != nil {
+			return err
+		}
+		preview, err := s.previewHandoff(ctx, tx, identity, sessionID, instanceID)
+		if err != nil {
+			return err
+		}
+		if expectedRunID != "" && expectedRunID != preview.FromRunID {
+			return fmt.Errorf("%w: the session moved since this preview; review the destination again", ErrConflict)
+		}
+		if !preview.CanMove {
+			return fmt.Errorf("%w: %s", ErrConflict, strings.Join(preview.Reasons, " "))
+		}
+		current, err := tx.LatestRun(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		result = Handoff{Run: domain.Run{ID: domain.NewRunID(), SessionID: sessionID, BackendInstanceID: instanceID, ResumeStatus: domain.ResumeUnknown}, MissingSkills: preview.MissingSkills}
+		if err := tx.CreateRun(ctx, &result.Run); err != nil {
+			return err
+		}
+		scope := domain.Scope{ProjectID: session.ProjectID, SessionID: sessionID, RunID: result.Run.ID}
+		if err := s.recordLifecycleAudit(ctx, tx, identity, events.Type("session.backend_changed"), scope, string(instanceID), map[string]any{"from": current.BackendInstanceID, "to": instanceID, "missingSkills": result.MissingSkills}); err != nil {
+			return err
+		}
+		return s.appendAll(ctx, tx, b, record{events.TypeRunCreated, scope, RunCreatedPayload{BackendInstanceID: string(instanceID), FromBackendInstanceID: string(current.BackendInstanceID), BackendName: preview.Backend.Name}})
+	})
 	if err != nil {
-		return nil
+		return Handoff{}, translate(err)
 	}
+	s.flush(b)
+	return result, nil
+}
 
-	available := make([]string, 0, len(after))
+func skillsLostInHandoff(ctx context.Context, store *postgres.Store, from, to domain.BackendInstanceID) ([]string, error) {
+	before, err := store.ListBackendSkills(ctx, from)
+	if err != nil {
+		return nil, err
+	}
+	after, err := store.ListBackendSkills(ctx, to)
+	if err != nil {
+		return nil, err
+	}
+	available := map[string]bool{}
 	for _, skill := range after {
 		if skill.Available {
-			available = append(available, skill.Name)
+			available[skill.Name] = true
 		}
 	}
-
-	var missing []string
+	missing := []string{}
 	for _, skill := range before {
-		if skill.Available && !slices.Contains(available, skill.Name) {
+		if skill.Available && !available[skill.Name] {
 			missing = append(missing, skill.Name)
 		}
 	}
-	return missing
+	slices.Sort(missing)
+	return slices.Compact(missing), nil
 }

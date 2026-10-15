@@ -19,6 +19,7 @@ func (h *handler) registerSessions(mux *http.ServeMux) {
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/events", h.sessionHistory)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/diff", h.workspaceDiff)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/repository", h.repository)
+	h.handle(mux, "GET /api/v1/sessions/{sessionId}/handoff", h.previewHandoff)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/messages", h.postMessage)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/archive", h.archiveSession)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/restore", h.restoreSession)
@@ -100,7 +101,8 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 		// BackendInstanceID moves the Session to another backend. It is an
 		// explicit act: the timeline stays continuous, but the native provider
 		// session does not travel (spec section 34).
-		BackendInstanceID *string `json:"backendInstanceId"`
+		BackendInstanceID *string      `json:"backendInstanceId"`
+		ExpectedRunID     domain.RunID `json:"expectedRunId"`
 		// Pinned puts the Session one click away from any Project, or takes it
 		// back out.
 		Pinned *bool `json:"pinned"`
@@ -111,6 +113,10 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 
 	if body.BackendInstanceID != nil && (body.Model != nil || body.Effort != nil) {
 		h.fail(w, fmt.Errorf("%w: change the backend and model in separate requests", service.ErrInvalid))
+		return
+	}
+	if body.BackendInstanceID != nil && (body.Title != nil || body.Pinned != nil || len(body.WorkingDirectoryID) > 0) {
+		h.fail(w, fmt.Errorf("%w: change the backend separately from other session settings", service.ErrInvalid))
 		return
 	}
 	sessionID := domain.SessionID(r.PathValue("sessionId"))
@@ -140,7 +146,7 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 
 	if body.BackendInstanceID != nil && *body.BackendInstanceID != "" {
 		handoff, err := h.svc.MoveSessionToBackend(r.Context(), identity, sessionID,
-			domain.BackendInstanceID(*body.BackendInstanceID))
+			domain.BackendInstanceID(*body.BackendInstanceID), body.ExpectedRunID)
 		if err != nil {
 			h.fail(w, err)
 			return

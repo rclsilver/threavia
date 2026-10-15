@@ -711,6 +711,34 @@ paths:
         "409":
           $ref: "#/components/responses/Error"
 
+  /api/v1/sessions/{sessionId}/handoff:
+    get:
+      tags: [sessions]
+      summary: Review a destination before moving the session
+      description: |
+        Read-only, owner-scoped preview of the target backend, its capacity,
+        capabilities, missing local Skills and working directory resolution.
+        Offline targets may be chosen explicitly; work waits for reconnection.
+        Full or draining targets cannot be selected. No files or native session
+        are copied. State is rechecked on move; use fromRunId as expectedRunId.
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/UUID" }
+        - name: backendInstanceId
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/UUID" }
+      responses:
+        "200":
+          description: Destination and any reasons preventing the move
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HandoffPreview" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
   /api/v1/sessions/{sessionId}:
     parameters:
       - $ref: "#/components/parameters/SessionID"
@@ -750,6 +778,12 @@ paths:
         Session and apply at the next Job launch; running Jobs keep their values.
         An unsupported model or effort is refused. Model changes cannot be
         combined with a backend move in one request.
+        Backend moves also cannot be combined with title, pin or directory changes.
+        Optional expectedRunId refuses a move if another client already moved the
+        session. Pending work (including queued Jobs), full/draining targets and
+        incompatible model/effort preferences prevent a move. The new Run starts
+        with bounded recent Core history; workspace files and native sessions stay
+        on the source backend.
       parameters:
         - $ref: "#/components/parameters/Channel"
       requestBody:
@@ -764,6 +798,7 @@ paths:
                   type: [string, "null"]
                   format: uuid
                 backendInstanceId: { $ref: "#/components/schemas/UUID" }
+                expectedRunId: { $ref: "#/components/schemas/UUID" }
                 pinned: { type: boolean }
                 model: { type: string, maxLength: 200, description: 'Empty resets to the backend default; omitted leaves it unchanged.' }
                 effort: { type: string, maxLength: 32, description: 'Empty resets to the backend default; omitted leaves it unchanged.' }
@@ -2520,6 +2555,10 @@ components:
               or a changed operational/authentication state, capacity or condition.
               Repeated reports and heartbeat timestamps do not emit events.
               Refresh backend instances, session lists, snapshots and attention.
+            - `run.created`: `{ backendInstanceId, fromBackendInstanceId?, backendName? }`.
+              A fromBackendInstanceId marks an explicit move: render a destination
+              notice explaining the fresh provider session and bounded Core history.
+              Refresh the snapshot, repository and audit. Initial runs remain silent.
             - `backend.quotas_updated`: `{ backendInstanceId }`, owner-scoped;
               refresh backend instances to read the complete quota snapshot
             - `backend.default_changed`: `{ backendInstanceId }`, owner-scoped;
@@ -3148,6 +3187,26 @@ components:
           type: object
           additionalProperties: true
           description: All other information reported for this quota, without folding different windows or models together.
+
+    HandoffPreview:
+      type: object
+      required: [fromRunId, backend, canMove, reasons, warnings, missingSkills, workingDirectory, nativeSessionTransferred]
+      properties:
+        fromRunId: { $ref: "#/components/schemas/UUID" }
+        backend: { $ref: "#/components/schemas/BackendInstance" }
+        canMove: { type: boolean }
+        reasons: { type: array, items: { type: string } }
+        warnings: { type: array, items: { type: string } }
+        missingSkills: { type: array, items: { type: string } }
+        nativeSessionTransferred: { type: boolean, const: false }
+        workingDirectory:
+          type: object
+          required: [resolution]
+          properties:
+            knownDirectoryId: { $ref: "#/components/schemas/UUID" }
+            name: { type: string }
+            path: { type: string }
+            resolution: { type: string, enum: [bound, resolve, backend_default] }
 
     Handoff:
       type: object

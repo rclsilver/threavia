@@ -179,10 +179,10 @@ function settle(sessionId: string) {
 }
 
 /** The demo's agent: honest about being one, and quick. */
-function modelSettings(sessionId: string, model?: string, effort?: string) {
+function modelSettings(sessionId: string, model?: string, effort?: string, targetBackend?: Json) {
   const session = sessionOf(sessionId);
   const current = timelineOf(sessionId).runs.at(-1)?.backendInstanceId;
-  const backend = state.backends.find((entry) => entry.id === current);
+  const backend = targetBackend ?? state.backends.find((entry) => entry.id === current);
   const catalog = backend?.modelCatalog as { defaultModel?: string; defaultEffort?: string; models: { id: string; efforts: string[]; defaultEffort?: string }[] } | undefined;
   const selected = model ?? text(session.model);
   const reasoning = effort ?? text(session.effort);
@@ -192,6 +192,31 @@ function modelSettings(sessionId: string, model?: string, effort?: string) {
   if (selected && !option) throw new ApiError(400, 'invalid', 'This model is unavailable on this backend.');
   if (reasoning && !option?.efforts.includes(reasoning)) throw new ApiError(400, 'invalid', 'This effort is unavailable for the model.');
   return { model: effective, effort: reasoning || (selected ? option?.defaultEffort : catalog?.defaultEffort) || option?.defaultEffort || '' };
+}
+
+function previewHandoff(sessionId: string, target: string) {
+  const session = sessionOf(sessionId);
+  const timeline = timelineOf(sessionId);
+  const backend = state.backends.find((entry) => entry.id === target);
+  if (!backend) throw notFound('This backend');
+  const current = timeline.runs.at(-1);
+  const reasons: string[] = [];
+  const warnings: string[] = [];
+  const capacity = backend.capacity as { activeRuns: number; maxConcurrentRuns: number };
+  if (session.status !== 'ACTIVE') reasons.push('The session is archived.');
+  if (current?.backendInstanceId === target) reasons.push('The session already uses this backend.');
+  if (backend.ownershipStatus === 'REVOKED') reasons.push('The backend is revoked.');
+  if (!(backend.capabilities as string[]).includes('CODE')) reasons.push('The backend does not support CODE work.');
+  if (capacity.maxConcurrentRuns <= 0) reasons.push('The backend is draining and accepts no new work.');
+  else if (capacity.activeRuns >= capacity.maxConcurrentRuns) reasons.push('The backend is full.');
+  if (timeline.jobs.some((job) => !['COMPLETED', 'FAILED', 'CANCELLED'].includes(String(job.status)))) reasons.push('Finish or cancel all running and queued jobs before moving.');
+  try { modelSettings(sessionId, undefined, undefined, backend); } catch (error) { reasons.push((error as Error).message); }
+  if (backend.operationalStatus !== 'READY') warnings.push(`The backend is ${text(backend.operationalStatus).toLowerCase()}; the next job may wait for it.`);
+  if (backend.providerAuthState === 'AUTHENTICATION_REQUIRED') warnings.push('Provider sign-in is required on the destination backend.');
+  const directory = state.directories.find((entry) => entry.id === session.workingDirectoryId);
+  const binding = directory && state.bindings.find((entry) => entry.knownDirectoryId === directory.id && entry.backendInstanceId === target);
+  return { fromRunId: current?.id, backend: clone(backend), canMove: reasons.length === 0, reasons, warnings, missingSkills: [], nativeSessionTransferred: false,
+    workingDirectory: directory ? { knownDirectoryId: directory.id, name: directory.name, ...(binding && { path: binding.path }), resolution: binding ? 'bound' : 'resolve' } : { resolution: 'backend_default' } };
 }
 
 function answer(sessionId: string, text: string, delivery?: string, artifactIds?: string[]) {
@@ -582,8 +607,15 @@ const routes: [string, RegExp, Handler][] = [
     return { session: sessionOf(sessionId), run: state.timelines[sessionId].runs[0], job };
   }],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)$/, (m) => snapshot(m[1])],
+  ['GET', /^\/api\/v1\/sessions\/([^/]+)\/handoff$/, (m, _body, query) => previewHandoff(m[1], query.get('backendInstanceId') ?? '')],
   ['PATCH', /^\/api\/v1\/sessions\/([^/]+)$/, (m, body) => {
     const session = sessionOf(m[1]);
+    if (body.backendInstanceId && ['model', 'effort', 'title', 'pinned', 'workingDirectoryId'].some((key) => body[key] !== undefined)) throw new ApiError(400, 'invalid', 'Change the backend separately from other session settings.');
+    if (body.backendInstanceId) {
+      const preview = previewHandoff(m[1], text(body.backendInstanceId));
+      if (body.expectedRunId && body.expectedRunId !== preview.fromRunId) throw new ApiError(409, 'conflict', 'The session moved since this preview; review the destination again.');
+      if (!preview.canMove) throw new ApiError(409, 'conflict', preview.reasons.join(' '));
+    }
     if (body.model !== undefined || body.effort !== undefined) {
       if (body.backendInstanceId) throw new ApiError(400, 'invalid', 'Change the backend and model in separate requests.');
       modelSettings(m[1], body.model as string | undefined, body.effort as string | undefined);
@@ -617,6 +649,9 @@ const routes: [string, RegExp, Handler][] = [
       const from = timeline.runs.at(-1)?.backendInstanceId;
       const runEntry = { id: newId(), sessionId: m[1], backendInstanceId: body.backendInstanceId, resumeStatus: 'UNKNOWN', createdAt: nowIso(), updatedAt: nowIso() };
       timeline.runs.push(runEntry);
+      const moved = { backendInstanceId: body.backendInstanceId, fromBackendInstanceId: from, backendName: previewHandoff(m[1], text(body.backendInstanceId)).backend.name };
+      pushEvent(m[1], 'run.created', moved);
+      emitLifecycle('run.created', text(session.projectId), moved, m[1]);
       record('session.backend_changed', { projectId: session.projectId, sessionId: m[1], subjectId: body.backendInstanceId, detail: { from, to: body.backendInstanceId, missingSkills: [] } });
       return { run: runEntry, missingSkills: [] };
     }

@@ -120,6 +120,13 @@ func TestAHandoffReportsALostLocalSkill(t *testing.T) {
 		return c.jobStatus(session, start.GetJobId()) == "COMPLETED"
 	})
 
+	var preview struct {
+		MissingSkills []string `json:"missingSkills"`
+	}
+	c.mustDo(http.MethodGet, "/api/v1/sessions/"+session+"/handoff?backendInstanceId="+desktopID, nil, &preview, http.StatusOK)
+	if len(preview.MissingSkills) != 1 || preview.MissingSkills[0] != "corp-deploy" {
+		t.Fatal("lost skill was not disclosed before moving", preview)
+	}
 	var handoff handoffResponse
 	c.mustDo(http.MethodPatch, "/api/v1/sessions/"+session,
 		map[string]any{"backendInstanceId": desktopID}, &handoff, http.StatusOK)

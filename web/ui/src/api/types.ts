@@ -34,6 +34,7 @@ export type BackendInstance = Schemas['BackendInstance'];
 export type BackendQuotas = Schemas['BackendQuotas'];
 export type Condition = Schemas['Condition'];
 export type Handoff = Schemas['Handoff'];
+export type HandoffPreview = Schemas['HandoffPreview'];
 export type Task = Schemas['Task'];
 export type TaskStatus = Schemas['TaskStatus'];
 export type Decision = Schemas['Decision'];

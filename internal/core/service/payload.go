@@ -125,7 +125,9 @@ type SessionRenamedPayload struct {
 // infrastructure detail: clients show it only when the user needs to choose or
 // debug a backend.
 type RunCreatedPayload struct {
-	BackendInstanceID string `json:"backendInstanceId"`
+	BackendInstanceID     string `json:"backendInstanceId"`
+	FromBackendInstanceID string `json:"fromBackendInstanceId,omitempty"`
+	BackendName           string `json:"backendName,omitempty"`
 }
 
 // JobCreatedPayload is the body of a job.created event.
