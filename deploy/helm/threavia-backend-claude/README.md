@@ -11,15 +11,10 @@ and why a laptop backend needs no chart at all.
 
 ## Install
 
-Create a one-shot registration token on Core, then:
-
-```sh
-helm install laptop deploy/helm/threavia-backend-claude \
-  --set core.address=threavia:9090 \
-  --set core.api=http://threavia:8080 \
-  --set core.registrationToken="$TOKEN" \
-  --set provider.apiKey="$ANTHROPIC_API_KEY"
-```
+Follow the [backend installation guide](../../../docs/installation.md#container-and-kubernetes-backends)
+for registration, Secrets, TLS endpoints and a pinned OCI chart installation.
+Use the `threavia-backend-claude` chart and Claude credentials for this backend.
+See [`values.yaml`](values.yaml) for all settings.
 
 The backend registers once, stores its persistent credential on its volume and
 never uses the registration token again.

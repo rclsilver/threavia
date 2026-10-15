@@ -1,356 +1,176 @@
 # Threavia
 
-Core can expose [Prometheus metrics](docs/metrics.md) through a dedicated listener,
-with an optional Prometheus Operator ServiceMonitor in the Helm chart.
+**Run coding agents on your own machines. Follow their work from the web or VS Code.**
 
-Jobs can [wait and resume after provider authentication or quota refusals](docs/provider-recovery.md),
-with recovery instructions in Web and VS Code.
+Threavia is a self-hosted control plane for **Claude Code** and **Codex**. Start
+work on a laptop or a Kubernetes backend, leave it running, and return from
+another device to read the result, answer a question or approve an action.
+Projects keep their tasks, decisions and history across conversations and providers.
 
-Threavia is a self-hosted, Kubernetes-friendly control plane for coding agents.
-It owns durable projects, sessions, jobs, events and project knowledge, while
-execution stays on autonomous **BackendInstances** such as a laptop running
-Claude Code or a Kubernetes pod running Codex.
+[Get started](#get-started) · [Installation guide](docs/installation.md) ·
+[Web and VS Code](#choose-your-view) · [Documentation](#documentation)
 
-The same logical Session is usable from Web, Android, VS Code and Voice. Clients
-are stateless views and controllers of Core state: a client disconnecting never
-stops agent execution.
+## Why use Threavia?
 
-The architecture and the V1 scope are specified in
-[`THREAVIA_SPEC_V1.md`](THREAVIA_SPEC_V1.md). Everything in this repository
-follows that document.
+Coding agents can work for a long time, ask for permission while you are away,
+and leave useful context scattered across terminals and conversations.
+Threavia gives you one place to direct that work and keep its context.
 
-## Status
+| When you need to… | Threavia helps you… |
+| --- | --- |
+| Leave an agent working without keeping an editor open | Run it on a backend independently of your client. Closing a tab or VS Code does not stop execution. |
+| Handle approvals away from your desk | See pending permissions and questions in the web client, including on a phone, and answer from either client. An answer is reflected in the other views. |
+| Use several machines or providers | Choose the backend and working directory for each session, with its status and provider quotas visible. |
+| Avoid repeating project context | Keep instructions, tasks, decisions, searchable history and Skills with the project. Share selected memory and known directories across your own projects. |
+| Control what an agent can do | Set execution modes, capability switches and rules; review requests, inspect diffs, stop work and read its audit trail. |
+| Pick up a long-running project later | Resume conversations, inspect published artifacts and schedule recurring session messages. |
 
-The V1 surface of the specification is implemented. From the web client: pick a
-Project, a BackendInstance and a KnownDirectory, send a message, watch Claude
-Code work, answer its permission requests and questions, and continue in the
-same provider session. Beyond that first slice, a Project carries tasks,
-decisions, searchable history, artifacts, skills and instructions; an
-ExecutionPolicy bounds what an agent may do; a Session can move to another
-backend; and Core authenticates with none, basic or an OIDC issuer.
+For example: start a change from VS Code on your laptop, check its progress on
+your phone, answer a permission request, then return to the editor to inspect
+the diff. The same session and project context are available in both views.
+The machine running the backend must stay available for execution to continue.
 
-Every acceptance criterion of section 32 is covered:
+## How it works
 
-| # | Criterion | Covered by |
+A working installation has a **Core**, **at least one backend**, and a client.
+You can put Core in Kubernetes and keep execution on a laptop; Kubernetes is
+optional for both components.
+
+```mermaid
+flowchart LR
+    Web["Web · desktop and phone"] -->|"HTTP / SSE"| Core["Threavia Core"]
+    VSCode["VS Code extension"] -->|"HTTP / SSE"| Core
+    Laptop["Laptop backend · Claude Code or Codex"] -->|"Outbound gRPC connection"| Core
+    Pod["Kubernetes backend · Claude Code or Codex"] -->|"Outbound gRPC connection"| Core
+    Core --> PG[(PostgreSQL)]
+    Core --> S3[(S3-compatible storage)]
+```
+
+- **Core** serves the web application and API, persists sessions and events in
+  PostgreSQL, and stores artifacts and project Skill bundles in S3-compatible
+  storage. Clients reconnect to the persisted state.
+- **Backends** run the provider CLI where your code and tools live. Provider
+  credentials and native provider sessions stay on the backend. Backends connect
+  out to Core, so a laptop needs no inbound port.
+- **Clients** show and control the same Core state. A web or editor disconnection
+  does not cancel the running agent.
+
+Files and tools available to an agent depend on its backend's operating-system
+permissions. Execution policies provide controls and approvals; use OS or
+container isolation when you need a security boundary. Backend changes are
+explicit: Threavia does not silently move work or synchronize repositories.
+
+## Get started
+
+1. **Install Core** using one of the paths below.
+2. **Connect a backend** on the machine where the agent should work. It needs
+   Claude Code or Codex and its own authenticated provider account or API key.
+3. **Open the web application or add Core in VS Code.** Create a project, choose
+   the backend and working directory, review its permissions, and send a message.
+
+| Installation path | Best suited to | Start here |
 | --- | --- | --- |
-| 1 | Core starts with PostgreSQL and migrations | live run |
-| 2 | Claude backend registers, connects outbound, becomes READY | live run |
-| 3 | Clients see the backend, the Project and the KnownDirectory | API verified live; the web client is served from Core |
-| 4 | First message atomically creates Session + Run + Job | live run + `TestFirstSendCreatesEverythingAtomically` |
-| 5 | Backend starts Claude in the resolved cwd | live run |
-| 6 | Agent output streams Backend → Core → PostgreSQL → SSE | live run + `TestStreamDeliversLiveEvents` |
-| 7 | A replayed backend event does not duplicate history | `TestBackendEventDeduplication` |
-| 8 | A validation waits indefinitely and is answered from a client | live run + `TestValidationWaitsAndResolves` |
-| 9 | A reloading client gets a snapshot and continues live | `TestStreamResumesFromItsCursor` |
-| 10 | A Core restart loses no history; unacknowledged events replay | live run + `TestJobFinishedDuringAnOutageIsNotRerun` |
-| 11 | A Job is cancelled with CANCELLING semantics | live run + `TestCancellationNeedsBackendConfirmation` |
-| 12 | A second message resumes the same native Claude session | live run + `TestSecondMessageResumesTheNativeSession` |
+| Docker Compose | Try Core locally or run it on a Docker host | [Local Docker setup](docs/installation.md#docker-compose) |
+| Kubernetes / Helm | Run Core in a cluster with your existing database, storage and ingress | [Kubernetes setup](docs/installation.md#kubernetes--helm) |
+| Release binaries | Run Core or a backend directly on Linux or macOS | [Binary installation](docs/installation.md#release-binaries) |
+| Laptop or server backend | Work in existing checkouts with local tools and provider credentials | [Connect Claude Code or Codex](docs/installation.md#connect-a-backend) |
+| Container or Kubernetes backend | Give execution its own persistent environment | [Container and cluster backends](docs/installation.md#container-and-kubernetes-backends) |
+| NixOS backend | Manage a backend as a system service | [NixOS modules](docs/nix.md) |
 
-The live runs drove the real Claude Code CLI against real PostgreSQL and real
-S3-compatible storage: it created a file after its Write permission was approved
-through Core, answered a follow-up from memory of the first turn, survived a
-Core restart mid-job, stopped on cancellation, read back the project Skills it
-had been handed and the project instructions it had been given, and worked in a
-directory the backend located and bound on its own.
+### Try Core with Docker
 
-Requests to remember facts, preferences or decisions use Threavia project
-memory, shared across sessions and backends, through the Core tools. Claude's
-automatic local memory is disabled for each Threavia process, including resumed
-sessions; this does not change the user's Claude settings. Credential references
-retain the file location and purpose, never the secret values.
+You need Docker with the Compose plugin and Git. From a clone of this repository:
 
-Core also stores global facts and decisions shared across all of an owner's
-projects on that instance. Manage them in **Settings → Core memory** on the web,
-or **Switch Memory Scope… → Global** in VS Code's Memory view. Important facts
-are loaded before every job; other facts are available through `memory_search`.
-Agents record a shared fact with `decision_create` and `scope: global`.
-To share an existing record, use **Make global — all my projects** in the web
-row menu or VS Code's Memory menu and directory manager. Agents use
-`decision_make_global` or `known_directory_make_global` with the record's ID.
-Memory promotion keeps the project record in history; directory promotion keeps
-its paths and session references, and refuses a global name collision.
-Session history stays project-specific, and each user's memory stays private.
-
-What is deliberately not implemented, matching the non-goals of section 33:
-
-- the Android and Voice clients: Core is client-agnostic, and the clients
-  written here are the web client and the VS Code extension
-  ([`clients/vscode`](clients/vscode/README.md));
-- automatic backend scheduling, scoring, failover and transparent migration: a
-  backend change is explicit;
-- the REVIEW capability, Crit/ChangeSet integration and vector memory search;
-- project sharing, roles and team models: V1 isolates per user;
-- external notification delivery: Core says what is worth pushing and pushes
-  nothing itself.
-
-## Requirements
-
-- Go 1.26 or later. `GOTOOLCHAIN=auto`, the default, fetches it when the
-  installed Go is older.
-- Node 22 or later, to build the web client. The Go binary embeds it, so a
-  release build needs this too, not only development.
-- Docker, for the local PostgreSQL and S3-compatible storage
-- A C compiler, only for `make test-race`: the race detector is
-  ThreadSanitizer, a C++ runtime, so a race-enabled binary needs cgo and the
-  system linker. Nothing else in the repository uses cgo.
-- `buf`, `protoc-gen-go` and `protoc-gen-go-grpc`, only to regenerate the
-  protobuf bindings: `make tools` installs the pinned versions
-
-On NixOS, [`shell.nix`](shell.nix) provides Go, Node, gcc and helm:
-
-```bash
-nix-shell              # enter the shell
-nix-shell --run make   # or run a single target
-nix develop            # the same, through the flake
+```sh
+git clone https://github.com/rclsilver/threavia.git
+cd threavia
+cp deploy/docker/compose.env.example .env.docker
+# Edit .env.docker: choose a released version and set a database password.
+docker compose --env-file .env.docker -p threavia -f deploy/docker/compose.yaml up -d
 ```
 
-## Local development
+Open <http://localhost:8080>, then [connect a backend](docs/installation.md#connect-a-backend).
+This example starts Core and PostgreSQL, publishes ports only on localhost and
+keeps the database in a named volume. It uses no login and leaves object storage
+disabled: **attachments, artifacts and Core-managed Skills need the
+[S3 configuration](docs/installation.md#enable-artifacts-and-skills)**.
 
-```bash
-make dev-up        # start PostgreSQL
-make migrate       # apply the database migrations
-make test          # run the test suite
-make test-db       # add the database integration and end-to-end tests
-make dev-up-storage # add S3-compatible object storage (Garage), configured
-make build         # build the web client, then all three binaries into bin/
+For remote access, configure authentication and TLS as described in the
+[installation guide](docs/installation.md#remote-access-and-authentication).
+The root `docker-compose.yml` is for source development; the example above
+runs the published Core image.
+
+## Choose your view
+
+### Web — follow work from a desktop or phone
+
+The web client is included in Core. Open Core's URL; there is no separate web
+server to install. Its responsive layout works in a desktop or mobile browser.
+
+- **Waiting** gathers questions and permission requests across projects.
+- **Sessions** show the conversation, tools, progress, file changes and published
+  artifacts. Queue a follow-up, steer or interrupt work when supported, or stop it.
+- **Project views** manage tasks and dependencies, memory, instructions,
+  directories, Skills, permissions and audit history.
+- **Account settings** manage backends, the default backend, provider quotas,
+  global memory and directories, and account audit history.
+
+Use project instructions for standing rules, and pin important decisions so
+agents receive them on future jobs. Global memory belongs to your account on
+this Core; it is shared across your projects, rather than across users.
+
+### VS Code — keep the conversation beside your code
+
+Install **[Threavia from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=rclsilver.threavia)**:
+
+```sh
+code --install-extension rclsilver.threavia
 ```
 
-Run the whole thing: Core in one terminal, a backend in another, the client in a
-browser.
+You can also install the `.vsix` attached to a
+[GitHub release](https://github.com/rclsilver/threavia/releases).
+Open the Threavia activity-bar view, choose **Add a Core**, enter its URL and
+sign in. You can connect several Cores at once.
 
-```bash
-# terminal 1
-export THREAVIA_POSTGRES_PASSWORD=threavia
-make run-core
-```
+- Follow sessions and answer approvals or questions in conversation editor tabs.
+- Use **Ask Threavia About This…** on a file or selection to send code context.
+- Open changed files and diffs, preview or save artifacts, and manage tasks,
+  memory, directories and permissions from the editor.
+- See backend status and quotas, and keep pending requests visible in the sidebar
+  and status bar.
 
-Create a registration token for the backend, then start it. It registers once,
-stores its identity locally and never needs the token again.
+The extension controls a backend; installing it does not start an agent on your
+workstation or copy a remote backend's files into your workspace. See the
+[VS Code guide](clients/vscode/README.md) for sign-in, commands and settings.
 
-```bash
-# terminal 2
-TOKEN=$(curl -s -X POST localhost:8080/api/v1/backend-tokens \
-  -H 'Content-Type: application/json' -d '{"label":"laptop"}' | jq -r .token)
+## Availability
 
-export THREAVIA_BACKEND_CORE_ADDRESS=localhost:9090
-export THREAVIA_BACKEND_CORE_API=http://localhost:8080
-export THREAVIA_BACKEND_REGISTRATION_TOKEN="$TOKEN"
-export THREAVIA_BACKEND_TLS_ENABLED=false    # local Core only; remote access needs TLS
-make run-backend
-```
+The clients provided here are **Web and VS Code**. Use the responsive web client
+on Android or iOS; native mobile and voice clients are not included. Projects
+and account data are isolated per user; shared team projects and roles are not
+provided. Backend selection is explicit, with no automatic scheduling or failover.
 
-Then open <http://localhost:8080>, create a project and send a first message.
-
-### Using Codex
-
-The Codex backend drives `codex app-server` (CLI 0.161.0). Install the CLI and
-authenticate on the backend machine with `codex login`, or supply
-`OPENAI_API_KEY`. With a separate Core registration token:
-
-```bash
-export THREAVIA_BACKEND_CORE_ADDRESS=localhost:9090
-export THREAVIA_BACKEND_CORE_API=http://localhost:8080
-export THREAVIA_BACKEND_REGISTRATION_TOKEN="$TOKEN"
-export THREAVIA_BACKEND_TLS_ENABLED=false
-make run-backend-codex
-```
-
-Select that backend when starting a session in the web or VS Code client.
-Its default identity and database are separate from Claude's, so both can run
-on one machine. `THREAVIA_BACKEND_CODEX_MODEL` and
-`THREAVIA_BACKEND_CODEX_REASONING_EFFORT` optionally override Codex's defaults.
-See [the Codex backend guide](docs/codex.md) for deployment, supported policies
-and protocol checks. It supports the same features as the Claude backend:
-automatic supervision, skills, sub-agents, plans, background commands and
-policy-controlled web search/fetch. With the development database running,
-`make test-codex-real` exercises the installed, authenticated CLI against a
-temporary Core schema using real inference.
-
-The [Agent Skills compatibility matrix](docs/skills.md) covers discovery,
-scripts, supporting files and permissions across Claude Code and Codex.
-
-Without `THREAVIA_AUTH_MODE`, Core runs with no authentication: every request
-acts as a single local user. That is why it then listens on `127.0.0.1:8080`
-only, so nobody else on the network can start sessions on your backends. Set
-`THREAVIA_HTTP_ADDR` to reach it from another machine, preferably with `basic`
-or `oidc` authentication; Core warns at startup when it listens beyond loopback
-without it.
-
-A known directory is optional. Give it a name such as `puppet` and the backend
-locates it under its configured discovery roots when the Job starts, asking you
-where it is only if it cannot (section 11):
-
-```bash
-export THREAVIA_BACKEND_DISCOVERY_ROOTS=$HOME/git,$HOME/dev
-```
-
-Manage known directories in a project's **Directories** page, in account
-settings for global directories, or through **Manage Known Directories…** in
-VS Code. A global directory belongs to your account on this Core and is available
-to all your projects. The session tools `known_directory_list`,
-`known_directory_register`, `known_directory_update`, `known_directory_bind`,
-`known_directory_unbind` and `known_directory_delete` manage the same metadata;
-listing and registration accept `scope: "global"`, with the current project as
-the default. Forgetting metadata never deletes backend files.
-
-On touch devices, including Android, Enter adds a line in new and existing
-messages; tap the send button to send. Desktop keeps Enter to send and
-Shift+Enter for a newline.
-
-In **Settings → Backends**, use a backend's menu to set or clear your default.
-VS Code offers **Set Default Backend…** and the Backends context menu. The
-choice is stored per account on this Core, shared by every project and client,
-and proposed first for new sessions. Existing sessions keep their backend.
-Revoking the default backend clears the preference.
-
-`.env.example` lists every environment variable with its default.
-
-### Working on the web client
-
-The client is a React application built with Vite
-([`web/ui`](web/ui/README.md)). In development it is served by Vite rather than
-by Core, so editing a component reloads the browser without rebuilding or
-restarting the Go binary:
-
-```bash
-# terminal 1
-make run-core
-
-# terminal 2
-make dev-web       # http://localhost:5173, hot reload, in a container
-```
-
-Everything the client calls is proxied to Core, so the browser stays on a single
-origin: no CORS, and the event stream behaves exactly as it does in production.
-The container runs on the host network, so it reaches Core at `localhost:8080`
-with no gateway or firewall rule to arrange. `THREAVIA_CORE_URL` points the
-proxy elsewhere, and `make web-dev` runs the same server with no container.
-
-In production the client is built and embedded in the binary, so a release is
-one file:
-
-```bash
-make web           # build into web/ui/dist
-make build         # the client, then all three binaries
-```
-
-A binary built without the client says so on the page rather than serving a
-blank one. The API is unaffected either way.
-
-The TypeScript types come from [`api/openapi.yaml`](api/openapi.yaml), which is
-the contract Core serves at `/api/spec.json`. A route the server registers and
-the document omits fails `TestEveryRouteIsInTheOpenAPIDocument`, and a renamed
-field breaks the web build rather than a user's screen.
-
-### Other tasks
-
-```bash
-make help          # list every target
-make generate      # regenerate gen/ from api/proto
-make web-generate  # regenerate the TypeScript API types from api/openapi.yaml
-make lint          # go vet + buf lint
-make web-lint      # type-check and lint the web client
-make vscode-check  # check, lint and test the VS Code extension
-make vscode-package # build the VS Code extension into clients/vscode/threavia.vsix
-make test-race     # test suite under the race detector (needs a C compiler)
-make dev-reset     # stop the dependencies and delete their data
-```
-
-## Releasing
-
-CI runs on every push and pull request: lint, then tests, then a build of every
-target. Container images and the Helm charts are built on every run too, so a
-broken Dockerfile surfaces long before release day, but they are published only
-from a tag.
-
-Tagging `vX.Y.Z` publishes:
-
-- `ghcr.io/rclsilver/threavia-core:X.Y.Z`,
-  `ghcr.io/rclsilver/threavia-backend-claude:X.Y.Z` and
-  `ghcr.io/rclsilver/threavia-backend-codex:X.Y.Z`, all linux/amd64 and
-  linux/arm64;
-- the Helm charts as OCI artifacts at `oci://ghcr.io/rclsilver/charts/threavia`,
-  `oci://ghcr.io/rclsilver/charts/threavia-backend-claude` and
-  `oci://ghcr.io/rclsilver/charts/threavia-backend-codex`;
-- a GitHub release with binary archives for linux and darwin, amd64 and arm64,
-  the VS Code extension as `threavia-X.Y.Z.vsix`, and their SHA-256 checksums.
-
-The flake needs no publishing: it is fetched from the repository, so the tag is
-the release. A NixOS machine installs a backend from it with
-`inputs.threavia.url = "github:rclsilver/threavia/vX.Y.Z"`, which is
-[`docs/nix.md`](docs/nix.md).
-
-```bash
-git tag -a vX.Y.Z -m "vX.Y.Z"
-git push origin vX.Y.Z
-```
-
-`make verify` runs locally exactly what the lint job runs: formatting, module
-tidiness, generated-code freshness for both the protocol and the API types,
-`go vet`, `buf lint` and the test suite. `make docker` builds all three images.
-
-The Core image is a static binary on a minimal Alpine that carries git, which
-installing a Skill from a git source runs, with the web client
-embedded. The Claude backend image is larger by necessity: it ships Node, the
-Claude Code CLI and git, because the agent needs a real userland to work in.
-Provider credentials are supplied at runtime and never baked into it.
-
-## Repository layout
-
-Matching specification section 25:
-
-```text
-api/openapi.yaml                 the client API contract, served and generated from
-api/proto/threavia/backend/v1/   protobuf definitions of the backend protocol
-gen/threavia/backend/v1/         generated Go bindings, never edited by hand
-cmd/threavia-core/               Core binary
-cmd/threavia-backend-claude/     Claude BackendInstance binary
-cmd/threavia-backend-codex/      Codex BackendInstance binary
-internal/core/api/               client HTTP/JSON + SSE surface
-internal/core/auth/              none / basic / oidc authentication
-internal/core/backendconn/       backend gRPC control connections and leases
-internal/core/config/            environment configuration
-internal/core/domain/            identifiers, enums and state transitions
-internal/core/events/            persistent event model and envelope
-internal/core/service/           Core application services
-internal/core/storage/postgres/  connection pool and migrations
-internal/core/storage/s3/        S3-compatible object storage
-internal/core/skills/            acquisition and packing of project skills
-internal/core/tools/             Core Tools exposed to agents
-internal/backends/shared/        adapter, execution contracts, policy gate, MCP, skills and workspace
-internal/backends/claude/        Claude Code runner
-internal/backends/codex/         Codex app-server runner and approval translation
-internal/envutil/                environment parsing helpers
-internal/logging/                shared structured logger
-pkg/backend-sdk/                 reusable Go SDK for BackendInstances
-migrations/                      embedded PostgreSQL migrations
-deploy/docker/                   container images for Core, Claude and Codex
-deploy/helm/threavia/            Helm chart for Core
-deploy/helm/threavia-backend-claude/  Helm chart for a Kubernetes backend
-deploy/helm/threavia-backend-codex/   Helm chart for a Codex Kubernetes backend
-examples/backend-example/        smallest possible BackendInstance
-docs/                            architecture, protocol and API notes
-web/                             the embed, and the fallback when nothing is built
-web/ui/                          React client: Vite, TanStack Query, Radix
-shell.nix                        NixOS development shell
-.github/workflows/ci.yml         lint, test, build, package, release
-```
-
-`internal/core/config`, `internal/envutil`, `internal/logging` and `gen/` are the
-only additions to the proposed tree; the reasons are recorded in
-[`docs/architecture.md`](docs/architecture.md).
+This README follows `master`. Packaged installations use tagged releases; open
+the documentation at the matching tag for that version's features. Newer Core
+and backend features can require updating both components; see the
+[provider authentication and quota recovery guide](docs/provider-recovery.md).
 
 ## Documentation
 
-- [`docs/architecture.md`](docs/architecture.md) — what is implemented, and every
-  implementation choice the specification left open
-- [`docs/protocol.md`](docs/protocol.md) — the Backend ↔ Core control protocol
-- [`docs/audit.md`](docs/audit.md) — significant mutations, attribution and durable audit history
-- [`docs/api.md`](docs/api.md) — the client HTTP API, and the contract it is
-  generated from
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — what a change has to carry with it,
-  the demo included
+| Guide | What you will find |
+| --- | --- |
+| [Installation](docs/installation.md) | Docker, Kubernetes, release binaries, backend registration, storage and authentication |
+| [VS Code](clients/vscode/README.md) | Installation, sign-in, views, commands and several Cores |
+| [Codex backend](docs/codex.md) | Provider setup, execution modes and supported features |
+| [NixOS](docs/nix.md) | Backend packages and services |
+| [Skills](docs/skills.md) | Agent Skills support for Claude Code and Codex |
+| [Session management](docs/session-management.md) | Coordinating and delegating work between sessions |
+| [Provider recovery](docs/provider-recovery.md) | Authentication expiry, exhausted quotas and retry behavior |
+| [Audit](docs/audit.md) · [Metrics](docs/metrics.md) | Activity records and operational monitoring |
+| [Development and releases](docs/development.md) · [Contributing](CONTRIBUTING.md) | Build from source, tests and contribution workflow |
+| [Architecture](docs/architecture.md) · [API](docs/api.md) · [Backend protocol](docs/protocol.md) | Technical contracts and implementation details |
+| [Specification](THREAVIA_SPEC_V1.md) | The original V1 scope and acceptance criteria |
 
 ## License
 
-Apache License 2.0, see [`LICENSE`](LICENSE).
+[Apache License 2.0](LICENSE).

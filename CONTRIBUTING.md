@@ -1,7 +1,7 @@
 # Contributing to Threavia
 
 Setting up a development environment, running the tests and building the
-binaries are described in the [README](README.md#local-development). This file
+binaries are described in the [development guide](docs/development.md#local-development). This file
 is about what a change has to carry with it to be complete.
 
 ## Before you open a change

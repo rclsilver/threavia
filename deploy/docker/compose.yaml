@@ -1,0 +1,44 @@
+# Local, single-user Core installation using published images.
+# From the repository root:
+#   cp deploy/docker/compose.env.example .env.docker
+#   docker compose --env-file .env.docker -p threavia -f deploy/docker/compose.yaml up -d
+# Configure .env.docker first. See docs/installation.md for storage and remote access.
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: threavia
+      POSTGRES_DB: threavia
+      POSTGRES_PASSWORD: ${THREAVIA_POSTGRES_PASSWORD:?Set a database password in .env.docker}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U threavia -d threavia"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  core:
+    image: ghcr.io/rclsilver/threavia-core:${THREAVIA_VERSION:?Set a released version in .env.docker}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      THREAVIA_HTTP_ADDR: ":8080"
+      THREAVIA_GRPC_ADDR: ":9090"
+      THREAVIA_AUTH_MODE: none
+      THREAVIA_POSTGRES_HOST: postgres
+      THREAVIA_POSTGRES_USER: threavia
+      THREAVIA_POSTGRES_DATABASE: threavia
+      THREAVIA_POSTGRES_PASSWORD: ${THREAVIA_POSTGRES_PASSWORD:?Set a database password in .env.docker}
+      THREAVIA_POSTGRES_SSLMODE: disable
+      THREAVIA_POSTGRES_AUTO_MIGRATE: "true"
+      THREAVIA_S3_ENABLED: "false"
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:9090:9090"
+
+volumes:
+  postgres-data:
