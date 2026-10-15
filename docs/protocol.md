@@ -254,6 +254,13 @@ unfinished jobs before the event is published. Repeated status reports and
 heartbeat timestamps create no events. Superseded connection leases cannot
 announce an offline state or park their replacement's jobs.
 
+Revocation is terminal for that BackendInstance. Status, conditions, heartbeat,
+quota, local Skill inventory and Hello metadata received after revocation are
+ignored without changing historical state or emitting backend update events.
+Reports serialize with revocation, including those already waiting on a database
+lock. A connection authenticated just before revocation is rejected with
+`UNAUTHENTICATED` when its Hello is processed; it must register a new instance.
+
 ## Skills
 
 Core persists project-scoped `skill.installed` (including replacement) and

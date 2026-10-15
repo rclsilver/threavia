@@ -51,14 +51,18 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 		features = append(features, domain.FeatureJobInputNext)
 	}
 
-	if err := s.changeBackendState(ctx, instanceID, func(tx *postgres.Store, _ domain.BackendInstance) error {
+	accepted, err := s.changeBackendState(ctx, instanceID, func(tx *postgres.Store, _ domain.BackendInstance) error {
 		return tx.MarkBackendConnected(ctx, instanceID, connectionID,
 			int(hello.GetProtocol().GetVersion()), capabilities,
 			int(hello.GetCapacity().GetMaxConcurrentRuns()),
 			hello.GetSdk().GetName(), hello.GetSdk().GetVersion(),
 			hello.GetBackend().GetName(), hello.GetBackend().GetVersion(), features)
-	}); err != nil {
+	})
+	if err != nil {
 		return err
+	}
+	if !accepted {
+		return backendconn.ErrUnknownBackendToken
 	}
 
 	var catalog *domain.ModelCatalog
@@ -68,22 +72,32 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 			catalog.Models = append(catalog.Models, domain.ModelOption{ID: m.GetId(), Name: m.GetName(), Efforts: append([]string{}, m.GetEfforts()...), DefaultEffort: m.GetDefaultEffort()})
 		}
 	}
-	if err := s.store.SetBackendModels(ctx, instanceID, catalog); err != nil {
-		return err
-	}
-	backend, err := s.store.BackendInstanceByID(ctx, instanceID)
+	b := &batch{}
+	accepted, err = s.withBackendReport(ctx, instanceID, func(tx *postgres.Store, backend domain.BackendInstance) error {
+		if err := tx.SetBackendModels(ctx, instanceID, catalog); err != nil {
+			return err
+		}
+		if backend.OwnerID == nil {
+			return nil
+		}
+		b.ownerID = *backend.OwnerID
+		return s.appendAll(ctx, tx, b, record{eventType: events.TypeBackendModelsUpdated, payload: map[string]any{"backendInstanceId": instanceID}})
+	})
 	if err != nil {
 		return err
 	}
-	if backend.OwnerID != nil {
-		s.emit(ctx, *backend.OwnerID, events.TypeBackendModelsUpdated, domain.Scope{}, map[string]any{"backendInstanceId": instanceID})
+	if !accepted {
+		return backendconn.ErrUnknownBackendToken
 	}
+	s.flush(b)
 
 	// The name follows the backend's configuration, the only place a person
 	// can rename it. It is cosmetic, so a name another of the owner's backends
 	// already holds keeps the old one rather than refusing the connection.
 	if name := strings.TrimSpace(hello.GetInstanceName()); name != "" {
-		if err := s.store.RenameBackendInstance(ctx, instanceID, name); err != nil {
+		if _, err := s.withBackendReport(ctx, instanceID, func(tx *postgres.Store, _ domain.BackendInstance) error {
+			return tx.RenameBackendInstance(ctx, instanceID, name)
+		}); err != nil {
 			s.logger.Warn("cannot rename the backend instance",
 				slog.String("backendInstanceId", string(instanceID)),
 				slog.String("name", name), slog.String("error", err.Error()))
@@ -99,7 +113,7 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 // They are not failed: the backend may well be finishing them locally, and it
 // reports what actually happened when it comes back.
 func (s *Service) Disconnected(ctx context.Context, instanceID domain.BackendInstanceID, connectionID string) {
-	err := s.changeBackendState(ctx, instanceID, func(tx *postgres.Store, backend domain.BackendInstance) error {
+	_, err := s.changeBackendState(ctx, instanceID, func(tx *postgres.Store, backend domain.BackendInstance) error {
 		if backend.ConnectionID == nil || *backend.ConnectionID != connectionID {
 			return nil
 		}
@@ -149,7 +163,7 @@ func (s *Service) StatusUpdate(ctx context.Context, instanceID domain.BackendIns
 	// Why it is in that state. Without this, the only place the answer existed
 	// was a line in the Core log, where the person who has to fix it never
 	// looks.
-	err := s.changeBackendState(ctx, instanceID, func(tx *postgres.Store, _ domain.BackendInstance) error {
+	accepted, err := s.changeBackendState(ctx, instanceID, func(tx *postgres.Store, _ domain.BackendInstance) error {
 		if err := tx.UpdateBackendStatus(ctx, instanceID, status,
 			providerAuthFromProto(update.GetProviderAuthState()), capacityFromProto(update.GetCapacity())); err != nil {
 			return err
@@ -160,7 +174,7 @@ func (s *Service) StatusUpdate(ctx context.Context, instanceID domain.BackendIns
 		s.logger.Error("cannot record the backend status and conditions",
 			slog.String("backendInstanceId", string(instanceID)), slog.String("error", err.Error()))
 	}
-	if err == nil && status == domain.BackendReady && providerAuthFromProto(update.GetProviderAuthState()) == domain.ProviderAuthenticated {
+	if accepted && err == nil && status == domain.BackendReady && providerAuthFromProto(update.GetProviderAuthState()) == domain.ProviderAuthenticated {
 		go s.releaseQueuedWork(context.WithoutCancel(ctx), instanceID)
 	}
 }
@@ -191,14 +205,22 @@ func (s *Service) QuotaReport(ctx context.Context, instanceID domain.BackendInst
 		s.logger.Warn("ignoring invalid quota snapshot", "backendInstanceId", instanceID, "error", err)
 		return
 	}
-	if err := s.store.UpdateBackendQuotas(ctx, instanceID, snapshot); err != nil {
+	b := &batch{}
+	_, err = s.withBackendReport(ctx, instanceID, func(tx *postgres.Store, backend domain.BackendInstance) error {
+		if err := tx.UpdateBackendQuotas(ctx, instanceID, snapshot); err != nil {
+			return err
+		}
+		if backend.OwnerID == nil {
+			return nil
+		}
+		b.ownerID = *backend.OwnerID
+		return s.appendAll(ctx, tx, b, record{eventType: events.TypeBackendQuotasUpdated, payload: map[string]any{"backendInstanceId": instanceID}})
+	})
+	if err != nil {
 		s.logger.Error("cannot record backend quotas", "backendInstanceId", instanceID, "error", err)
 		return
 	}
-	backend, err := s.store.BackendInstanceByID(ctx, instanceID)
-	if err == nil && backend.OwnerID != nil {
-		s.emit(ctx, *backend.OwnerID, events.TypeBackendQuotasUpdated, domain.Scope{}, map[string]any{"backendInstanceId": instanceID})
-	}
+	s.flush(b)
 }
 
 // ReconcileState converges Core desired state with what the backend reports

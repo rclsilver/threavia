@@ -130,12 +130,13 @@ func (s *Store) UpdateBackendStatus(ctx context.Context, id domain.BackendInstan
 	return classify(err, "update backend status")
 }
 
-// RecordBackendHeartbeat refreshes the liveness timestamp.
+// RecordBackendHeartbeat refreshes liveness only while the credential is live.
+// The predicate is rechecked after a concurrent revocation releases its lock.
 func (s *Store) RecordBackendHeartbeat(ctx context.Context, id domain.BackendInstanceID, at time.Time, capacity domain.Capacity) error {
 	_, err := s.q.Exec(ctx, `
 		UPDATE backend_instances
 		SET last_heartbeat_at = $2, active_runs = $3, updated_at = now()
-		WHERE id = $1`, id, at, capacity.ActiveRuns)
+		WHERE id = $1 AND ownership_status <> 'REVOKED'`, id, at, capacity.ActiveRuns)
 	return classify(err, "record backend heartbeat")
 }
 

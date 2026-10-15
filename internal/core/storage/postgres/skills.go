@@ -107,25 +107,32 @@ func (s *Store) DeleteSkill(ctx context.Context, ownerID domain.UserID, id domai
 // The report is authoritative and complete: a Skill the backend no longer lists
 // is gone, which is how Core stops offering work that depends on it.
 func (s *Store) ReplaceBackendSkills(ctx context.Context, backendID domain.BackendInstanceID, skills []domain.BackendSkill) error {
+	if s.pool == nil {
+		return s.replaceBackendSkills(ctx, backendID, skills)
+	}
 	return s.WithTx(ctx, func(tx *Store) error {
-		if _, err := tx.q.Exec(ctx,
-			`DELETE FROM backend_skills WHERE backend_instance_id = $1`, backendID); err != nil {
-			return classify(err, "replace backend skills")
-		}
-		for _, skill := range skills {
-			if _, err := tx.q.Exec(ctx, `
+		return tx.replaceBackendSkills(ctx, backendID, skills)
+	})
+}
+
+func (s *Store) replaceBackendSkills(ctx context.Context, backendID domain.BackendInstanceID, skills []domain.BackendSkill) error {
+	if _, err := s.q.Exec(ctx,
+		`DELETE FROM backend_skills WHERE backend_instance_id = $1`, backendID); err != nil {
+		return classify(err, "replace backend skills")
+	}
+	for _, skill := range skills {
+		if _, err := s.q.Exec(ctx, `
 				INSERT INTO backend_skills (backend_instance_id, name, description, available)
 				VALUES ($1, $2, $3, $4)
 				ON CONFLICT (backend_instance_id, name) DO UPDATE SET
 					description = EXCLUDED.description,
 					available   = EXCLUDED.available,
 					reported_at = now()`,
-				backendID, skill.Name, skill.Description, skill.Available); err != nil {
-				return classify(err, "replace backend skills")
-			}
+			backendID, skill.Name, skill.Description, skill.Available); err != nil {
+			return classify(err, "replace backend skills")
 		}
-		return nil
-	})
+	}
+	return nil
 }
 
 // ListBackendSkills returns the local Skills a BackendInstance reported.

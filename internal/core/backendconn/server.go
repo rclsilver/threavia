@@ -136,6 +136,9 @@ func (s *Server) Connect(stream backendv1.BackendControl_ConnectServer) error {
 	}()
 
 	if err := s.sink.Connected(ctx, instanceID, conn.ID(), hello); err != nil {
+		if errors.Is(err, ErrUnknownBackendToken) {
+			return status.Error(codes.Unauthenticated, "unknown backend credential")
+		}
 		return status.Errorf(codes.Internal, "cannot accept the backend connection: %v", err)
 	}
 

@@ -215,7 +215,10 @@ func (s *Service) OpenSkillBundle(ctx context.Context, id domain.SkillID) (domai
 // RecordBackendSkills stores what a BackendInstance reports it has locally.
 // Core keeps the metadata only; the content never leaves the backend.
 func (s *Service) RecordBackendSkills(ctx context.Context, backendID domain.BackendInstanceID, local []domain.BackendSkill) error {
-	return translate(s.store.ReplaceBackendSkills(ctx, backendID, local))
+	_, err := s.withBackendReport(ctx, backendID, func(tx *postgres.Store, _ domain.BackendInstance) error {
+		return tx.ReplaceBackendSkills(ctx, backendID, local)
+	})
+	return translate(err)
 }
 
 // BackendSkills returns the local Skills a BackendInstance reported, which is

@@ -17,9 +17,36 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
+	"github.com/rclsilver/threavia/internal/core/domain"
 )
 
 const testToken = "t0ken"
+
+type revokedOnConnectSink struct{ NopSink }
+
+func (revokedOnConnectSink) Connected(context.Context, domain.BackendInstanceID, string, *backendv1.Hello) error {
+	return ErrUnknownBackendToken
+}
+
+func TestConnectRejectsRevocationAfterAuthentication(t *testing.T) {
+	server, conn := newTestCore(t)
+	server.sink = revokedOnConnectSink{}
+	ctx, cancel := context.WithTimeout(authorised(context.Background(), testToken), 5*time.Second)
+	defer cancel()
+	stream, err := backendv1.NewBackendControlClient(conn).Connect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stream.Send(validHello()); err != nil {
+		t.Fatal(err)
+	}
+	if first, err := stream.Recv(); err != nil || first.GetWelcome() == nil {
+		t.Fatal("missing initial welcome", first, err)
+	}
+	if _, err := stream.Recv(); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("got %v, want Unauthenticated", err)
+	}
+}
 
 // newTestCore starts the control service on an in-memory listener.
 func newTestCore(t *testing.T) (*Server, *grpc.ClientConn) {
