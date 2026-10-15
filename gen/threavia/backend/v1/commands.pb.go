@@ -267,8 +267,11 @@ type Welcome struct {
 	BackendInstanceId        string                 `protobuf:"bytes,2,opt,name=backend_instance_id,json=backendInstanceId,proto3" json:"backend_instance_id,omitempty"`
 	ServerTime               *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=server_time,json=serverTime,proto3" json:"server_time,omitempty"`
 	HeartbeatIntervalSeconds uint32                 `protobuf:"varint,4,opt,name=heartbeat_interval_seconds,json=heartbeatIntervalSeconds,proto3" json:"heartbeat_interval_seconds,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	// Allows JobWaitingBackend. Absent/false means the backend must retain
+	// terminal failure behavior rather than strand a Job on an older Core.
+	ProviderRecovery bool `protobuf:"varint,5,opt,name=provider_recovery,json=providerRecovery,proto3" json:"provider_recovery,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Welcome) Reset() {
@@ -327,6 +330,13 @@ func (x *Welcome) GetHeartbeatIntervalSeconds() uint32 {
 		return x.HeartbeatIntervalSeconds
 	}
 	return 0
+}
+
+func (x *Welcome) GetProviderRecovery() bool {
+	if x != nil {
+		return x.ProviderRecovery
+	}
+	return false
 }
 
 // One exception to the switches below.
@@ -964,10 +974,13 @@ type StartJob struct {
 	// Files explicitly attached by the user, bounded to 3 MiB total by Core.
 	Attachments []*PromptAttachment `protobuf:"bytes,9,rep,name=attachments,proto3" json:"attachments,omitempty"`
 	// Session preferences, frozen for this Job. Empty values use backend defaults.
-	Model         string `protobuf:"bytes,10,opt,name=model,proto3" json:"model,omitempty"`
-	Effort        string `protobuf:"bytes,11,opt,name=effort,proto3" json:"effort,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Model  string `protobuf:"bytes,10,opt,name=model,proto3" json:"model,omitempty"`
+	Effort string `protobuf:"bytes,11,opt,name=effort,proto3" json:"effort,omitempty"`
+	// Work already consumed by earlier stopped attempts of this same Job.
+	ActionsUsed       uint32 `protobuf:"varint,12,opt,name=actions_used,json=actionsUsed,proto3" json:"actions_used,omitempty"`
+	ActiveSecondsUsed uint32 `protobuf:"varint,13,opt,name=active_seconds_used,json=activeSecondsUsed,proto3" json:"active_seconds_used,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *StartJob) Reset() {
@@ -1075,6 +1088,20 @@ func (x *StartJob) GetEffort() string {
 		return x.Effort
 	}
 	return ""
+}
+
+func (x *StartJob) GetActionsUsed() uint32 {
+	if x != nil {
+		return x.ActionsUsed
+	}
+	return 0
+}
+
+func (x *StartJob) GetActiveSecondsUsed() uint32 {
+	if x != nil {
+		return x.ActiveSecondsUsed
+	}
+	return 0
 }
 
 type PromptAttachment struct {
@@ -2019,13 +2046,14 @@ var File_threavia_backend_v1_commands_proto protoreflect.FileDescriptor
 
 const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"\n" +
-	"\"threavia/backend/v1/commands.proto\x12\x13threavia.backend.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a threavia/backend/v1/common.proto\"\xd9\x01\n" +
+	"\"threavia/backend/v1/commands.proto\x12\x13threavia.backend.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a threavia/backend/v1/common.proto\"\x86\x02\n" +
 	"\aWelcome\x12#\n" +
 	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId\x12.\n" +
 	"\x13backend_instance_id\x18\x02 \x01(\tR\x11backendInstanceId\x12;\n" +
 	"\vserver_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"serverTime\x12<\n" +
-	"\x1aheartbeat_interval_seconds\x18\x04 \x01(\rR\x18heartbeatIntervalSeconds\"\xc4\x01\n" +
+	"\x1aheartbeat_interval_seconds\x18\x04 \x01(\rR\x18heartbeatIntervalSeconds\x12+\n" +
+	"\x11provider_recovery\x18\x05 \x01(\bR\x10providerRecovery\"\xc4\x01\n" +
 	"\x0ePermissionRule\x12=\n" +
 	"\x06effect\x18\x01 \x01(\x0e2%.threavia.backend.v1.PermissionEffectR\x06effect\x12I\n" +
 	"\n" +
@@ -2079,7 +2107,7 @@ const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"\x05tools\x18\b \x03(\v2!.threavia.backend.v1.CoreToolSpecR\x05tools\x121\n" +
 	"\x14project_instructions\x18\t \x01(\tR\x13projectInstructions\x129\n" +
 	"\x06skills\x18\n" +
-	" \x03(\v2!.threavia.backend.v1.ProjectSkillR\x06skills\"\xd0\x03\n" +
+	" \x03(\v2!.threavia.backend.v1.ProjectSkillR\x06skills\"\xa3\x04\n" +
 	"\bStartJob\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1d\n" +
@@ -2094,7 +2122,9 @@ const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"\vattachments\x18\t \x03(\v2%.threavia.backend.v1.PromptAttachmentR\vattachments\x12\x14\n" +
 	"\x05model\x18\n" +
 	" \x01(\tR\x05model\x12\x16\n" +
-	"\x06effort\x18\v \x01(\tR\x06effort\"\x86\x01\n" +
+	"\x06effort\x18\v \x01(\tR\x06effort\x12!\n" +
+	"\factions_used\x18\f \x01(\rR\vactionsUsed\x12.\n" +
+	"\x13active_seconds_used\x18\r \x01(\rR\x11activeSecondsUsed\"\x86\x01\n" +
 	"\x10PromptAttachment\x12\x1f\n" +
 	"\vartifact_id\x18\x01 \x01(\tR\n" +
 	"artifactId\x12\x1a\n" +

@@ -206,6 +206,11 @@ func TestProviderProcess(t *testing.T) {
 			status = "failed"
 			failure = map[string]any{"message": "model refused the request"}
 		}
+		if strings.HasPrefix(scenario, "provider-") {
+			codes := map[string]string{"provider-auth": "unauthorized", "provider-quota": "usageLimitExceeded", "provider-rate": "rateLimitExceeded", "provider-generic": "serverOverloaded"}
+			status = "failed"
+			failure = map[string]any{"message": "provider refused the request", "codexErrorInfo": codes[scenario], "retry_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339)}
+		}
 		notify("turn/completed", map[string]any{"threadId": "thread-1", "turn": map[string]any{"id": turn, "status": status, "error": failure}})
 	}
 	turn := "turn-1"

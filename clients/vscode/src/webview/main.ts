@@ -302,6 +302,7 @@ function renderHeader() {
       : []),
     h('button', { type: 'button', class: 'meta-item', disabled: !view.modelSettings?.supported, title: 'Change the session model and effort; applies to the next job', onclick: () => post({ type: 'configureModel' }) }, `${view.active && view.active.status !== 'QUEUED' ? 'Next job · ' : ''}Model: ${view.modelSettings?.model ?? 'Backend default'} · Effort: ${view.modelSettings?.effort ?? 'Backend default'}`),
     ...(view.active?.model && view.active.status !== 'QUEUED' ? [h('span', { class: 'meta-item' }, `Current job: ${view.active.model} · ${view.active.effort ? `${view.active.effort} effort` : 'Effort not reported'}`)] : []),
+    ...(view.active?.status === 'WAITING_BACKEND' && view.active.backendWait ? [h('span', { class: 'meta-item', role: 'status' }, view.active.backendWait.message + (view.active.backendWait.retryAt ? ` Next attempt no earlier than ${new Date(view.active.backendWait.retryAt).toLocaleString()}.` : ''))] : []),
     ...(view.repository
       ? [repositoryMeta(view.repository)]
       : []),

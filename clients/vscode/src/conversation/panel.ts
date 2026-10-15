@@ -543,7 +543,7 @@ class ConversationPanel {
       repository: repo && text ? { text, status: repo, fetching: this.fetchingRepository, error: this.repositoryError } : undefined,
       activity: active?.status === 'RUNNING' && fresh ? humanise(fresh) : undefined,
       pending: pendingJobs(this.jobs),
-      active: active && { id: active.id, status: active.status, model: active.model, effort: active.effort },
+      active: active && { id: active.id, status: active.status, model: active.model, effort: active.effort, backendWait: active.backendWait },
       deliveries: deliveriesFor(active, this.backend),
       validations: requests.validations,
       questions: requests.userInputs,

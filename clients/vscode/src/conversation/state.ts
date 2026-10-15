@@ -11,10 +11,10 @@ export const FINISHED: ReadonlySet<string> = new Set(['COMPLETED', 'FAILED', 'CA
 
 export function applyToAttention(attention: { validations: ValidationRequest[]; userInputs: UserInputRequest[] }, event: Event) {
   const interrupted = payloadOf(event, 'user.message')?.delivery === 'NOW';
-  const ended = ['job.completed', 'job.failed', 'job.cancelled'].includes(event.type);
+  const stopped = ['job.completed', 'job.failed', 'job.cancelled', 'job.waiting_backend'].includes(event.type);
   const keep = (request: ValidationRequest | UserInputRequest) => request.scope.jobId !== event.jobId ||
     Date.parse(request.createdAt) > Date.parse(event.timestamp);
-  if ((interrupted || ended) && event.jobId) {
+  if ((interrupted || stopped) && event.jobId) {
     return { validations: attention.validations.filter(keep), userInputs: attention.userInputs.filter(keep) };
   }
   if (event.type !== 'validation.resolved' && event.type !== 'user_input.resolved') return attention;
@@ -50,6 +50,9 @@ export function mergeEvents(current: readonly Event[], incoming: readonly Event[
 export function applyToJobs(jobs: readonly Job[], event: Event): Job[] {
   const settings = payloadOf(event, 'job.started');
   const model = { ...(settings?.model && { model: settings.model }), ...(settings?.effort && { effort: settings.effort }) };
+  const waiting = payloadOf(event, 'job.waiting_backend');
+  const backendWait = waiting ? { reason: waiting.reason, message: waiting.message, retryAt: waiting.retryAt } : undefined;
+  const recovery = waiting || ['job.started', 'job.completed', 'job.failed', 'job.cancelled'].includes(event.type) ? { backendWait } : {};
   const status = payloadOf(event, 'user.message')?.delivery === 'NOW' ? 'RUNNING' : jobStatusFor(event.type);
   if (!status || !event.jobId) return jobs as Job[];
   if (!jobs.some((job) => job.id === event.jobId)) {
@@ -57,10 +60,10 @@ export function applyToJobs(jobs: readonly Job[], event: Event): Job[] {
     // taken. The identifiers are all the list needs to show it as live.
     return [
       ...jobs,
-      { ...model, id: event.jobId, runId: event.runId ?? '', status, createdAt: event.timestamp, updatedAt: event.timestamp },
+      { ...model, ...recovery, id: event.jobId, runId: event.runId ?? '', status, createdAt: event.timestamp, updatedAt: event.timestamp },
     ];
   }
-  return jobs.map((job) => (job.id === event.jobId ? { ...job, ...model, status, updatedAt: event.timestamp } : job));
+  return jobs.map((job) => (job.id === event.jobId ? { ...job, ...model, ...recovery, status, updatedAt: event.timestamp } : job));
 }
 
 function jobStatusFor(type: string): JobStatus | null {
@@ -75,6 +78,8 @@ function jobStatusFor(type: string): JobStatus | null {
       return 'WAITING_VALIDATION';
     case 'user_input.requested':
       return 'WAITING_INPUT';
+    case 'job.waiting_backend':
+      return 'WAITING_BACKEND';
     case 'job.completed':
       return 'COMPLETED';
     case 'job.failed':

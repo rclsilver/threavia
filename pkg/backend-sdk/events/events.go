@@ -152,6 +152,13 @@ func (f *Factory) WorkspaceChanged(ctx context.Context, runID, jobID string, cha
 	})
 }
 
+// JobWaitingBackend reports a stopped attempt that Core can resume later.
+func (f *Factory) JobWaitingBackend(ctx context.Context, runID, jobID string, wait *backendv1.JobWaitingBackend) (*backendv1.JobEvent, error) {
+	return f.build(ctx, runID, jobID, func(e *backendv1.JobEvent) {
+		e.Body = &backendv1.JobEvent_JobWaitingBackend{JobWaitingBackend: wait}
+	})
+}
+
 // JobCompleted reports a successful Job.
 // usage is nil when the provider reported nothing, which is a valid answer: a
 // backend that cannot count must say so by omission rather than by zeroes that

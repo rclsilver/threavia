@@ -40,7 +40,6 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 		// The key stays on the backend and travels over stdin, never argv or
 		// the Core connection. Explicit API-key configuration selects this auth.
 		if err := r.call(startupCtx, "account/login/start", map[string]any{"type": "apiKey", "apiKey": c.options.APIKey}, nil); err != nil {
-			out.code = "AUTHENTICATION_REQUIRED"
 			out.err = err
 			return out
 		}
@@ -275,7 +274,7 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 		out.code, out.err = "POLICY_UNSUPPORTED", errors.New("Codex did not execute the Threavia policy hook")
 		return out
 	}
-	actions, plans := 0, 0
+	actions, plans := int(p.ActionsUsed), 0
 	root := thread.Thread.ID
 	for {
 		var msg message
@@ -514,6 +513,7 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 			status := str(turn, "status")
 			if status == "failed" {
 				failure, _ := turn["error"].(map[string]any)
+				out.blocked = codexProviderBlock(failure)
 				out.err = errors.New(str(failure, "message"))
 				return out
 			}

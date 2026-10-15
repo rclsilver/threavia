@@ -299,9 +299,14 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 
 	// The duration limit is enforced here because no permission gate can see
 	// time passing: a Run that asks for nothing can still run forever.
+	attemptStarted := time.Now()
 	runCtx, stop := context.WithCancel(ctx)
 	if seconds := params.Policy.MaxDurationSeconds; seconds > 0 {
-		runCtx, stop = context.WithTimeout(ctx, time.Duration(seconds)*time.Second)
+		remaining := seconds - int(params.ActiveSecondsUsed)
+		if remaining <= 0 {
+			return sink.JobFailed(ctx, params.RunID, params.JobID, "POLICY_LIMIT", "execution duration limit reached across provider attempts", nil)
+		}
+		runCtx, stop = context.WithTimeout(ctx, time.Duration(remaining)*time.Second)
 	}
 	defer stop()
 
@@ -356,11 +361,9 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	if err := runner.ReportJobStarted(ctx, sink, params.RunID, params.JobID, params.Model, params.Effort); err != nil {
 		c.logger.Error("cannot report the job start", slog.String("error", err.Error()))
 	}
-	// Reported straight away: Core records it on the Run, so a later message
-	// resumes this exact provider session even if this Job fails.
-	if err := sink.NativeSessionBound(ctx, params.RunID, params.JobID, nativeSessionID); err != nil {
-		c.logger.Error("cannot report the native session", slog.String("error", err.Error()))
-	}
+	// A minted id is not yet a resumable conversation: an initial auth/quota
+	// refusal can leave no session on disk. Bind once real assistant work starts.
+	params.NativeSessionID = nativeSessionID
 
 	var diagnostics strings.Builder
 	var wg sync.WaitGroup
@@ -371,7 +374,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	}()
 
 	outcome := c.consume(ctx, stdout, params, sink)
-	if outcome.stoppedBy != "" {
+	if outcome.stoppedBy != "" || outcome.blocked != nil {
 		// Stopped mid-stream: nothing reads the output any more, and a process
 		// left waiting on its next message would never exit.
 		stop()
@@ -409,6 +412,10 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 			fmt.Sprintf("stopped by the execution policy after %d seconds", params.Policy.MaxDurationSeconds), outcome.usage)
 	}
 
+	if outcome.blocked != nil {
+		outcome.blocked.ActiveSeconds = runner.ProviderAttemptSeconds(attemptStarted)
+		return runner.ReportProviderBlock(ctx, sink, params.RunID, params.JobID, outcome.blocked, outcome.usage)
+	}
 	switch {
 	case outcome.completed && !outcome.failed:
 		return sink.JobCompleted(ctx, params.RunID, params.JobID, outcome.summary, outcome.usage)
@@ -423,6 +430,10 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 		}
 		if message == "" {
 			message = "claude code exited without producing a result"
+		}
+		if block := runner.ProviderBlockFor("claude", "", message); block != nil {
+			block.ActiveSeconds = runner.ProviderAttemptSeconds(attemptStarted)
+			return runner.ReportProviderBlock(ctx, sink, params.RunID, params.JobID, block, outcome.usage)
 		}
 		if resuming {
 			message = "could not resume the provider session: " + message

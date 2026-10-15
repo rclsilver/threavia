@@ -16,6 +16,12 @@ const event = (type: string, extra: Partial<Event> = {}): Event => ({
 const kinds = (effects: Effect[]) => effects.map((effect) => effect.kind);
 
 describe('what an event changes', () => {
+  it('refreshes stopped provider work without announcing a job ending', () => {
+    const effects = effectsOf(event('job.waiting_backend', { jobId: 'j1', payload: { reason: 'AUTHENTICATION_REQUIRED', message: 'Login required' } }), at);
+    expect(kinds(effects)).toEqual(['attentionCleared', 'sessions', 'backends', 'attention', 'snapshot', 'repository']);
+    expect(kinds(effects)).not.toContain('jobEnded');
+  });
+
   it('refreshes session settings changed from another client', () => {
     expect(effectsOf(event('session.model_changed'), at)).toEqual([{ kind: 'sessions' }, { kind: 'snapshot', sessionId: 's1' }]);
   });

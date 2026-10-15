@@ -23,6 +23,7 @@ func (a *Adapter) startQuotaReporting(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
+			_ = a.refreshProviderStatus(ctx)
 			if reader, ok := a.runner.(runner.QuotaReader); ok {
 				readCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 				snapshot := reader.Quotas(readCtx)
@@ -36,7 +37,9 @@ func (a *Adapter) startQuotaReporting(ctx context.Context) {
 					snapshot = source.InitialQuotas()
 				}
 				_ = a.ReportQuotas(ctx, snapshot, true)
-				return
+				if _, authReader := a.runner.(runner.AuthReader); !authReader {
+					return
+				}
 			}
 			select {
 			case <-ctx.Done():

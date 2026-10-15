@@ -36,6 +36,7 @@ message JobEvent {
     JobCompleted job_completed = 19;
     JobFailed job_failed = 20;
     JobCancelled job_cancelled = 21;
+    JobWaitingBackend job_waiting_backend = 22;
   }
 }
 
@@ -164,3 +165,16 @@ message JobFailed {
 }
 
 message JobCancelled {}
+
+// The provider attempt has stopped; Core owns when the same Job may retry.
+// This is not a terminal outcome, and does not release the Run's active slot.
+message JobWaitingBackend {
+  string reason = 1;
+  string message = 2;
+  // Earliest retry, not a promise that a provider quota resets then.
+  google.protobuf.Timestamp retry_at = 3;
+  Usage usage = 4;
+  // Rounded-up wall time of this stopped attempt, measured on the backend.
+  // Provider waiting time is excluded; zero means not reported.
+  uint32 active_seconds = 5;
+}

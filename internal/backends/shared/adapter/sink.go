@@ -212,8 +212,8 @@ func (a *Adapter) Progress(ctx context.Context, runID, jobID, kind, detail strin
 	sdk.SendEphemeral(ctx, sdk.Events().Ephemeral(runID, jobID, kind, detail))
 }
 
-// recordTerminal remembers how a Job ended, so a reconnection reports the truth
-// rather than a Job that looks stuck.
+// recordTerminal records a stopped attempt, including a resumable provider
+// wait, so reconciliation reports the current execution state.
 func (a *Adapter) recordTerminal(ctx context.Context, runID, jobID string, status backendv1.JobStatus) {
 	if err := a.store.SaveJob(ctx, state.JobRecord{JobID: jobID, RunID: runID, Status: status}); err != nil {
 		a.logger.Error("cannot record the job outcome locally", slog.String("error", err.Error()))

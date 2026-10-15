@@ -2475,6 +2475,14 @@ components:
         effort: { type: string, description: 'Effort at launch, updated when the provider confirms it. Absent when unknown.' }
         originChannel: { $ref: "#/components/schemas/Channel" }
         error: { type: string }
+        backendWait:
+          type: object
+          description: A stopped provider attempt, retained while WAITING_BACKEND. The same Job retries; waiting time consumes no execution budget.
+          required: [reason, message]
+          properties:
+            reason: { type: string, examples: ["AUTHENTICATION_REQUIRED", "QUOTA_EXCEEDED", "RATE_LIMITED"] }
+            message: { type: string }
+            retryAt: { type: string, format: date-time, description: 'Earliest next attempt, not a promised quota reset.' }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         startedAt: { type: string, format: date-time }
@@ -2541,6 +2549,11 @@ components:
               session-scoped schedule changes. Refresh schedules and audit.
               actorJobId identifies the originating agent Job when present.
             - `agent.message`: `{ text }`
+            - `job.waiting_backend`: `{ reason, message, retryAt?, usage? }`,
+              a provider attempt has stopped for authentication or quota.
+              Refresh job/session state, backends and attention. The same Job
+              retains its slot and can be cancelled. `job.started` clears the
+              wait on resumption; terminal usage includes all prior attempts.
             - `tool.started`: `{ toolCallId, name, input }`
             - `tool.completed`: `{ toolCallId, name, output }`, the output a
               bounded excerpt marked with an ellipsis when it was cut

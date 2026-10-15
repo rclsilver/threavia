@@ -243,6 +243,11 @@ func run() error {
 	})
 
 	group.Go(func() error {
+		svc.RunProviderRecovery(groupCtx)
+		return nil
+	})
+
+	group.Go(func() error {
 		<-groupCtx.Done()
 		logger.Info("shutting down")
 

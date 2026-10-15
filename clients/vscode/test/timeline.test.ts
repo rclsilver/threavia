@@ -55,6 +55,11 @@ describe('messageAuthor', () => {
 });
 
 describe('rowsOf', () => {
+  it('keeps provider recovery visible as an unfinished job', () => {
+    const rows = rowsOf([event('job.waiting_backend', { reason: 'RATE_LIMITED', message: 'Wait before retrying' }, { jobId: 'j' })], NOW);
+    expect(kinds(rows)).toEqual(['day', 'job.waiting_backend']);
+  });
+
   it('pairs a tool call with its result, and opens the day once', () => {
     sequence = 0;
     const rows = rowsOf(finishedJob('j1'), NOW);

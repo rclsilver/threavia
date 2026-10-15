@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
+	"github.com/rclsilver/threavia/internal/core/domain"
 	"github.com/rclsilver/threavia/internal/core/events"
 )
 
@@ -111,6 +112,15 @@ func translateJobEvent(event *backendv1.JobEvent) (events.Type, any, error) {
 
 	case *backendv1.JobEvent_JobCancelled:
 		return events.TypeJobCancelled, JobEndedPayload{}, nil
+
+	case *backendv1.JobEvent_JobWaitingBackend:
+		wait := body.JobWaitingBackend
+		payload := JobWaitingBackendPayload{BackendWait: domain.BackendWait{Reason: wait.GetReason(), Message: wait.GetMessage()}, Usage: usageFromProto(wait.GetUsage())}
+		if at := wait.GetRetryAt(); at != nil && at.CheckValid() == nil {
+			value := at.AsTime()
+			payload.RetryAt = &value
+		}
+		return events.TypeJobWaitingBackend, payload, nil
 
 	default:
 		return "", nil, nil
