@@ -23,15 +23,27 @@ type HandoffHistoryItem struct {
 // Select only useful fields, bounded in SQL, from before this Run's creation.
 // Raw tool output, requests, provider ids and binary attachments never travel.
 func (s *Store) HandoffHistory(ctx context.Context, owner domain.UserID, sessionID domain.SessionID, runID domain.RunID) ([]HandoffHistoryItem, error) {
+	return s.sessionHistory(ctx, owner, sessionID, string(runID), false)
+}
+
+// ResumeHistory excludes the current prompt and later queued user messages.
+func (s *Store) ResumeHistory(ctx context.Context, owner domain.UserID, sessionID domain.SessionID, jobID domain.JobID) ([]HandoffHistoryItem, error) {
+	return s.sessionHistory(ctx, owner, sessionID, string(jobID), true)
+}
+
+func (s *Store) sessionHistory(ctx context.Context, owner domain.UserID, sessionID domain.SessionID, boundaryID string, resume bool) ([]HandoffHistoryItem, error) {
+	boundary := "(SELECT min(global_sequence) FROM events WHERE run_id=$3 AND session_id=$1 AND type='run.created')"
+	if resume {
+		boundary = "(SELECT min(global_sequence) FROM events WHERE job_id=$3 AND session_id=$1 AND type='user.message')"
+	}
 	rows, err := s.q.Query(ctx, `SELECT e.type,
 	 left(coalesce(e.payload->>'text', e.payload->>'summary', e.payload->>'error', ''),1500),
 	 ARRAY(SELECT left(coalesce(f->>'path',''),200) FROM jsonb_array_elements(
 	 CASE WHEN jsonb_typeof(e.payload->'files')='array' THEN e.payload->'files' ELSE '[]'::jsonb END) f LIMIT 20)
 	 FROM events e JOIN sessions s ON s.id=e.session_id JOIN projects p ON p.id=s.project_id
-	 WHERE s.id=$1 AND p.owner_id=$2 AND e.global_sequence <
-	 (SELECT min(global_sequence) FROM events WHERE run_id=$3 AND session_id=$1 AND type='run.created')
+	 WHERE s.id=$1 AND p.owner_id=$2 AND e.global_sequence < `+boundary+`
 	 AND e.type IN ('user.message','agent.message','job.completed','job.failed','workspace.changed')
-	 ORDER BY e.global_sequence DESC LIMIT 16`, sessionID, owner, runID)
+	 ORDER BY e.global_sequence DESC LIMIT 16`, sessionID, owner, boundaryID)
 	if err != nil {
 		return nil, classify(err, "read handoff history")
 	}

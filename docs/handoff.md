@@ -40,5 +40,8 @@ After native binding, later messages resume normally without re-injecting it.
 Web and VS Code render the move notice, including its destination name and the
 fresh-session/workspace boundary. VS Code has no existing move action; the Web
 and API own this preview/confirmation flow. No backend or protocol update is
-required. Recovery after a native resume failure remains separate backlog work
-(`dc0288ef`); this change only covers explicit moves.
+required for explicit moves. Native resume recovery additionally uses the
+shared failure contract in docs/protocol.md. It keeps the same backend and Run,
+excludes the current prompt and later queued messages from history excerpts,
+and never retries the failed Job automatically. A successful fresh native
+binding ends the recovery-context injection.

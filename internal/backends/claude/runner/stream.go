@@ -71,6 +71,7 @@ type contentBlock struct {
 
 // outcome is what the provider output said about how the Job ended.
 type outcome struct {
+	bound     bool
 	completed bool
 	failed    bool
 	summary   string
@@ -135,6 +136,7 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 		case "system":
 			// The init frame confirms the session the provider actually used.
 			if line.Subtype == "init" && line.SessionID != "" {
+				result.bound = true
 				if line.Model != "" {
 					_ = contract.ReportJobModel(ctx, sink, params.RunID, params.JobID, line.Model, params.Effort)
 				}

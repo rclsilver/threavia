@@ -275,6 +275,11 @@ func TestProviderProcess(t *testing.T) {
 			}
 			response(map[string]any{"data": []any{map[string]any{"hooks": hooks}}})
 		case "thread/start", "thread/resume":
+			if (scenario == "resume-missing" || scenario == "resume-network" || scenario == "resume-auth") && msg.Method == "thread/resume" {
+				diagnostic := map[string]string{"resume-missing": "no rollout found for thread id old", "resume-network": "connection reset by peer", "resume-auth": "401 Unauthorized: thread not found"}[scenario]
+				send(map[string]any{"id": msg.ID, "error": map[string]any{"code": -32600, "message": diagnostic}})
+				continue
+			}
 			if p["ephemeral"] == true {
 				config, _ := p["config"].(map[string]any)
 				if p["approvalPolicy"] != "never" || config["mcp_servers.threavia.enabled"] != false || config["features.shell_tool"] != false || config["features.multi_agent"] != false || config["features.unified_exec"] != false {
@@ -531,6 +536,10 @@ func TestRunAndResume(t *testing.T) {
 				joined := strings.Join(sink.events, ",")
 				if !strings.Contains(joined, "tool:Bash:cmd-1,result:Bash:cmd-1") {
 					t.Fatalf("tool events: %s", joined)
+				}
+			} else if scenario == "resume-error" {
+				if sink.code != "NATIVE_SESSION_UNAVAILABLE:NOT_FOUND" {
+					t.Fatalf("missing conversation was not classified: %+v", sink)
 				}
 			} else if sink.code != "PROVIDER_ERROR" {
 				t.Fatalf("expected failure, got %+v", sink)

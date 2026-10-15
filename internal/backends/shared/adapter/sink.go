@@ -11,6 +11,7 @@ import (
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/backends/shared/runner"
 	"github.com/rclsilver/threavia/internal/backends/shared/workspace"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/resume"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/state"
 )
 
@@ -52,6 +53,8 @@ func (a *Adapter) JobStartedWithModel(ctx context.Context, runID, jobID, model, 
 // NativeSessionBound implements runner.Sink. It is also recorded locally, so a
 // backend restart still knows which provider session backs the Run.
 func (a *Adapter) NativeSessionBound(ctx context.Context, runID, jobID, nativeSessionID string) error {
+	a.nativeMu.Lock()
+	defer a.nativeMu.Unlock()
 	if err := a.store.SaveRun(ctx, state.RunRecord{
 		RunID:           runID,
 		NativeSessionID: nativeSessionID,
@@ -186,6 +189,37 @@ func (a *Adapter) JobCompleted(ctx context.Context, runID, jobID, summary string
 
 // JobFailed implements runner.Sink.
 func (a *Adapter) JobFailed(ctx context.Context, runID, jobID, code, message string, usage *backendv1.Usage) error {
+	_, permanent := resume.FailureReason(code)
+	_, attemptFailed := resume.AttemptFailureReason(code)
+	if permanent || attemptFailed {
+		a.nativeMu.Lock()
+		defer a.nativeMu.Unlock()
+		// Persist the failure for replay before changing local reconciliation
+		// state. A crash between the two cannot lose the reason for the loss.
+		if err := a.send(ctx, func() (*backendv1.JobEvent, error) {
+			return a.sdk().Events().JobFailed(ctx, runID, jobID, code, message, usage)
+		}); err != nil {
+			return err
+		}
+		runs, err := a.store.Runs(ctx)
+		if err != nil {
+			return err
+		}
+		for _, run := range runs {
+			if run.RunID == runID {
+				run.ResumeStatus = backendv1.ResumeStatus_RESUME_STATUS_UNAVAILABLE
+				if !permanent {
+					run.ResumeStatus = backendv1.ResumeStatus_RESUME_STATUS_UNSPECIFIED
+				}
+				if err := a.store.SaveRun(ctx, run); err != nil {
+					return err
+				}
+				break
+			}
+		}
+		a.recordTerminal(ctx, runID, jobID, backendv1.JobStatus_JOB_STATUS_FAILED)
+		return nil
+	}
 	a.recordTerminal(ctx, runID, jobID, backendv1.JobStatus_JOB_STATUS_FAILED)
 	return a.send(ctx, func() (*backendv1.JobEvent, error) {
 		return a.sdk().Events().JobFailed(ctx, runID, jobID, code, message, usage)

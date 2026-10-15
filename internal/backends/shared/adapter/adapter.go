@@ -37,6 +37,7 @@ type Adapter struct {
 	logger      *slog.Logger
 
 	mu               sync.Mutex
+	nativeMu         sync.Mutex // orders lost bindings and their replacements
 	client           *client.Client
 	jobs             map[string]*jobState
 	waiters          map[string]*waiter

@@ -246,6 +246,39 @@ writer. Pending waits are cancelled when the control stream ends.
 
 ## Backend lifecycle
 
+### Native conversation resume
+
+A backend attempts the requested native-session id; Core never expires it by
+age. A confirmed permanent resume failure is a terminal `JobFailed` whose
+`error.code` is `NATIVE_SESSION_UNAVAILABLE:<REASON>`. Reasons are bounded
+uppercase identifiers, an open vocabulary (currently `NOT_FOUND`, `PURGED`,
+`INCOMPATIBLE`). Only a failed resume handshake may emit this code. Unknown
+errors, timeouts, cancellation, authentication and quotas never invalidate a
+conversation; authentication/quota waits retain the existing recovery behavior.
+
+An unsuccessful resume handshake without proof of permanent loss uses
+`NATIVE_SESSION_RESUME_FAILED:<REASON>` (currently `UNKNOWN`). Core retains the
+native id, records `resumeStatus: UNKNOWN` and the reason, and emits
+`run.resume_failed { reason }`. The next message retries the same binding.
+A successful retry clears the reason, marks `AVAILABLE`, and emits
+`run.resume_available { reason: "RESUMED" }`. A remembered id in reconciliation
+is not a successful retry.
+
+Core atomically records the failed Job, marks the Run `UNAVAILABLE`, and emits
+`run.resume_unavailable { reason }`. The old native id stays on the historical
+Run, but is omitted from the next Job's command. That Job creates a fresh native
+conversation on the same backend and Run; it receives bounded recent Core
+history before its own prompt, plus the normal project context. The failed Job
+is not retried automatically. A successful fresh binding marks the Run
+`AVAILABLE` and emits `run.resume_available { reason: "NEW_SESSION" }`.
+Clients display both notices and refresh snapshots. No workspace files move.
+
+The backend persists the unavailable local Run and buffers the failure for
+replay during Core outages. Reconciliation cannot undo a confirmed loss merely
+by repeating an old native id; bindings from finished Jobs are ignored.
+Existing protocol-v1 peers remain compatible: an older Core treats the new
+failure code as an ordinary failed Job, without automatic fresh-session recovery.
+
 Core emits the persistent, owner-scoped `backend.status_changed` client event
 after a connection, disconnection, or a changed status report. Its payload is
 `{ backendInstanceId, operationalStatus, providerAuthState }`. Clients refresh

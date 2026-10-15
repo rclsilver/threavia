@@ -42,6 +42,8 @@ export type Pending = Record<string, JobStatus>;
 
 /** The events worth a line. The rest is machinery a user never asked to see. */
 const RENDERED = new Set([
+	'run.resume_unavailable', 'run.resume_available',
+  'run.resume_failed',
   'session.created',
   'user.message',
   'agent.message',
@@ -243,6 +245,9 @@ function foldFinished(rows: Row[], opened: ReadonlySet<number>): Row[] {
       type === 'user.message' ||
       type === 'workspace.changed' ||
       type === 'artifact.created' ||
+      type === 'run.resume_unavailable' ||
+      type === 'run.resume_available' ||
+      type === 'run.resume_failed' ||
       ENDINGS.has(type) ||
       row.key === answer.get(job)
     );
@@ -1096,6 +1101,12 @@ function describe(event: Event): {
       return { Icon: Flag, text: 'Session created.' };
     case 'run.created':
       return { Icon: Flag, text: `Moved to ${typeof event.payload?.backendName === 'string' ? event.payload.backendName : 'another backend'}. The next message starts a fresh provider session with recent Core history. Workspace files stay on the source machine.` };
+    case 'run.resume_unavailable':
+      return { Icon: AlertTriangle, tone: 'text-warn-text', text: 'The provider conversation could not be resumed. Core history is preserved. The next message starts a fresh conversation with recent history; the failed message is not retried automatically.' };
+    case 'run.resume_available':
+      return { Icon: Flag, text: event.payload?.reason === 'RESUMED' ? 'The provider conversation was resumed successfully.' : 'A fresh provider conversation has started with recent Core history.' };
+    case 'run.resume_failed':
+      return { Icon: AlertTriangle, tone: 'text-warn-text', text: 'The provider conversation could not be resumed. Its binding is retained; the next message will retry it.' };
     // The provider result repeats the last agent message, so only the fact that
     // the turn ended is worth showing.
     case 'job.completed':

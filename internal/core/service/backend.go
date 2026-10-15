@@ -14,6 +14,7 @@ import (
 	"github.com/rclsilver/threavia/internal/core/events"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/quotas"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/resume"
 )
 
 // Service implements the backend control sink.
@@ -233,7 +234,7 @@ func (s *Service) QuotaReport(ctx context.Context, instanceID domain.BackendInst
 func (s *Service) ReconcileState(ctx context.Context, instanceID domain.BackendInstanceID, state *backendv1.ReconcileState) {
 	known := make(map[domain.JobID]*backendv1.JobState)
 	for _, run := range state.GetRuns() {
-		if native := run.GetNativeSessionId(); native != "" {
+		if native := run.GetNativeSessionId(); native != "" && run.GetResumeStatus() != backendv1.ResumeStatus_RESUME_STATUS_UNAVAILABLE {
 			s.bindReportedNativeSession(ctx, instanceID, domain.RunID(run.GetRunId()), native)
 		}
 		for _, job := range run.GetJobs() {
@@ -351,25 +352,31 @@ func (s *Service) ReconcileState(ctx context.Context, instanceID domain.BackendI
 func (s *Service) bindReportedNativeSession(ctx context.Context, instanceID domain.BackendInstanceID, runID domain.RunID, native string) {
 	logger := s.logger.With(slog.String("backendInstanceId", string(instanceID)), slog.String("runId", string(runID)))
 
-	run, err := s.store.RunByID(ctx, runID)
-	if errors.Is(err, postgres.ErrNotFound) {
-		logger.Warn("ignoring a native session reported for a run that does not exist")
-		return
-	}
-	if err != nil {
-		logger.Error("cannot read a run reported by its backend", slog.String("error", err.Error()))
-		return
-	}
-	if run.BackendInstanceID != instanceID {
-		logger.Warn("ignoring a native session reported for a run of another backend")
-		return
-	}
 	if _, err := adoptedSession(native); err != nil {
 		logger.Warn("ignoring a malformed native session", slog.String("error", err.Error()))
 		return
 	}
 
-	if err := s.store.BindNativeSession(ctx, runID, native); err != nil {
+	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		run, err := tx.LockRun(ctx, runID)
+		if errors.Is(err, postgres.ErrNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if run.BackendInstanceID != instanceID {
+			logger.Warn("ignoring a native session reported for a run of another backend")
+			return nil
+		}
+		// Reconciliation is not a successful resume, even if its report
+		// was received before the loss committed.
+		if run.ResumeStatus == domain.ResumeUnavailable || run.ResumeReason != nil {
+			return nil
+		}
+		return tx.BindNativeSession(ctx, runID, native)
+	})
+	if err != nil {
 		logger.Error("cannot record a native session", slog.String("error", err.Error()))
 	}
 }
@@ -614,7 +621,29 @@ func (s *Service) applyEvent(ctx context.Context, tx *postgres.Store, b *batch, 
 				slog.String("error", err.Error()))
 			return nil
 		}
-		return tx.BindNativeSession(ctx, scope.RunID, native)
+		run, err := tx.LockRun(ctx, scope.RunID)
+		if err != nil {
+			return err
+		}
+		job, err := tx.JobByID(ctx, scope.JobID)
+		if err != nil || job.Status.Terminal() {
+			return err
+		}
+		if run.ResumeStatus == domain.ResumeUnavailable && run.NativeSessionID != nil && *run.NativeSessionID == native {
+			return nil
+		}
+		if err := tx.BindNativeSession(ctx, scope.RunID, native); err != nil {
+			return err
+		}
+		if run.ResumeStatus == domain.ResumeUnavailable || run.ResumeReason != nil {
+			reason := "RESUMED"
+			if run.ResumeStatus == domain.ResumeUnavailable {
+				reason = "NEW_SESSION"
+			}
+			return s.appendAll(ctx, tx, b, record{eventType: events.TypeRunResumeAvailable, scope: scope,
+				payload: map[string]any{"reason": reason}})
+		}
+		return nil
 
 	case *backendv1.JobEvent_ValidationRequested:
 		payload, sum, err := canonicalJSON(body.ValidationRequested.GetRequestPayload())
@@ -664,6 +693,31 @@ func (s *Service) applyEvent(ctx context.Context, tx *postgres.Store, b *batch, 
 
 	case *backendv1.JobEvent_JobFailed:
 		message := body.JobFailed.GetError().GetMessage()
+		reason, permanent := resume.FailureReason(body.JobFailed.GetError().GetCode())
+		attemptReason, attemptFailed := resume.AttemptFailureReason(body.JobFailed.GetError().GetCode())
+		if permanent || attemptFailed {
+			status, kind := domain.ResumeUnavailable, events.TypeRunResumeUnavailable
+			if !permanent {
+				status, kind, reason = domain.ResumeUnknown, events.TypeRunResumeFailed, attemptReason
+			}
+			run, err := tx.LockRun(ctx, scope.RunID)
+			if err != nil {
+				return err
+			}
+			job, err := tx.JobByID(ctx, scope.JobID)
+			if err != nil {
+				return err
+			}
+			if !job.Status.Terminal() && run.NativeSessionID != nil && run.ResumeStatus != domain.ResumeUnavailable {
+				if err := tx.SetResumeStatus(ctx, scope.RunID, status, &reason); err != nil {
+					return err
+				}
+				if err := s.appendAll(ctx, tx, b, record{eventType: kind, scope: scope,
+					payload: map[string]any{"reason": reason}}); err != nil {
+					return err
+				}
+			}
+		}
 		if err := tx.AbandonJobAttention(ctx, scope.JobID, "the job failed"); err != nil {
 			return err
 		}

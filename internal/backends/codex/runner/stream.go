@@ -14,6 +14,7 @@ import (
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	contract "github.com/rclsilver/threavia/internal/backends/shared/runner"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/resume"
 )
 
 func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p contract.StartParams, sink contract.Sink, url string, requests *sync.WaitGroup) (out outcome) {
@@ -202,6 +203,17 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 	phase = method
 	if err := r.call(startupCtx, method, args, &thread); err != nil {
 		out.err = err
+		if method == "thread/resume" {
+			out.code = resume.AttemptFailureCode("UNKNOWN")
+			// Only a provider RPC refusal proves a missing conversation.
+			// EOF, timeout, cancellation and errors from later turns do not.
+			var failure *providerRPCError
+			if errors.As(err, &failure) {
+				if reason := contract.NativeResumeFailure("codex", failure.failure.Message); reason != "" {
+					out.code = resume.FailureCode(reason)
+				}
+			}
+		}
 		return out
 	}
 	if thread.Thread.ID == "" {

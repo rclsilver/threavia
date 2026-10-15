@@ -107,6 +107,9 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
     // A new Run means the Session moved to another backend, which also moves
     // where its repository is read.
     case 'run.created':
+    case 'run.resume_unavailable':
+    case 'run.resume_available':
+    case 'run.resume_failed':
       return [...snapshot(sessionId), ...repository(sessionId)];
 
     // The sidebar says which Session is working from the list, so the list

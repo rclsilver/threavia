@@ -93,3 +93,8 @@ func scanRun(row scanner) (domain.Run, error) {
 func (s *Store) RunByID(ctx context.Context, id domain.RunID) (domain.Run, error) {
 	return scanRun(s.q.QueryRow(ctx, `SELECT `+runColumns+` FROM runs r WHERE r.id = $1`, id))
 }
+
+// LockRun serializes native-session reports with dispatching the next Job.
+func (s *Store) LockRun(ctx context.Context, id domain.RunID) (domain.Run, error) {
+	return scanRun(s.q.QueryRow(ctx, `SELECT `+runColumns+` FROM runs r WHERE r.id=$1 FOR UPDATE`, id))
+}

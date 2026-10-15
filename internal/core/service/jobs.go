@@ -54,6 +54,11 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 	if from != domain.JobQueued && from != domain.JobWaitingBackend {
 		return
 	}
+	// Retain the old id on the Run for history, but never send it again once
+	// the backend has confirmed it cannot be resumed.
+	if jc.Run.ResumeStatus == domain.ResumeUnavailable {
+		jc.NativeSessionID = nil
+	}
 
 	conn, ok := s.backends.Lookup(jc.BackendInstanceID)
 	if !ok || !conn.Reconciled() {
@@ -136,12 +141,7 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 	// that its project memory is missing — it just works as if the project had
 	// none, and the decisions someone recorded so every later session would
 	// know go unread.
-	projectContext, err := s.projectContext(ctx, jc)
-	if err != nil {
-		s.logger.Error("cannot build the project context, leaving the job queued",
-			slog.String("jobId", string(jobID)), slog.String("error", err.Error()))
-		return
-	}
+	var projectContext *backendv1.ProjectContext
 
 	// Reserving the active slot before sending is what keeps a second Job of the
 	// same Run from being dispatched concurrently.
@@ -150,6 +150,24 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 		session, err := tx.LockSession(ctx, jc.OwnerID, jc.SessionID)
 		if err != nil {
 			return err
+		}
+		// A dispatch may have loaded its context before the preceding Job
+		// reported a lost conversation. Read the binding under the same lock
+		// as those reports, before reserving this Job's slot.
+		jc.Run, err = tx.LockRun(ctx, jc.Run.ID)
+		if err != nil {
+			return err
+		}
+		jc.NativeSessionID = jc.Run.NativeSessionID
+		if jc.Run.ResumeStatus == domain.ResumeUnavailable {
+			jc.NativeSessionID = nil
+		}
+		projectContext, err = s.projectContext(ctx, tx, jc)
+		if err != nil {
+			return err
+		}
+		if jc.Job.BackendWait != nil {
+			prompt = recoveryPrompt(recovery, jc.NativeSessionID != nil)
 		}
 		backend, err := tx.BackendInstanceByID(ctx, jc.BackendInstanceID)
 		if err != nil {
@@ -239,7 +257,7 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 // recorded so that every later session would know goes unread. Refusing to
 // build the context leaves the Job queued, which is recoverable; sending it
 // without is not.
-func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) (*backendv1.ProjectContext, error) {
+func (s *Service) projectContext(ctx context.Context, store *postgres.Store, jc postgres.JobContext) (*backendv1.ProjectContext, error) {
 	pc := &backendv1.ProjectContext{
 		ProjectId:           string(jc.ProjectID),
 		ProjectName:         jc.ProjectName,
@@ -256,7 +274,7 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) (*
 		pc.KnownDirectoryGitRemote = jc.KnownDirectoryGitRemote
 	}
 	// Resolve the session role from durable state rather than the assignment.
-	session, err := s.store.GetSession(ctx, jc.OwnerID, jc.SessionID)
+	session, err := store.GetSession(ctx, jc.OwnerID, jc.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("read the session manager: %w", err)
 	}
@@ -268,7 +286,7 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) (*
 	// Active IMPORTANT decisions only. A superseded or NORMAL one is searchable
 	// on demand, and injecting either would spend context on something that is
 	// no longer true or not important enough to have been marked so.
-	globals, err := s.store.ImportantGlobalDecisions(ctx, jc.OwnerID, contextDecisionLimit)
+	globals, err := store.ImportantGlobalDecisions(ctx, jc.OwnerID, contextDecisionLimit)
 	if err != nil {
 		return nil, fmt.Errorf("read the global decisions: %w", err)
 	}
@@ -279,7 +297,7 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) (*
 			Id: string(decision.ID), Title: "[Core memory] " + decision.Title, Content: decision.Content,
 		})
 	}
-	decisions, err := s.store.ImportantDecisions(ctx, jc.ProjectID, contextDecisionLimit)
+	decisions, err := store.ImportantDecisions(ctx, jc.ProjectID, contextDecisionLimit)
 	if err != nil {
 		return nil, fmt.Errorf("read the project decisions: %w", err)
 	}
@@ -291,7 +309,7 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) (*
 
 	// A compact summary of what is open and actionable, not every Task ever
 	// filed: in progress first, then what is ready to start.
-	tasks, err := s.store.OpenTasks(ctx, jc.ProjectID, contextTaskLimit)
+	tasks, err := store.OpenTasks(ctx, jc.ProjectID, contextTaskLimit)
 	if err != nil {
 		return nil, fmt.Errorf("read the project tasks: %w", err)
 	}
@@ -303,7 +321,7 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) (*
 
 	// Core-managed Skills: identity only. The backend fetches and caches the
 	// bundles it does not already have, so a Job never carries their content.
-	installed, err := s.store.ListSkills(ctx, jc.ProjectID)
+	installed, err := store.ListSkills(ctx, jc.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("read the project skills: %w", err)
 	}
@@ -317,7 +335,7 @@ func (s *Service) projectContext(ctx context.Context, jc postgres.JobContext) (*
 		})
 	}
 
-	handoff, err := s.handoffContext(ctx, jc)
+	handoff, err := s.handoffContext(ctx, store, jc)
 	if err != nil {
 		return nil, fmt.Errorf("read the session transfer context: %w", err)
 	}

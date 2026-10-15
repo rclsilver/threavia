@@ -2556,6 +2556,9 @@ components:
               Repeated reports and heartbeat timestamps do not emit events.
               Refresh backend instances, session lists, snapshots and attention.
             - `run.created`: `{ backendInstanceId, fromBackendInstanceId?, backendName? }`.
+            - `run.resume_unavailable`: `{ reason }`; confirmed permanent loss, Core history preserved.
+            - `run.resume_available`: `{ reason: "NEW_SESSION" | "RESUMED" }`; a fresh binding or a successful retry.
+            - `run.resume_failed`: `{ reason }`; failed resume without proof of permanent loss, binding retained.
               A fromBackendInstanceId marks an explicit move: render a destination
               notice explaining the fresh provider session and bounded Core history.
               Refresh the snapshot, repository and audit. Initial runs remain silent.

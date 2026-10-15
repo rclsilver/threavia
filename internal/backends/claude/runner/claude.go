@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/resume"
 
 	"github.com/rclsilver/threavia/internal/backends/shared/mcp"
 	"github.com/rclsilver/threavia/internal/backends/shared/policy"
@@ -415,6 +416,20 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	if outcome.blocked != nil {
 		outcome.blocked.ActiveSeconds = runner.ProviderAttemptSeconds(attemptStarted)
 		return runner.ReportProviderBlock(ctx, sink, params.RunID, params.JobID, outcome.blocked, outcome.usage)
+	}
+	if resuming && !outcome.bound && (!outcome.completed || outcome.failed) {
+		diagnostic := outcome.summary
+		if diagnostic == "" {
+			diagnostic = strings.TrimSpace(diagnostics.String())
+		}
+		if reason := runner.NativeResumeFailure("claude", diagnostic); reason != "" {
+			return sink.JobFailed(ctx, params.RunID, params.JobID, resume.FailureCode(reason),
+				"The native provider conversation is no longer resumable. Core history is preserved; the next message starts a fresh conversation.", outcome.usage)
+		}
+		if runner.ProviderBlockFor("claude", "", diagnostic) == nil {
+			return sink.JobFailed(ctx, params.RunID, params.JobID, resume.AttemptFailureCode("UNKNOWN"),
+				"The native provider conversation could not be resumed. Its binding is retained; the next message will retry it.", outcome.usage)
+		}
 	}
 	switch {
 	case outcome.completed && !outcome.failed:

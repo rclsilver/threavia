@@ -21,6 +21,7 @@ import (
 	"github.com/rclsilver/threavia/internal/backends/shared/policy"
 	contract "github.com/rclsilver/threavia/internal/backends/shared/runner"
 	"github.com/rclsilver/threavia/internal/backends/shared/workspace"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/resume"
 )
 
 type endpoint interface {
@@ -452,6 +453,9 @@ func (c *Codex) Run(ctx context.Context, params contract.StartParams, sink contr
 		if block != nil {
 			block.ActiveSeconds = contract.ProviderAttemptSeconds(attemptStarted)
 			return contract.ReportProviderBlock(ctx, sink, params.RunID, params.JobID, block, outcome.usage)
+		}
+		if _, permanent := resume.FailureReason(outcome.code); permanent {
+			detail = "The native provider conversation is no longer resumable. Core history is preserved; the next message starts a fresh conversation."
 		}
 		return sink.JobFailed(ctx, params.RunID, params.JobID, outcome.code, detail, outcome.usage)
 	}

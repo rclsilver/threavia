@@ -20,7 +20,10 @@ const (
 	TypeSessionPinned       Type = "session.pinned"
 	TypeSessionModelChanged Type = "session.model_changed"
 
-	TypeRunCreated Type = "run.created"
+	TypeRunCreated           Type = "run.created"
+	TypeRunResumeUnavailable Type = "run.resume_unavailable"
+	TypeRunResumeAvailable   Type = "run.resume_available"
+	TypeRunResumeFailed      Type = "run.resume_failed"
 
 	TypeJobCreated        Type = "job.created"
 	TypeJobStarted        Type = "job.started"

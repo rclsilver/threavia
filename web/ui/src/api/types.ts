@@ -62,6 +62,9 @@ export interface List<T> {
  * line.
  */
 export interface EventPayloads {
+  'run.resume_unavailable': { reason: string };
+  'run.resume_available': { reason: 'NEW_SESSION' | 'RESUMED' };
+  'run.resume_failed': { reason: string };
   'backend.status_changed': { backendInstanceId: string; operationalStatus: BackendInstance['operationalStatus']; providerAuthState: BackendInstance['providerAuthState'] };
   'backend.quotas_updated': { backendInstanceId: string };
   'project.updated': { projectId: string; name: string };
