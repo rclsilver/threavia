@@ -41,6 +41,7 @@ type Codex struct {
 	pendingPolicies map[string]policy.Policy
 	command         func(context.Context, string) *exec.Cmd
 	webTransport    http.RoundTripper
+	startupTimeout  time.Duration
 	// available is what a Job can run by name, read from PATH at start.
 	available []string
 }
@@ -106,7 +107,7 @@ func New(binary string, tools *mcp.Server, options Options, logger *slog.Logger)
 		options.Version = "dev"
 	}
 	contract.SweepScratch(options.Scratch, logger)
-	c := &Codex{binary: binary, tools: tools, options: options, logger: logger, running: make(map[string]*execution), pendingPolicies: make(map[string]policy.Policy), available: contract.ExecutablesOnPath()}
+	c := &Codex{binary: binary, tools: tools, options: options, logger: logger, running: make(map[string]*execution), pendingPolicies: make(map[string]policy.Policy), available: contract.ExecutablesOnPath(), startupTimeout: 30 * time.Second}
 	c.command = func(ctx context.Context, hookCommand string) *exec.Cmd {
 		quoted, _ := json.Marshal(hookCommand)
 		group := `[{hooks=[{type="command",command=` + string(quoted) + `,timeout=2147483647}]}]`

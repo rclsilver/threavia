@@ -109,6 +109,14 @@ The backend checks definitions with `hooks/list`, enables and trusts only its
 own two hooks, and requires a SessionStart handshake before allowing tools.
 Missing hook support or conflicting managed settings fail with
 `POLICY_UNSUPPORTED`; no user/project configuration is modified.
+Setup (initialization, authentication, configuration, skills and thread
+start/resume) has a 30-second deadline. After setup, the first `turn/start`
+and SessionStart confirmation share a fresh 30-second deadline. A confirmation
+already received wins over a simultaneous deadline. An initial turn timeout,
+missing confirmation or provider exit during that wait is a technical
+`PROVIDER_STARTUP_FAILED`, with the startup phase and elapsed time in its
+diagnostic; it is not a human permission refusal. Tools remain gated until
+the handshake. The Job's duration limit and cancellation still apply.
 Blocked native hooks produce failed tool events even when Codex does not emit
 a native tool item. Native MCP consent forms for the private Threavia server
 are accepted; policy checks and human validations happen at the endpoint.
