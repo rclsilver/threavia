@@ -345,6 +345,9 @@ func TestProviderProcess(t *testing.T) {
 			}
 			response(map[string]any{"thread": map[string]any{"id": "thread-1"}})
 		case "turn/start":
+			if scenario == "startup-stalled-turn" {
+				continue
+			}
 			if strings.HasPrefix(scenario, "session-model") && (p["model"] != "session-model" || p["effort"] != "high") {
 				os.Exit(44)
 			}

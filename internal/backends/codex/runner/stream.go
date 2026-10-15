@@ -16,15 +16,25 @@ import (
 	contract "github.com/rclsilver/threavia/internal/backends/shared/runner"
 )
 
-func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p contract.StartParams, sink contract.Sink, url string, requests *sync.WaitGroup) outcome {
-	out := outcome{code: "PROVIDER_ERROR"}
+func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p contract.StartParams, sink contract.Sink, url string, requests *sync.WaitGroup) (out outcome) {
+	out.code = "PROVIDER_ERROR"
+	started, phase := time.Now(), "attachments"
+	startupComplete := false
+	defer func() {
+		if !startupComplete && out.err != nil {
+			elapsed := time.Since(started).Round(time.Millisecond)
+			c.logger.Warn("Codex startup failed", "jobId", p.JobID, "phase", phase, "elapsed", elapsed, "code", out.code)
+			out.err = fmt.Errorf("Codex startup %s after %s: %w", phase, elapsed, out.err)
+		}
+	}()
 	if err := contract.PrepareAttachments(&p, contract.ScratchDir(c.options.Scratch, p.RunID)); err != nil {
 		out.err = err
 		return out
 	}
 	firstInput := true
-	startupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	startupCtx, cancel := context.WithTimeout(ctx, c.startupTimeout)
 	defer cancel()
+	phase = "initialize"
 	if err := r.call(startupCtx, "initialize", map[string]any{
 		"clientInfo":   map[string]any{"name": "threavia", "title": "Threavia", "version": c.options.Version},
 		"capabilities": map[string]any{"experimentalApi": true},
@@ -36,6 +46,7 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 		out.err = err
 		return out
 	}
+	phase = "authentication"
 	if c.options.APIKey != "" {
 		// The key stays on the backend and travels over stdin, never argv or
 		// the Core connection. Explicit API-key configuration selects this auth.
@@ -98,6 +109,7 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 			DisabledReason *string `json:"disabledReason"`
 		} `json:"layers"`
 	}
+	phase = "configuration"
 	if err := r.call(startupCtx, "config/read", map[string]any{"cwd": p.WorkingDirectory, "includeLayers": true}, &machine); err != nil {
 		out.err = err
 		return out
@@ -139,6 +151,7 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 		live.nativeRules = live.nativeRules || found
 		live.mu.Unlock()
 	}
+	phase = "hook verification"
 	hookTrust, err := verifyHooks(startupCtx, r, p.WorkingDirectory, live.hookCommand)
 	if err != nil {
 		out.code, out.err = "POLICY_UNSUPPORTED", err
@@ -147,6 +160,7 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 	// Trust only the two exact host-generated definitions, scoped to this
 	// thread. No global trust bypass or durable user configuration changes.
 	config["hooks.state"] = hookTrust
+	phase = "skills"
 	skills, err := loadSkills(startupCtx, r, p.WorkingDirectory, p.SkillDirectory, config)
 	if err != nil {
 		out.code, out.err = "SKILLS_UNAVAILABLE", err
@@ -186,6 +200,7 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 			Effort string `json:"reasoningEffort"`
 		} `json:"thread"`
 	}
+	phase = method
 	if err := r.call(startupCtx, method, args, &thread); err != nil {
 		out.err = err
 		return out
@@ -217,7 +232,8 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 		out.err = err
 		return out
 	}
-	startTurn := func(text string) error {
+	cancel()
+	startTurn := func(callCtx context.Context, text string) error {
 		live.mu.Lock()
 		if live.turnCancel != nil {
 			live.turnCancel()
@@ -250,7 +266,7 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 				ID string `json:"id"`
 			} `json:"turn"`
 		}
-		if err := r.call(ctx, "turn/start", params, &response); err != nil {
+		if err := r.call(callCtx, "turn/start", params, &response); err != nil {
 			return err
 		}
 		if response.Turn.ID == "" {
@@ -262,19 +278,27 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 		live.mu.Unlock()
 		return nil
 	}
-	if err := startTurn(p.Prompt); err != nil {
+	// Thread setup and the first turn have separate budgets: loading config,
+	// skills or a resumed conversation must not consume the hook's deadline.
+	turnCtx, turnCancel := context.WithTimeout(ctx, c.startupTimeout)
+	defer turnCancel()
+	phase = "first turn"
+	if err := startTurn(turnCtx, p.Prompt); err != nil {
+		out.code = "PROVIDER_STARTUP_FAILED"
 		out.err = err
 		return out
 	}
 	// Codex can defer SessionStart until the first turn. Confirm the hook ran
 	// before processing tool events, rather than assuming thread/start waits
 	// for lifecycle hooks. PreToolUse also refuses work until this handshake.
-	select {
-	case <-live.hookReady:
-	case <-startupCtx.Done():
-		out.code, out.err = "POLICY_UNSUPPORTED", errors.New("Codex did not execute the Threavia policy hook")
+	phase = "policy hook handshake"
+	if err := waitPolicyHook(turnCtx, live.hookReady, r); err != nil {
+		out.code, out.err = "PROVIDER_STARTUP_FAILED", err
 		return out
 	}
+	turnCancel()
+	startupComplete = true
+	c.logger.Debug("Codex startup complete", "jobId", p.JobID, "elapsed", time.Since(started).Round(time.Millisecond))
 	actions, plans := 0, 0
 	root := thread.Thread.ID
 	for {
@@ -518,7 +542,7 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 				return out
 			}
 			if next != nil {
-				if err := startTurn(next.text); err != nil {
+				if err := startTurn(ctx, next.text); err != nil {
 					out.err = err
 					return out
 				}

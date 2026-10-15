@@ -253,6 +253,12 @@ backend, as metadata. Core never fetches their content, which is what lets a
 backend expose a Skill that only exists behind a corporate network, and what
 lets a handoff report that another backend cannot run it (section 18).
 
+The bundle is a tar.gz of the skill directory rooted at `SKILL.md`, with
+supporting regular files and relative paths preserved. Executable bits are
+normalized to `0644`; scripts need an installed interpreter. The
+[Claude/Codex compatibility matrix](skills.md) describes native discovery,
+supporting files and policy enforcement without changing this wire format.
+
 Known-directory tools can list and register owner-global directories with
 `scope: "global"`; the default scope is the current project. The project list
 includes its owner's global directories. Updates, binding and forgetting accept

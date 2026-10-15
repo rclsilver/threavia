@@ -163,6 +163,9 @@ policy-controlled web search/fetch. With the development database running,
 `make test-codex-real` exercises the installed, authenticated CLI against a
 temporary Core schema using real inference.
 
+The [Agent Skills compatibility matrix](docs/skills.md) covers discovery,
+scripts, supporting files and permissions across Claude Code and Codex.
+
 Without `THREAVIA_AUTH_MODE`, Core runs with no authentication: every request
 acts as a single local user. That is why it then listens on `127.0.0.1:8080`
 only, so nobody else on the network can start sessions on your backends. Set
