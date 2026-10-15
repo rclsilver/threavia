@@ -88,6 +88,9 @@ func coreToolError(err error) error {
 
 // invokeTool dispatches one Core Tool call.
 func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc jobScope, name tools.Name, input map[string]any, file []byte) (map[string]any, error) {
+	// Audit attributes every Core tool mutation to the authenticated calling
+	// Job. These values never come from tool input.
+	ctx = context.WithValue(domain.WithChannel(ctx, domain.Channel("agent")), managerJobKey{}, jc.JobID)
 	switch name {
 	case tools.NameScheduleList, tools.NameScheduleCreate, tools.NameScheduleUpdate, tools.NameScheduleDelete:
 		return s.scheduleTool(ctx, identity, jc, name, input)

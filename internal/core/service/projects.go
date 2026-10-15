@@ -9,6 +9,7 @@ import (
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
 	"github.com/rclsilver/threavia/internal/core/events"
+	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 	"github.com/rclsilver/threavia/internal/core/storage/s3"
 )
 
@@ -26,9 +27,16 @@ func (s *Service) CreateProject(ctx context.Context, identity auth.Identity, nam
 		Description: strings.TrimSpace(description),
 		Status:      domain.ProjectActive,
 	}
-	if err := s.store.CreateProject(ctx, &project); err != nil {
+	b := &batch{ownerID: identity.UserID}
+	if err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		if err := tx.CreateProject(ctx, &project); err != nil {
+			return err
+		}
+		return s.recordAuditedChange(ctx, tx, b, identity, events.TypeProjectCreated, domain.Scope{ProjectID: project.ID}, string(project.ID), projectAuditPayload(project))
+	}); err != nil {
 		return domain.Project{}, translate(err)
 	}
+	s.flush(b)
 	return project, nil
 }
 
@@ -47,21 +55,57 @@ func (s *Service) GetProject(ctx context.Context, identity auth.Identity, id dom
 // SetProjectStatus archives or restores a Project. Archiving is the normal
 // lifecycle; permanent deletion is a separate, explicit operation.
 func (s *Service) SetProjectStatus(ctx context.Context, identity auth.Identity, id domain.ProjectID, status domain.ProjectStatus) (domain.Project, error) {
-	current, err := s.store.GetProject(ctx, identity.UserID, id)
+	var project domain.Project
+	b := &batch{ownerID: identity.UserID}
+	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		current, err := tx.LockProject(ctx, identity.UserID, id)
+		if err != nil {
+			return err
+		}
+		if _, err := current.Status.Transition(status); err != nil {
+			return fmt.Errorf("%w: %s", ErrConflict, err)
+		}
+		project, err = tx.SetProjectStatus(ctx, identity.UserID, id, status)
+		if err != nil {
+			return err
+		}
+		kind := events.TypeProjectArchived
+		if status == domain.ProjectActive {
+			kind = events.TypeProjectRestored
+		}
+		return s.recordAuditedChange(ctx, tx, b, identity, kind, domain.Scope{ProjectID: id}, string(id), projectAuditPayload(project))
+	})
 	if err != nil {
 		return domain.Project{}, translate(err)
 	}
-	if _, err := current.Status.Transition(status); err != nil {
-		return domain.Project{}, fmt.Errorf("%w: %s", ErrConflict, err)
-	}
-	project, err := s.store.SetProjectStatus(ctx, identity.UserID, id, status)
-	return project, translate(err)
+	s.flush(b)
+	return project, nil
 }
 
 // DeleteProject permanently removes a Project and everything it owns.
 // BackendInstances belong to the user and are never deleted with it.
 func (s *Service) DeleteProject(ctx context.Context, identity auth.Identity, id domain.ProjectID) error {
-	keys, err := s.store.DeleteProjectData(ctx, identity.UserID, id)
+	var keys []string
+	b := &batch{ownerID: identity.UserID}
+	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		if err := tx.LockDecisionMemory(ctx, identity.UserID); err != nil {
+			return err
+		}
+		project, err := tx.LockProject(ctx, identity.UserID, id)
+		if err != nil {
+			return err
+		}
+		keys, err = tx.DeleteProjectData(ctx, identity.UserID, id)
+		if err != nil {
+			return err
+		}
+		payload := projectAuditPayload(project)
+		if err := s.recordLifecycleAudit(ctx, tx, identity, events.TypeProjectDeleted, domain.Scope{ProjectID: id}, string(id), payload); err != nil {
+			return err
+		}
+		// The owner-scoped notice survives the project's cascading deletion.
+		return s.appendAll(ctx, tx, b, record{eventType: events.TypeProjectDeleted, scope: domain.Scope{}, payload: payload})
+	})
 	if err != nil {
 		return translate(err)
 	}
@@ -72,7 +116,7 @@ func (s *Service) DeleteProject(ctx context.Context, identity auth.Identity, id 
 			}
 		}
 	}
-	s.emit(ctx, identity.UserID, events.TypeProjectDeleted, domain.Scope{}, map[string]any{"projectId": id})
+	s.flush(b)
 	return nil
 }
 
@@ -158,28 +202,64 @@ func (s *Service) ListBindings(ctx context.Context, identity auth.Identity, dirI
 // section 18: what every agent working on this Project must follow, whatever
 // provider runs it.
 func (s *Service) UpdateProject(ctx context.Context, identity auth.Identity, id domain.ProjectID, name, description, instructions string) (domain.Project, error) {
-	current, err := s.store.GetProject(ctx, identity.UserID, id)
+	var project domain.Project
+	b := &batch{ownerID: identity.UserID}
+	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		current, err := tx.LockProject(ctx, identity.UserID, id)
+		if err != nil {
+			return err
+		}
+		// Absent fields retain the existing API's patch semantics.
+		if name = strings.TrimSpace(name); name == "" {
+			name = current.Name
+		}
+		if description == "" {
+			description = current.Description
+		}
+		if instructions == "" {
+			instructions = current.Instructions
+		}
+		description, instructions = strings.TrimSpace(description), strings.TrimSpace(instructions)
+		var fields []string
+		if name != current.Name {
+			fields = append(fields, "name")
+		}
+		if description != current.Description {
+			fields = append(fields, "description")
+		}
+		if instructions != current.Instructions {
+			fields = append(fields, "instructions")
+		}
+		if len(fields) == 0 {
+			project = current
+			return nil
+		}
+		project, err = tx.UpdateProject(ctx, identity.UserID, id, name, description, instructions)
+		if err != nil {
+			return err
+		}
+		payload := projectAuditPayload(project)
+		payload.ChangedFields = fields
+		if name != current.Name {
+			payload.PreviousName = current.Name
+		}
+		return s.recordAuditedChange(ctx, tx, b, identity, events.TypeProjectUpdated, domain.Scope{ProjectID: id}, string(id), payload)
+	})
 	if err != nil {
 		return domain.Project{}, translate(err)
 	}
-
-	// Absent fields keep their value: a client editing the instructions must not
-	// have to resend the name.
-	if name = strings.TrimSpace(name); name == "" {
-		name = current.Name
-	}
-	if description == "" {
-		description = current.Description
-	}
-	if instructions == "" {
-		instructions = current.Instructions
-	}
-
-	project, err := s.store.UpdateProject(ctx, identity.UserID, id,
-		name, strings.TrimSpace(description), strings.TrimSpace(instructions))
-	if err != nil {
-		return project, translate(err)
-	}
-	s.emit(ctx, identity.UserID, events.TypeProjectUpdated, domain.Scope{ProjectID: id}, map[string]any{"projectId": id, "name": project.Name})
+	s.flush(b)
 	return project, nil
+}
+
+type ProjectPayload struct {
+	ProjectID     domain.ProjectID     `json:"projectId"`
+	Name          string               `json:"name"`
+	Status        domain.ProjectStatus `json:"status"`
+	PreviousName  string               `json:"previousName,omitempty"`
+	ChangedFields []string             `json:"changedFields,omitempty"`
+}
+
+func projectAuditPayload(project domain.Project) ProjectPayload {
+	return ProjectPayload{ProjectID: project.ID, Name: project.Name, Status: project.Status}
 }

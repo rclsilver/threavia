@@ -27,3 +27,12 @@ func (s *Service) recordLifecycleAudit(ctx context.Context, tx *postgres.Store, 
 		JobID: string(jobID), SubjectID: subject, Channel: domain.ChannelFrom(ctx).String(), Detail: detail,
 	})
 }
+
+// recordAuditedChange couples the durable notification to the mutation and
+// audit. The caller flushes its batch only after the transaction commits.
+func (s *Service) recordAuditedChange(ctx context.Context, tx *postgres.Store, b *batch, identity auth.Identity, kind events.Type, scope domain.Scope, subject string, payload any) error {
+	if err := s.recordLifecycleAudit(ctx, tx, identity, kind, scope, subject, payload); err != nil {
+		return err
+	}
+	return s.appendAll(ctx, tx, b, record{eventType: kind, scope: scope, payload: payload})
+}

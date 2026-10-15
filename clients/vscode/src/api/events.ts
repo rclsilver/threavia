@@ -62,6 +62,9 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
       return [{ kind: 'directories' }];
     case 'working_directory.changed':
       return [{ kind: 'directories' }, { kind: 'sessions' }, ...snapshot(sessionId), ...repository(sessionId)];
+    case 'project.created':
+    case 'project.archived':
+    case 'project.restored':
     case 'project.updated':
       return [{ kind: 'projects' }];
     case 'project.deleted':

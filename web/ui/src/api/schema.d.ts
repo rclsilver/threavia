@@ -4401,9 +4401,25 @@ export interface components {
              *       empty identifier clears the preference; refresh the backend list.
              *     - `directory.changed`: `{ knownDirectoryId }`, owner-scoped; refresh
              *       directory lists and bindings after metadata or paths change.
-             *     - `project.updated`: `{ projectId, name }`, refresh project metadata
-             *     - `project.deleted`: `{ projectId }`, owner-scoped without projectId
-             *       in the envelope, so the notification survives the deletion
+             *     - `project.created`, `project.archived`, `project.restored`:
+             *       `{ projectId, name, status }`, refresh projects and audit.
+             *     - `project.updated`: `{ projectId, name, status?, changedFields?, previousName? }`,
+             *       refresh project metadata and audit. Instructions and description
+             *       contents are omitted; changedFields names what changed.
+             *     - `project.deleted`: `{ projectId, name?, status? }`, owner-scoped
+             *       without projectId in the envelope, surviving project deletion.
+             *       Audit retains its project/subject identifiers and last name.
+             *     - `task.created`, `task.updated`, `task.deleted`: `{ taskId, title, status }`,
+             *       optionally dependsOn, changedFields, previousStatus and
+             *       dependencyAction/dependencyTaskId/dependencyTitle. Refresh tasks
+             *       and audit; no task description is copied into the event or audit.
+             *     - `decision.created`, `decision.superseded`, `decision.updated`,
+             *       `decision.deleted`: `{ decisionId, title, importance }`, optionally
+             *       status, supersedes, supersededBy, previousProjectId (promotion),
+             *       previousImportance or restored (an earlier fact became active
+             *       after its replacement was deleted). Refresh memory and audit.
+             *       Global events are owner-scoped without a project id. Fact content
+             *       is omitted. Mutation, audit and events commit together.
              *
              *     - `artifact.deleted`: `{ artifactId }`, project-scoped metadata removal
              *     - `skill.installed`: `{ skillId, name, installedRevision, replaced }`,

@@ -54,9 +54,32 @@ export function demoLifecycleEvents(receive: (event: Event) => void): () => void
   return () => { lifecycleListeners.delete(receive); };
 }
 
-function emitLifecycle(type: string, projectId: string, payload: Json, sessionId?: string) {
+function emitLifecycle(type: string, projectId: string | undefined, payload: Json, sessionId?: string) {
   const event: Event = { id: newId(), sequence: sequence++, timestamp: nowIso(), type, projectId, payload, ...(sessionId && { sessionId }) };
   for (const receive of lifecycleListeners) receive(event);
+}
+
+function recordKnowledge(action: string, projectId: string | undefined, subjectId: unknown, detail: Json, ownerNotice = false) {
+  record(action, { ...(projectId && { projectId }), subjectId, detail });
+  emitLifecycle(action, ownerNotice ? undefined : projectId, detail);
+}
+
+function taskOf(id: string): Json {
+  const task = state.tasks.find((entry) => entry.id === id);
+  if (!task) throw notFound('This task');
+  return task;
+}
+
+function taskDetail(task: Json): Json {
+  return { taskId: task.id, title: task.title, status: task.status, dependsOn: [...((task.dependsOn as string[]) ?? [])] };
+}
+
+function decisionDetail(decision: Json): Json {
+  return { decisionId: decision.id, title: decision.title, status: decision.status, importance: decision.importance };
+}
+
+function projectDetail(project: Json): Json {
+  return { projectId: project.id, name: project.name, status: project.status };
 }
 
 function recordSessionLifecycle(session: Json, action: string, detail: Json) {
@@ -107,6 +130,9 @@ function recordDecision(body: Json, projectId?: string) {
   const decision = { id: newId(), ...(projectId && { projectId }), title, content: text(body.content).trim(), importance: body.importance ?? 'NORMAL', status: 'ACTIVE', ...(previous && { supersedes: previous.id }), createdAt: nowIso(), updatedAt: nowIso() };
   if (previous) previous.status = 'SUPERSEDED';
   state.decisions.unshift(decision);
+  const promoted = previous?.projectId && previous.projectId !== projectId ? { previousProjectId: previous.projectId } : {};
+  recordKnowledge('decision.created', projectId, decision.id, { ...decisionDetail(decision), ...(previous && { supersedes: previous.id }), ...promoted });
+  if (previous) recordKnowledge('decision.superseded', text(previous.projectId) || undefined, previous.id, { ...decisionDetail(previous), supersededBy: decision.id, ...promoted });
   return decision;
 }
 
@@ -310,16 +336,34 @@ const routes: [string, RegExp, Handler][] = [
 
   ['GET', /^\/api\/v1\/projects$/, () => list(state.projects)],
   ['POST', /^\/api\/v1\/projects$/, (_m, body) => {
-    const project = { id: newId(), ownerId: 'alex', name: text(body.name, 'project'), description: '', instructions: '', status: 'ACTIVE', createdAt: nowIso(), updatedAt: nowIso() };
+    const name = text(body.name).trim();
+    if (!name) throw new ApiError(400, 'invalid', 'Enter a project name.');
+    const project = { id: newId(), ownerId: 'alex', name, description: text(body.description).trim(), instructions: '', status: 'ACTIVE', createdAt: nowIso(), updatedAt: nowIso() };
     state.projects.push(project);
     state.projectPolicies[project.id] = { mode: 'INTERACTIVE', allowFilesystemWrite: true, allowGitCommit: true, allowGitPush: false, allowNetwork: true };
+    recordKnowledge('project.created', project.id, project.id, projectDetail(project));
     return project;
   }],
   ['GET', /^\/api\/v1\/projects\/([^/]+)$/, (m) => state.projects.find((project) => project.id === m[1]) ?? (() => { throw notFound('This project'); })()],
   ['PATCH', /^\/api\/v1\/projects\/([^/]+)$/, (m, body) => {
     const project = state.projects.find((entry) => entry.id === m[1]);
     if (!project) throw notFound('This project');
-    Object.assign(project, body, { updatedAt: nowIso() });
+    const changedFields = ['name', 'description', 'instructions'].filter((field) => text(body[field]).trim() && text(body[field]).trim() !== project[field]);
+    if (!changedFields.length) return project;
+    const previousName = project.name;
+    for (const field of changedFields) project[field] = text(body[field]).trim();
+    project.updatedAt = nowIso();
+    recordKnowledge('project.updated', m[1], m[1], { ...projectDetail(project), changedFields, ...(changedFields.includes('name') && { previousName }) });
+    return project;
+  }],
+  ['POST', /^\/api\/v1\/projects\/([^/]+)\/(archive|restore)$/, (m) => {
+    const project = state.projects.find((entry) => entry.id === m[1]);
+    if (!project) throw notFound('This project');
+    const status = m[2] === 'archive' ? 'ARCHIVED' : 'ACTIVE';
+    if (status === project.status) throw new ApiError(409, 'conflict', 'The project is already in that state.');
+    project.status = status; project.updatedAt = nowIso();
+    if (status === 'ARCHIVED') project.archivedAt = nowIso(); else delete project.archivedAt;
+    recordKnowledge(m[2] === 'archive' ? 'project.archived' : 'project.restored', m[1], m[1], projectDetail(project));
     return project;
   }],
   ['DELETE', /^\/api\/v1\/projects\/([^/]+)$/, (m) => {
@@ -341,6 +385,7 @@ const routes: [string, RegExp, Handler][] = [
     state.schedules = state.schedules.filter((entry) => !ids.has(String(entry.sessionId)));
     for (const id of ids) { delete state.timelines[id]; delete state.sessionPolicies[id]; }
     delete state.projectPolicies[m[1]];
+    recordKnowledge('project.deleted', m[1], m[1], projectDetail(project), true);
     return undefined;
   }],
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/sessions$/, (m, _b, query) =>
@@ -401,30 +446,54 @@ const routes: [string, RegExp, Handler][] = [
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/tasks$/, (m, _b, query) =>
     list(state.tasks.filter((task) => task.projectId === m[1] && (query.get('includeDone') === 'true' || task.status !== 'DONE')))],
   ['POST', /^\/api\/v1\/projects\/([^/]+)\/tasks$/, (m, body) => {
-    const task = { id: newId(), projectId: m[1], title: body.title, description: body.description ?? '', status: 'TODO', dependsOn: body.dependsOn ?? [], createdAt: nowIso(), updatedAt: nowIso() };
+    const title = text(body.title).trim();
+    if (!title) throw new ApiError(400, 'invalid', 'Enter a task title.');
+    if (!state.projects.some((entry) => entry.id === m[1])) throw notFound('This project');
+    const dependencies = [...new Set((body.dependsOn as string[]) ?? [])];
+    if (dependencies.some((id) => taskOf(id).projectId !== m[1])) throw new ApiError(400, 'invalid', 'Dependencies belong to the same project.');
+    const task = { id: newId(), projectId: m[1], title, description: text(body.description).trim(), status: 'TODO', dependsOn: dependencies, createdAt: nowIso(), updatedAt: nowIso() };
     state.tasks.push(task);
+    recordKnowledge('task.created', m[1], task.id, taskDetail(task));
     return task;
   }],
   ['PATCH', /^\/api\/v1\/tasks\/([^/]+)$/, (m, body) => {
-    const task = state.tasks.find((entry) => entry.id === m[1]);
-    if (!task) throw notFound('This task');
-    Object.assign(task, body, { updatedAt: nowIso(), completedAt: body.status === 'DONE' ? nowIso() : undefined });
+    const task = taskOf(m[1]);
+    if (body.status && !['TODO', 'IN_PROGRESS', 'DONE'].includes(text(body.status))) throw new ApiError(400, 'invalid', 'Unknown task status.');
+    const changedFields = ['title', 'description', 'status'].filter((field) => text(body[field]).trim() && text(body[field]).trim() !== task[field]);
+    if (!changedFields.length) return task;
+    const previousStatus = task.status;
+    for (const field of changedFields) task[field] = text(body[field]).trim();
+    task.updatedAt = nowIso();
+    if (body.status) task.completedAt = body.status === 'DONE' ? nowIso() : undefined;
+    recordKnowledge('task.updated', text(task.projectId), task.id, { ...taskDetail(task), changedFields, ...(changedFields.includes('status') && { previousStatus }) });
     return task;
   }],
   ['DELETE', /^\/api\/v1\/tasks\/([^/]+)$/, (m) => {
+    const removed = taskOf(m[1]);
     state.tasks = state.tasks.filter((task) => task.id !== m[1]);
     for (const task of state.tasks) task.dependsOn = ((task.dependsOn as string[]) ?? []).filter((other) => other !== m[1]);
+    recordKnowledge('task.deleted', text(removed.projectId), removed.id, taskDetail(removed));
   }],
   ['POST', /^\/api\/v1\/tasks\/([^/]+)\/dependencies$/, (m, body) => {
-    const task = state.tasks.find((entry) => entry.id === m[1]);
-    if (!task) throw notFound('This task');
-    task.dependsOn = [...((task.dependsOn as string[]) ?? []), String(body.dependsOn)];
+    const task = taskOf(m[1]); const blocker = taskOf(text(body.dependsOn));
+    if (blocker.projectId !== task.projectId) throw new ApiError(400, 'invalid', 'Dependencies belong to the same project.');
+    const reaches = (id: string, seen = new Set<string>()): boolean => {
+      if (id === m[1]) return true;
+      if (seen.has(id)) return false;
+      seen.add(id); return ((taskOf(id).dependsOn as string[]) ?? []).some((other) => reaches(other, seen));
+    };
+    if (reaches(text(blocker.id))) throw new ApiError(400, 'invalid', 'Dependencies cannot form a cycle.');
+    if (((task.dependsOn as string[]) ?? []).includes(text(blocker.id))) return task;
+    task.dependsOn = [...((task.dependsOn as string[]) ?? []), text(blocker.id)];
+    recordKnowledge('task.updated', text(task.projectId), task.id, { ...taskDetail(task), changedFields: ['dependsOn'], dependencyAction: 'added', dependencyTaskId: blocker.id, dependencyTitle: blocker.title });
     return task;
   }],
   ['DELETE', /^\/api\/v1\/tasks\/([^/]+)\/dependencies\/([^/]+)$/, (m) => {
-    const task = state.tasks.find((entry) => entry.id === m[1]);
-    if (!task) throw notFound('This task');
+    const task = taskOf(m[1]);
+    if (!((task.dependsOn as string[]) ?? []).includes(m[2])) return task;
+    const blocker = taskOf(m[2]);
     task.dependsOn = ((task.dependsOn as string[]) ?? []).filter((other) => other !== m[2]);
+    recordKnowledge('task.updated', text(task.projectId), task.id, { ...taskDetail(task), changedFields: ['dependsOn'], dependencyAction: 'removed', dependencyTaskId: blocker.id, dependencyTitle: blocker.title });
     return task;
   }],
 
@@ -449,18 +518,25 @@ const routes: [string, RegExp, Handler][] = [
   ['PATCH', /^\/api\/v1\/decisions\/([^/]+)$/, (m, body) => {
     const decision = state.decisions.find((entry) => entry.id === m[1]);
     if (!decision) throw notFound('This decision');
-    decision.importance = body.importance;
+    if (!['NORMAL', 'IMPORTANT'].includes(text(body.importance))) throw new ApiError(400, 'invalid', 'Unknown importance.');
+    if (decision.importance === body.importance) return decision;
+    const previousImportance = decision.importance;
+    decision.importance = body.importance; decision.updatedAt = nowIso();
+    recordKnowledge('decision.updated', text(decision.projectId) || undefined, decision.id, { ...decisionDetail(decision), previousImportance });
     return decision;
   }],
   ['DELETE', /^\/api\/v1\/decisions\/([^/]+)$/, (m) => {
     const removed = state.decisions.find((entry) => entry.id === m[1]);
     if (!removed) throw notFound('This decision');
+    let revived: Json | undefined;
     if (removed.supersedes) {
       const previous = state.decisions.find((entry) => entry.id === removed.supersedes);
-      if (previous && previous.projectId === removed.projectId) previous.status = 'ACTIVE';
+      if (previous && previous.projectId === removed.projectId && previous.status === 'SUPERSEDED') { previous.status = 'ACTIVE'; previous.updatedAt = nowIso(); revived = previous; }
     }
     state.decisions = state.decisions.filter((entry) => entry.id !== m[1]);
     for (const entry of state.decisions) if (entry.supersedes === m[1]) delete entry.supersedes;
+    recordKnowledge('decision.deleted', text(removed.projectId) || undefined, removed.id, decisionDetail(removed));
+    if (revived) recordKnowledge('decision.updated', text(revived.projectId) || undefined, revived.id, { ...decisionDetail(revived), restored: true });
   }],
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/search$/, () => ({ tasks: [], decisions: [], history: [] })],
 

@@ -63,6 +63,9 @@ export interface EventPayloads {
   'backend.status_changed': { backendInstanceId: string; operationalStatus: BackendInstance['operationalStatus']; providerAuthState: BackendInstance['providerAuthState'] };
   'backend.quotas_updated': { backendInstanceId: string };
   'project.updated': { projectId: string; name: string };
+  'project.created': { projectId: string; name: string; status: Project['status'] };
+  'project.archived': { projectId: string; name: string; status: Project['status'] };
+  'project.restored': { projectId: string; name: string; status: Project['status'] };
   'project.deleted': { projectId: string };
   'session.created': { title: string; managerSessionId?: string };
   'session.deleted': { sessionId?: string; title?: string; artifactsDeleted?: boolean };

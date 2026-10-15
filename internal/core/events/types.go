@@ -62,6 +62,9 @@ const (
 	TypeBackendQuotasUpdated  Type = "backend.quotas_updated"
 	TypeBackendModelsUpdated  Type = "backend.models_updated"
 	TypeProjectUpdated        Type = "project.updated"
+	TypeProjectCreated        Type = "project.created"
+	TypeProjectArchived       Type = "project.archived"
+	TypeProjectRestored       Type = "project.restored"
 	TypeProjectDeleted        Type = "project.deleted"
 	TypeDirectoryChanged      Type = "directory.changed"
 	TypeBackendDefaultChanged Type = "backend.default_changed"
@@ -77,6 +80,9 @@ const (
 // persistentTypes is the set of event types Core persists and assigns a global
 // sequence to.
 var persistentTypes = map[Type]bool{
+	TypeProjectCreated:          true,
+	TypeProjectArchived:         true,
+	TypeProjectRestored:         true,
 	TypeScheduleCreated:         true,
 	TypeScheduleUpdated:         true,
 	TypeScheduleDeleted:         true,

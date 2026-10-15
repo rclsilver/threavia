@@ -717,6 +717,10 @@ const audit = (n: number, action: string, minutesAgo: number, rest: Record<strin
 const policyDetail = (overrides: Record<string, unknown>) => ({ ...projectPolicies[IDS.homelab], ...overrides });
 
 export const auditEntries = [
+  audit(50, 'project.created', 60 * 24 * 40, { projectId: IDS.homelab, subjectId: IDS.homelab, channel: 'web', detail: { projectId: IDS.homelab, name: 'homelab', status: 'ACTIVE' } }),
+  audit(51, 'project.updated', 60 * 24, { projectId: IDS.homelab, subjectId: IDS.homelab, channel: 'web', detail: { projectId: IDS.homelab, name: 'homelab', status: 'ACTIVE', changedFields: ['instructions'] } }),
+  audit(52, 'task.updated', 60, { projectId: IDS.homelab, subjectId: id('d000000a', 1), actorId: 'agent', channel: 'agent', jobId: id('d0000006', 1), detail: { taskId: id('d000000a', 1), title: 'Check the ingress rollout', previousStatus: 'IN_PROGRESS', status: 'DONE', changedFields: ['status'] } }),
+  audit(53, 'decision.created', 62, { projectId: IDS.homelab, subjectId: id('d000000b', 1), actorId: 'agent', channel: 'agent', jobId: id('d0000006', 1), detail: { decisionId: id('d000000b', 1), title: 'Ingress goes through MetalLB, never the host network', importance: 'IMPORTANT', status: 'ACTIVE' } }),
   audit(41, 'skill.installed', 60 * 24, { projectId: IDS.homelab, subjectId: skills[0].id, channel: 'web', detail: { skillId: skills[0].id, name: skills[0].name, installedRevision: skills[0].installedRevision, replaced: false } }),
   audit(42, 'session.created', 70, { projectId: IDS.homelab, sessionId: IDS.ingress, subjectId: IDS.ingress, channel: 'web', detail: { title: 'Fix the flaky deploy of the ingress controller', backendInstanceId: IDS.laptop } }),
   audit(43, 'session.deleted', 60 * 24 * 2, { projectId: IDS.homelab, sessionId: id('d0000003', 90), subjectId: id('d0000003', 90), channel: 'web', detail: { sessionId: id('d0000003', 90), title: 'Inspect the old staging cluster', artifactsDeleted: false } }),

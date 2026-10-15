@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Bell, BookText, Copy, Folder, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Bell, BookText, Copy, Folder, History, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
 import { useBackends, useClaimBackend, useIssueBackendToken, useMe, useProjects, useRevokeBackend, useSetDefaultBackend } from '@/api/queries';
@@ -10,6 +10,7 @@ import { DirectoriesPane } from '@/components/directories-pane';
 import { BackendIcon, BackendQuotas } from '@/components/backend-info';
 import { ConfirmLine, NewButton, RecordList, RecordRow } from '@/components/record-list';
 import { DecisionsPane } from '@/routes/project';
+import { AuditTimeline } from '@/components/audit-timeline';
 import { ActionError } from '@/components/ui/action-error';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
@@ -25,10 +26,11 @@ import { useWideLayout } from '@/use-layout';
 import { useTheme, type Theme } from '@/use-theme';
 import { useShortcut } from '@/use-shortcut';
 
-export type AccountTab = 'appearance' | 'notifications' | 'backends' | 'permissions' | 'directories' | 'memory';
+export type AccountTab = 'appearance' | 'notifications' | 'backends' | 'permissions' | 'directories' | 'memory' | 'audit';
 
 const TABS: { tab: AccountTab; label: string; Icon: LucideIcon; detail: string }[] = [
   { tab: 'memory', label: 'Core memory', Icon: BookText, detail: 'Facts and decisions shared across all your projects on this Core. Pinned ones travel with every Job; the others remain searchable.' },
+  { tab: 'audit', label: 'Audit', Icon: History, detail: 'Who changed what across your projects and Core memory. Records remain available after a project or its subjects are deleted.' },
   { tab: 'directories', label: 'Directories', Icon: Folder, detail: 'Manage known directories on this Core, in a project or globally across your projects.' },
   { tab: 'permissions', label: 'Permissions', Icon: ShieldCheck, detail: 'The defaults for all your projects and backends on this instance. Backends, projects and sessions can override them.' },
   { tab: 'appearance', label: 'Appearance', Icon: Monitor, detail: 'How this client looks and lays itself out, on this device.' },
@@ -117,6 +119,7 @@ export function SettingsView() {
           {current.tab === 'permissions' && <DefaultPolicyPane />}
           {current.tab === 'directories' && <DirectorySettings />}
           {current.tab === 'memory' && <CoreMemorySettings />}
+          {current.tab === 'audit' && <AuditTimeline />}
         </div>
       </div>
     </div>

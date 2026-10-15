@@ -258,9 +258,15 @@ func jsonUnmarshal(data []byte, target any) error { return json.Unmarshal(data, 
 
 // TaskPayload is the body of the task.* events.
 type TaskPayload struct {
-	TaskID string `json:"taskId"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
+	TaskID           string          `json:"taskId"`
+	Title            string          `json:"title"`
+	Status           string          `json:"status"`
+	ChangedFields    []string        `json:"changedFields,omitempty"`
+	PreviousStatus   string          `json:"previousStatus,omitempty"`
+	DependsOn        []domain.TaskID `json:"dependsOn,omitempty"`
+	DependencyAction string          `json:"dependencyAction,omitempty"`
+	DependencyTaskID domain.TaskID   `json:"dependencyTaskId,omitempty"`
+	DependencyTitle  string          `json:"dependencyTitle,omitempty"`
 }
 
 // DecisionPayload is the body of the decision.* events.
@@ -269,7 +275,12 @@ type DecisionPayload struct {
 	Title      string `json:"title"`
 	Importance string `json:"importance"`
 	// SupersededBy is set on decision.superseded.
-	SupersededBy string `json:"supersededBy,omitempty"`
+	SupersededBy       string           `json:"supersededBy,omitempty"`
+	Supersedes         string           `json:"supersedes,omitempty"`
+	PreviousProjectID  domain.ProjectID `json:"previousProjectId,omitempty"`
+	Status             string           `json:"status,omitempty"`
+	PreviousImportance string           `json:"previousImportance,omitempty"`
+	Restored           bool             `json:"restored,omitempty"`
 }
 
 // mustJSON encodes a value for an audit detail. The values passed are small

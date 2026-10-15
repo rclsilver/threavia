@@ -7,6 +7,7 @@ import type { AuditEntry, Session } from '@/api/types';
 import { ActionError } from '@/components/ui/action-error';
 import { EmptyState } from '@/components/ui/card';
 import { clock, cn, humanise } from '@/lib/utils';
+import { knowledgeAudit } from '@/lib/knowledge-audit';
 
 /**
  * Who changed what an agent may do, and who answered what it asked — read as a
@@ -17,7 +18,7 @@ import { clock, cn, humanise } from '@/lib/utils';
  * as a sentence, and a change of permissions says what changed, read against
  * the save before it.
  */
-export function AuditTimeline({ projectId }: { projectId: string }) {
+export function AuditTimeline({ projectId }: { projectId?: string }) {
   const audit = useAudit(projectId);
   const sessions = useSessions(projectId, true);
   const backends = useBackends();
@@ -32,7 +33,7 @@ export function AuditTimeline({ projectId }: { projectId: string }) {
   if (entries.length === 0) {
     return (
       <EmptyState>
-        Nothing recorded yet. Approvals, permissions, session and Skill changes in this project
+        Nothing recorded yet. Project, task, memory, session and Skill changes, approvals and permissions
         will be written here, with who did it and from where.
       </EmptyState>
     );
@@ -89,7 +90,7 @@ export function AuditTimeline({ projectId }: { projectId: string }) {
   );
 }
 
-type Kind = 'APPROVAL' | 'PERMISSIONS' | 'BACKEND' | 'SESSION' | 'SKILL' | 'OTHER';
+type Kind = 'APPROVAL' | 'PERMISSIONS' | 'BACKEND' | 'SESSION' | 'SKILL' | 'PROJECT' | 'TASK' | 'MEMORY' | 'OTHER';
 
 const KINDS: { kind: Kind; label: string }[] = [
   { kind: 'APPROVAL', label: 'Approvals' },
@@ -97,10 +98,15 @@ const KINDS: { kind: Kind; label: string }[] = [
   { kind: 'BACKEND', label: 'Backends' },
   { kind: 'SESSION', label: 'Sessions' },
   { kind: 'SKILL', label: 'Skills' },
+  { kind: 'PROJECT', label: 'Projects' },
+  { kind: 'TASK', label: 'Tasks' },
+  { kind: 'MEMORY', label: 'Memory' },
   { kind: 'OTHER', label: 'Other' },
 ];
 
 function kindOf(entry: AuditEntry): Kind {
+  const knowledge = knowledgeAudit(entry);
+  if (knowledge) return knowledge.kind;
   if (entry.action === 'validation.resolved') return 'APPROVAL';
   if (entry.action === 'execution_policy.set') return 'PERMISSIONS';
   if (entry.action === 'session.backend_changed') return 'BACKEND';
@@ -159,7 +165,7 @@ const CHANNELS: Record<string, string> = { web: 'the web', api: 'the API', mobil
 function SessionLink({ id, context }: { id: string; context: Context }) {
   const session = context.session(id);
   // The record outlives what it describes; a deleted Session is named, not linked.
-  if (!session) return <span>a session since deleted</span>;
+  if (!session) return <span>a session no longer listed here</span>;
   return (
     <Link to="/sessions/$sessionId" params={{ sessionId: id }} className="hover:text-text underline underline-offset-2">
       {session.title || 'an untitled session'}
@@ -170,6 +176,9 @@ function SessionLink({ id, context }: { id: string; context: Context }) {
 const TONES = { ok: 'text-ok', danger: 'text-danger', accent: 'text-accent', muted: 'text-muted' };
 
 function describe(entry: AuditEntry, context: Context): { Icon: LucideIcon; tone: string; title: ReactNode; body?: ReactNode } {
+  const knowledge = knowledgeAudit(entry);
+  if (knowledge) return { Icon: Circle, tone: TONES[knowledge.tone], title: knowledge.title,
+    body: knowledge.detail ? <p className="text-muted text-sm">{knowledge.detail}</p> : undefined };
   const detail = (entry.detail ?? {}) as Record<string, unknown>;
   const text = (value: unknown) => (typeof value === 'string' ? value : '');
 

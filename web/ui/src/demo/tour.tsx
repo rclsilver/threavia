@@ -171,7 +171,7 @@ const STEPS: Step[] = [
     path: PROJECT('audit'),
     target: 'main ol',
     title: 'Who decided what',
-    body: 'Approvals, permissions, sessions and Skills, with who changed them and from which device. Session records keep their names after deletion; filters help you find each kind.',
+    body: 'Projects, tasks, memory, sessions, Skills and permissions, with who changed them and from which device. Names remain after deletion; filters help you find each kind. Account settings also show audit across projects and Core memory.',
   },
   {
     path: '/settings/backends',

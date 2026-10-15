@@ -28,6 +28,12 @@ func (s *Store) GetProject(ctx context.Context, ownerID domain.UserID, id domain
 		`SELECT `+projectColumns+` FROM projects WHERE id = $1 AND owner_id = $2`, id, ownerID))
 }
 
+// LockProject serializes mutations with project deletion and keeps audit
+// before/after values from concurrent writers consistent. Call inside WithTx.
+func (s *Store) LockProject(ctx context.Context, ownerID domain.UserID, id domain.ProjectID) (domain.Project, error) {
+	return scanProject(s.q.QueryRow(ctx, `SELECT `+projectColumns+` FROM projects WHERE id=$1 AND owner_id=$2 FOR UPDATE`, id, ownerID))
+}
+
 // ListProjects returns the Projects of a user, most recently updated first.
 func (s *Store) ListProjects(ctx context.Context, ownerID domain.UserID, includeArchived bool) ([]domain.Project, error) {
 	rows, err := s.q.Query(ctx, `
@@ -84,7 +90,7 @@ func (s *Store) DeleteProject(ctx context.Context, ownerID domain.UserID, id dom
 // for cleanup after commit. Backend filesystem contents are never touched.
 func (s *Store) DeleteProjectData(ctx context.Context, ownerID domain.UserID, id domain.ProjectID) ([]string, error) {
 	var keys []string
-	err := s.WithTx(ctx, func(tx *Store) error {
+	remove := func(tx *Store) error {
 		var locked domain.ProjectID
 		if err := tx.q.QueryRow(ctx, `SELECT id FROM projects WHERE id = $1 AND owner_id = $2 FOR UPDATE`, id, ownerID).Scan(&locked); err != nil {
 			return classify(err, "lock project")
@@ -116,7 +122,14 @@ func (s *Store) DeleteProjectData(ctx context.Context, ownerID domain.UserID, id
 		}
 		_, err = tx.q.Exec(ctx, `DELETE FROM projects WHERE id = $1 AND owner_id = $2`, id, ownerID)
 		return classify(err, "delete project")
-	})
+	}
+	var err error
+	if s.pool == nil {
+		// The service may include its audit and deletion notice in this transaction.
+		err = remove(s)
+	} else {
+		err = s.WithTx(ctx, remove)
+	}
 	return keys, err
 }
 

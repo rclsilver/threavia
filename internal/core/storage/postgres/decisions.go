@@ -9,6 +9,14 @@ import (
 const decisionColumns = `d.id, COALESCE(d.project_id::text, ''), d.title, d.content, d.importance,
 	d.status, d.supersedes, d.created_by_job_id, d.created_at, d.updated_at, d.owner_id`
 
+// LockDecisionMemory serializes an owner's lineage changes across global and
+// project memory. Deleting a project takes this lock before its project lock.
+// This avoids racing a promotion, supersession or revival with deletion.
+func (s *Store) LockDecisionMemory(ctx context.Context, ownerID domain.UserID) error {
+	_, err := s.q.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('decision-memory:' || $1::text, 0))`, ownerID)
+	return classify(err, "lock decision memory")
+}
+
 // CreateDecision inserts a Decision.
 func (s *Store) CreateDecision(ctx context.Context, decision *domain.Decision) error {
 	err := s.q.QueryRow(ctx, `

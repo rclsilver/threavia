@@ -310,8 +310,12 @@ export class EventStream {
         void this.queries.invalidateQueries({ queryKey: ['directories'] });
         void this.queries.invalidateQueries({ queryKey: ['bindings'] });
         break;
+      case 'project.created':
+      case 'project.archived':
+      case 'project.restored':
       case 'project.updated':
       case 'project.deleted':
+        void this.queries.invalidateQueries({ queryKey: keys.audit() });
         void this.queries.invalidateQueries({ queryKey: ['projects'] });
         void this.queries.invalidateQueries({ queryKey: ['project'] });
         if (event.type === 'project.deleted') {
@@ -326,6 +330,7 @@ export class EventStream {
       case 'task.updated':
       case 'task.deleted':
         void this.queries.invalidateQueries({ queryKey: ['tasks'] });
+        void this.queries.invalidateQueries({ queryKey: keys.audit() });
         break;
 
       case 'skill.installed':
@@ -348,6 +353,7 @@ export class EventStream {
       case 'decision.updated':
       case 'decision.deleted':
         void this.queries.invalidateQueries({ queryKey: ['decisions'] });
+        void this.queries.invalidateQueries({ queryKey: keys.audit() });
         break;
 
       case 'working_directory.changed':
