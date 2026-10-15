@@ -22,11 +22,12 @@ const (
 
 	TypeRunCreated Type = "run.created"
 
-	TypeJobCreated   Type = "job.created"
-	TypeJobStarted   Type = "job.started"
-	TypeJobCompleted Type = "job.completed"
-	TypeJobFailed    Type = "job.failed"
-	TypeJobCancelled Type = "job.cancelled"
+	TypeJobCreated        Type = "job.created"
+	TypeJobStarted        Type = "job.started"
+	TypeJobCompleted      Type = "job.completed"
+	TypeJobFailed         Type = "job.failed"
+	TypeJobCancelled      Type = "job.cancelled"
+	TypeJobWaitingBackend Type = "job.waiting_backend"
 
 	TypeUserMessage  Type = "user.message"
 	TypeAgentMessage Type = "agent.message"
@@ -94,6 +95,7 @@ var persistentTypes = map[Type]bool{
 	TypeJobCompleted:            true,
 	TypeJobFailed:               true,
 	TypeJobCancelled:            true,
+	TypeJobWaitingBackend:       true,
 	TypeUserMessage:             true,
 	TypeAgentMessage:            true,
 	TypeToolStarted:             true,

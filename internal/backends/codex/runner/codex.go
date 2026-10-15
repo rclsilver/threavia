@@ -285,10 +285,16 @@ func (c *Codex) Run(ctx context.Context, params contract.StartParams, sink contr
 		c.mu.Unlock()
 		return fail("POLICY_UNSUPPORTED", err)
 	}
+	attemptStarted := time.Now()
 	runCtx, stop := context.WithCancel(ctx)
 	if params.Policy.MaxDurationSeconds > 0 {
 		stop()
-		runCtx, stop = context.WithTimeout(ctx, time.Duration(params.Policy.MaxDurationSeconds)*time.Second)
+		remaining := params.Policy.MaxDurationSeconds - int(params.ActiveSecondsUsed)
+		if remaining <= 0 {
+			c.mu.Unlock()
+			return fail("POLICY_LIMIT", errors.New("execution duration limit reached across provider attempts"))
+		}
+		runCtx, stop = context.WithTimeout(ctx, time.Duration(remaining)*time.Second)
 	}
 	defer stop()
 	live := &execution{children: make(map[string]*child), foreign: make(map[string]bool), turns: make(map[string]bool), stop: stop, policy: params.Policy, items: make(map[string]map[string]any), requests: make(map[string]context.CancelFunc), done: make(chan struct{}), ctx: runCtx, turnCtx: runCtx, cwd: params.WorkingDirectory, hookReady: make(chan struct{}), policyUpdates: make(chan struct{}, 1), sink: sink, reportCtx: ctx, runID: params.RunID, jobID: params.JobID}
@@ -431,6 +437,22 @@ func (c *Codex) Run(ctx context.Context, params contract.StartParams, sink contr
 		if c.options.APIKey != "" {
 			detail = strings.ReplaceAll(detail, c.options.APIKey, "[redacted]")
 		}
+		block := outcome.blocked
+		if block == nil {
+			var failure *providerRPCError
+			if errors.As(outcome.err, &failure) {
+				var details map[string]any
+				_ = json.Unmarshal(failure.failure.Data, &details)
+				block = codexProviderBlock(details)
+			}
+		}
+		if block == nil {
+			block = contract.ProviderBlockFor("codex", outcome.code, detail)
+		}
+		if block != nil {
+			block.ActiveSeconds = contract.ProviderAttemptSeconds(attemptStarted)
+			return contract.ReportProviderBlock(ctx, sink, params.RunID, params.JobID, block, outcome.usage)
+		}
 		return sink.JobFailed(ctx, params.RunID, params.JobID, outcome.code, detail, outcome.usage)
 	}
 	return sink.JobCompleted(ctx, params.RunID, params.JobID, outcome.summary, outcome.usage)
@@ -441,6 +463,7 @@ type outcome struct {
 	usage   *backendv1.Usage
 	err     error
 	code    string
+	blocked *contract.ProviderBlock
 }
 type tailWriter struct {
 	mu   sync.Mutex

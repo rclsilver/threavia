@@ -36,13 +36,16 @@ type Adapter struct {
 	localSkills []skills.Local
 	logger      *slog.Logger
 
-	mu            sync.Mutex
-	client        *client.Client
-	jobs          map[string]*jobState
-	waiters       map[string]*waiter
-	quotaCancel   context.CancelFunc
-	quotaMu       sync.Mutex
-	quotaSnapshot *quotas.Status
+	mu               sync.Mutex
+	client           *client.Client
+	jobs             map[string]*jobState
+	waiters          map[string]*waiter
+	quotaCancel      context.CancelFunc
+	quotaMu          sync.Mutex
+	quotaSnapshot    *quotas.Status
+	providerMu       sync.Mutex
+	providerBlock    *runner.ProviderBlock
+	providerRecovery bool
 }
 
 // jobState is what the adapter remembers about a Job it is running.
@@ -104,35 +107,20 @@ func (a *Adapter) sdk() *client.Client {
 // condition rather than as a startup failure: the backend stays reachable and
 // the user can see why it cannot work.
 func (a *Adapter) OnConnected(ctx context.Context, welcome *backendv1.Welcome) error {
+	a.providerMu.Lock()
+	a.providerRecovery = welcome.GetProviderRecovery()
+	a.providerMu.Unlock()
 	sdk := a.sdk()
 	if sdk == nil {
 		return nil
 	}
 
-	status := backendv1.BackendOperationalStatus_BACKEND_OPERATIONAL_STATUS_READY
-	providerAuth := backendv1.ProviderAuthState_PROVIDER_AUTH_STATE_AUTHENTICATED
-	var conditions []*backendv1.Condition
-
-	if err := a.runner.Available(); err != nil {
-		status = backendv1.BackendOperationalStatus_BACKEND_OPERATIONAL_STATUS_DEGRADED
-		providerAuth = backendv1.ProviderAuthState_PROVIDER_AUTH_STATE_AUTHENTICATION_REQUIRED
-		conditions = append(conditions, &backendv1.Condition{
-			Type:    "ProviderAvailable",
-			Status:  "False",
-			Reason:  "ExecutableNotFound",
-			Message: err.Error(),
-		})
-	}
-
 	// Reported on every connection: Core keeps the metadata of what only exists
 	// here, so a handoff can say another backend cannot run a given Skill.
 	a.reportSkills(ctx)
+	err := a.refreshProviderStatus(ctx)
 	a.startQuotaReporting(ctx)
-
-	a.logger.Info("reporting backend status",
-		slog.String("connectionId", welcome.GetConnectionId()),
-		slog.String("status", status.String()))
-	return sdk.SendStatus(ctx, status, providerAuth, conditions...)
+	return err
 }
 
 // OnDisconnected logs the loss of the control stream. Local execution keeps
@@ -159,11 +147,13 @@ func (a *Adapter) OnDisconnected(_ context.Context, cause error) {
 // goroutine and everything it produces travels back as events.
 func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error {
 	params := runner.StartParams{
-		Model:           cmd.GetModel(),
-		Effort:          cmd.GetEffort(),
-		RunID:           cmd.GetRunId(),
-		JobID:           cmd.GetJobId(),
-		NativeSessionID: cmd.GetNativeSessionId(),
+		Model:             cmd.GetModel(),
+		Effort:            cmd.GetEffort(),
+		ActionsUsed:       cmd.GetActionsUsed(),
+		ActiveSecondsUsed: cmd.GetActiveSecondsUsed(),
+		RunID:             cmd.GetRunId(),
+		JobID:             cmd.GetJobId(),
+		NativeSessionID:   cmd.GetNativeSessionId(),
 		// Resolved in the job goroutine: it may need the user, which this one
 		// cannot wait for (spec section 11).
 		Prompt:              cmd.GetPrompt(),

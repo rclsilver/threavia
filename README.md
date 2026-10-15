@@ -3,6 +3,9 @@
 Core can expose [Prometheus metrics](docs/metrics.md) through a dedicated listener,
 with an optional Prometheus Operator ServiceMonitor in the Helm chart.
 
+Jobs can [wait and resume after provider authentication or quota refusals](docs/provider-recovery.md),
+with recovery instructions in Web and VS Code.
+
 Threavia is a self-hosted, Kubernetes-friendly control plane for coding agents.
 It owns durable projects, sessions, jobs, events and project knowledge, while
 execution stays on autonomous **BackendInstances** such as a laptop running

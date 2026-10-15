@@ -80,6 +80,7 @@ export interface EventPayloads {
   'tool.completed': { toolCallId: string; name: string; output?: { output?: string } };
   'tool.failed': { toolCallId: string; name: string; error?: string };
   'job.started': { model?: string; effort?: string };
+  'job.waiting_backend': { reason: string; message: string; retryAt?: string; usage?: Usage };
   'session.model_changed': { model: string; effort: string };
   'job.completed': { summary?: string; usage?: Usage; model?: string; effort?: string };
   'job.failed': { error?: string; usage?: Usage; model?: string; effort?: string };

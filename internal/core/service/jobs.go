@@ -63,10 +63,39 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 		return
 	}
 
+	if wait := jc.Job.BackendWait; wait != nil && wait.RetryAt != nil && wait.RetryAt.After(s.now()) {
+		return
+	}
+	backend, err := s.store.BackendInstanceByID(ctx, jc.BackendInstanceID)
+	if err != nil {
+		return
+	}
+	blocked, err := s.providerCondition(ctx, backend)
+	if err != nil {
+		return
+	}
+	if blocked != nil {
+		s.parkForProvider(ctx, jc, blocked)
+		return
+	}
+
 	prompt, err := s.store.JobPrompt(ctx, jobID)
 	if err != nil {
 		s.logger.Error("cannot read the job prompt", slog.String("jobId", string(jobID)), slog.String("error", err.Error()))
 		return
+	}
+	var recovery providerHistory
+	if jc.Job.BackendWait != nil {
+		history, err := s.store.JobProviderHistory(ctx, jobID)
+		if err != nil {
+			return
+		}
+		recovery = readProviderHistory(history)
+		recovery.Seconds, err = s.store.JobProviderActiveSeconds(ctx, jobID)
+		if err != nil {
+			return
+		}
+		prompt = recoveryPrompt(recovery, jc.NativeSessionID != nil)
 	}
 
 	attachmentIDs, err := s.store.JobAttachmentIDs(ctx, jobID)
@@ -126,14 +155,23 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 		if err != nil {
 			return err
 		}
-		model, effort, err = backend.ResolveModel(session.Model, session.Effort)
-		if err != nil {
-			return fmt.Errorf("%w: %v", ErrInvalid, err)
-		}
+		// Claim first so a later queued Job cannot fail validation while an
+		// earlier Job still owns the Run. The transaction rolls back on error.
 		if _, err = tx.TransitionJob(ctx, jobID, from, domain.JobRunning, nil); err != nil {
 			return err
 		}
-		return tx.SetJobModel(ctx, jobID, model, effort)
+		if jc.Job.StartedAt != nil {
+			model, effort = jc.Job.Model, jc.Job.Effort
+		} else {
+			model, effort, err = backend.ResolveModel(session.Model, session.Effort)
+		}
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrInvalid, err)
+		}
+		if err := tx.SetJobModel(ctx, jobID, model, effort); err != nil {
+			return err
+		}
+		return tx.StartProviderAttempt(ctx, jobID)
 	})
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
@@ -156,17 +194,19 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 		CommandId: domain.NewUUID(),
 		Message: &backendv1.CoreToBackend_StartJob{
 			StartJob: &backendv1.StartJob{
-				ProjectId:       string(jc.ProjectID),
-				SessionId:       string(jc.SessionID),
-				RunId:           string(jc.Run.ID),
-				JobId:           string(jobID),
-				NativeSessionId: derefString(jc.NativeSessionID),
-				Model:           model,
-				Effort:          effort,
-				Prompt:          prompt,
-				Attachments:     attachments,
-				ProjectContext:  projectContext,
-				ExecutionPolicy: policyToProto(policy),
+				ProjectId:         string(jc.ProjectID),
+				SessionId:         string(jc.SessionID),
+				RunId:             string(jc.Run.ID),
+				JobId:             string(jobID),
+				NativeSessionId:   derefString(jc.NativeSessionID),
+				Model:             model,
+				Effort:            effort,
+				ActionsUsed:       recovery.Actions,
+				ActiveSecondsUsed: recovery.Seconds,
+				Prompt:            prompt,
+				Attachments:       attachments,
+				ProjectContext:    projectContext,
+				ExecutionPolicy:   policyToProto(policy),
 			},
 		},
 	}
@@ -341,12 +381,23 @@ func (s *Service) CancelJob(ctx context.Context, identity auth.Identity, jobID d
 	}
 	scope := domain.Scope{ProjectID: jc.ProjectID, SessionID: jc.SessionID, RunID: jc.Run.ID, JobID: jobID}
 
-	if job.Status == domain.JobQueued {
-		updated, err := s.store.TransitionJob(ctx, jobID, domain.JobQueued, domain.JobCancelled, nil)
+	if job.Status == domain.JobQueued || (job.Status == domain.JobWaitingBackend && job.BackendWait != nil) {
+		ended := JobEndedPayload{Reason: reason, Model: job.Model, Effort: job.Effort}
+		if job.BackendWait != nil {
+			history, err := s.store.JobProviderHistory(ctx, jobID)
+			if err != nil {
+				return domain.Job{}, err
+			}
+			ended.Usage = readProviderHistory(history).Usage
+		}
+		updated, err := s.store.TransitionJob(ctx, jobID, job.Status, domain.JobCancelled, nil)
 		if err != nil {
 			return domain.Job{}, translate(err)
 		}
-		s.emit(ctx, identity.UserID, events.TypeJobCancelled, scope, JobEndedPayload{Reason: reason})
+		s.emit(ctx, identity.UserID, events.TypeJobCancelled, scope, ended)
+		if job.BackendWait != nil {
+			s.dispatchNext(ctx, jc.Run.ID)
+		}
 		return updated, nil
 	}
 

@@ -35,11 +35,13 @@ type StartParams struct {
 	// WorkingDirectory is the resolved physical cwd. It is the initial directory
 	// only, never a filesystem boundary: the agent may work elsewhere subject to
 	// real OS permissions.
-	WorkingDirectory string
-	Model            string
-	Effort           string
-	Prompt           string
-	Attachments      []*backendv1.PromptAttachment
+	WorkingDirectory  string
+	Model             string
+	Effort            string
+	ActionsUsed       uint32
+	ActiveSecondsUsed uint32
+	Prompt            string
+	Attachments       []*backendv1.PromptAttachment
 	// ProjectName and ProjectDescription come from the compact ProjectContext
 	// Core builds at Job start.
 	ProjectName        string

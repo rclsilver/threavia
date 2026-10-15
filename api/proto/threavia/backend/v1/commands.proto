@@ -17,6 +17,9 @@ message Welcome {
   string backend_instance_id = 2;
   google.protobuf.Timestamp server_time = 3;
   uint32 heartbeat_interval_seconds = 4;
+  // Allows JobWaitingBackend. Absent/false means the backend must retain
+  // terminal failure behavior rather than strand a Job on an older Core.
+  bool provider_recovery = 5;
 }
 
 // ExecutionPolicy (spec section 17). Limits must be enforced by Core/backend,
@@ -174,6 +177,9 @@ message StartJob {
   // Session preferences, frozen for this Job. Empty values use backend defaults.
   string model = 10;
   string effort = 11;
+  // Work already consumed by earlier stopped attempts of this same Job.
+  uint32 actions_used = 12;
+  uint32 active_seconds_used = 13;
 }
 
 message PromptAttachment {

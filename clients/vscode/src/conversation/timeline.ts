@@ -54,6 +54,7 @@ const RENDERED = new Set([
   'job.completed',
   'job.failed',
   'job.cancelled',
+  'job.waiting_backend',
 ]);
 
 /** How a Job ends, in the log. */
@@ -388,6 +389,10 @@ export function describe(event: Event): { icon: string; tone?: 'ok' | 'danger' |
     // that the turn ended is worth showing.
     case 'job.completed':
       return { icon: 'pass', tone: 'ok', text: 'Done.' };
+    case 'job.waiting_backend': {
+      const wait = payloadOf(event, 'job.waiting_backend');
+      return { icon: 'clock', tone: 'warn', text: `Waiting for the provider: ${wait?.message ?? 'Temporarily unavailable.'}${wait?.retryAt ? ' Next attempt no earlier than ' + new Date(wait.retryAt).toLocaleString() + '.' : ''}` };
+    }
     case 'job.failed':
       return {
         icon: 'warning',

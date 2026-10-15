@@ -54,6 +54,7 @@ const RENDERED = new Set([
   'job.completed',
   'job.failed',
   'job.cancelled',
+  'job.waiting_backend',
 ]);
 
 /**
@@ -1097,6 +1098,10 @@ function describe(event: Event): {
     // the turn ended is worth showing.
     case 'job.completed':
       return { Icon: CheckCircle2, tone: 'text-ok', text: 'Done.' };
+    case 'job.waiting_backend': {
+      const wait = payloadOf(event, 'job.waiting_backend');
+      return { Icon: AlertTriangle, tone: 'text-warn-text', text: `Waiting for the provider: ${wait?.message ?? 'Temporarily unavailable.'}${wait?.retryAt ? ' Next attempt no earlier than ' + new Date(wait.retryAt).toLocaleString() + '.' : ''}` };
+    }
     case 'job.failed':
       return {
         Icon: AlertTriangle,

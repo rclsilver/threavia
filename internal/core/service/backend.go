@@ -160,6 +160,9 @@ func (s *Service) StatusUpdate(ctx context.Context, instanceID domain.BackendIns
 		s.logger.Error("cannot record the backend status and conditions",
 			slog.String("backendInstanceId", string(instanceID)), slog.String("error", err.Error()))
 	}
+	if err == nil && status == domain.BackendReady && providerAuthFromProto(update.GetProviderAuthState()) == domain.ProviderAuthenticated {
+		go s.releaseQueuedWork(context.WithoutCancel(ctx), instanceID)
+	}
 }
 
 // conditionsFromProto translates what a backend reported. Core stores the
@@ -493,7 +496,19 @@ func (s *Service) JobEvent(ctx context.Context, instanceID domain.BackendInstanc
 	if ended, ok := payload.(JobEndedPayload); ok {
 		ended.Model = jc.Job.Model
 		ended.Effort = jc.Job.Effort
+		history, err := s.store.JobProviderHistory(ctx, jobID)
+		if err != nil {
+			return 0, err
+		}
+		ended.Usage = addProviderUsage(ended.Usage, readProviderHistory(history).Usage)
 		payload = ended
+	}
+	if wait, ok := payload.(JobWaitingBackendPayload); ok {
+		if wait.RetryAt == nil || !wait.RetryAt.After(s.now()) {
+			next := s.now().Add(time.Minute)
+			wait.RetryAt = &next
+		}
+		payload = wait
 	}
 	scope := domain.Scope{ProjectID: jc.ProjectID, SessionID: jc.SessionID, RunID: jc.Run.ID, JobID: jobID}
 	b := &batch{ownerID: jc.OwnerID}
@@ -637,6 +652,31 @@ func (s *Service) applyEvent(ctx context.Context, tx *postgres.Store, b *batch, 
 			return err
 		}
 		return transitionTo(ctx, tx, scope.JobID, domain.JobCancelled, nil)
+
+	case *backendv1.JobEvent_JobWaitingBackend:
+		job, err := tx.JobByID(ctx, scope.JobID)
+		if err != nil {
+			return err
+		}
+		if job.Status.Terminal() || job.Status == domain.JobCancelling {
+			return nil
+		}
+		if err := tx.AbandonJobAttention(ctx, scope.JobID, "the provider attempt stopped"); err != nil {
+			return err
+		}
+		if err := transitionTo(ctx, tx, scope.JobID, domain.JobWaitingBackend, nil); err != nil {
+			return err
+		}
+		wait := &domain.BackendWait{Reason: body.JobWaitingBackend.GetReason(), Message: body.JobWaitingBackend.GetMessage()}
+		if at := body.JobWaitingBackend.GetRetryAt(); at != nil && at.CheckValid() == nil {
+			value := at.AsTime()
+			wait.RetryAt = &value
+		}
+		if wait.RetryAt == nil || !wait.RetryAt.After(s.now()) {
+			next := s.now().Add(time.Minute)
+			wait.RetryAt = &next
+		}
+		return tx.SetJobBackendWait(ctx, scope.JobID, wait, body.JobWaitingBackend.GetActiveSeconds())
 
 	default:
 		return nil

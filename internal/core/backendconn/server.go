@@ -119,6 +119,7 @@ func (s *Server) Connect(stream backendv1.BackendControl_ConnectServer) error {
 				BackendInstanceId:        string(instanceID),
 				ServerTime:               timestamppb.Now(),
 				HeartbeatIntervalSeconds: uint32(s.opts.HeartbeatInterval.Seconds()),
+				ProviderRecovery:         true,
 			},
 		},
 	}

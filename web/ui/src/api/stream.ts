@@ -251,9 +251,13 @@ export class EventStream {
       // from every snapshot, so the list follows each Job as it moves.
       case 'job.created':
       case 'job.started':
+      case 'job.waiting_backend':
       case 'job.completed':
       case 'job.failed':
       case 'job.cancelled':
+        if (event.type === 'job.waiting_backend') {
+          void this.queries.invalidateQueries({ queryKey: keys.backends() });
+        }
         void this.queries.invalidateQueries({ queryKey: ['sessions'] });
         // Work that ended may have committed, pushed or left files behind.
         if (event.type !== 'job.created' && event.type !== 'job.started') {
@@ -404,6 +408,9 @@ export class EventStream {
 function applyToJobs(jobs: Job[], event: Event): Job[] {
   const settings = payloadOf(event, 'job.started');
   const model = { ...(settings?.model && { model: settings.model }), ...(settings?.effort && { effort: settings.effort }) };
+  const waiting = payloadOf(event, 'job.waiting_backend');
+  const backendWait = waiting ? { reason: waiting.reason, message: waiting.message, retryAt: waiting.retryAt } : undefined;
+  const recovery = waiting || ['job.started', 'job.completed', 'job.failed', 'job.cancelled'].includes(event.type) ? { backendWait } : {};
   const status = payloadOf(event, 'user.message')?.delivery === 'NOW' ? 'RUNNING' : jobStatusFor(event.type);
   if (!status || !event.jobId) return jobs;
 
@@ -415,6 +422,7 @@ function applyToJobs(jobs: Job[], event: Event): Job[] {
       ...jobs,
       {
         ...model,
+        ...recovery,
         id: event.jobId,
         runId: event.runId ?? '',
         status,
@@ -424,7 +432,7 @@ function applyToJobs(jobs: Job[], event: Event): Job[] {
     ];
   }
   return jobs.map((job) =>
-    job.id === event.jobId ? { ...job, ...model, status, updatedAt: event.timestamp } : job,
+    job.id === event.jobId ? { ...job, ...model, ...recovery, status, updatedAt: event.timestamp } : job,
   );
 }
 
@@ -440,6 +448,8 @@ function jobStatusFor(type: string): Job['status'] | null {
       return 'WAITING_VALIDATION';
     case 'user_input.requested':
       return 'WAITING_INPUT';
+    case 'job.waiting_backend':
+      return 'WAITING_BACKEND';
     case 'job.completed':
       return 'COMPLETED';
     case 'job.failed':

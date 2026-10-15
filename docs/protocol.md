@@ -96,6 +96,15 @@ name stays and the connection goes on.
 
 ## Quotas
 
+Explicit auth/quota refusals can stop an attempt without ending its Job through
+`JobWaitingBackend`, negotiated by `Welcome.provider_recovery`. The event
+carries a reason, message, earliest retry timestamp, known attempt usage and
+rounded-up active seconds. Core persists the wait, retains the Run slot and
+resumes the same Job after provider readiness and the retry deadline. Retry
+`StartJob.actions_used` and `active_seconds_used` preserve execution budgets.
+See [provider recovery](provider-recovery.md) for detection, probes, retry
+semantics, client behavior and deployment order.
+
 `QuotaReport.snapshot` follows the HTTP `BackendQuotas` schema. Each instance
 reports its own limits and thresholds, with stable window ids, optional usage,
 provider status, resets and raw quota metadata. Missing values remain absent;

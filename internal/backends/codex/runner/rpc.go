@@ -21,9 +21,20 @@ type message struct {
 	Error  *rpcError       `json:"error,omitempty"`
 }
 type rpcError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int             `json:"code"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data"`
 }
+
+type providerRPCError struct {
+	method  string
+	failure *rpcError
+}
+
+func (e *providerRPCError) Error() string {
+	return fmt.Sprintf("%s: %s (code %d)", e.method, e.failure.Message, e.failure.Code)
+}
+
 type rpc struct {
 	writer   io.Writer
 	writeMu  sync.Mutex
@@ -95,7 +106,7 @@ func (r *rpc) call(ctx context.Context, method string, params any, result any) e
 	select {
 	case msg := <-response:
 		if msg.Error != nil {
-			return fmt.Errorf("%s: %s (code %d)", method, msg.Error.Message, msg.Error.Code)
+			return &providerRPCError{method: method, failure: msg.Error}
 		}
 		if result != nil {
 			return json.Unmarshal(msg.Result, result)

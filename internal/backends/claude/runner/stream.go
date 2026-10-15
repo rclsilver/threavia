@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"time"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	contract "github.com/rclsilver/threavia/internal/backends/shared/runner"
@@ -27,10 +28,11 @@ type streamLine struct {
 	Result    string           `json:"result"`
 
 	// What the turn consumed, reported on the result line.
-	Usage         *providerUsage `json:"usage"`
-	CostUSD       float64        `json:"total_cost_usd"`
-	Duration      int64          `json:"duration_ms"`
-	RateLimitInfo map[string]any `json:"rate_limit_info"`
+	Usage         *providerUsage  `json:"usage"`
+	CostUSD       float64         `json:"total_cost_usd"`
+	Duration      int64           `json:"duration_ms"`
+	RateLimitInfo map[string]any  `json:"rate_limit_info"`
+	Error         json.RawMessage `json:"error"`
 }
 
 // providerUsage is the subset of the provider accounting Threavia keeps.
@@ -76,7 +78,8 @@ type outcome struct {
 	stoppedBy string
 	// usage is nil when the provider reported none, which a terminal event
 	// carries through: no accounting is not the same as a free Job.
-	usage *backendv1.Usage
+	usage   *backendv1.Usage
+	blocked *contract.ProviderBlock
 }
 
 // consume reads the provider output stream and emits normalised events.
@@ -86,12 +89,13 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 	toolNames := make(map[string]string)
 	var (
 		result  outcome
-		actions int
+		actions = int(params.ActionsUsed)
 	)
 
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 0, 64<<10), maxLine)
 	echoes := 0
+	bound := false
 
 	for scanner.Scan() {
 		raw := strings.TrimSpace(scanner.Text())
@@ -122,6 +126,11 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 		case "rate_limit_event":
 			if line.RateLimitInfo != nil {
 				_ = contract.ReportQuotas(ctx, sink, claudeRateLimit(line.RateLimitInfo), false)
+				if line.RateLimitInfo["status"] == "rejected" {
+					result.blocked = contract.ProviderBlockFor("claude", "quota_exceeded", "")
+					result.blocked.RetryAt = contract.ProviderRetryAt(line.RateLimitInfo, time.Now())
+					return result
+				}
 			}
 		case "system":
 			// The init frame confirms the session the provider actually used.
@@ -133,6 +142,28 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 			}
 
 		case "assistant":
+			if len(line.Error) > 0 {
+				var code string
+				if json.Unmarshal(line.Error, &code) != nil {
+					var failure struct {
+						Type string `json:"type"`
+						Code string `json:"code"`
+					}
+					_ = json.Unmarshal(line.Error, &failure)
+					code = failure.Type
+					if code == "" {
+						code = failure.Code
+					}
+				}
+				result.blocked = contract.ProviderBlockFor("claude", code, "")
+			}
+			if result.blocked != nil {
+				continue
+			}
+			if !bound && params.NativeSessionID != "" {
+				_ = sink.NativeSessionBound(ctx, params.RunID, params.JobID, params.NativeSessionID)
+				bound = true
+			}
 			if stopped := c.emitAssistant(ctx, params, line, toolNames, sink, &actions); stopped != "" {
 				result.stoppedBy = stopped
 				return result
@@ -148,6 +179,16 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 			result.completed = true
 			result.failed = line.IsError
 			result.summary = line.Result
+			if line.IsError && result.blocked == nil {
+				result.blocked = contract.ProviderBlockFor("claude", "", line.Result)
+			}
+			if !line.IsError {
+				result.blocked = nil
+			}
+			if !line.IsError && !bound && params.NativeSessionID != "" {
+				_ = sink.NativeSessionBound(ctx, params.RunID, params.JobID, params.NativeSessionID)
+				bound = true
+			}
 			if result.summary == "" && line.IsError {
 				result.summary = "claude code reported an error (" + line.Subtype + ")"
 			}

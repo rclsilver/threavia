@@ -81,12 +81,20 @@ type Job struct {
 	// OriginChannel is the kind of client that started this work. Core records
 	// it so a device that is already watching the work is not also made to ring
 	// (spec section 6).
-	OriginChannel Channel    `json:"originChannel,omitempty"`
-	Error         *string    `json:"error,omitempty"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
-	StartedAt     *time.Time `json:"startedAt,omitempty"`
-	EndedAt       *time.Time `json:"endedAt,omitempty"`
+	OriginChannel Channel      `json:"originChannel,omitempty"`
+	Error         *string      `json:"error,omitempty"`
+	BackendWait   *BackendWait `json:"backendWait,omitempty"`
+	CreatedAt     time.Time    `json:"createdAt"`
+	UpdatedAt     time.Time    `json:"updatedAt"`
+	StartedAt     *time.Time   `json:"startedAt,omitempty"`
+	EndedAt       *time.Time   `json:"endedAt,omitempty"`
+}
+
+// BackendWait describes a stopped provider attempt that Core can retry.
+type BackendWait struct {
+	Reason  string     `json:"reason"`
+	Message string     `json:"message"`
+	RetryAt *time.Time `json:"retryAt,omitempty"`
 }
 
 // BackendInstance is an autonomous remote execution participant. It belongs to a

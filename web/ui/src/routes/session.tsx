@@ -145,6 +145,9 @@ export function SessionView() {
               {active && active.status !== 'QUEUED' ? 'Next job · ' : ''}Model: {data.session.model || backend?.modelCatalog?.defaultModel || 'Backend default'} · Effort: {data.session.effort || (data.session.model ? backend?.modelCatalog?.models.find((option) => option.id === data.session.model)?.defaultEffort : backend?.modelCatalog?.defaultEffort) || 'Backend default'}
             </Link>
             {active?.model && active.status !== 'QUEUED' && <span>Current job: {active.model} · {active.effort ? `${active.effort} effort` : 'Effort not reported'}</span>}
+            {active?.status === 'WAITING_BACKEND' && active.backendWait && (
+              <span className="text-warn-text" role="status">{active.backendWait.message}{active.backendWait.retryAt && ` Next attempt no earlier than ${new Date(active.backendWait.retryAt).toLocaleString()}.`}</span>
+            )}
             <RepositoryStatus sessionId={sessionId} />
             {active && working && (
               // A liveness signal, not history: it says the agent is still

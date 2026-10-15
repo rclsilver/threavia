@@ -109,6 +109,7 @@ type JobEvent struct {
 	//	*JobEvent_JobCompleted
 	//	*JobEvent_JobFailed
 	//	*JobEvent_JobCancelled
+	//	*JobEvent_JobWaitingBackend
 	Body          isJobEvent_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -294,6 +295,15 @@ func (x *JobEvent) GetJobCancelled() *JobCancelled {
 	return nil
 }
 
+func (x *JobEvent) GetJobWaitingBackend() *JobWaitingBackend {
+	if x != nil {
+		if x, ok := x.Body.(*JobEvent_JobWaitingBackend); ok {
+			return x.JobWaitingBackend
+		}
+	}
+	return nil
+}
+
 type isJobEvent_Body interface {
 	isJobEvent_Body()
 }
@@ -346,6 +356,10 @@ type JobEvent_JobCancelled struct {
 	JobCancelled *JobCancelled `protobuf:"bytes,21,opt,name=job_cancelled,json=jobCancelled,proto3,oneof"`
 }
 
+type JobEvent_JobWaitingBackend struct {
+	JobWaitingBackend *JobWaitingBackend `protobuf:"bytes,22,opt,name=job_waiting_backend,json=jobWaitingBackend,proto3,oneof"`
+}
+
 func (*JobEvent_JobStarted) isJobEvent_Body() {}
 
 func (*JobEvent_NativeSessionBound) isJobEvent_Body() {}
@@ -369,6 +383,8 @@ func (*JobEvent_JobCompleted) isJobEvent_Body() {}
 func (*JobEvent_JobFailed) isJobEvent_Body() {}
 
 func (*JobEvent_JobCancelled) isJobEvent_Body() {}
+
+func (*JobEvent_JobWaitingBackend) isJobEvent_Body() {}
 
 // EphemeralJobEvent is streamed for liveness only (progress, "agent working").
 // Core may fan it out to connected clients but does not persist it.
@@ -1306,11 +1322,92 @@ func (*JobCancelled) Descriptor() ([]byte, []int) {
 	return file_threavia_backend_v1_events_proto_rawDescGZIP(), []int{15}
 }
 
+// The provider attempt has stopped; Core owns when the same Job may retry.
+// This is not a terminal outcome, and does not release the Run's active slot.
+type JobWaitingBackend struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Reason  string                 `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
+	Message string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// Earliest retry, not a promise that a provider quota resets then.
+	RetryAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=retry_at,json=retryAt,proto3" json:"retry_at,omitempty"`
+	Usage   *Usage                 `protobuf:"bytes,4,opt,name=usage,proto3" json:"usage,omitempty"`
+	// Rounded-up wall time of this stopped attempt, measured on the backend.
+	// Provider waiting time is excluded; zero means not reported.
+	ActiveSeconds uint32 `protobuf:"varint,5,opt,name=active_seconds,json=activeSeconds,proto3" json:"active_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JobWaitingBackend) Reset() {
+	*x = JobWaitingBackend{}
+	mi := &file_threavia_backend_v1_events_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JobWaitingBackend) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JobWaitingBackend) ProtoMessage() {}
+
+func (x *JobWaitingBackend) ProtoReflect() protoreflect.Message {
+	mi := &file_threavia_backend_v1_events_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JobWaitingBackend.ProtoReflect.Descriptor instead.
+func (*JobWaitingBackend) Descriptor() ([]byte, []int) {
+	return file_threavia_backend_v1_events_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *JobWaitingBackend) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *JobWaitingBackend) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *JobWaitingBackend) GetRetryAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RetryAt
+	}
+	return nil
+}
+
+func (x *JobWaitingBackend) GetUsage() *Usage {
+	if x != nil {
+		return x.Usage
+	}
+	return nil
+}
+
+func (x *JobWaitingBackend) GetActiveSeconds() uint32 {
+	if x != nil {
+		return x.ActiveSeconds
+	}
+	return 0
+}
+
 var File_threavia_backend_v1_events_proto protoreflect.FileDescriptor
 
 const file_threavia_backend_v1_events_proto_rawDesc = "" +
 	"\n" +
-	" threavia/backend/v1/events.proto\x12\x13threavia.backend.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a threavia/backend/v1/common.proto\"\xfc\b\n" +
+	" threavia/backend/v1/events.proto\x12\x13threavia.backend.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a threavia/backend/v1/common.proto\"\xd6\t\n" +
 	"\bJobEvent\x12(\n" +
 	"\x10backend_event_id\x18\x01 \x01(\tR\x0ebackendEventId\x12)\n" +
 	"\x10backend_sequence\x18\x02 \x01(\x04R\x0fbackendSequence\x12\x15\n" +
@@ -1333,7 +1430,8 @@ const file_threavia_backend_v1_events_proto_rawDesc = "" +
 	"\rjob_completed\x18\x13 \x01(\v2!.threavia.backend.v1.JobCompletedH\x00R\fjobCompleted\x12?\n" +
 	"\n" +
 	"job_failed\x18\x14 \x01(\v2\x1e.threavia.backend.v1.JobFailedH\x00R\tjobFailed\x12H\n" +
-	"\rjob_cancelled\x18\x15 \x01(\v2!.threavia.backend.v1.JobCancelledH\x00R\fjobCancelledB\x06\n" +
+	"\rjob_cancelled\x18\x15 \x01(\v2!.threavia.backend.v1.JobCancelledH\x00R\fjobCancelled\x12X\n" +
+	"\x13job_waiting_backend\x18\x16 \x01(\v2&.threavia.backend.v1.JobWaitingBackendH\x00R\x11jobWaitingBackendB\x06\n" +
 	"\x04body\"\xaa\x01\n" +
 	"\x11EphemeralJobEvent\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x15\n" +
@@ -1404,7 +1502,13 @@ const file_threavia_backend_v1_events_proto_rawDesc = "" +
 	"\tJobFailed\x120\n" +
 	"\x05error\x18\x01 \x01(\v2\x1a.threavia.backend.v1.ErrorR\x05error\x120\n" +
 	"\x05usage\x18\x02 \x01(\v2\x1a.threavia.backend.v1.UsageR\x05usage\"\x0e\n" +
-	"\fJobCancelled*\x86\x01\n" +
+	"\fJobCancelled\"\xd5\x01\n" +
+	"\x11JobWaitingBackend\x12\x16\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x125\n" +
+	"\bretry_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\aretryAt\x120\n" +
+	"\x05usage\x18\x04 \x01(\v2\x1a.threavia.backend.v1.UsageR\x05usage\x12%\n" +
+	"\x0eactive_seconds\x18\x05 \x01(\rR\ractiveSeconds*\x86\x01\n" +
 	"\tFileState\x12\x1a\n" +
 	"\x16FILE_STATE_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10FILE_STATE_ADDED\x10\x01\x12\x17\n" +
@@ -1425,7 +1529,7 @@ func file_threavia_backend_v1_events_proto_rawDescGZIP() []byte {
 }
 
 var file_threavia_backend_v1_events_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_threavia_backend_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_threavia_backend_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_threavia_backend_v1_events_proto_goTypes = []any{
 	(FileState)(0),                // 0: threavia.backend.v1.FileState
 	(*JobEvent)(nil),              // 1: threavia.backend.v1.JobEvent
@@ -1444,12 +1548,13 @@ var file_threavia_backend_v1_events_proto_goTypes = []any{
 	(*JobCompleted)(nil),          // 14: threavia.backend.v1.JobCompleted
 	(*JobFailed)(nil),             // 15: threavia.backend.v1.JobFailed
 	(*JobCancelled)(nil),          // 16: threavia.backend.v1.JobCancelled
-	(*timestamppb.Timestamp)(nil), // 17: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),       // 18: google.protobuf.Struct
-	(*Error)(nil),                 // 19: threavia.backend.v1.Error
+	(*JobWaitingBackend)(nil),     // 17: threavia.backend.v1.JobWaitingBackend
+	(*timestamppb.Timestamp)(nil), // 18: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),       // 19: google.protobuf.Struct
+	(*Error)(nil),                 // 20: threavia.backend.v1.Error
 }
 var file_threavia_backend_v1_events_proto_depIdxs = []int32{
-	17, // 0: threavia.backend.v1.JobEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	18, // 0: threavia.backend.v1.JobEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	3,  // 1: threavia.backend.v1.JobEvent.job_started:type_name -> threavia.backend.v1.JobStarted
 	4,  // 2: threavia.backend.v1.JobEvent.native_session_bound:type_name -> threavia.backend.v1.NativeSessionBound
 	5,  // 3: threavia.backend.v1.JobEvent.agent_message:type_name -> threavia.backend.v1.AgentMessage
@@ -1462,21 +1567,24 @@ var file_threavia_backend_v1_events_proto_depIdxs = []int32{
 	14, // 10: threavia.backend.v1.JobEvent.job_completed:type_name -> threavia.backend.v1.JobCompleted
 	15, // 11: threavia.backend.v1.JobEvent.job_failed:type_name -> threavia.backend.v1.JobFailed
 	16, // 12: threavia.backend.v1.JobEvent.job_cancelled:type_name -> threavia.backend.v1.JobCancelled
-	17, // 13: threavia.backend.v1.EphemeralJobEvent.occurred_at:type_name -> google.protobuf.Timestamp
-	18, // 14: threavia.backend.v1.ToolStarted.input:type_name -> google.protobuf.Struct
-	18, // 15: threavia.backend.v1.ToolCompleted.output:type_name -> google.protobuf.Struct
-	19, // 16: threavia.backend.v1.ToolFailed.error:type_name -> threavia.backend.v1.Error
-	18, // 17: threavia.backend.v1.ValidationRequested.request_payload:type_name -> google.protobuf.Struct
-	0,  // 18: threavia.backend.v1.FileChange.state:type_name -> threavia.backend.v1.FileState
-	11, // 19: threavia.backend.v1.WorkspaceChanged.files:type_name -> threavia.backend.v1.FileChange
-	13, // 20: threavia.backend.v1.JobCompleted.usage:type_name -> threavia.backend.v1.Usage
-	19, // 21: threavia.backend.v1.JobFailed.error:type_name -> threavia.backend.v1.Error
-	13, // 22: threavia.backend.v1.JobFailed.usage:type_name -> threavia.backend.v1.Usage
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	17, // 13: threavia.backend.v1.JobEvent.job_waiting_backend:type_name -> threavia.backend.v1.JobWaitingBackend
+	18, // 14: threavia.backend.v1.EphemeralJobEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	19, // 15: threavia.backend.v1.ToolStarted.input:type_name -> google.protobuf.Struct
+	19, // 16: threavia.backend.v1.ToolCompleted.output:type_name -> google.protobuf.Struct
+	20, // 17: threavia.backend.v1.ToolFailed.error:type_name -> threavia.backend.v1.Error
+	19, // 18: threavia.backend.v1.ValidationRequested.request_payload:type_name -> google.protobuf.Struct
+	0,  // 19: threavia.backend.v1.FileChange.state:type_name -> threavia.backend.v1.FileState
+	11, // 20: threavia.backend.v1.WorkspaceChanged.files:type_name -> threavia.backend.v1.FileChange
+	13, // 21: threavia.backend.v1.JobCompleted.usage:type_name -> threavia.backend.v1.Usage
+	20, // 22: threavia.backend.v1.JobFailed.error:type_name -> threavia.backend.v1.Error
+	13, // 23: threavia.backend.v1.JobFailed.usage:type_name -> threavia.backend.v1.Usage
+	18, // 24: threavia.backend.v1.JobWaitingBackend.retry_at:type_name -> google.protobuf.Timestamp
+	13, // 25: threavia.backend.v1.JobWaitingBackend.usage:type_name -> threavia.backend.v1.Usage
+	26, // [26:26] is the sub-list for method output_type
+	26, // [26:26] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_threavia_backend_v1_events_proto_init() }
@@ -1498,6 +1606,7 @@ func file_threavia_backend_v1_events_proto_init() {
 		(*JobEvent_JobCompleted)(nil),
 		(*JobEvent_JobFailed)(nil),
 		(*JobEvent_JobCancelled)(nil),
+		(*JobEvent_JobWaitingBackend)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1505,7 +1614,7 @@ func file_threavia_backend_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_threavia_backend_v1_events_proto_rawDesc), len(file_threavia_backend_v1_events_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

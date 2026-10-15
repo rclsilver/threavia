@@ -65,7 +65,7 @@ func (c *core) connectClaudeBackend(credential, skillCache string, discoveryRoot
 
 // connectBackendWith runs the real Claude adapter over the given stand-in for
 // the provider.
-func (c *core) connectBackendWith(local runner.Runner, credential, skillCache string, discoveryRoots ...string) {
+func (c *core) connectBackendWith(local runner.Runner, credential, skillCache string, discoveryRoots ...string) *adapter.Adapter {
 	c.t.Helper()
 
 	cfg := adapter.Default()
@@ -73,7 +73,8 @@ func (c *core) connectBackendWith(local runner.Runner, credential, skillCache st
 	cfg.Provider.DefaultWorkingDirectory = c.t.TempDir()
 	cfg.Provider.DiscoveryRoots = discoveryRoots
 
-	handler := adapter.New(cfg, local, sdkstate.NewMemoryStore(),
+	state := sdkstate.NewMemoryStore()
+	handler := adapter.New(cfg, local, state,
 		slog.New(slog.NewTextHandler(discard{}, nil)))
 
 	clientCfg := cfg.Client
@@ -86,7 +87,7 @@ func (c *core) connectBackendWith(local runner.Runner, credential, skillCache st
 	clientCfg.HeartbeatInterval = 200 * time.Millisecond
 	clientCfg.DialOptions = []grpc.DialOption{c.dialer}
 
-	sdk, err := sdkclient.New(clientCfg, handler, sdkstate.NewMemoryStore(),
+	sdk, err := sdkclient.New(clientCfg, handler, state,
 		slog.New(slog.NewTextHandler(discard{}, nil)))
 	if err != nil {
 		c.t.Fatalf("building the claude backend: %v", err)
@@ -98,6 +99,7 @@ func (c *core) connectBackendWith(local runner.Runner, credential, skillCache st
 	go func() { _ = sdk.Run(ctx) }()
 
 	waitUntil(c.t, "the claude backend to connect", func() bool { return sdk.Connected() })
+	return handler
 }
 
 type discard struct{}

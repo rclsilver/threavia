@@ -117,6 +117,9 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
       // its own, and work that stopped may have left files behind.
       return [...clearedAttention(event), { kind: 'sessions' }, { kind: 'attention' }, ...repository(sessionId)];
 
+    case 'job.waiting_backend':
+      return [...clearedAttention(event), { kind: 'sessions' }, { kind: 'backends' }, { kind: 'attention' }, ...snapshot(sessionId), ...repository(sessionId)];
+
     case 'job.completed':
     case 'job.failed': {
       const effects: Effect[] = [...clearedAttention(event), { kind: 'sessions' }, { kind: 'attention' }, ...repository(sessionId)];

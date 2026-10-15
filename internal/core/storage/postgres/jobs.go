@@ -14,7 +14,7 @@ import (
 var ErrJobSlotTaken = errors.New("the run already has an active job")
 
 const jobColumns = `j.id, j.run_id, j.status, j.idempotency_key, j.error, j.origin_channel,
-	j.created_at, j.updated_at, j.started_at, j.ended_at, j.model, j.effort`
+	j.created_at, j.updated_at, j.started_at, j.ended_at, j.model, j.effort, j.backend_wait`
 
 // CreateJob inserts a Job. A Job is created QUEUED and is dispatched
 // separately, so that enqueueing never depends on backend availability.
@@ -144,7 +144,7 @@ func (s *Store) SessionToolJobs(ctx context.Context, sessionID domain.SessionID)
 func (s *Store) TransitionJob(ctx context.Context, id domain.JobID, from, to domain.JobStatus, failure *string) (domain.Job, error) {
 	var startedAt, endedAt *time.Time
 	now := time.Now().UTC()
-	if to == domain.JobRunning && !from.Active() {
+	if to == domain.JobRunning {
 		startedAt = &now
 	}
 	if to.Terminal() {
@@ -155,6 +155,7 @@ func (s *Store) TransitionJob(ctx context.Context, id domain.JobID, from, to dom
 		UPDATE jobs j
 		SET status = $3,
 		    error = COALESCE($4, j.error),
+		    backend_wait = CASE WHEN $3 = 'WAITING_BACKEND' THEN j.backend_wait ELSE NULL END,
 		    started_at = COALESCE(j.started_at, $5),
 		    ended_at = COALESCE($6, j.ended_at),
 		    updated_at = now()
@@ -214,7 +215,7 @@ func (s *Store) LoadJobContext(ctx context.Context, id domain.JobID) (JobContext
 	var jc JobContext
 	err := s.q.QueryRow(ctx, `
 		SELECT j.id, j.run_id, j.status, j.idempotency_key, j.error, j.origin_channel,
-		       j.created_at, j.updated_at, j.started_at, j.ended_at, j.model, j.effort,
+		       j.created_at, j.updated_at, j.started_at, j.ended_at, j.model, j.effort, j.backend_wait,
 		       r.id, r.session_id, r.backend_instance_id, r.native_session_id,
 		       r.resume_status, r.resume_reason, r.created_at, r.updated_at,
 		       s.id, p.id, p.owner_id, p.name, p.description, p.instructions,
@@ -230,7 +231,7 @@ func (s *Store) LoadJobContext(ctx context.Context, id domain.JobID) (JobContext
 		WHERE j.id = $1`, id).Scan(
 		&jc.Job.ID, &jc.Job.RunID, &jc.Job.Status, &jc.Job.IdempotencyKey, &jc.Job.Error,
 		&jc.Job.OriginChannel,
-		&jc.Job.CreatedAt, &jc.Job.UpdatedAt, &jc.Job.StartedAt, &jc.Job.EndedAt, &jc.Job.Model, &jc.Job.Effort,
+		&jc.Job.CreatedAt, &jc.Job.UpdatedAt, &jc.Job.StartedAt, &jc.Job.EndedAt, &jc.Job.Model, &jc.Job.Effort, &jc.Job.BackendWait,
 		&jc.Run.ID, &jc.Run.SessionID, &jc.Run.BackendInstanceID, &jc.Run.NativeSessionID,
 		&jc.Run.ResumeStatus, &jc.Run.ResumeReason, &jc.Run.CreatedAt, &jc.Run.UpdatedAt,
 		&jc.SessionID, &jc.ProjectID, &jc.OwnerID, &jc.ProjectName, &jc.ProjectDesc,
@@ -256,7 +257,7 @@ func (s *Store) QueuedJobsForBackend(ctx context.Context, instanceID domain.Back
 	rows, err := s.q.Query(ctx, `
 		SELECT j.id
 		FROM jobs j JOIN runs r ON r.id = j.run_id
-		WHERE r.backend_instance_id = $1 AND j.status = 'QUEUED'
+		WHERE r.backend_instance_id = $1 AND (j.status = 'QUEUED' OR (j.status = 'WAITING_BACKEND' AND j.backend_wait IS NOT NULL))
 		ORDER BY j.created_at`, instanceID)
 	if err != nil {
 		return nil, classify(err, "list queued jobs")
@@ -302,7 +303,7 @@ func (s *Store) ActiveJobsForBackend(ctx context.Context, instanceID domain.Back
 func scanJob(row scanner) (domain.Job, error) {
 	var job domain.Job
 	err := row.Scan(&job.ID, &job.RunID, &job.Status, &job.IdempotencyKey, &job.Error, &job.OriginChannel,
-		&job.CreatedAt, &job.UpdatedAt, &job.StartedAt, &job.EndedAt, &job.Model, &job.Effort)
+		&job.CreatedAt, &job.UpdatedAt, &job.StartedAt, &job.EndedAt, &job.Model, &job.Effort, &job.BackendWait)
 	return job, classify(err, "read job")
 }
 

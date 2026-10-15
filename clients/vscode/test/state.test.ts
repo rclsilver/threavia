@@ -35,6 +35,15 @@ describe('mergeEvents', () => {
 });
 
 describe('applyToJobs', () => {
+  it('preserves the provider recovery cause until the same job resumes', () => {
+    const backendWait = { reason: 'QUOTA_EXCEEDED', message: 'Quota exhausted', retryAt: '2026-10-09T12:00:00Z' };
+    const waiting = applyToJobs([job('a', 'RUNNING')], { ...event(1, 'job.waiting_backend', 'a'), payload: backendWait });
+    expect(waiting[0]).toMatchObject({ status: 'WAITING_BACKEND', backendWait });
+    expect(activeJob(waiting)?.id).toBe('a');
+    expect(deliveriesFor(waiting[0], undefined)).toEqual([]);
+    expect(applyToJobs(waiting, event(2, 'job.started', 'a'))[0]).toMatchObject({ status: 'RUNNING', backendWait: undefined });
+  });
+
   it('keeps provider-confirmed model settings while the job moves through its lifecycle', () => {
     const started = { ...event(1, 'job.started', 'a'), payload: { model: 'opus-v1', effort: 'high' } };
     let jobs = applyToJobs([job('a', 'QUEUED')], started);

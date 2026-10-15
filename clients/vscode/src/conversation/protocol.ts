@@ -1,4 +1,4 @@
-import type { BackendQuotas, Delivery, Event, JobStatus, Repository, UserInputRequest, ValidationRequest } from '../api/types';
+import type { BackendQuotas, Delivery, Event, Job, JobStatus, Repository, UserInputRequest, ValidationRequest } from '../api/types';
 import type { DraftStart } from './draft';
 import type { StateTone } from './state';
 
@@ -28,7 +28,7 @@ export interface SessionView {
   /** Every Job still going, so a message can carry its own stop. */
   pending: Record<string, JobStatus>;
   /** The Job Stop and Escape stop. */
-  active?: { id: string; status: JobStatus; model?: string; effort?: string };
+  active?: Pick<Job, 'id' | 'status' | 'model' | 'effort' | 'backendWait'>;
   deliveries: ('NEXT' | 'NOW')[];
   validations: ValidationRequest[];
   questions: UserInputRequest[];

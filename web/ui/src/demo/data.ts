@@ -24,6 +24,7 @@ export const IDS = {
   blog: id('d0000003', 5),
   oldSession: id('d0000003', 6),
   ingressCheck: id('d0000003', 7),
+  providerRecovery: id('d0000003', 8),
 };
 
 const now = Date.now();
@@ -145,8 +146,8 @@ export const backends = [
       {
         type: 'ProviderAuthenticated',
         status: 'False',
-        reason: 'LoginRequired',
-        message: 'The provider session expired. Run `claude /login` on ci-runner.',
+        reason: 'AUTHENTICATION_REQUIRED',
+        message: 'The provider session expired. Run claude auth login on ci-runner.',
       },
     ],
     createdAt: at(60 * 24 * 12),
@@ -172,6 +173,7 @@ const session = (
 });
 
 export const sessions = [
+  session(IDS.providerRecovery, IDS.homelab, 'Review the deployment pipeline', 8, 2, { activeJobStatus: 'WAITING_BACKEND' }),
   session(IDS.certManager, IDS.homelab, 'Upgrade cert-manager to 1.16', 14, 1, { activeJobStatus: 'WAITING_VALIDATION', model: 'opus', effort: 'high' }),
   session(IDS.ingress, IDS.homelab, 'Fix the flaky deploy of the ingress controller', 70, 22, { model: 'sonnet', effort: 'medium' }),
   session(IDS.ingressCheck, IDS.homelab, 'Check the ingress rollout', 24, 22, { managerSessionId: IDS.ingress }),
@@ -453,6 +455,7 @@ function grafana(): SessionState {
 
 export function timelines(): Record<string, SessionState> {
   return {
+    [IDS.providerRecovery]: providerRecovery(),
     [IDS.ingress]: ingress(),
     [IDS.certManager]: certManager(),
     [IDS.backups]: backups(),
@@ -461,6 +464,22 @@ export function timelines(): Record<string, SessionState> {
     [IDS.ingressCheck]: ingressCheck(),
     [IDS.blog]: quiet(IDS.blog, 6, IDS.laptop, 60 * 27, 'Draft a post about rebuilding the homelab: why, what changed, what I would do again.', 'The draft is in `content/posts/homelab-rebuild.md`: the why, the three changes that mattered, and what I would do again.', IDS.website),
   };
+}
+
+function providerRecovery(): SessionState {
+  const r = run(IDS.providerRecovery, 8, IDS.ci, 8);
+  const t = new Timeline(IDS.providerRecovery, IDS.homelab, r.id, 8000);
+  const j = id('d0000006', 30);
+  const wait = { reason: 'AUTHENTICATION_REQUIRED', message: 'The provider session expired. Run claude auth login on ci-runner. This Job resumes automatically after authentication is restored.', retryAt: at(-1) };
+  t.push('session.created', 8);
+  t.push('job.created', 8, { runId: r.id }, j);
+  t.push('user.message', 8, { text: 'Review the deployment pipeline and identify unnecessary rebuilds.' }, j);
+  t.push('job.started', 7.9, {}, j);
+  t.tool(j, 7.8, 'Read', { file_path: '.github/workflows/build.yml' }, 'name: Build\non: [push, pull_request]');
+  t.push('job.waiting_backend', 2, wait, j);
+  t.job(j, 'WAITING_BACKEND', 8);
+  t.jobs[0].backendWait = wait;
+  return { runs: [r], jobs: t.jobs, events: t.events };
 }
 
 // --------------------------------------------------------------- attention
