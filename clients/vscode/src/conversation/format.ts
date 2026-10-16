@@ -1,3 +1,4 @@
+import { isMarkdown } from '../../../shared/markdown-artifact';
 /**
  * Numbers and times as a person reads them, in the web client's words
  * (web/ui/src/lib/utils.ts), so the two clients say the same thing.
@@ -52,7 +53,7 @@ export function bytes(size: number): string {
 }
 
 /** What an artifact is, as far as showing it goes. */
-export type ArtifactKind = 'image' | 'audio' | 'video' | 'html' | 'text' | 'other';
+export type ArtifactKind = 'image' | 'audio' | 'video' | 'html' | 'markdown' | 'text' | 'other';
 
 export function artifactKind(mimeType: string, filename: string): ArtifactKind {
   const type = mimeType.toLowerCase();
@@ -61,6 +62,7 @@ export function artifactKind(mimeType: string, filename: string): ArtifactKind {
   if (type.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'].includes(extension)) return 'audio';
   if (type.startsWith('video/') || ['mp4', 'webm', 'mov'].includes(extension)) return 'video';
   if (type.startsWith('text/html') || ['html', 'htm'].includes(extension)) return 'html';
+  if (isMarkdown(mimeType, filename)) return 'markdown';
   if (
     type.startsWith('text/') ||
     /json|yaml|xml|csv/.test(type) ||

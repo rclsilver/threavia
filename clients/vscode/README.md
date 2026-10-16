@@ -97,7 +97,9 @@ pinned global decisions are read by agents in all your projects on that Core.
     other files are placed in the agent's readable scratch directory.
   - **Artifacts.** Images appear in the conversation and open at full size.
     Audio and video have native playback controls. Open shows a media file or
-    page in its own tab, and text as a read-only document; Save as… downloads it.
+    page in its own tab. Markdown opens as a rendered document with tables,
+    lists and Mermaid diagrams; **Source** shows its original Markdown. Other
+    text opens as a read-only document; Save as… downloads the original file.
     Playback depends on the formats supported by VS Code's embedded browser.
   - **Artifacts view.** The collapsed **Artifacts** sidebar follows the same
     Project as Tasks and Memory. Open, save or delete a row, upload files from

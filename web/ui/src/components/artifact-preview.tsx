@@ -1,9 +1,12 @@
+import { ARTIFACT_TEXT_LIMIT } from '../../../../clients/shared/markdown-artifact';
 import { mediaType } from '../../../../clients/shared/media';
 import { useQuery } from '@tanstack/react-query';
 import { Download, Maximize2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { fetchBlob, saveBlob } from '@/api/client';
+import { Markdown } from '@/components/markdown';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ActionError } from '@/components/ui/action-error';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -13,7 +16,7 @@ import { bytes, cn } from '@/lib/utils';
 const contentPath = (artifactId: string) => `/api/v1/artifacts/${artifactId}/content`;
 
 /** Text files are shown up to here; past it, the person downloads them. */
-const TEXT_LIMIT = 200_000;
+const TEXT_LIMIT = ARTIFACT_TEXT_LIMIT;
 
 /**
  * The bytes of an artifact, fetched once with the client's credential: a Blob
@@ -26,7 +29,9 @@ function useArtifactContent(artifactId: string, kind: Kind, enabled: boolean) {
       const blob = await fetchBlob(contentPath(artifactId));
       // Served as bytes, whatever the file is: the type is set again here
       // from what the artifact says it is, so an image renders as one.
-      return ['image', 'audio', 'video'].includes(kind) ? { blob } : { text: (await blob.text()).slice(0, TEXT_LIMIT) };
+      if (['image', 'audio', 'video'].includes(kind)) return { blob };
+      const text = await blob.text();
+      return { text: text.slice(0, TEXT_LIMIT), truncated: text.length > TEXT_LIMIT };
     },
     enabled: enabled && kind !== 'other',
     staleTime: Infinity,
@@ -96,6 +101,7 @@ function Rendering({
     );
   }
   const text = content.data && 'text' in content.data ? content.data.text : '';
+  if (kind === 'markdown') return <MarkdownArtifact key={artifactId} text={text ?? ''} large={large} truncated={!!content.data?.truncated} />;
   if (kind === 'html') {
     return (
       <iframe
@@ -205,7 +211,7 @@ export function ArtifactCard({
   const kind = kindOf(mimeType, filename);
   const Icon = iconOf(kind);
   const [open, setOpen] = useState(false);
-  const previewable = ['image', 'html', 'audio', 'video'].includes(kind);
+  const previewable = ['image', 'html', 'audio', 'video', 'markdown'].includes(kind);
 
   return (
     <div data-tour="artifact" className="bg-surface border-border space-y-2 rounded-(--radius-card) border p-2 sm:p-3">
@@ -238,4 +244,17 @@ export function ArtifactCard({
       />
     </div>
   );
+}
+
+/** Each opening starts with the document; the original text remains one tab away. */
+function MarkdownArtifact({ text, large, truncated }: { text: string; large: boolean; truncated: boolean }) {
+  return <Tabs defaultValue="preview" className={cn('flex min-h-0 flex-col', large && 'h-full')}>
+    <TabsList aria-label="Markdown view">
+      <TabsTrigger value="preview" className="min-h-11">Preview</TabsTrigger>
+      <TabsTrigger value="source" className="min-h-11">Source</TabsTrigger>
+    </TabsList>
+    {truncated && <p role="status" className="text-muted py-2 text-sm">This preview is limited to 200,000 characters. Download the file to read the full document.</p>}
+    <TabsContent value="preview" className={cn('p-3', !large && 'max-h-96')}><Markdown diagrams>{text}</Markdown></TabsContent>
+    <TabsContent value="source" className={cn('p-3', !large && 'max-h-96')}><pre className="font-mono text-xs whitespace-pre-wrap">{text}</pre></TabsContent>
+  </Tabs>;
 }

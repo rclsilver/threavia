@@ -2,6 +2,7 @@ import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { MermaidBlock } from '@/components/mermaid-block';
 import { CodeBlock } from '@/components/code-block';
 
 /**
@@ -18,7 +19,7 @@ function textOf(children: React.ReactNode): string {
   return '';
 }
 
-export const Markdown = memo(function Markdown({ children }: { children: string }) {
+export const Markdown = memo(function Markdown({ children, diagrams = false }: { children: string; diagrams?: boolean }) {
   return (
     <div className="prose-agent">
       <ReactMarkdown
@@ -27,6 +28,8 @@ export const Markdown = memo(function Markdown({ children }: { children: string 
           code({ className, children, ...props }) {
             const language = /language-(\w+)/.exec(className ?? '')?.[1];
             const text = textOf(children).replace(/\n$/, '');
+
+            if (diagrams && language?.toLowerCase() === 'mermaid') return <MermaidBlock code={text} />;
 
             // An inline span has no language and no newline; a fenced block is
             // what gets highlighted.

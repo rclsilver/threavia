@@ -76,7 +76,7 @@ export class Core implements vscode.Disposable {
       this.attention,
       this.presence,
     );
-    this.artifacts = new Artifacts(this.client, deps.artifactDocuments, setting.id);
+    this.artifacts = new Artifacts(this.client, deps.artifactDocuments, setting.id, context.extensionUri);
     this.repositories = new RepositoryMonitor(this.client, this.bus);
     this.repositories.setFocused(vscode.window.state.focused);
     this.subscriptions.push(

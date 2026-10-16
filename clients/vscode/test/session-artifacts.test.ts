@@ -10,6 +10,7 @@ vi.mock('vscode', () => {
   class TabInputText { constructor(readonly uri: unknown) {} }
   class TabInputTextDiff {}
   return {
+    Uri: { joinPath: (uri: { path: string }, ...parts: string[]) => ({ path: [uri.path, ...parts].join('/'), toString: () => [uri.path, ...parts].join('/') }) },
     TabInputText, TabInputTextDiff, ProgressLocation: { Window: 10 },
     window: {
       ...host, tabGroups: { all: [], close: host.close },
@@ -25,7 +26,7 @@ import type { VirtualDocuments } from '../src/diff/documents';
 import { closeSessionViews, sessionRestored } from '../src/session-views';
 
 const ref = { coreId: 'artifact-core', sessionId: 'artifact-session' };
-const artifact = { artifactId: 'a1', filename: 'report.md', mimeType: 'text/markdown' };
+const artifact = { artifactId: 'a1', filename: 'report.txt', mimeType: 'text/plain' };
 const content = new TextEncoder().encode('Report');
 
 function setup(read: () => Promise<Uint8Array>) {
@@ -34,6 +35,7 @@ function setup(read: () => Promise<Uint8Array>) {
     { artifactContent: read } as unknown as CoreClient,
     { put } as unknown as VirtualDocuments,
     ref.coreId,
+    { path: '/extension' } as vscode.Uri,
   );
   return { artifacts, put };
 }
@@ -85,4 +87,19 @@ describe('artifact previews while a session is being archived', () => {
     await opening;
     expect(host.close).toHaveBeenCalledExactlyOnceWith([tab], true);
   });
+});
+
+
+it('opens Markdown in its own preview and closes that preview when its session is archived', async () => {
+  const dispose = vi.fn();
+  const panel = { dispose, onDidDispose: vi.fn(() => ({ dispose: vi.fn() })), webview: { html: '', cspSource: 'https://extension.test', asWebviewUri: (uri: unknown) => uri } };
+  host.createWebviewPanel.mockReturnValueOnce(panel);
+  const { artifacts, put } = setup(() => Promise.resolve(content));
+  await artifacts.open({ ...artifact, filename: 'report.md', mimeType: 'text/markdown' }, 2, ref.sessionId);
+  expect(put).not.toHaveBeenCalled();
+  expect(host.showTextDocument).not.toHaveBeenCalled();
+  expect(host.createWebviewPanel).toHaveBeenCalledWith('threavia.artifact', 'report.md', 2, expect.objectContaining({ enableScripts: true }));
+  expect(panel.webview.html).toContain('id="source" hidden');
+  await closeSessionViews(ref);
+  expect(dispose).toHaveBeenCalledOnce();
 });

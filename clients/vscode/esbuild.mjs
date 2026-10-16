@@ -33,7 +33,7 @@ const contexts = await Promise.all([
   // included, is in these files.
   esbuild.context({
     ...common,
-    entryPoints: { webview: 'src/webview/main.ts', 'webview-style': 'src/webview/style.css' },
+    entryPoints: { artifact: 'src/webview/artifact.ts', 'artifact-style': 'src/webview/artifact.css', webview: 'src/webview/main.ts', 'webview-style': 'src/webview/style.css' },
     format: 'iife',
     platform: 'browser',
     target: 'chrome120',

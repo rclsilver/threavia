@@ -4,6 +4,8 @@
 !dist/extension.js
 !dist/webview.js
 !dist/webview-style.css
+!dist/artifact.js
+!dist/artifact-style.css
 !dist/codicon.ttf
 !media/**
 !package.json

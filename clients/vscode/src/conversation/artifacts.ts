@@ -4,6 +4,8 @@ import * as vscode from 'vscode';
 import type { CoreClient } from '../api/client';
 import type { VirtualDocuments } from '../diff/documents';
 import { artifactPath } from '../cores/refs';
+import { markdownArtifactPage } from './markdown-artifact';
+import { nonce } from './html';
 import { artifactKind } from './format';
 import type { ArtifactRef } from './protocol';
 import { closeSessionViews, registerSessionPanel, sessionArchived } from '../session-views';
@@ -22,6 +24,7 @@ export class Artifacts {
     private readonly client: CoreClient,
     private readonly documents: VirtualDocuments,
     private readonly coreId: string,
+    private readonly extensionUri: vscode.Uri,
   ) {}
 
   async open(artifact: ArtifactRef, column: EditorColumn, sessionId?: string): Promise<void> {
@@ -48,11 +51,17 @@ export class Artifacts {
       // A page an agent wrote runs its scripts — a chart needs them — in a
       // webview that can reach nothing: no network by its policy, no files,
       // and nobody listening to its messages.
-      enableScripts: kind === 'html',
-      localResourceRoots: [],
+      enableScripts: kind === 'html' || kind === 'markdown',
+      localResourceRoots: kind === 'markdown' ? [vscode.Uri.joinPath(this.extensionUri, 'dist')] : [],
     });
     if (ref && !registerSessionPanel(ref, panel)) return;
-    if (kind === 'audio' || kind === 'video') {
+    if (kind === 'markdown') {
+      const asset = (name: string) => panel.webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'dist', name)).toString();
+      panel.webview.html = markdownArtifactPage({
+        title, text: new TextDecoder().decode(bytes), cspSource: panel.webview.cspSource,
+        scriptUri: asset('artifact.js'), styleUri: asset('artifact-style.css'), nonce: nonce(),
+      });
+    } else if (kind === 'audio' || kind === 'video') {
       const type = mediaType(artifact.mimeType, artifact.filename);
       panel.webview.html = mediaPage(title, kind, `data:${type};base64,${Buffer.from(bytes).toString('base64')}`);
     } else if (kind === 'image') {

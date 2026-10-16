@@ -602,8 +602,10 @@ wav.setUint32(24, 8000, true); wav.setUint32(28, 16000, true); wav.setUint16(32,
 wavText(36, 'data'); wav.setUint32(40, 4000, true);
 for (let i = 0; i < 2000; i++) wav.setInt16(44 + i * 2, Math.round(Math.sin(i * 2 * Math.PI * 440 / 8000) * 2000 * Math.sin(i * Math.PI / 2000)), true);
 
+const incidentReportMarkdown = "# Ingress incident — node-3\n\nThe second controller replica crashed because Traefik held host port **443**.\n\n| Check | Result |\n| --- | --- |\n| Ingress route | Healthy |\n| Port 443 | Already held by Traefik |\n| Recommended fix | Use the shared controller |\n\n## Request path\n\n```mermaid\nflowchart LR\n  Browser --> Traefik\n  Traefik --> Ingress[Shared ingress controller]\n  Ingress --> Service[Application service]\n```\n\n## Recovery\n\n```mermaid\nsequenceDiagram\n  Operator->>Cluster: Remove conflicting host port\n  Cluster-->>Operator: Controller ready\n  Browser->>Traefik: Retry request\n  Traefik-->>Browser: Application response\n```\n\n- [x] Identify the conflicting listener\n- [x] Keep the shared ingress controller\n- [ ] Verify the next rollout\n\nKeep `hostNetwork` disabled for the application controller.\n";
+
 export const artifacts = [
-  { id: id('d000000c', 1), ownerId: 'alex', projectId: IDS.homelab, filename: 'ingress-incident-report.md', mimeType: 'text/markdown', size: 2481, sha256: '5e2b7c9a1f0d3e4b6a8c2d1f9e7b5a3c1d0e8f6a4b2c9d7e5f3a1b0c8d6e4f2a', sessionId: IDS.ingress, createdAt: at(61) },
+  { id: id('d000000c', 1), ownerId: 'alex', projectId: IDS.homelab, filename: 'ingress-incident-report.md', mimeType: 'text/markdown', size: new TextEncoder().encode(incidentReportMarkdown).length, sha256: '5e2b7c9a1f0d3e4b6a8c2d1f9e7b5a3c1d0e8f6a4b2c9d7e5f3a1b0c8d6e4f2a', sessionId: IDS.ingress, createdAt: at(61) },
   { id: id('d000000c', 2), ownerId: 'alex', projectId: IDS.homelab, filename: 'ups-dashboard.json', mimeType: 'application/json', size: 18342, sha256: '9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b', sessionId: IDS.grafana, createdAt: at(60 * 28) },
   { id: id('d000000c', 3), ownerId: 'alex', projectId: IDS.homelab, filename: 'node-inventory.csv', mimeType: 'text/csv', size: 412, sha256: 'c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2', createdAt: at(60 * 24 * 5) },
   { id: id('d000000c', 4), ownerId: 'alex', projectId: IDS.homelab, filename: 'ups-dashboard-preview.html', mimeType: 'text/html; charset=utf-8', size: upsPreviewHtml.length, sha256: '3b1f9c7e5a2d8f4c6e0a9b7d5f3c1e8a6d4b2f0c9e7a5d3b1f8c6e4a2d0b9f7e', sessionId: IDS.grafana, createdAt: at(60 * 30 - 6) },
@@ -614,7 +616,7 @@ export const artifacts = [
 
 /** What a download of each demo file gives, made up like the rest. */
 export const artifactContent: Record<string, string | Uint8Array<ArrayBuffer>> = {
-  [artifacts[0].id]: '# Ingress incident — node-3\n\nThe second controller replica crashed because traefik held host port 443.\n',
+  [artifacts[0].id]: incidentReportMarkdown,
   [artifacts[1].id]: '{ "title": "UPS", "panels": [] }\n',
   [artifacts[2].id]: 'node,role,gpu\nnode-1,control-plane,no\nnode-2,worker,no\nnode-3,worker,yes\n',
   [artifacts[3].id]: upsPreviewHtml,

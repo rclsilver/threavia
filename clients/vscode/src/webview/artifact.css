@@ -1,0 +1,10 @@
+@import './style.css';
+.artifact-toolbar {display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.artifact-toolbar strong {overflow-wrap:anywhere}
+.artifact-toolbar button {min-height:36px;padding:6px 14px;background:transparent;color:var(--text);border:1px solid var(--border);cursor:pointer}
+.artifact-toolbar button[aria-pressed=true] {background:var(--hover);border-bottom:2px solid var(--focus)}
+.artifact-document {flex:1;min-height:0;overflow:auto;padding:20px;scrollbar-gutter:stable}
+.artifact-document > * {max-width:64rem;margin:0 auto}
+#source {white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--mono);font-size:var(--mono-size)}
+#preview iframe {display:block;width:100%;border:0}
+.artifact-limit {padding:8px 16px;margin:0;color:var(--muted)}

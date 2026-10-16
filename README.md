@@ -109,7 +109,9 @@ server to install. Its responsive layout works in a desktop or mobile browser.
 
 - **Waiting** gathers questions and permission requests across projects.
 - **Sessions** show the conversation, tools, progress, file changes and published
-  artifacts. Queue a follow-up, steer or interrupt work when supported, or stop it.
+  artifacts. Markdown artifacts open as readable documents, including Mermaid
+  diagrams, with a Source view for the original text. Queue a follow-up, steer or
+  interrupt work when supported, or stop it.
 - **Project views** manage tasks and dependencies, memory, instructions,
   directories, Skills, permissions and audit history.
 - **Account settings** manage backends, the default backend, provider quotas,
