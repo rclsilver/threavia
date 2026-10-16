@@ -24,7 +24,8 @@ import {
   SkillsView,
 } from '@/routes/project';
 import { SessionView } from '@/routes/session';
-import { SettingsView, type AccountTab } from '@/routes/settings';
+import { SettingsView } from '@/routes/settings';
+import { ACCOUNT_TABS } from '@/lib/account-tabs';
 import { SessionSettingsView, type SettingsTab } from '@/routes/session-settings';
 import { TasksView } from '@/routes/tasks';
 import { HomeView, WaitingView } from '@/routes/waiting';
@@ -74,14 +75,12 @@ const sessionRoute = createRoute({
   component: SessionView,
 });
 
-const ACCOUNT_TABS: AccountTab[] = ['appearance', 'notifications', 'backends', 'permissions', 'directories', 'memory'];
-
 /** The person's settings, one tab per URL; an unknown tab lands on the first. */
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/$tab',
   beforeLoad: ({ params }) => {
-    if (!ACCOUNT_TABS.includes(params.tab as AccountTab)) {
+    if (!ACCOUNT_TABS.some(({ tab }) => tab === params.tab)) {
       // eslint-disable-next-line @typescript-eslint/only-throw-error
       throw redirect({ to: '/settings/$tab', params: { tab: 'appearance' } });
     }

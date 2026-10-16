@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Bell, BookText, Copy, Folder, History, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Copy, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
 import { useBackends, useClaimBackend, useIssueBackendToken, useMe, useProjects, useRevokeBackend, useSetDefaultBackend } from '@/api/queries';
@@ -21,27 +21,12 @@ import { Input } from '@/components/ui/input';
 import { MenuItem } from '@/components/ui/menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSelectedProject } from '@/use-project';
+import { ACCOUNT_TABS } from '@/lib/account-tabs';
 import { cn, humanise, when } from '@/lib/utils';
 import { useWideLayout } from '@/use-layout';
 import { useTheme, type Theme } from '@/use-theme';
 import { useShortcut } from '@/use-shortcut';
 
-export type AccountTab = 'appearance' | 'notifications' | 'backends' | 'permissions' | 'directories' | 'memory' | 'audit';
-
-const TABS: { tab: AccountTab; label: string; Icon: LucideIcon; detail: string }[] = [
-  { tab: 'memory', label: 'Core memory', Icon: BookText, detail: 'Facts and decisions shared across all your projects on this Core. Pinned ones travel with every Job; the others remain searchable.' },
-  { tab: 'audit', label: 'Audit', Icon: History, detail: 'Who changed what across your projects and Core memory. Records remain available after a project or its subjects are deleted.' },
-  { tab: 'directories', label: 'Directories', Icon: Folder, detail: 'Manage known directories on this Core, in a project or globally across your projects.' },
-  { tab: 'permissions', label: 'Permissions', Icon: ShieldCheck, detail: 'The defaults for all your projects and backends on this instance. Backends, projects and sessions can override them.' },
-  { tab: 'appearance', label: 'Appearance', Icon: Monitor, detail: 'How this client looks and lays itself out, on this device.' },
-  {
-    tab: 'notifications',
-    label: 'Notifications',
-    Icon: Bell,
-    detail: 'An approval or a question waiting, or work that ended while you were not watching. Never every event.',
-  },
-  { tab: 'backends', label: 'Backends', Icon: Server, detail: 'The machines that run the work, and what can be done about them.' },
-];
 
 /**
  * Everything about the person and their machines, as a page of its own.
@@ -54,7 +39,7 @@ export function SettingsView() {
   const { tab } = useParams({ from: '/settings/$tab' });
   const navigate = useNavigate();
   const me = useMe();
-  const current = TABS.find((entry) => entry.tab === tab) ?? TABS[0];
+  const current = ACCOUNT_TABS.find((entry) => entry.tab === tab) ?? ACCOUNT_TABS[0];
 
   // Escape goes back to where the person was, as it closed the dialog this was.
   useShortcut('Escape', useCallback(() => window.history.length > 1 ? window.history.back() : void navigate({ to: '/' }), [navigate]));
@@ -91,7 +76,7 @@ export function SettingsView() {
           </div>
         </div>
         <nav aria-label="Settings" className="-mb-px mt-3 flex gap-1 overflow-x-auto">
-          {TABS.map(({ tab: value, label, Icon }) => (
+          {ACCOUNT_TABS.map(({ tab: value, label, Icon }) => (
             <Link
               key={value}
               to="/settings/$tab"

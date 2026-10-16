@@ -3,7 +3,6 @@ import {
   Archive,
   ArchiveRestore,
   BookText,
-  Bell,
   Check,
   ChevronDown,
   ChevronUp,
@@ -15,7 +14,6 @@ import {
   Inbox,
   ListChecks,
   LoaderCircle,
-  Monitor,
   Menu as MenuIcon,
   MessageCircleQuestion,
   Package,
@@ -27,7 +25,6 @@ import {
   Pencil,
   Trash2,
   ShieldAlert,
-  Server,
   ShieldCheck,
   Sparkles,
   X,
@@ -67,6 +64,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input, Label } from '@/components/ui/input';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
+import { ACCOUNT_TABS, type AccountTab } from '@/lib/account-tabs';
 import { cn } from '@/lib/utils';
 
 /**
@@ -796,7 +794,7 @@ function UserMenu({
         : // Counted, never named: a name alone reads as "the" backend, as if
           // there could only be one.
           `${live.length} ${live.length === 1 ? 'backend' : 'backends'} ready`;
-  const go = (tab: 'appearance' | 'notifications' | 'backends') => void navigate({ to: '/settings/$tab', params: { tab } });
+  const go = (tab: AccountTab) => void navigate({ to: '/settings/$tab', params: { tab } });
 
   return (
     <Menu>
@@ -849,19 +847,13 @@ function UserMenu({
           {anonymous ? 'No authentication configured' : `Signed in with ${me.data?.authMode}`}
         </MenuLabel>
         <MenuSeparator />
-        <MenuItem onSelect={() => go('appearance')}>
-          <Monitor className="text-muted size-4" />
-          Appearance
-        </MenuItem>
-        <MenuItem onSelect={() => go('notifications')}>
-          <Bell className="text-muted size-4" />
-          Notifications
-        </MenuItem>
-        <MenuItem onSelect={() => go('backends')}>
-          <Server className="text-muted size-4" />
-          <span className="flex-1">Backends</span>
-          {unwell.length > 0 && <span className="bg-warn size-1.5 rounded-full" />}
-        </MenuItem>
+        {ACCOUNT_TABS.map(({ tab, label, Icon }) => (
+          <MenuItem key={tab} className="min-h-11 md:min-h-0" onSelect={() => go(tab)}>
+            <Icon className="text-muted size-4" />
+            <span className="flex-1">{label}</span>
+            {tab === 'backends' && unwell.length > 0 && <span className="bg-warn size-1.5 rounded-full" />}
+          </MenuItem>
+        ))}
       </MenuContent>
     </Menu>
   );
