@@ -103,8 +103,7 @@ func (r *rpc) call(ctx context.Context, method string, params any, result any) e
 	if err := r.send(map[string]any{"id": id, "method": method, "params": params}); err != nil {
 		return err
 	}
-	select {
-	case msg := <-response:
+	decode := func(msg message) error {
 		if msg.Error != nil {
 			return &providerRPCError{method: method, failure: msg.Error}
 		}
@@ -112,9 +111,20 @@ func (r *rpc) call(ctx context.Context, method string, params any, result any) e
 			return json.Unmarshal(msg.Result, result)
 		}
 		return nil
+	}
+	select {
+	case msg := <-response:
+		return decode(msg)
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-r.done:
+		// The provider can exit immediately after its last response. The
+		// reader routes that response before closing done; do not lose it.
+		select {
+		case msg := <-response:
+			return decode(msg)
+		default:
+		}
 		return r.err
 	}
 }

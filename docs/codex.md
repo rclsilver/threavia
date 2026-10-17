@@ -188,7 +188,15 @@ backend exposes `mcp__threavia__update_plan` (steps with `pending`,
 `in_progress` or `completed`) and reports its calls, like any native
 `turn/plan/updated`, as a `TodoWrite` call whose input carries `todos` in
 Claude Code's shape. Only a TOOL rule naming `TodoWrite` applies to it.
-Context compaction is reported as progress.
+Context compaction is reported as progress when it starts and finishes,
+including during startup of a resumed conversation. The first turn and policy
+hook normally have 30 seconds to start. An observed compaction can extend this
+wait to at most 5 minutes 30 seconds in total; after compaction finishes, the
+hook has up to 30 seconds, within that same cap. The Job's cancellation and
+execution duration limit still apply. Compaction never authorizes tools:
+SessionStart must confirm the policy hook before any tool is allowed.
+The `compacting_context` and `context_compacted` ephemeral signals are visible
+in both clients; an active compaction refreshes its signal every 5 seconds.
 
 ### Background commands
 

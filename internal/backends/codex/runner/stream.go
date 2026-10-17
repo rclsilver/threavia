@@ -289,50 +289,67 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 		live.mu.Unlock()
 		return nil
 	}
-	// Thread setup and the first turn have separate budgets: loading config,
-	// skills or a resumed conversation must not consume the hook's deadline.
-	turnCtx, turnCancel := context.WithTimeout(ctx, c.startupTimeout)
-	defer turnCancel()
-	phase = "first turn"
-	if err := startTurn(turnCtx, p.Prompt); err != nil {
-		out.code = "PROVIDER_STARTUP_FAILED"
-		out.err = err
-		return out
+	// Setup has its own budget. During the first turn, observe compaction
+	// without allowing tools or hiding it behind the SessionStart handshake.
+	compacting := false
+	reportCompaction := func(detail string) {
+		compacting = detail == "compacting context"
+		kind := "compacting_context"
+		if !compacting {
+			kind = "context_compacted"
+		}
+		// Core forwards the kind, not the detail, of ephemeral signals. Both
+		// clients display this kind as prose without a protocol/UI change.
+		sink.Progress(reportCtx, p.RunID, p.JobID, kind, detail)
 	}
-	// Codex can defer SessionStart until the first turn. Confirm the hook ran
-	// before processing tool events, rather than assuming thread/start waits
-	// for lifecycle hooks. PreToolUse also refuses work until this handshake.
-	phase = "policy hook handshake"
-	if err := waitPolicyHook(turnCtx, live.hookReady, r); err != nil {
+	pending, startupPhase, err := c.startFirstTurn(ctx, r, live, func(callCtx context.Context) error {
+		return startTurn(callCtx, p.Prompt)
+	}, reportCompaction)
+	if err != nil {
+		phase = startupPhase
 		out.code, out.err = "PROVIDER_STARTUP_FAILED", err
+		var failed *startupTurnFailure
+		if errors.As(err, &failed) {
+			out.blocked = codexProviderBlock(failed.failure)
+		}
 		return out
 	}
-	turnCancel()
 	startupComplete = true
 	c.logger.Debug("Codex startup complete", "jobId", p.JobID, "elapsed", time.Since(started).Round(time.Millisecond))
 	actions, plans := int(p.ActionsUsed), 0
 	root := thread.Thread.ID
+	compactionPulse := time.NewTicker(5 * time.Second)
+	defer compactionPulse.Stop()
 	for {
 		var msg message
-		select {
-		case msg = <-r.events:
-		case <-live.policyUpdates:
-			// Revoke any pending automatic decision made under the old policy.
-			// The replacement turn reads the current policy and supervision.
-			if err := c.Inject(p.JobID, "The execution policy has changed. Continue the requested task under the current policy and standing instructions.", true); err != nil {
-				out.err = fmt.Errorf("apply updated supervision: %w", err)
-				return out
-			}
-			continue
-		case <-ctx.Done():
-			out.err = ctx.Err()
-			return out
-		case <-r.done:
+		if len(pending) > 0 {
+			msg, pending = pending[0], pending[1:]
+		} else {
 			select {
 			case msg = <-r.events:
-			default:
-				out.err = r.err
+			case <-compactionPulse.C:
+				if compacting {
+					reportCompaction("compacting context")
+				}
+				continue
+			case <-live.policyUpdates:
+				// Revoke any pending automatic decision made under the old policy.
+				// The replacement turn reads the current policy and supervision.
+				if err := c.Inject(p.JobID, "The execution policy has changed. Continue the requested task under the current policy and standing instructions.", true); err != nil {
+					out.err = fmt.Errorf("apply updated supervision: %w", err)
+					return out
+				}
+				continue
+			case <-ctx.Done():
+				out.err = ctx.Err()
 				return out
+			case <-r.done:
+				select {
+				case msg = <-r.events:
+				default:
+					out.err = r.err
+					return out
+				}
 			}
 		}
 		var payload map[string]any
@@ -450,8 +467,8 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 				}
 				continue
 			case "contextCompaction":
-				if msg.Method == "item/completed" {
-					sink.Progress(reportCtx, p.RunID, p.JobID, "agent.working", "context compacted")
+				if _, detail := compactionProgress(msg.Method, payload); sub == nil && detail != "" {
+					reportCompaction(detail)
 				}
 				continue
 			}

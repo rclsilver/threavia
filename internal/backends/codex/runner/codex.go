@@ -32,17 +32,18 @@ type endpoint interface {
 }
 type Options struct{ Model, ReasoningEffort, Scratch, Version, APIKey string }
 type Codex struct {
-	binary          string
-	tools           endpoint
-	options         Options
-	asker           mcp.Asker
-	logger          *slog.Logger
-	mu              sync.Mutex
-	running         map[string]*execution
-	pendingPolicies map[string]policy.Policy
-	command         func(context.Context, string) *exec.Cmd
-	webTransport    http.RoundTripper
-	startupTimeout  time.Duration
+	binary            string
+	tools             endpoint
+	options           Options
+	asker             mcp.Asker
+	logger            *slog.Logger
+	mu                sync.Mutex
+	running           map[string]*execution
+	pendingPolicies   map[string]policy.Policy
+	command           func(context.Context, string) *exec.Cmd
+	webTransport      http.RoundTripper
+	startupTimeout    time.Duration
+	compactionTimeout time.Duration
 	// available is what a Job can run by name, read from PATH at start.
 	available []string
 }
@@ -108,7 +109,7 @@ func New(binary string, tools *mcp.Server, options Options, logger *slog.Logger)
 		options.Version = "dev"
 	}
 	contract.SweepScratch(options.Scratch, logger)
-	c := &Codex{binary: binary, tools: tools, options: options, logger: logger, running: make(map[string]*execution), pendingPolicies: make(map[string]policy.Policy), available: contract.ExecutablesOnPath(), startupTimeout: 30 * time.Second}
+	c := &Codex{binary: binary, tools: tools, options: options, logger: logger, running: make(map[string]*execution), pendingPolicies: make(map[string]policy.Policy), available: contract.ExecutablesOnPath(), startupTimeout: 30 * time.Second, compactionTimeout: 5 * time.Minute}
 	c.command = func(ctx context.Context, hookCommand string) *exec.Cmd {
 		quoted, _ := json.Marshal(hookCommand)
 		group := `[{hooks=[{type="command",command=` + string(quoted) + `,timeout=2147483647}]}]`

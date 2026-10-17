@@ -111,6 +111,7 @@ func (s *recordingSink) JobCancelled(context.Context, string, string) error {
 	return nil
 }
 func (s *recordingSink) Progress(_ context.Context, _, _, kind, detail string) {
+	s.keep("progress:"+detail, map[string]any{"kind": kind})
 	s.append("progress:" + detail)
 }
 
@@ -411,7 +412,37 @@ func TestProviderProcess(t *testing.T) {
 					os.Exit(22)
 				}
 			}
+			if strings.HasPrefix(scenario, "startup-compact") {
+				beforeResponse := scenario == "startup-compact-before-response"
+				if !beforeResponse {
+					response(map[string]any{"turn": map[string]any{"id": turn, "status": "inProgress"}})
+				}
+				compaction := map[string]any{"threadId": "thread-1", "turnId": turn, "item": map[string]any{"id": "compact-1", "type": "contextCompaction"}}
+				notify("item/started", compaction)
+				if scenario == "startup-compaction-hang" {
+					continue
+				}
+				if scenario == "startup-compaction-error" {
+					notify("turn/completed", map[string]any{"threadId": "thread-1", "turn": map[string]any{"id": turn, "status": "failed", "error": map[string]any{"message": "compaction request failed", "codexErrorInfo": "serverOverloaded"}}})
+					continue
+				}
+				// Exceed the ordinary startup timeout used by regression tests.
+				time.Sleep(500 * time.Millisecond)
+				notify("item/completed", compaction)
+				if beforeResponse {
+					response(map[string]any{"turn": map[string]any{"id": turn, "status": "inProgress"}})
+				}
+				complete(turn)
+				continue
+			}
 			response(map[string]any{"turn": map[string]any{"id": turn, "status": "inProgress"}})
+			if scenario == "compact" {
+				compaction := map[string]any{"threadId": "thread-1", "turnId": turn, "item": map[string]any{"id": "compact-1", "type": "contextCompaction"}}
+				notify("item/started", compaction)
+				notify("item/completed", compaction)
+				complete(turn)
+				continue
+			}
 			if scenario == "crash" {
 				os.Exit(12)
 			}
