@@ -2,8 +2,6 @@ import { createContext, use } from 'react';
 
 export interface StreamState {
   connected: boolean;
-  /** Raises the cursor from a snapshot, so a reconnection does not rewind. */
-  seen: (sequence: number) => void;
   /**
    * What the agent was last seen doing in a Session, if anything recently.
    *
@@ -15,7 +13,6 @@ export interface StreamState {
 
 export const StreamContext = createContext<StreamState>({
   connected: false,
-  seen: () => {},
   activity: () => null,
 });
 

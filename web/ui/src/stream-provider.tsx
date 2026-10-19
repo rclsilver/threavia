@@ -38,11 +38,28 @@ export function StreamProvider({ children, demo = false }: { children: ReactNode
       return () => { cancelled = true; stop(); };
     }
     followPresence();
-    live.open(setConnected, (signal) => {
+    const open = () => live.open((connected) => {
+      setConnected(connected);
+      // Reconcile state that may have changed while this client was offline.
+      if (connected) void queries.invalidateQueries();
+    }, (signal) => {
       setActivity((current) => ({ ...current, [signal.sessionId]: signal }));
     });
-    return () => live.close();
-  }, [demo]);
+    const wake = () => {
+      if (document.visibilityState === 'visible') open();
+    };
+    open();
+    // Mobile browsers can suspend both fetch and its timeout in the background.
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('focus', wake);
+    window.addEventListener('online', wake);
+    return () => {
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('focus', wake);
+      window.removeEventListener('online', wake);
+      live.close();
+    };
+  }, [demo, queries]);
 
   // A signal is liveness, so it expires rather than lingering as a stale claim
   // that something is still running.
@@ -71,7 +88,6 @@ export function StreamProvider({ children, demo = false }: { children: ReactNode
     <StreamContext
       value={{
         connected,
-        seen: (sequence) => stream.current?.seen(sequence),
         activity: lastSeen,
       }}
     >

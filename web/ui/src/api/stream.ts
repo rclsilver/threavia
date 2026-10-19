@@ -8,6 +8,9 @@ import { authorizedFetch, CHANNEL } from './client';
 import { keys } from './keys';
 import { payloadOf, type Event, type Job, type Snapshot } from './types';
 
+// Core sends a keepalive every 20 seconds, even when no Job is running.
+const SILENCE_LIMIT = 45_000;
+
 /**
  * A liveness signal. It carries no sequence and is never stored: it says the
  * agent is still working between two things worth remembering.
@@ -51,14 +54,6 @@ export class EventStream {
   }
 
   /**
-   * Raises the cursor to what a snapshot reported. A snapshot is a point the
-   * stream has already passed, so the stream never rewinds for it.
-   */
-  seen(sequence: number) {
-    this.cursor = Math.max(this.cursor, sequence);
-  }
-
-  /**
    * Opens the stream and keeps it open.
    *
    * Read with fetch rather than EventSource, which cannot send a header: a
@@ -76,6 +71,7 @@ export class EventStream {
 
     const abort = new AbortController();
     this.abort = abort;
+    onStateChange(false);
     void this.run(abort, onStateChange);
   }
 
@@ -90,6 +86,16 @@ export class EventStream {
     let backoff = 1000;
 
     while (!abort.signal.aborted) {
+      // A network can stop delivering without closing the TCP connection.
+      // Bound both opening and reading, then replay from the last event read.
+      const connection = new AbortController();
+      const stop = () => connection.abort();
+      abort.signal.addEventListener('abort', stop, { once: true });
+      let timer = setTimeout(stop, SILENCE_LIMIT);
+      const heard = () => {
+        clearTimeout(timer);
+        timer = setTimeout(stop, SILENCE_LIMIT);
+      };
       try {
         // The stream says whether the person is looking, so Core never holds
         // a fresh connection as present by mistake until the first change.
@@ -98,49 +104,67 @@ export class EventStream {
         headers.set('X-Threavia-Active', String(active));
         const response = await authorizedFetch(`/api/v1/events?after=${this.cursor}&channel=${CHANNEL}`, {
           headers,
-          signal: abort.signal,
+          signal: connection.signal,
         });
+        if (connection.signal.aborted) {
+          void response.body?.cancel().catch(() => {});
+          throw new Error('the stream timed out');
+        }
         presenceSentWithStream(active);
         if (!response.ok || !response.body) {
           throw new Error(`the stream did not open (${response.status})`);
         }
 
+        heard();
         onStateChange(true);
         backoff = 1000;
-        await this.consume(response.body, abort.signal);
+        await this.consume(response.body, connection.signal, heard);
       } catch {
         // An abort is the caller closing the stream, not a failure.
         if (abort.signal.aborted) return;
+      } finally {
+        clearTimeout(timer);
+        abort.signal.removeEventListener('abort', stop);
+        connection.abort();
       }
 
-      onStateChange(false);
       if (abort.signal.aborted) return;
+      onStateChange(false);
       await sleep(backoff, abort.signal);
       backoff = Math.min(backoff * 2, 30_000);
     }
   }
 
   /** Reads frames until the connection ends. */
-  private async consume(body: ReadableStream<Uint8Array>, signal: AbortSignal) {
+  private async consume(body: ReadableStream<Uint8Array>, signal: AbortSignal, heard: () => void) {
     const reader = body.getReader();
     // Decoded with `stream: true` so a multi-byte character split across two
     // chunks is held until the rest of it arrives.
     const decoder = new TextDecoder();
     let buffer = '';
 
-    while (!signal.aborted) {
-      const { done, value } = await reader.read();
-      if (done) return;
+    const cancel = () => { void reader.cancel().catch(() => {}); };
+    signal.addEventListener('abort', cancel, { once: true });
+    try {
+      while (!signal.aborted) {
+        const { done, value } = await reader.read();
+        if (done || signal.aborted) return;
 
-      buffer += decoder.decode(value, { stream: true });
-      // A frame ends at a blank line. Anything after the last one is a frame
-      // still arriving, so it stays in the buffer.
-      let boundary = buffer.indexOf('\n\n');
-      while (boundary !== -1) {
-        this.frame(buffer.slice(0, boundary));
-        buffer = buffer.slice(boundary + 2);
-        boundary = buffer.indexOf('\n\n');
+        buffer += decoder.decode(value, { stream: true });
+        // A frame ends at a blank line. Anything after the last one is a frame
+        // still arriving, so it stays in the buffer.
+        let boundary = buffer.indexOf('\n\n');
+        while (boundary !== -1) {
+          heard(); // Comment keepalives count too; agent activity is optional.
+          this.frame(buffer.slice(0, boundary));
+          buffer = buffer.slice(boundary + 2);
+          boundary = buffer.indexOf('\n\n');
+        }
       }
+    } finally {
+      signal.removeEventListener('abort', cancel);
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
     }
   }
 
@@ -180,7 +204,9 @@ export class EventStream {
 
   /** Routes one event onto the cache. */
   deliver(event: Event) {
-    this.seen(event.sequence);
+    // Only consuming global events advances the cursor. A Session snapshot
+    // says nothing about missed events belonging to other Sessions.
+    this.cursor = Math.max(this.cursor, event.sequence);
     this.apply(event);
   }
 
@@ -401,9 +427,10 @@ export class EventStream {
     this.queries.setQueryData<Snapshot>(keys.snapshot(sessionId), (snapshot) => {
       if (!snapshot) return snapshot;
 
-      // A reconnection replays from the cursor, so the same event can arrive
-      // twice. The sequence is the identity Core assigned it.
-      if (snapshot.events.some((seen) => seen.sequence === event.sequence)) {
+      // A snapshot already includes Job state through its cursor, even when
+      // its recent timeline window no longer contains the replayed event.
+      // Applying that older event would rewind a finished Job to RUNNING.
+      if (event.sequence <= snapshot.cursor || snapshot.events.some((seen) => seen.sequence === event.sequence)) {
         return snapshot;
       }
 
@@ -485,10 +512,13 @@ function jobStatusFor(type: string): Job['status'] | null {
 /** A delay that gives up when the stream is closed under it. */
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener('abort', () => {
+    const done = () => {
       clearTimeout(timer);
+      signal.removeEventListener('abort', done);
       resolve();
-    }, { once: true });
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener('abort', done, { once: true });
+    if (signal.aborted) done();
   });
 }

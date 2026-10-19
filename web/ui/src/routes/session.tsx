@@ -1,7 +1,7 @@
 import { PromptAttachments } from '@/components/prompt-attachments';
 import { usePromptAttachments } from '@/lib/prompt-attachments';
 import { Link, useParams } from '@tanstack/react-router';
-import { ArrowUp, Pin, Settings2, Square } from 'lucide-react';
+import { ArrowUp, LoaderCircle, Pin, Settings2, Square } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import {
@@ -33,7 +33,7 @@ const FINISHED = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
 
 export function SessionView() {
   const { sessionId } = useParams({ from: '/sessions/$sessionId' });
-  const { seen, activity } = useStream();
+  const { activity } = useStream();
   const snapshot = useSnapshot(sessionId);
   const cancel = useCancelJob(sessionId);
   const earlier = useEarlierEvents(sessionId);
@@ -56,12 +56,6 @@ export function SessionView() {
     const own = target.closest('[data-field-scope]')?.querySelector<HTMLElement>('input, textarea');
     (own ?? message.current)?.focus({ preventScroll: true });
   };
-
-  // The snapshot is a point the stream has already passed, so a reconnection
-  // resumes from here rather than replaying what is on screen.
-  useEffect(() => {
-    if (snapshot.data) seen(snapshot.data.cursor);
-  }, [snapshot.data, seen]);
 
   // Escape stops what is running, as it interrupts Claude Code in a terminal.
   // It stops the same Job as the Stop button: the oldest one still going.
@@ -464,11 +458,12 @@ function Composer({
               variant="primary"
               size="icon"
               className="disabled:bg-surface-2 disabled:text-muted size-11 rounded-md disabled:opacity-100 sm:size-8"
-              title={touchKeyboard ? 'Send' : 'Send (Enter)'}
-              aria-label="Send"
+              title={send.isPending ? 'Sending…' : touchKeyboard ? 'Send' : 'Send (Enter)'}
+              aria-label={send.isPending ? 'Sending…' : 'Send'}
+              aria-busy={send.isPending}
               disabled={send.isPending || attachments.busy || (!message.trim() && !attachments.files.length)}
             >
-              <ArrowUp />
+              {send.isPending ? <LoaderCircle className="animate-spin" /> : <ArrowUp />}
             </Button>
           </div>
           {active && (

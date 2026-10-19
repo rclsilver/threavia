@@ -280,6 +280,9 @@ export function useSnapshot(sessionId: string | undefined) {
       // already reached past that window stays, or it would vanish from under
       // them in the middle of reading it.
       const cached = queries.getQueryData<Snapshot>(keys.snapshot(sessionId ?? ''));
+      // On a slow network, events can overtake the HTTP response. Never put
+      // the Session back in the state it had before those events arrived.
+      if (cached && cached.cursor > fresh.cursor) return cached;
       const start = fresh.events[0]?.sequence;
       if (!cached || start === undefined) return fresh;
       const older = cached.events.filter((event) => event.sequence < start);
@@ -424,13 +427,21 @@ export function usePostMessage(sessionId: string) {
         delivery === 'QUEUE' ? idempotencyKey() : undefined,
       ),
     onSuccess: (job, { delivery }) => {
+      // The response already names the accepted Job. Show it immediately,
+      // leaving a Job the stream knows alone: it may already have finished.
+      queries.setQueryData<Snapshot>(keys.snapshot(sessionId), (snapshot) => {
+        if (!snapshot || snapshot.jobs.some((known) => known.id === job.id)) return snapshot;
+        return { ...snapshot, jobs: [...snapshot.jobs, job] };
+      });
       // An interruption drops what the interrupted turn was waiting on, which
       // Core resolves without an event of its own.
       if (delivery === 'NOW') {
         if (job.status === 'RUNNING') dropInterruptedAttention(queries, sessionId, job.id, job.updatedAt);
         void queries.invalidateQueries({ queryKey: keys.attention() });
-        void queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
       }
+      // HTTP acceptance must be visible even while the event stream recovers.
+      void queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
+      void queries.invalidateQueries({ queryKey: ['sessions'] });
     },
   });
 }
