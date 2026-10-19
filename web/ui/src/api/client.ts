@@ -1,4 +1,5 @@
 import { clientId, deviceName } from '../lib/device';
+import { uuid } from '../lib/uuid';
 
 /**
  * The HTTP client.
@@ -204,5 +205,5 @@ export const api = {
 
 /** A fresh key for a command a client may retry (spec section 27). */
 export function idempotencyKey(): HeadersInit {
-  return { 'Idempotency-Key': crypto.randomUUID() };
+  return { 'Idempotency-Key': uuid() };
 }

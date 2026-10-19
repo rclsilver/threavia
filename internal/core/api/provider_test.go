@@ -267,10 +267,12 @@ func TestKnownProviderAuthenticationParksNewWorkUntilReady(t *testing.T) {
 	providerStatus(c, "AUTHENTICATION_REQUIRED", false)
 	session := c.startSession(project, c.backendID, dir, "Start after login")
 	var snapshot struct{ Jobs []domain.Job }
-	c.mustDo("GET", "/api/v1/sessions/"+session, nil, &snapshot, 200)
-	if len(snapshot.Jobs) != 1 || snapshot.Jobs[0].Status != domain.JobWaitingBackend || snapshot.Jobs[0].BackendWait == nil {
-		t.Fatal(snapshot)
-	}
+	// Connected precedes the initial reconcile on the control stream. Observe
+	// the asynchronous parking instead of requiring it in the first HTTP read.
+	waitUntil(t, "known authentication condition to park the queued job", func() bool {
+		c.mustDo("GET", "/api/v1/sessions/"+session, nil, &snapshot, 200)
+		return len(snapshot.Jobs) == 1 && snapshot.Jobs[0].Status == domain.JobWaitingBackend && snapshot.Jobs[0].BackendWait != nil
+	})
 	expectNothing(t, "inference before authentication", backend.starts)
 	providerDue(t, c, string(snapshot.Jobs[0].ID))
 	providerStatus(c, "", true)

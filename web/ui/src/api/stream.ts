@@ -190,6 +190,10 @@ export class EventStream {
     }
 
     switch (event.type) {
+      case 'review.changed':
+        void this.queries.invalidateQueries({ queryKey: ['review', event.sessionId ?? ''] });
+        void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
+        break;
       case 'user.message':
         if (payloadOf(event, 'user.message')?.delivery === 'NOW' && event.jobId) {
           dropInterruptedAttention(this.queries, event.sessionId, event.jobId, event.timestamp);

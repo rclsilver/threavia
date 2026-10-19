@@ -4,6 +4,124 @@
  */
 
 export interface paths {
+    "/api/v1/sessions/{sessionId}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["schemas"]["UUID"];
+            };
+            cookie?: never;
+        };
+        /** Read the durable human review, including drafts and revision history */
+        get: {
+            parameters: {
+                query?: {
+                    revisionId?: string;
+                    /** @description Compute changed-file lists against this earlier revision, or initial */
+                    compareTo?: string;
+                };
+                header?: never;
+                path: {
+                    sessionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Review */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Review"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Edit the review using optimistic concurrency; approval and publication are human-only */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ReviewAction"];
+                };
+            };
+            responses: {
+                /** @description Updated review */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Review"];
+                    };
+                };
+                409: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sessions/{sessionId}/review/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["schemas"]["UUID"];
+            };
+            cookie?: never;
+        };
+        /** Read an immutable file version from a declared repository on its backend */
+        get: {
+            parameters: {
+                query: {
+                    revisionId: string;
+                    repositoryId: string;
+                    path: string;
+                    /** @description Earlier revision ID, or initial for the first baseline */
+                    compareTo?: string;
+                };
+                header?: never;
+                path: {
+                    sessionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Bounded text and diff; binary and truncated flags explicitly describe omitted content */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReviewFileContent"];
+                    };
+                };
+                503: components["responses"]["Error"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -4248,6 +4366,100 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Review: {
+            sessionId: string;
+            version: number;
+            required: boolean;
+            /** @enum {string} */
+            status: "OPEN" | "WAITING" | "CORRECTING" | "APPROVED";
+            correctionJobId?: string;
+            repositories: components["schemas"]["ReviewRepository"][];
+            revisions: components["schemas"]["ReviewRevision"][];
+            threads: components["schemas"]["ReviewThread"][];
+            seen: {
+                [key: string]: string;
+            };
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ReviewRepository: {
+            id: string;
+            backendInstanceId: string;
+            name: string;
+            directory: string;
+            gitDirectory: string;
+            initialTree: string;
+            approvedTree: string;
+            /** @enum {string} */
+            baselineSource: "BEFORE_WORK" | "DECLARED" | "HISTORICAL";
+        };
+        ReviewRevision: {
+            id: string;
+            /** Format: date-time */
+            createdAt: string;
+            approved: boolean;
+            repositories: {
+                repositoryId: string;
+                baseTree: string;
+                headTree: string;
+                error?: string;
+                files: {
+                    path: string;
+                    oldPath?: string;
+                    /** @enum {string} */
+                    state: "ADDED" | "MODIFIED" | "DELETED" | "RENAMED";
+                }[];
+            }[];
+        };
+        ReviewThread: {
+            id: string;
+            revisionId: string;
+            repositoryId?: string;
+            path?: string;
+            /** @enum {string} */
+            side?: "before" | "after";
+            startLine?: number;
+            endLine?: number;
+            excerpt?: string;
+            resolved: boolean;
+            messages: {
+                id: string;
+                body: string;
+                author: string;
+                draft: boolean;
+                batchId?: string;
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+        };
+        ReviewFileContent: {
+            path: string;
+            before: string;
+            after: string;
+            diff: string;
+            binary: boolean;
+            truncated: boolean;
+        };
+        ReviewAction: {
+            /** @enum {string} */
+            action: "refresh" | "require" | "approve" | "publish" | "comment" | "edit" | "delete" | "resolve" | "seen" | "register";
+            expectedVersion: number;
+            revisionId?: string;
+            repositoryId?: string;
+            threadId?: string;
+            messageId?: string;
+            body?: string;
+            path?: string;
+            /** @enum {string} */
+            side?: "before" | "after";
+            startLine?: number;
+            endLine?: number;
+            resolved?: boolean;
+            directory?: string;
+            name?: string;
+            /** @description Client-generated UUID for retry-safe publication */
+            batchId?: string;
+        };
         /** Format: uuid */
         UUID: string;
         /**
@@ -4526,6 +4738,9 @@ export interface components {
              *     - `workspace.changed`: `{ knownDirectoryId, files, additions,
              *       deletions, directory?, baseTree?, headTree? }`, the last three
              *       present when the diff of a file can be asked for
+             *     - `review.changed`: `{ version, status, required }`, session-scoped
+             *       human review changes. Refresh the review and session snapshot;
+             *       draft bodies and code content never appear in the event.
              *     - `artifact.created`: `{ artifactId, filename, mimeType, size,
              *       title? }`, a file uploaded (Project scope) or published by an agent (Session scope)
              *     - `validation.resolved`: `{ validationId, approved, note, title, actorJobId? }`, title
@@ -4909,7 +5124,7 @@ export interface components {
              *     runs, after interrupting it or at its next step, prompt attachments,
              *     and per-session model selection.
              *      */
-            features?: ("JOB_INPUT_NOW" | "JOB_INPUT_NEXT" | "PROMPT_ATTACHMENTS" | "MODEL_SELECTION")[];
+            features?: ("JOB_INPUT_NOW" | "JOB_INPUT_NEXT" | "PROMPT_ATTACHMENTS" | "MODEL_SELECTION" | "HUMAN_REVIEW")[];
             capacity: components["schemas"]["Capacity"];
             conditions?: components["schemas"]["Condition"][];
             protocolVersion: number;

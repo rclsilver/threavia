@@ -1,0 +1,45 @@
+# Isolated human-review validation. Always give this stack its own project name.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: threavia
+      POSTGRES_PASSWORD: threavia
+      POSTGRES_DB: threavia
+    ports: ["127.0.0.1:55442:5432"]
+    volumes: ["review-postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U threavia -d threavia"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  core:
+    image: threavia-human-review:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/core.Dockerfile
+      args: { VERSION: human-review-local }
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["127.0.0.1:18081:8080", "127.0.0.1:19091:9090"]
+    environment:
+      THREAVIA_HTTP_ADDR: ":8080"
+      THREAVIA_HTTP_ALLOWED_HOSTS: "localhost:18081,127.0.0.1:18081,core:8080"
+      THREAVIA_AUTH_MODE: none
+      THREAVIA_POSTGRES_HOST: postgres
+      THREAVIA_POSTGRES_USER: threavia
+      THREAVIA_POSTGRES_PASSWORD: threavia
+      THREAVIA_POSTGRES_DATABASE: threavia
+      THREAVIA_POSTGRES_SSLMODE: disable
+      THREAVIA_GRPC_ADDR: ":9090"
+  fixture:
+    image: threavia-human-review:local
+    user: "0:0"
+    entrypoint: ["/fixture"]
+    command: ["--core-api=http://core:8080", "--core-address=core:9090", "--workspace=/data"]
+    depends_on: [core]
+    volumes: ["../../bin/review-fixture:/fixture:ro", "review-workspaces:/data"]
+    restart: on-failure
+volumes:
+  review-postgres:
+  review-workspaces:

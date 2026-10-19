@@ -151,6 +151,13 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 		if err != nil {
 			return err
 		}
+		allowed, err := tx.ReviewAllowsJob(ctx, jc.SessionID, jobID)
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			return errReviewPending
+		}
 		// A dispatch may have loaded its context before the preceding Job
 		// reported a lost conversation. Read the binding under the same lock
 		// as those reports, before reserving this Job's slot.
@@ -200,7 +207,7 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 			}
 			return
 		}
-		if errors.Is(err, postgres.ErrJobSlotTaken) || errors.Is(err, postgres.ErrNotFound) {
+		if errors.Is(err, postgres.ErrJobSlotTaken) || errors.Is(err, postgres.ErrNotFound) || errors.Is(err, errReviewPending) {
 			// Another Job holds the slot, or this one already moved on.
 			return
 		}

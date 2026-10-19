@@ -62,6 +62,7 @@ func registered(t *testing.T) []string {
 	h.registerProjects(mux)
 	h.registerBackends(mux)
 	h.registerSessions(mux)
+	h.registerReviews(mux)
 	h.registerJobs(mux)
 	h.registerAttention(mux)
 	h.registerKnowledge(mux)

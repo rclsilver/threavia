@@ -377,3 +377,36 @@ event. Removal emits Project-scoped `artifact.deleted` with `{ artifactId }`, so
 all clients refresh their artifact lists. Downloads still use authenticated
 attachment responses; clients render fetched bytes locally with their media
 MIME type, and generated HTML stays isolated from the conversation.
+# Human review extension
+
+`FeatureFlags.human_review` advertises backend support for immutable review
+snapshots and per-action mandatory-review checkpoints. `Welcome.human_review`
+enables the internal checkpoint only when Core understands it; an older Core
+does not leave a newer backend calling an unknown tool before every action.
+
+`ReviewWorkspaceRequest` / `ReviewWorkspace` are correlated by request_id and
+authenticated backend identity. SNAPSHOT takes a declared working directory
+and UUID ref_id; its Struct result is `{directory, gitDirectory, name, tree}`.
+LIST takes the saved common Git directory and two immutable tree IDs, returning
+`{files:[{path,oldPath?,state}]}` with at most 20000 paths. FILE reads one of these
+paths and returns `{path,before,after,diff,binary,truncated}`. Each text side and
+the diff are bounded to 512 KiB. Errors are explicit; a missing tree is never an
+empty file. Snapshot refs protect objects without touching the real index.
+
+Provider pre-execution hooks and direct MCP tools call the authenticated internal
+Core tool `review_checkpoint`, scoped to the current Run and Job. It is not an
+agent-facing tool spec. Core permits a bounded wait for human approval, then
+returns an explicit refusal while the durable gate remains closed. The backend
+RPC deadline is shorter than its native hook timeout, preventing fail-open
+timeouts. Reconnection and restart read the same durable gate. The regular
+agent-facing tools are `review_repository_register`, `review_read`,
+`review_request` and `review_reply`; none grants approval or resolves threads.
+
+The GATE operation acknowledges `{run_id,review_required,correction_job_id,
+review_version}` before a live request succeeds. The adapter retains the latch
+across control-stream disconnections. Gate versions only advance, preventing a
+delayed older request from undoing approval or a newer required review. A newly
+started Job inherits the current Run latch, with only the explicit correction
+Job exempted. Unrestricted Jobs keep working during a Core outage; a latched
+Job refuses further actions until approval can be confirmed. Permission answers
+are checked again before an already waiting action may execute.

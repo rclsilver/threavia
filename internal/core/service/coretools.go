@@ -40,6 +40,12 @@ func (s *Service) CoreToolRequest(ctx context.Context, instanceID domain.Backend
 	}
 
 	identity := auth.Identity{UserID: jc.OwnerID}
+	if request.GetName() == "review_checkpoint" {
+		if err := s.waitReviewCheckpoint(ctx, jc.OwnerID, jc.SessionID, jc.Job.ID); err != nil {
+			return nil, err
+		}
+		return structpb.NewStruct(map[string]any{"allowed": true})
+	}
 	scope := jobScope{
 		ProjectID:         jc.ProjectID,
 		SessionID:         jc.SessionID,
@@ -92,6 +98,8 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 	// Job. These values never come from tool input.
 	ctx = context.WithValue(domain.WithChannel(ctx, domain.Channel("agent")), managerJobKey{}, jc.JobID)
 	switch name {
+	case tools.NameReviewRepositoryRegister, tools.NameReviewRead, tools.NameReviewRequest, tools.NameReviewReply:
+		return s.reviewTool(ctx, identity, jc, name, input)
 	case tools.NameScheduleList, tools.NameScheduleCreate, tools.NameScheduleUpdate, tools.NameScheduleDelete:
 		return s.scheduleTool(ctx, identity, jc, name, input)
 	case tools.NameArtifactPublish:

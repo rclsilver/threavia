@@ -13,6 +13,13 @@ import (
 )
 
 func (c *Codex) decide(ctx context.Context, live *execution, jobID, tool string, input map[string]any, hook bool) (mcp.Decision, error) {
+	if checker, ok := c.asker.(interface {
+		ReviewCheckpoint(context.Context, string) error
+	}); ok {
+		if err := checker.ReviewCheckpoint(ctx, jobID); err != nil {
+			return mcp.Decision{Reason: err.Error()}, err
+		}
+	}
 	live.mu.Lock()
 	p, cwd, version, nativeRules := live.policy, live.cwd, live.policyVersion, live.nativeRules
 	live.mu.Unlock()

@@ -155,6 +155,7 @@ func (s ProviderAuthState) Valid() bool {
 type Feature string
 
 const (
+	FeatureHumanReview Feature = "HUMAN_REVIEW"
 	// FeatureJobInputNow: a message can interrupt the running Job and reorient
 	// it at once.
 	FeatureJobInputNow Feature = "JOB_INPUT_NOW"

@@ -136,6 +136,7 @@ func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /mcp/{token}", s.handle)
 	mux.HandleFunc("POST /policy/{token}", s.handlePolicy)
+	mux.HandleFunc("POST /review/{token}", s.handleReviewCheckpoint)
 	s.http = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 
 	go func() {
@@ -191,6 +192,11 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 	s.mu.RUnlock()
 	if gate == nil {
 		http.NotFound(w, r)
+		return
+	}
+	if err := s.BeforeAction(r.Context(), sess.jobID, sess.coreTools); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"decision": "block", "reason": err.Error()})
 		return
 	}
 	var input map[string]any
@@ -355,6 +361,9 @@ func (s *Server) call(ctx context.Context, sess *session, raw json.RawMessage) (
 	}
 	if params.Arguments == nil {
 		params.Arguments = map[string]any{}
+	}
+	if err := s.BeforeAction(ctx, sess.jobID, sess.coreTools); err != nil {
+		return map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": err.Error()}}}, nil
 	}
 
 	switch params.Name {

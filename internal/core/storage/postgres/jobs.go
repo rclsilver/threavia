@@ -87,7 +87,8 @@ func (s *Store) NextQueuedJob(ctx context.Context, runID domain.RunID) (domain.J
 		SELECT `+jobColumns+`
 		FROM jobs j
 		WHERE j.run_id = $1 AND j.status = 'QUEUED'
-		ORDER BY j.created_at
+		ORDER BY (j.id::text = COALESCE((SELECT hr.document->>'correctionJobId' FROM human_reviews hr
+		 JOIN runs rr ON rr.session_id=hr.session_id WHERE rr.id=$1),'')) DESC, j.created_at
 		LIMIT 1`, runID))
 }
 

@@ -105,6 +105,7 @@ message BackendToCore {
     WorkspaceDiff workspace_diff = 11;
     RepositoryStatus repository_status = 12;
     QuotaReport quota_report = 13;
+    ReviewWorkspace review_workspace = 14;
   }
 }
 
@@ -127,7 +128,16 @@ message CoreToBackend {
     UpdateJobPolicy update_job_policy = 13;
     WorkspaceDiffRequest workspace_diff_request = 14;
     RepositoryStatusRequest repository_status_request = 15;
+    ReviewWorkspaceRequest review_workspace_request = 16;
   }
+}
+
+// A bounded read of backend-owned review snapshots. Correlated and scoped to
+// the authenticated backend; content is never accepted from another instance.
+message ReviewWorkspace {
+  string request_id = 1;
+  google.protobuf.Struct result = 2;
+  Error error = 3;
 }
 
 // Skills the backend has locally, reported on connection and whenever they

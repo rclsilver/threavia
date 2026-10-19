@@ -9,6 +9,8 @@
  * hostname there themselves.
  */
 
+import { uuid } from './uuid';
+
 const ID_KEY = 'threavia.client.id';
 const NAME_KEY = 'threavia.client.name';
 
@@ -30,7 +32,7 @@ function store(key: string, value: string) {
 
 let id = stored(ID_KEY);
 if (!id) {
-  id = crypto.randomUUID();
+  id = uuid();
   store(ID_KEY, id);
 }
 

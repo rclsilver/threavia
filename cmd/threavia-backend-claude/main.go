@@ -28,6 +28,10 @@ import (
 var version = "dev"
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "--review-hook" {
+		mcp.RunReviewHook(os.Args[2], os.Stdin, os.Stdout)
+		return
+	}
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "threavia-backend-claude: %v\n", err)
 		os.Exit(1)

@@ -63,6 +63,54 @@ security:
   - bearerAuth: []
 
 paths:
+  /api/v1/sessions/{sessionId}/review:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+    get:
+      tags: [sessions]
+      summary: Read the durable human review, including drafts and revision history
+      parameters:
+        - { name: revisionId, in: query, schema: { type: string } }
+        - { name: compareTo, in: query, schema: { type: string }, description: 'Compute changed-file lists against this earlier revision, or initial' }
+      responses:
+        '200':
+          description: Review
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+    post:
+      tags: [sessions]
+      summary: Edit the review using optimistic concurrency; approval and publication are human-only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewAction' }
+      responses:
+        '200':
+          description: Updated review
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/sessions/{sessionId}/review/file:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+    get:
+      tags: [sessions]
+      summary: Read an immutable file version from a declared repository on its backend
+      parameters:
+        - { name: revisionId, in: query, required: true, schema: { type: string } }
+        - { name: repositoryId, in: query, required: true, schema: { type: string } }
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: compareTo, in: query, schema: { type: string }, description: 'Earlier revision ID, or initial for the first baseline' }
+      responses:
+        '200':
+          description: Bounded text and diff; binary and truncated flags explicitly describe omitted content
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewFileContent' }
+        '503': { $ref: '#/components/responses/Error' }
   /healthz:
     get:
       tags: [operational]
@@ -2330,6 +2378,118 @@ components:
                   message: { type: string }
 
   schemas:
+    Review:
+      type: object
+      required: [sessionId, version, required, status, repositories, revisions, threads, seen, updatedAt]
+      properties:
+        sessionId: { type: string }
+        version: { type: integer }
+        required: { type: boolean }
+        status: { type: string, enum: [OPEN, WAITING, CORRECTING, APPROVED] }
+        correctionJobId: { type: string }
+        repositories:
+          type: array
+          items: { $ref: '#/components/schemas/ReviewRepository' }
+        revisions:
+          type: array
+          items: { $ref: '#/components/schemas/ReviewRevision' }
+        threads:
+          type: array
+          items: { $ref: '#/components/schemas/ReviewThread' }
+        seen: { type: object, additionalProperties: { type: string } }
+        updatedAt: { type: string, format: date-time }
+    ReviewRepository:
+      type: object
+      required: [id, backendInstanceId, name, directory, gitDirectory, initialTree, approvedTree, baselineSource]
+      properties:
+        id: { type: string }
+        backendInstanceId: { type: string }
+        name: { type: string }
+        directory: { type: string }
+        gitDirectory: { type: string }
+        initialTree: { type: string }
+        approvedTree: { type: string }
+        baselineSource: { type: string, enum: [BEFORE_WORK, DECLARED, HISTORICAL] }
+    ReviewRevision:
+      type: object
+      required: [id, createdAt, repositories, approved]
+      properties:
+        id: { type: string }
+        createdAt: { type: string, format: date-time }
+        approved: { type: boolean }
+        repositories:
+          type: array
+          items:
+            type: object
+            required: [repositoryId, baseTree, headTree, files]
+            properties:
+              repositoryId: { type: string }
+              baseTree: { type: string }
+              headTree: { type: string }
+              error: { type: string }
+              files:
+                type: array
+                items:
+                  type: object
+                  required: [path, state]
+                  properties:
+                    path: { type: string }
+                    oldPath: { type: string }
+                    state: { type: string, enum: [ADDED, MODIFIED, DELETED, RENAMED] }
+    ReviewThread:
+      type: object
+      required: [id, revisionId, resolved, messages]
+      properties:
+        id: { type: string }
+        revisionId: { type: string }
+        repositoryId: { type: string }
+        path: { type: string }
+        side: { type: string, enum: [before, after] }
+        startLine: { type: integer }
+        endLine: { type: integer }
+        excerpt: { type: string }
+        resolved: { type: boolean }
+        messages:
+          type: array
+          items:
+            type: object
+            required: [id, body, author, draft, createdAt]
+            properties:
+              id: { type: string }
+              body: { type: string }
+              author: { type: string }
+              draft: { type: boolean }
+              batchId: { type: string }
+              createdAt: { type: string, format: date-time }
+    ReviewFileContent:
+      type: object
+      required: [path, before, after, diff, binary, truncated]
+      properties:
+        path: { type: string }
+        before: { type: string }
+        after: { type: string }
+        diff: { type: string }
+        binary: { type: boolean }
+        truncated: { type: boolean }
+    ReviewAction:
+      type: object
+      required: [action, expectedVersion]
+      properties:
+        action: { type: string, enum: [refresh, require, approve, publish, comment, edit, delete, resolve, seen, register] }
+        expectedVersion: { type: integer }
+        revisionId: { type: string }
+        repositoryId: { type: string }
+        threadId: { type: string }
+        messageId: { type: string }
+        body: { type: string, maxLength: 20000 }
+        path: { type: string }
+        side: { type: string, enum: [before, after] }
+        startLine: { type: integer, minimum: 1 }
+        endLine: { type: integer, minimum: 1 }
+        resolved: { type: boolean }
+        directory: { type: string }
+        name: { type: string }
+        batchId: { type: string, description: Client-generated UUID for retry-safe publication }
     UUID:
       type: string
       format: uuid
@@ -2629,6 +2789,9 @@ components:
             - `workspace.changed`: `{ knownDirectoryId, files, additions,
               deletions, directory?, baseTree?, headTree? }`, the last three
               present when the diff of a file can be asked for
+            - `review.changed`: `{ version, status, required }`, session-scoped
+              human review changes. Refresh the review and session snapshot;
+              draft bodies and code content never appear in the event.
             - `artifact.created`: `{ artifactId, filename, mimeType, size,
               title? }`, a file uploaded (Project scope) or published by an agent (Session scope)
             - `validation.resolved`: `{ validationId, approved, note, title, actorJobId? }`, title
@@ -3116,7 +3279,7 @@ components:
             and per-session model selection.
           items:
             type: string
-            enum: [JOB_INPUT_NOW, JOB_INPUT_NEXT, PROMPT_ATTACHMENTS, MODEL_SELECTION]
+            enum: [JOB_INPUT_NOW, JOB_INPUT_NEXT, PROMPT_ATTACHMENTS, MODEL_SELECTION, HUMAN_REVIEW]
         capacity: { $ref: "#/components/schemas/Capacity" }
         conditions:
           type: array

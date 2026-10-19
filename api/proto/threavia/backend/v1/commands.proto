@@ -20,6 +20,27 @@ message Welcome {
   // Allows JobWaitingBackend. Absent/false means the backend must retain
   // terminal failure behavior rather than strand a Job on an older Core.
   bool provider_recovery = 5;
+  // The Core understands human reviews and the internal review checkpoint.
+  bool human_review = 6;
+}
+
+// SNAPSHOT captures the working tree and protects the objects using ref_id.
+// LIST and FILE read immutable trees from the saved git directory, including
+// after a linked worktree was removed. No repository content is executed.
+message ReviewWorkspaceRequest {
+  string request_id = 1;
+  string operation = 2;
+  string directory = 3;
+  string base_tree = 4;
+  string head_tree = 5;
+  string path = 6;
+  string ref_id = 7;
+  string old_path = 8;
+  // GATE acknowledges the review latch before a user-facing action succeeds.
+  string run_id = 9;
+  bool review_required = 10;
+  string correction_job_id = 11;
+  uint64 review_version = 12;
 }
 
 // ExecutionPolicy (spec section 17). Limits must be enforced by Core/backend,

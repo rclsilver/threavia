@@ -67,7 +67,8 @@ type Service struct {
 
 	// repositories holds the repository status requests waiting for a
 	// backend's answer, by request id.
-	repositories sync.Map
+	repositories   sync.Map
+	reviewRequests sync.Map
 
 	// pushKeys is the Web Push identity, loaded or made on first use.
 	pushMu   sync.Mutex

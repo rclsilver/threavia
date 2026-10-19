@@ -70,6 +70,11 @@ func (a *Adapter) AskValidation(ctx context.Context, jobID, toolName string, inp
 
 	select {
 	case decision := <-w.approved:
+		if decision.Approved {
+			if err := a.ReviewCheckpoint(ctx, jobID); err != nil {
+				return mcp.Decision{Reason: err.Error()}, err
+			}
+		}
 		return decision, nil
 	case err := <-w.failed:
 		return mcp.Decision{}, err

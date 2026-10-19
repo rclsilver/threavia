@@ -47,12 +47,15 @@ type Adapter struct {
 	providerMu       sync.Mutex
 	providerBlock    *runner.ProviderBlock
 	providerRecovery bool
+	humanReview      bool
+	reviewGates      map[string]reviewGate
 }
 
 // jobState is what the adapter remembers about a Job it is running.
 type jobState struct {
-	runID    string
-	requests map[string]struct{}
+	reviewRequired bool
+	runID          string
+	requests       map[string]struct{}
 	// knownDirectoryID is the KnownDirectory Core resolved for this Job, when
 	// there is one. It attributes a change summary to a directory.
 	knownDirectoryID string
@@ -84,6 +87,7 @@ func New(cfg Config, providerRunner runner.Runner, store state.Store, logger *sl
 		localSkills: skills.Discover(cfg.Provider.LocalSkillRoots),
 		jobs:        make(map[string]*jobState),
 		waiters:     make(map[string]*waiter),
+		reviewGates: make(map[string]reviewGate),
 	}
 }
 
@@ -111,6 +115,9 @@ func (a *Adapter) OnConnected(ctx context.Context, welcome *backendv1.Welcome) e
 	a.providerMu.Lock()
 	a.providerRecovery = welcome.GetProviderRecovery()
 	a.providerMu.Unlock()
+	a.mu.Lock()
+	a.humanReview = welcome.GetHumanReview()
+	a.mu.Unlock()
 	sdk := a.sdk()
 	if sdk == nil {
 		return nil
@@ -181,6 +188,9 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 		policy:           a.policyFor(cmd.GetRunId(), cmd.GetExecutionPolicy()),
 		knownDirectoryID: cmd.GetProjectContext().GetKnownDirectoryId(),
 	}
+	if gate, ok := a.reviewGates[params.RunID]; ok {
+		a.jobs[params.JobID].reviewRequired = gate.required && gate.correctionJobID != params.JobID
+	}
 	a.mu.Unlock()
 
 	if err := a.store.SaveJob(context.WithoutCancel(ctx), state.JobRecord{
@@ -233,6 +243,16 @@ func (a *Adapter) execute(ctx context.Context, params runner.StartParams, pc *ba
 	}
 	a.mu.Unlock()
 
+	// Capture the initial cwd before the provider can modify or commit files.
+	// Extra repositories are declared by the agent before it works in them.
+	a.mu.Lock()
+	reviewEnabled := a.humanReview
+	a.mu.Unlock()
+	if reviewEnabled {
+		if _, err := a.CallCoreTool(ctx, params.JobID, "review_repository_register", map[string]any{"directory": workingDirectory, "beforeWork": true}, ""); err != nil {
+			a.logger.Warn("review baseline could not be captured", "error", err)
+		}
+	}
 	if err := a.runner.Run(ctx, params, a); err != nil {
 		a.logger.Error("job failed to run",
 			slog.String("jobId", params.JobID), slog.String("error", err.Error()))

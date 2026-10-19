@@ -1,8 +1,11 @@
 import { ApiError } from '@/api/client';
 import { announceJobEnded } from '@/lib/job-ended';
+import { uuid } from '@/lib/uuid';
 import type { Event } from '@/api/types';
 
 import * as data from './data';
+import { demoReview, demoReviewAction, demoReviewFile } from './review';
+import type { ReviewAction } from '@/api/reviews';
 
 /**
  * Core, played in memory.
@@ -45,7 +48,7 @@ const state = {
 
 let sequence = 9000;
 const nowIso = () => new Date().toISOString();
-const newId = () => crypto.randomUUID();
+const newId = uuid;
 const lifecycleListeners = new Set<(event: Event) => void>();
 
 /** Reuse the real clients' event path for changes made in the playable demo. */
@@ -321,6 +324,9 @@ function recordScheduleChange(schedule: Json, action: string) {
 type Handler = (match: RegExpMatchArray, body: Json, query: URLSearchParams) => unknown;
 
 const routes: [string, RegExp, Handler][] = [
+  ['GET', /^\/api\/v1\/sessions\/([^/]+)\/review$/, (m) => { sessionOf(m[1]); return demoReview(m[1]); }],
+  ['GET', /^\/api\/v1\/sessions\/([^/]+)\/review\/file$/, (m, _body, query) => { sessionOf(m[1]); return demoReviewFile(m[1], query); }],
+  ['POST', /^\/api\/v1\/sessions\/([^/]+)\/review$/, (m, body) => { const session = sessionOf(m[1]); const review = demoReviewAction(m[1], body as unknown as ReviewAction); emitLifecycle('review.changed', text(session.projectId), { version: review.version, status: review.status, required: review.required }, m[1]); return review; }],
   ['PUT', /^\/api\/v1\/me\/default-backend$/, (_m, body) => {
     const id = body.backendInstanceId;
     if (id !== null && !state.backends.some((backend) => backend.id === id && backend.ownershipStatus === 'CLAIMED')) throw notFound('This backend');

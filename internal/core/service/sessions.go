@@ -397,6 +397,11 @@ func (s *Service) deliverToRunningJob(ctx context.Context, identity auth.Identit
 		if err := tx.TouchSession(ctx, sessionID); err != nil {
 			return err
 		}
+		if allowed, err := tx.ReviewAllowsJob(ctx, sessionID, job.ID); err != nil {
+			return err
+		} else if !allowed {
+			return fmt.Errorf("%w: approve the mandatory review or send its correction batch first", ErrConflict)
+		}
 		if delivery == DeliveryNow {
 			// The turn that asked is the one being interrupted: what it was
 			// waiting on no longer needs an answer.

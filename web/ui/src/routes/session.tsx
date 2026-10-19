@@ -21,6 +21,7 @@ import { BackendInfo } from '@/components/backend-info';
 import { ActionError } from '@/components/ui/action-error';
 import { Badge } from '@/components/ui/badge';
 import { RepositoryStatus } from '@/components/repository-status';
+import { ReviewNotice } from '@/components/review-notice';
 import { Timeline, type Pending } from '@/components/timeline';
 import { Button } from '@/components/ui/button';
 import { useStream } from '@/use-stream';
@@ -160,6 +161,7 @@ export function SessionView() {
           </div>
         </div>
         <div className="flex items-center gap-1">
+        <Button asChild size="lg" variant="ghost"><Link to="/sessions/$sessionId/review" params={{ sessionId }} data-tour="open-review">Review</Link></Button>
         <PinButton session={data.session} />
         {/* Everything about the Session that is not the conversation is a page
             of its own, one step away. */}
@@ -170,6 +172,8 @@ export function SessionView() {
         </Button>
         </div>
       </header>
+
+      <ReviewNotice sessionId={sessionId} />
 
       <Timeline
         events={data.events}

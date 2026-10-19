@@ -92,6 +92,10 @@ const STEPS: Step[] = [
     body: 'Once a job is done, its thirty commands become one line between your question and the answer. Open it to read every step: what ran, and what came back.',
   },
   {
+    path: `${SESSION(IDS.certManager)}/review`, target: '[data-tour="review"]', title: 'Review changes across repositories',
+    body: 'Browse the file tree, tap a line to save a draft, then request all corrections together. Require validation to pause the agent until you approve; the demo correction is simulated.',
+  },
+  {
     path: SESSION(IDS.ingress),
     target: '[data-tour="copy-response"]',
     title: 'Take an answer with you',

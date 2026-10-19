@@ -75,6 +75,11 @@
           "name": "Backends",
           "visibility": "collapsed",
           "contextualTitle": "Threavia"
+        },
+        {
+          "id": "threavia.reviews",
+          "name": "Code Review",
+          "visibility": "collapsed"
         }
       ]
     },
@@ -406,6 +411,72 @@
         "title": "Make Global — All My Projects",
         "category": "Threavia",
         "icon": "$(globe)"
+      },
+      {
+        "command": "threavia.openReview",
+        "title": "Review Changes",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.review.action",
+        "title": "Review Action",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.review.refresh",
+        "title": "Refresh Review Changes",
+        "category": "Threavia",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "threavia.review.openFile",
+        "title": "Open Review Diff",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.review.openThread",
+        "title": "Open Review Discussion",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.review.saveComment",
+        "title": "Save Draft",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.review.resolve",
+        "title": "Resolve / Reopen Discussion",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.review.editDraft",
+        "title": "Edit Draft",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.review.deleteDraft",
+        "title": "Discard Draft",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.review.viewed",
+        "title": "Mark Viewed",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.review.fileComment",
+        "title": "Comment on File",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.review.saveEditedDraft",
+        "title": "Save Draft",
+        "category": "Threavia"
+      },
+      {
+        "command": "threavia.review.cancelEditDraft",
+        "title": "Cancel Edit",
+        "category": "Threavia"
       }
     ],
     "submenus": [
@@ -583,6 +654,50 @@
         {
           "command": "threavia.makeDecisionGlobal",
           "when": "false"
+        },
+        {
+          "command": "threavia.review.action",
+          "when": "false"
+        },
+        {
+          "command": "threavia.review.openFile",
+          "when": "false"
+        },
+        {
+          "command": "threavia.review.openThread",
+          "when": "false"
+        },
+        {
+          "command": "threavia.review.saveComment",
+          "when": "false"
+        },
+        {
+          "command": "threavia.review.resolve",
+          "when": "false"
+        },
+        {
+          "command": "threavia.review.editDraft",
+          "when": "false"
+        },
+        {
+          "command": "threavia.review.deleteDraft",
+          "when": "false"
+        },
+        {
+          "command": "threavia.review.viewed",
+          "when": "false"
+        },
+        {
+          "command": "threavia.review.fileComment",
+          "when": "false"
+        },
+        {
+          "command": "threavia.review.saveEditedDraft",
+          "when": "false"
+        },
+        {
+          "command": "threavia.review.cancelEditDraft",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -657,6 +772,11 @@
           "command": "threavia.refresh",
           "when": "view == threavia.artifacts",
           "group": "navigation@3"
+        },
+        {
+          "command": "threavia.review.refresh",
+          "when": "view == threavia.reviews",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
@@ -873,6 +993,21 @@
           "command": "threavia.makeDecisionGlobal",
           "when": "view == threavia.memory && viewItem =~ /^decision\\.(important|normal)\\.project$/",
           "group": "2_change@2"
+        },
+        {
+          "command": "threavia.openReview",
+          "when": "view == threavia.sidebar && viewItem == session",
+          "group": "navigation"
+        },
+        {
+          "command": "threavia.review.viewed",
+          "when": "view == threavia.reviews && viewItem == reviewFile",
+          "group": "review"
+        },
+        {
+          "command": "threavia.review.fileComment",
+          "when": "view == threavia.reviews && viewItem == reviewFile",
+          "group": "review"
         }
       ],
       "editor/title": [
@@ -890,6 +1025,11 @@
           "command": "threavia.openInBrowser",
           "when": "activeWebviewPanelId == 'threavia.conversation' && !threavia.conversationDraft",
           "group": "navigation@2"
+        },
+        {
+          "command": "threavia.openReview",
+          "when": "activeWebviewPanelId == threavia.conversation",
+          "group": "navigation"
         }
       ],
       "editor/context": [
@@ -921,6 +1061,44 @@
           "command": "threavia.setTaskDone",
           "when": "viewItem =~ /^task\\.(ready|waiting|inProgress)$/",
           "group": "1_status@3"
+        }
+      ],
+      "comments/commentThread/context": [
+        {
+          "command": "threavia.review.saveComment",
+          "when": "commentController == threavia.review",
+          "group": "inline"
+        }
+      ],
+      "comments/commentThread/title": [
+        {
+          "command": "threavia.review.resolve",
+          "when": "commentController == threavia.review && commentThread == reviewThread",
+          "group": "navigation"
+        }
+      ],
+      "comments/comment/title": [
+        {
+          "command": "threavia.review.editDraft",
+          "when": "commentController == threavia.review && comment == reviewDraft",
+          "group": "inline"
+        },
+        {
+          "command": "threavia.review.deleteDraft",
+          "when": "commentController == threavia.review && comment == reviewDraft",
+          "group": "inline"
+        }
+      ],
+      "comments/comment/context": [
+        {
+          "command": "threavia.review.saveEditedDraft",
+          "when": "commentController == threavia.review && comment == reviewDraft",
+          "group": "inline"
+        },
+        {
+          "command": "threavia.review.cancelEditDraft",
+          "when": "commentController == threavia.review && comment == reviewDraft",
+          "group": "inline"
         }
       ]
     },

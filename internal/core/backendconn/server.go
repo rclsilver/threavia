@@ -120,6 +120,7 @@ func (s *Server) Connect(stream backendv1.BackendControl_ConnectServer) error {
 				ServerTime:               timestamppb.Now(),
 				HeartbeatIntervalSeconds: uint32(s.opts.HeartbeatInterval.Seconds()),
 				ProviderRecovery:         true,
+				HumanReview:              true,
 			},
 		},
 	}
@@ -258,6 +259,13 @@ func (s *Server) handle(ctx context.Context, instanceID domain.BackendInstanceID
 
 	case *backendv1.BackendToCore_QuotaReport:
 		s.sink.QuotaReport(ctx, instanceID, body.QuotaReport)
+		return nil
+	case *backendv1.BackendToCore_ReviewWorkspace:
+		if sink, ok := s.sink.(interface {
+			ReviewWorkspace(context.Context, domain.BackendInstanceID, *backendv1.ReviewWorkspace)
+		}); ok {
+			sink.ReviewWorkspace(ctx, instanceID, body.ReviewWorkspace)
+		}
 		return nil
 
 	case *backendv1.BackendToCore_StatusUpdate:

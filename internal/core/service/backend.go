@@ -9,6 +9,7 @@ import (
 	"time"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
+	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/backendconn"
 	"github.com/rclsilver/threavia/internal/core/domain"
 	"github.com/rclsilver/threavia/internal/core/events"
@@ -39,6 +40,9 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 	}
 
 	var features []domain.Feature
+	if hello.GetFeatures().GetHumanReview() {
+		features = append(features, domain.FeatureHumanReview)
+	}
 	if hello.GetFeatures().GetModelSelection() {
 		features = append(features, domain.FeatureModelSelection)
 	}
@@ -542,9 +546,23 @@ func (s *Service) JobEvent(ctx context.Context, instanceID domain.BackendInstanc
 	scope := domain.Scope{ProjectID: jc.ProjectID, SessionID: jc.SessionID, RunID: jc.Run.ID, JobID: jobID}
 	b := &batch{ownerID: jc.OwnerID}
 	duplicate := false
+	isReviewCorrection := false
+	switch event.GetBody().(type) {
+	case *backendv1.JobEvent_JobCompleted, *backendv1.JobEvent_JobFailed, *backendv1.JobEvent_JobCancelled:
+		review, err := s.store.ReadReview(ctx, jc.OwnerID, jc.SessionID)
+		if err != nil {
+			return 0, err
+		}
+		isReviewCorrection = review.CorrectionJobID == jc.Job.ID
+	}
 
 	err = s.store.WithTx(ctx, func(tx *postgres.Store) error {
 		if eventType != "" {
+			if isReviewCorrection {
+				if _, err := tx.LockSession(ctx, jc.OwnerID, jc.SessionID); err != nil {
+					return err
+				}
+			}
 			record, err := s.newRecord(eventType, scope, payload)
 			if err != nil {
 				return err
@@ -566,7 +584,14 @@ func (s *Service) JobEvent(ctx context.Context, instanceID domain.BackendInstanc
 			}
 			b.add(record)
 		}
-		return s.applyEvent(ctx, tx, b, jc, scope, event)
+		if err := s.applyEvent(ctx, tx, b, jc, scope, event); err != nil {
+			return err
+		}
+		switch event.GetBody().(type) {
+		case *backendv1.JobEvent_JobCompleted, *backendv1.JobEvent_JobFailed, *backendv1.JobEvent_JobCancelled:
+			return s.finishReviewCorrection(ctx, tx, b, jc)
+		}
+		return nil
 	})
 	if err != nil {
 		return 0, err
@@ -767,6 +792,17 @@ func (s *Service) afterEvent(ctx context.Context, scope domain.Scope, event *bac
 		s.dispatchNext(ctx, scope.RunID)
 		jc, err := s.store.LoadJobContext(ctx, scope.JobID)
 		if err == nil {
+			go func() {
+				captureCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 60*time.Second)
+				defer cancel()
+				r, err := s.ReadReview(captureCtx, auth.Identity{UserID: jc.OwnerID}, jc.SessionID)
+				if err == nil && len(r.Repositories) > 0 && (r.Status != "CORRECTING" || r.CorrectionJobID == jc.Job.ID) {
+					_, err = s.refreshReview(captureCtx, auth.Identity{UserID: jc.OwnerID}, r)
+				}
+				if err != nil && !errors.Is(err, ErrConflict) {
+					s.logger.Warn("could not capture completed review changes", "error", err)
+				}
+			}()
 			s.wakeManagedAttention(ctx, jc.OwnerID, jc.ProjectID, jc.SessionID)
 		}
 	}

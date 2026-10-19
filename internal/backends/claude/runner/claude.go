@@ -553,6 +553,18 @@ func (c *Claude) command(ctx context.Context, params StartParams, scratch, nativ
 		c.logger.Error("cannot render the provider permissions, falling back to the gate alone",
 			slog.String("jobId", params.JobID), slog.String("error", err.Error()))
 	} else {
+		if endpoint := c.tools.ReviewEndpoint(params.JobID); endpoint != "" {
+			if executable, err := os.Executable(); err == nil {
+				var settingsMap map[string]any
+				if json.Unmarshal([]byte(settings), &settingsMap) == nil {
+					command := "'" + strings.ReplaceAll(executable, "'", "'\"'\"'") + "' --review-hook '" + endpoint + "'"
+					settingsMap["hooks"] = map[string]any{"PreToolUse": []any{map[string]any{"matcher": "*", "hooks": []any{map[string]any{"type": "command", "command": command, "timeout": 20}}}}}
+					if encoded, err := json.Marshal(settingsMap); err == nil {
+						settings = string(encoded)
+					}
+				}
+			}
+		}
 		args = append(args, "--settings", settings)
 	}
 	if params.SkillDirectory != "" {

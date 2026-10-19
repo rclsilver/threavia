@@ -21,6 +21,12 @@ func TestSessionModelsPersistIndependentlyAndApplyToTheNextJob(t *testing.T) {
 		{Id: "beta", Name: "Beta", Efforts: []string{"low", "high", "max"}, DefaultEffort: "high"},
 	}}
 	backend := c.connectBackendWithReconcileGate(credential, nil, catalog)
+	// Connected is observed in the SDK before Core finishes persisting Hello.
+	// Explicit model preferences require the advertised catalog to be stored.
+	waitUntil(t, "the advertised model catalog", func() bool {
+		instance, err := c.store.GetBackendInstance(ctx, domain.UserID("thomas"), domain.BackendInstanceID(backendID))
+		return err == nil && instance.ModelCatalog != nil && len(instance.ModelCatalog.Models) == len(catalog.Models)
+	})
 	start := func(model, effort string) service.StartSessionResult {
 		var result service.StartSessionResult
 		c.mustDo(http.MethodPost, "/api/v1/sessions/start", map[string]any{"projectId": project, "backendInstanceId": backendID, "message": "start", "model": model, "effort": effort}, &result, http.StatusCreated)

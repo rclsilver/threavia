@@ -26,6 +26,7 @@ import { BackendsView } from './tree/backends';
 import { UNTITLED, titleOf } from './tree/model';
 import { SidebarProvider, type Node, type RequestNode, type SessionNode } from './tree/provider';
 import { PathResolver } from './workspace/resolve';
+import { Reviews } from './review/view';
 
 /**
  * What the extension exposes to the code that builds on it: every Core, with
@@ -43,6 +44,8 @@ export function activate(context: vscode.ExtensionContext): Threavia {
   const documents = new VirtualDocuments('threavia-diff');
   const artifactDocuments = new VirtualDocuments('threavia-artifact');
   const cores = new Cores(context, identity, artifactDocuments);
+  const reviews = new Reviews(cores);
+  context.subscriptions.push(reviews);
 
   const sidebar = new SidebarProvider(cores);
   const tree = vscode.window.createTreeView('threavia.sidebar', {
@@ -425,6 +428,23 @@ export function activate(context: vscode.ExtensionContext): Threavia {
   // which hands the command nothing that names the Session.
   const targetSession = (target: unknown): SessionRef | undefined =>
     (target ? sessionRefOf(target, cores.ids) : undefined) ?? panels.activeSession;
+
+  const reviewAction = async (work: () => Promise<unknown>) => {
+    try { await work(); } catch (error) { void vscode.window.showErrorMessage(`Review action did not complete: ${error instanceof Error ? error.message : String(error)}. Your saved drafts are preserved.`); }
+  };
+  command('threavia.openReview', (target: unknown) => { const ref = targetSession(target); if (ref) return reviewAction(() => reviews.open(ref)); });
+  command('threavia.review.action', (action: string) => reviewAction(() => reviews.execute(action)));
+  command('threavia.review.refresh', () => reviewAction(() => reviews.execute('refresh')));
+  command('threavia.review.openFile', (node: Parameters<Reviews['openFile']>[0]) => reviewAction(() => reviews.openFile(node)));
+  command('threavia.review.openThread', (id: string) => reviewAction(() => reviews.openThread(id)));
+  command('threavia.review.saveComment', async (reply: vscode.CommentReply) => { try { await reviews.saveComment(reply); } catch (error) { void vscode.window.showErrorMessage(`Draft not saved: ${error instanceof Error ? error.message : 'Unexpected error'}. Retry without discarding your input.`); throw error; } });
+  command('threavia.review.resolve', (thread: vscode.CommentThread) => reviewAction(() => reviews.resolve(thread)));
+  command('threavia.review.editDraft', (comment: Parameters<Reviews['editDraft']>[0]) => reviews.editDraft(comment));
+  command('threavia.review.saveEditedDraft', (comment: Parameters<Reviews['saveEditedDraft']>[0]) => reviewAction(() => reviews.saveEditedDraft(comment)));
+  command('threavia.review.cancelEditDraft', () => reviewAction(() => reviews.cancelEditDraft()));
+  command('threavia.review.deleteDraft', (comment: Parameters<Reviews['deleteDraft']>[0]) => reviewAction(() => reviews.deleteDraft(comment)));
+  command('threavia.review.viewed', (node: Parameters<Reviews['fileAction']>[0]) => reviewAction(() => reviews.fileAction(node, 'seen')));
+  command('threavia.review.fileComment', (node: Parameters<Reviews['fileAction']>[0]) => reviewAction(() => reviews.fileAction(node, 'comment')));
 
   command('threavia.openInBrowser', (target: unknown) => {
     const ref = targetSession(target);

@@ -318,6 +318,16 @@ func (c *Client) dispatch(ctx context.Context, msg *backendv1.CoreToBackend) {
 	case *backendv1.CoreToBackend_WorkspaceDiffRequest:
 		go c.answerDiff(ctx, body.WorkspaceDiffRequest)
 		return
+	case *backendv1.CoreToBackend_ReviewWorkspaceRequest:
+		go func() {
+			answer := &backendv1.ReviewWorkspace{Error: &backendv1.Error{Code: "UNSUPPORTED", Message: "This backend does not support human reviews."}}
+			if reader, ok := c.handler.(ReviewWorkspaceReader); ok {
+				answer = reader.OnReviewWorkspaceRequest(ctx, body.ReviewWorkspaceRequest)
+			}
+			answer.RequestId = body.ReviewWorkspaceRequest.GetRequestId()
+			_ = c.enqueue(ctx, &backendv1.BackendToCore{Message: &backendv1.BackendToCore_ReviewWorkspace{ReviewWorkspace: answer}})
+		}()
+		return
 
 	case *backendv1.CoreToBackend_RepositoryStatusRequest:
 		go c.answerRepositoryStatus(ctx, body.RepositoryStatusRequest)

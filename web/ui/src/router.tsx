@@ -24,6 +24,7 @@ import {
   SkillsView,
 } from '@/routes/project';
 import { SessionView } from '@/routes/session';
+import { ReviewView } from '@/routes/review';
 import { SettingsView } from '@/routes/settings';
 import { ACCOUNT_TABS } from '@/lib/account-tabs';
 import { SessionSettingsView, type SettingsTab } from '@/routes/session-settings';
@@ -74,6 +75,8 @@ const sessionRoute = createRoute({
   path: '/sessions/$sessionId',
   component: SessionView,
 });
+
+const reviewRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sessions/$sessionId/review', component: ReviewView });
 
 /** The person's settings, one tab per URL; an unknown tab lands on the first. */
 const settingsRoute = createRoute({
@@ -205,6 +208,7 @@ const routeTree = rootRoute.addChildren([
   waitingRoute,
   draftRoute,
   sessionRoute,
+  reviewRoute,
   sessionSettingsRoute,
   sessionSettingsIndexRoute,
   settingsRoute,
