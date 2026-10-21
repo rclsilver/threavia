@@ -1,4 +1,9 @@
-# Managing delegated sessions
+# Managing sessions across projects
+
+An agent can list, read and message sessions owned by the signed-in user,
+including sessions in other projects. It can also create a session in a chosen
+project. The four tools use the same ownership checks as the HTTP API; another
+user's projects and sessions are inaccessible.
 
 A person can give a development or bugfix task to one manager conversation.
 That agent creates worker sessions, sends assignments and feedback, answers
@@ -14,15 +19,22 @@ as `mcp__threavia__<name>` when a Job starts:
 
 | Tool | Purpose |
 | --- | --- |
-| `session_create` | Start delegated work with a self-contained `message` and optional `title` and `idempotencyKey`. Returns `session`, `run` and `job`. |
-| `session_list` | Find this conversation's directly managed sessions, across runs. `includeArchived` includes finished sessions put aside. |
-| `session_read` | Read `session`, up to 50 recent Jobs (unfinished first), pending `attention`, and recent `events`. `limit` is 1–100 (default 50); `before` pages backwards using `beforeSequence`. |
-| `session_send` | Send feedback. `QUEUE` creates a later Job, `NEXT` reaches the next step, `NOW` interrupts work and abandons pending questions and permissions. NEXT/NOW require backend support. |
+| `session_create` | Start a session with a self-contained `message` and optional `title`, `projectId`, `workingDirectoryId` and `idempotencyKey`. The default is the current project. Returns `session`, `run` and `job`. The created session is a direct delegate. |
+| `session_list` | `scope: project` (default) lists the current project, or `projectId`; `all` lists sessions across the user's projects; `managed` lists this conversation's direct delegates across projects, optionally filtered by `projectId`. `includeArchived` includes archived sessions and projects. `limit` is 1–100 (default 50); pass `nextOffset` as `offset` for the next page. Results are ordered newest-created first, so activity does not shift existing sessions between pages. |
+| `session_read` | Read any owned session's `session`, up to 50 recent Jobs (unfinished first), pending `attention`, and recent `events`, including user and agent messages. `limit` is 1–100 (default 50); `before` pages backwards using `beforeSequence`. |
+| `session_send` | Send a message to any owned session. `QUEUE` creates a later Job, `NEXT` reaches the next step, `NOW` interrupts work and abandons pending questions and permissions. NEXT/NOW require backend support. Messages are attributed to the sending agent; they do not adopt the recipient as a delegate or change its policy. |
 | `session_answer` | Answer a pending information request using `sessionId`, `requestId` and `value`. Closed choices are enforced. It resumes the worker; it cannot approve permissions. |
 | `session_resolve_validation` | Relay the exact worker permission for approval in the manager conversation, then forward the decision. Requires `sessionId`, `requestId`, `approved`, original `payloadSha256` and `requestPayload`, plus optional `note`. |
 | `session_wait` | Wait for events, attention or completion. `afterSequence` pages forwards; `timeoutSeconds` is 0–30 (default 20). Returns state, events, a session event `cursor` and `timedOut`. A timeout is not completion. |
 | `session_cancel` | Stop a specific `jobId` in a managed `sessionId`, with an optional `reason`. History and files stay available. |
 | `session_archive` | Archive or restore using `archived`. Jobs must finish or be cancelled before archival. |
+
+`session_list` also returns a `projects` directory with each relevant project's
+`id`, `name` and `status`, including projects without sessions. This lets the
+agent discover a target for creation without knowing its identifier in advance.
+For example, call `session_list({scope: "all"})`, then
+`session_create({projectId: "<id>", message: "<assignment>"})`.
+Do not combine `scope: all` with `projectId`; use `scope: project` for one project.
 
 The manager stays responsible for checking results and completing the original
 task. Assign distinct files to parallel workers: sessions inherit the same
@@ -33,19 +45,25 @@ actual limits into account when delegating.
 ## Scope and persistence
 
 `managerSessionId` belongs to the Session, so a later manager Job can find its
-workers after a resume or reconnect. Only directly delegated children may be
-read or changed through these tools; an unrelated session, sibling or parent
-cannot be targeted even when it shares the owner or project. Nested delegation
-uses the same rule at each level.
+workers after a resume or reconnect. Reading and sending messages require
+ownership, regardless of delegation or project. Answering questions, relaying
+permissions, waiting, cancelling and archiving remain limited to directly
+delegated children. Nested delegation uses that rule at each level. Reading
+another conversation does not make its contents new user instructions or
+authorization.
 
-Creation is atomic. A worker inherits the manager's project, backend, logical
-working directory and effective execution policy before its first dispatch.
+Creation is atomic. A worker uses the target project's instructions and
+inherits the manager's backend and effective execution policy before its first
+dispatch. In the same project it also inherits the logical working directory,
+unless `workingDirectoryId` selects another directory or an empty string clears
+it. In another project no directory is inherited: an explicit directory must
+belong to that target project or be shared globally.
 The policy is a snapshot taken at delegation; later policy changes to the
 manager do not silently rewrite a worker's policy. Project policy rules still
-apply. The tools cannot select another backend, directory or wider policy.
+apply. Creation cannot select another backend or a wider policy.
 
-Optional idempotency keys are scoped to the manager and operation (and worker
-for messages). Reusing a creation key resumes the existing delegation rather
+Optional idempotency keys are scoped to the manager, operation and target
+project (or target session for messages). Reusing a creation key resumes the existing delegation rather
 than creating duplicate work. Use a new key for a new assignment.
 
 A callback is queued when a worker asks a question, requests permission or ends
@@ -94,6 +112,9 @@ changes on its event bus; it has no native Skills or audit view to refresh.
 Build and restart Core, apply migration `000015_managed_sessions`, then start
 a new Job to receive the tool catalogue. No backend protocol change is needed.
 Existing Jobs retain the tools they received when they started.
+The cross-project extension requires only a Core rebuild and restart, followed
+by a new Job to receive the updated descriptions and schemas. It adds no
+migration, HTTP route or backend protocol field.
 
 Web and VS Code use the same existing Session, message, input and validation
 routes and events; their Session contracts include the optional manager field,
@@ -105,3 +126,7 @@ reviewed callback, with a tour step showing the Agent attribution.
 The integration suite in `internal/core/api/sessiontools_test.go` uses a
 throwaway PostgreSQL schema to exercise real Core/backend messages, including
 same-connection waits, scope boundaries, receipt integrity and manager wakeup.
+`sessionaccounttools_test.go` covers project discovery, pagination, reading,
+message attribution and idempotency, and creation across projects. Both clients
+use the existing events and Agent attribution; no UI, demo route or editor
+command is added for this Core Tool extension.

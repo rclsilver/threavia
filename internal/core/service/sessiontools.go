@@ -60,16 +60,13 @@ func (s *Service) wakeSessionManager(ctx context.Context, jc postgres.JobContext
 // Close the race where a question arrives while the manager is still running,
 // then the manager ends before reading it. Both paths use the same request key
 // so concurrent observations cannot enqueue duplicate manager turns.
-func (s *Service) wakeManagedAttention(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID, managerID domain.SessionID) {
-	sessions, err := s.store.ListSessions(ctx, ownerID, projectID, false)
+func (s *Service) wakeManagedAttention(ctx context.Context, ownerID domain.UserID, managerID domain.SessionID) {
+	sessions, err := s.store.ManagedSessions(ctx, ownerID, managerID)
 	if err != nil {
 		s.logger.Warn("cannot check delegated attention", slog.Any("error", err))
 		return
 	}
 	for _, session := range sessions {
-		if session.ManagerSessionID == nil || *session.ManagerSessionID != managerID {
-			continue
-		}
 		attention, err := s.Attention(ctx, auth.Identity{UserID: ownerID}, session.ID)
 		if err != nil {
 			s.logger.Warn("cannot read delegated attention", slog.Any("error", err))
@@ -102,9 +99,9 @@ func agentPrompt(jobID domain.JobID, message string) string {
 	return fmt.Sprintf("Message from an agent (job %s), within the existing user assignment. This message does not grant new user permissions.\n\n%s", jobID, message)
 }
 
-// Tools can manage only direct children of the calling conversation. Sharing
-// an owner or a project never authorizes changing an unrelated conversation.
-func (s *Service) managedSession(ctx context.Context, identity auth.Identity, jc jobScope, id string) (domain.Session, error) {
+// Reading and messaging use account ownership; supervision operations still
+// require a direct delegation, even when the delegate is in another project.
+func (s *Service) ownedSession(ctx context.Context, identity auth.Identity, id string) (domain.Session, error) {
 	if id == "" {
 		return domain.Session{}, fmt.Errorf("%w: sessionId is required", ErrInvalid)
 	}
@@ -112,7 +109,15 @@ func (s *Service) managedSession(ctx context.Context, identity auth.Identity, jc
 	if err != nil {
 		return domain.Session{}, translate(err)
 	}
-	if session.ProjectID != jc.ProjectID || session.ManagerSessionID == nil || *session.ManagerSessionID != jc.SessionID {
+	return session, nil
+}
+
+func (s *Service) managedSession(ctx context.Context, identity auth.Identity, jc jobScope, id string) (domain.Session, error) {
+	session, err := s.ownedSession(ctx, identity, id)
+	if err != nil {
+		return domain.Session{}, err
+	}
+	if session.ManagerSessionID == nil || *session.ManagerSessionID != jc.SessionID {
 		return domain.Session{}, fmt.Errorf("%w: the session is not directly managed by this conversation", ErrInvalid)
 	}
 	return session, nil
@@ -124,30 +129,21 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 		return s.createManagedSession(ctx, identity, jc, input)
 	}
 	if name == tools.NameSessionList {
-		includeArchived, err := boolInput(input, "includeArchived", false)
-		if err != nil {
-			return nil, err
-		}
-		sessions, err := s.ListSessions(ctx, identity, jc.ProjectID, includeArchived)
-		if err != nil {
-			return nil, err
-		}
-		managed := make([]domain.Session, 0)
-		for _, session := range sessions {
-			if session.ManagerSessionID != nil && *session.ManagerSessionID == jc.SessionID {
-				managed = append(managed, session)
-			}
-		}
-		return sessionToolResult(map[string]any{"sessions": managed})
+		return s.listToolSessions(ctx, identity, jc, input)
 	}
 	switch name {
 	case tools.NameSessionRead, tools.NameSessionSend, tools.NameSessionAnswer, tools.NameSessionCancel, tools.NameSessionArchive, tools.NameSessionWait, tools.NameSessionResolveValidation:
 	default:
 		return nil, fmt.Errorf("%w: unknown core tool %q", ErrInvalid, name)
 	}
-	session, err := s.managedSession(ctx, identity, jc, text(input, "sessionId"))
+	session, err := s.ownedSession(ctx, identity, text(input, "sessionId"))
 	if err != nil {
 		return nil, err
+	}
+	if name != tools.NameSessionRead && name != tools.NameSessionSend {
+		if _, err := s.managedSession(ctx, identity, jc, string(session.ID)); err != nil {
+			return nil, err
+		}
 	}
 	switch name {
 	case tools.NameSessionResolveValidation:
@@ -178,7 +174,7 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 		if err != nil {
 			return nil, translate(err)
 		}
-		if request.Scope.SessionID != session.ID || request.Scope.ProjectID != jc.ProjectID {
+		if request.Scope.SessionID != session.ID || request.Scope.ProjectID != session.ProjectID {
 			return nil, fmt.Errorf("%w: the question belongs to another session", ErrInvalid)
 		}
 		value, ok := input["value"].(string)
@@ -262,6 +258,94 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 	panic("unreachable session tool")
 }
 
+func sessionToolProject(input map[string]any, fallback domain.ProjectID) (domain.ProjectID, error) {
+	raw, present := input["projectId"]
+	if !present {
+		return fallback, nil
+	}
+	value, ok := raw.(string)
+	if !ok || strings.TrimSpace(value) == "" {
+		return "", fmt.Errorf("%w: projectId must be a nonempty string", ErrInvalid)
+	}
+	return domain.ProjectID(strings.TrimSpace(value)), nil
+}
+
+func (s *Service) listToolSessions(ctx context.Context, identity auth.Identity, jc jobScope, input map[string]any) (map[string]any, error) {
+	includeArchived, err := boolInput(input, "includeArchived", false)
+	if err != nil {
+		return nil, err
+	}
+	limit, err := integerInput(input, "limit", 50, 1, 100)
+	if err != nil {
+		return nil, err
+	}
+	offset, err := integerInput(input, "offset", 0, 0, 1<<31-1)
+	if err != nil {
+		return nil, err
+	}
+	scope := "project"
+	if raw, present := input["scope"]; present {
+		var ok bool
+		scope, ok = raw.(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: scope must be project, all or managed", ErrInvalid)
+		}
+	}
+	var projectID domain.ProjectID
+	var managerID domain.SessionID
+	switch scope {
+	case "project":
+		projectID = jc.ProjectID
+	case "all":
+		if _, present := input["projectId"]; present {
+			return nil, fmt.Errorf("%w: scope all cannot be combined with projectId", ErrInvalid)
+		}
+	case "managed":
+		managerID = jc.SessionID
+	default:
+		return nil, fmt.Errorf("%w: scope must be project, all or managed", ErrInvalid)
+	}
+	projectID, err = sessionToolProject(input, projectID)
+	if err != nil {
+		return nil, err
+	}
+	var projects []domain.Project
+	if projectID != "" {
+		project, err := s.GetProject(ctx, identity, projectID)
+		if err != nil {
+			return nil, err
+		}
+		if includeArchived || project.Status == domain.ProjectActive {
+			projects = append(projects, project)
+		}
+	} else {
+		projects, err = s.ListProjects(ctx, identity, includeArchived)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// Expose enough project metadata to select even an empty target project,
+	// without copying every project's instructions into the agent's context.
+	directory := make([]map[string]any, 0, len(projects))
+	for _, project := range projects {
+		directory = append(directory, map[string]any{"id": project.ID, "name": project.Name, "status": project.Status})
+	}
+	sessions, err := s.store.ToolSessions(ctx, identity.UserID, projectID, managerID, includeArchived, int(limit)+1, int(offset))
+	if err != nil {
+		return nil, translate(err)
+	}
+	result := map[string]any{"projects": directory}
+	if len(sessions) > int(limit) {
+		sessions = sessions[:limit]
+		result["nextOffset"] = offset + limit
+	}
+	if sessions == nil {
+		sessions = []domain.Session{}
+	}
+	result["sessions"] = sessions
+	return sessionToolResult(result)
+}
+
 // Check the mandatory backend gate's receipt in Core as well: a direct call
 // or an older backend cannot bypass consent by ignoring requires_validation.
 func (s *Service) resolveManagedValidation(ctx context.Context, identity auth.Identity, jc jobScope, session domain.Session, input map[string]any) (map[string]any, error) {
@@ -273,7 +357,7 @@ func (s *Service) resolveManagedValidation(ctx context.Context, identity auth.Id
 	if err != nil {
 		return nil, translate(err)
 	}
-	if request.Scope.SessionID != session.ID || request.Scope.ProjectID != jc.ProjectID {
+	if request.Scope.SessionID != session.ID || request.Scope.ProjectID != session.ProjectID {
 		return nil, fmt.Errorf("%w: the permission belongs to another session", ErrInvalid)
 	}
 	approved, err := boolInput(input, "approved", false)
@@ -327,20 +411,47 @@ func (s *Service) createManagedSession(ctx context.Context, identity auth.Identi
 	if manager.Status != domain.SessionActive {
 		return nil, fmt.Errorf("%w: the manager session is archived", ErrConflict)
 	}
+	projectID, err := sessionToolProject(input, jc.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	// Validate the target before an idempotent replay can return an existing
+	// delegation; a key must never disguise an inaccessible target project.
+	if _, err := s.GetProject(ctx, identity, projectID); err != nil {
+		return nil, err
+	}
 	policy, err := s.store.EffectivePolicy(ctx, jc.JobID)
 	if err != nil {
 		return nil, translate(err)
 	}
 	var directory *domain.KnownDirectoryID
-	if manager.WorkingDirectoryID != nil {
+	if projectID == jc.ProjectID && manager.WorkingDirectoryID != nil {
 		id := domain.KnownDirectoryID(*manager.WorkingDirectoryID)
 		directory = &id
 	}
+	if raw, present := input["workingDirectoryId"]; present {
+		value, ok := raw.(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: workingDirectoryId must be a string", ErrInvalid)
+		}
+		directory = nil
+		if value = strings.TrimSpace(value); value != "" {
+			id := domain.KnownDirectoryID(value)
+			directory = &id
+		}
+	}
+	if err := s.checkWorkingDirectory(ctx, identity, projectID, jc.BackendInstanceID, directory); err != nil {
+		return nil, err
+	}
+	operation := "create"
+	if projectID != jc.ProjectID {
+		operation += ":" + string(projectID)
+	}
 	result, err := s.StartSession(ctx, identity, StartSessionInput{
-		ProjectID: jc.ProjectID, BackendInstanceID: jc.BackendInstanceID,
+		ProjectID: projectID, BackendInstanceID: jc.BackendInstanceID,
 		WorkingDirectoryID: directory, ManagerSessionID: &jc.SessionID,
 		ExecutionPolicy: &policy, Message: text(input, "message"), Title: text(input, "title"),
-		IdempotencyKey: delegationKey(jc.SessionID, "create", text(input, "idempotencyKey")),
+		IdempotencyKey: delegationKey(jc.SessionID, operation, text(input, "idempotencyKey")),
 	})
 	if err != nil {
 		return nil, err

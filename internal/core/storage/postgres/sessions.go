@@ -65,6 +65,45 @@ func (s *Store) ListSessions(ctx context.Context, ownerID domain.UserID, project
 	return readSessionList(rows)
 }
 
+// ToolSessions lists an owner's sessions across projects, with optional project
+// and direct-manager filters. Creation order keeps pagination stable when an
+// existing session receives messages. An empty filter means all owned projects.
+func (s *Store) ToolSessions(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID, managerID domain.SessionID, includeArchived bool, limit, offset int) ([]domain.Session, error) {
+	var project, manager any
+	if projectID != "" {
+		project = projectID
+	}
+	if managerID != "" {
+		manager = managerID
+	}
+	rows, err := s.q.Query(ctx, `
+		SELECT `+sessionColumns+`, `+activeJobStatus+`
+		FROM sessions s JOIN projects p ON p.id = s.project_id
+		WHERE p.owner_id = $1
+		  AND ($2::uuid IS NULL OR s.project_id = $2)
+		  AND ($3::uuid IS NULL OR s.manager_session_id = $3)
+		  AND ($4 OR (s.status = 'ACTIVE' AND p.status = 'ACTIVE'))
+		ORDER BY s.created_at DESC, s.id DESC
+		LIMIT $5 OFFSET $6`, ownerID, project, manager, includeArchived, limit, offset)
+	if err != nil {
+		return nil, classify(err, "list tool sessions")
+	}
+	return readSessionList(rows)
+}
+
+// ManagedSessions finds all direct delegates, including those in other projects,
+// for the durable attention callback. It is not a paginated agent response.
+func (s *Store) ManagedSessions(ctx context.Context, ownerID domain.UserID, managerID domain.SessionID) ([]domain.Session, error) {
+	rows, err := s.q.Query(ctx, `
+		SELECT `+sessionColumns+`, `+activeJobStatus+`
+		FROM sessions s JOIN projects p ON p.id = s.project_id
+		WHERE p.owner_id = $1 AND s.manager_session_id = $2 AND s.status = 'ACTIVE'`, ownerID, managerID)
+	if err != nil {
+		return nil, classify(err, "list managed sessions")
+	}
+	return readSessionList(rows)
+}
+
 // PinnedSessions returns the Sessions an owner pinned, in every Project, in
 // the order they were pinned. An archived one is left out: it is out of the
 // way on purpose, and it comes back pinned when it is restored.

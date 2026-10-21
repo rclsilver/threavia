@@ -87,7 +87,7 @@ func TestSessionToolsCreateInheritAndResumeManager(t *testing.T) {
 	backend.callCoreToolExpectingFailure(t, context.Background(), manager.GetRunId(), manager.GetJobId(), "session_create", map[string]any{"message": "Work from a finished turn"})
 	c.mustDo(http.MethodPost, "/api/v1/sessions/"+managerID+"/messages", map[string]any{"message": "Check your delegates"}, nil, http.StatusCreated)
 	resumed := receive(t, "the manager's next job", backend.starts)
-	listed := backend.callCoreTool(t, context.Background(), resumed.GetRunId(), resumed.GetJobId(), "session_list", map[string]any{})
+	listed := backend.callCoreTool(t, context.Background(), resumed.GetRunId(), resumed.GetJobId(), "session_list", map[string]any{"scope": "managed"})
 	sessions, _ := listed["sessions"].([]any)
 	if len(sessions) != 1 || sessions[0].(map[string]any)["id"] != childID {
 		t.Fatalf("resumed manager's children = %v, want %s", listed, childID)
@@ -98,8 +98,9 @@ func TestSessionToolsCreateInheritAndResumeManager(t *testing.T) {
 	}
 }
 
-// Sharing an owner or a project does not make arbitrary sessions delegates.
-func TestSessionToolsRespectDirectDelegationScope(t *testing.T) {
+// Reading and messaging use account ownership; supervision still requires a
+// direct delegation. The caller's Run/Job must remain authenticated too.
+func TestSessionToolsRespectOwnershipAndDelegationScope(t *testing.T) {
 	c, backend, projectID, dirID := setup(t)
 	managerID := c.startSession(projectID, c.backendID, dirID, "Coordinate")
 	manager := receive(t, "the manager", backend.starts)
@@ -112,13 +113,17 @@ func TestSessionToolsRespectDirectDelegationScope(t *testing.T) {
 	ctx := context.Background()
 
 	for _, id := range []string{managerID, unrelated, foreign} {
-		for _, tool := range []string{"session_read", "session_wait", "session_send", "session_archive"} {
+		read := backend.callCoreTool(t, ctx, manager.GetRunId(), manager.GetJobId(), "session_read", map[string]any{"sessionId": id})
+		if read["session"].(map[string]any)["id"] != id {
+			t.Fatalf("read returned the wrong session: %v", read)
+		}
+		for _, tool := range []string{"session_wait", "session_archive", "session_cancel", "session_answer", "session_resolve_validation"} {
 			backend.callCoreToolExpectingFailure(t, ctx, manager.GetRunId(), manager.GetJobId(), tool,
 				map[string]any{"sessionId": id, "message": "interfere", "archived": true, "timeoutSeconds": 0})
 		}
 	}
 	for _, id := range []string{childID, siblingID, managerID} {
-		backend.callCoreToolExpectingFailure(t, ctx, child.GetRunId(), child.GetJobId(), "session_read", map[string]any{"sessionId": id})
+		backend.callCoreTool(t, ctx, child.GetRunId(), child.GetJobId(), "session_read", map[string]any{"sessionId": id})
 	}
 	backend.callCoreToolExpectingFailure(t, ctx, child.GetRunId(), manager.GetJobId(), "session_read", map[string]any{"sessionId": childID})
 
@@ -128,7 +133,22 @@ func TestSessionToolsRespectDirectDelegationScope(t *testing.T) {
 	otherBackend := other.connectBackend(credential)
 	otherID := other.startSession(otherProject, otherBackendID, "", "Private work")
 	_ = receive(t, "the other owner's job", otherBackend.starts)
-	backend.callCoreToolExpectingFailure(t, ctx, manager.GetRunId(), manager.GetJobId(), "session_read", map[string]any{"sessionId": otherID})
+	for _, tool := range []string{"session_read", "session_send", "session_wait", "session_archive", "session_cancel", "session_answer", "session_resolve_validation"} {
+		backend.callCoreToolExpectingFailure(t, ctx, manager.GetRunId(), manager.GetJobId(), tool, map[string]any{"sessionId": otherID, "message": "Private work"})
+	}
+	backend.callCoreToolExpectingFailure(t, ctx, manager.GetRunId(), manager.GetJobId(), "session_list", map[string]any{"projectId": otherProject})
+	backend.callCoreToolExpectingFailure(t, ctx, manager.GetRunId(), manager.GetJobId(), "session_create", map[string]any{"projectId": otherProject, "message": "Private work"})
+	all := backend.callCoreTool(t, ctx, manager.GetRunId(), manager.GetJobId(), "session_list", map[string]any{"scope": "all"})
+	for _, item := range all["sessions"].([]any) {
+		if item.(map[string]any)["id"] == otherID {
+			t.Fatal("another owner's session leaked into the list")
+		}
+	}
+	for _, item := range all["projects"].([]any) {
+		if item.(map[string]any)["id"] == otherProject {
+			t.Fatal("another owner's project leaked into the directory")
+		}
+	}
 }
 
 // The manager may answer a delegate's information request, with agent
@@ -231,11 +251,11 @@ func TestSessionToolsQueueCancelAndArchive(t *testing.T) {
 	}))
 	waitUntil(t, "the cancelled child", func() bool { return c.jobStatus(childID, next.GetJobId()) == "CANCELLED" })
 	backend.callCoreTool(t, ctx, manager.GetRunId(), manager.GetJobId(), "session_archive", map[string]any{"sessionId": childID, "archived": true})
-	listed := backend.callCoreTool(t, ctx, manager.GetRunId(), manager.GetJobId(), "session_list", map[string]any{})
+	listed := backend.callCoreTool(t, ctx, manager.GetRunId(), manager.GetJobId(), "session_list", map[string]any{"scope": "managed"})
 	if children, _ := listed["sessions"].([]any); len(children) != 0 {
 		t.Fatalf("active children = %v, want none", listed)
 	}
-	listed = backend.callCoreTool(t, ctx, manager.GetRunId(), manager.GetJobId(), "session_list", map[string]any{"includeArchived": true})
+	listed = backend.callCoreTool(t, ctx, manager.GetRunId(), manager.GetJobId(), "session_list", map[string]any{"scope": "managed", "includeArchived": true})
 	if children, _ := listed["sessions"].([]any); len(children) != 1 {
 		t.Fatalf("all children = %v, want the archived one", listed)
 	}
@@ -371,7 +391,7 @@ func TestSessionToolsPermissionRelayKeepsTheExactChildAction(t *testing.T) {
 	if !mandatory {
 		t.Fatal("session_resolve_validation must require a human validation in every execution mode")
 	}
-	childID, child := delegatedSession(t, backend, manager, map[string]any{"message": "Prepare the fix"})
+	childID, child := delegatedSession(t, backend, manager, map[string]any{"projectId": c.createProject("delegated-permission"), "message": "Prepare the fix"})
 	ctx := context.Background()
 	payload, _ := structpb.NewStruct(map[string]any{"tool": "Bash", "input": map[string]any{"command": "git push origin fix-parser"}})
 	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
@@ -491,7 +511,7 @@ func TestSessionToolsPendingChildQuestionWakesFinishingManager(t *testing.T) {
 	c, backend, projectID, dirID := setup(t)
 	managerID := c.startSession(projectID, c.backendID, dirID, "Coordinate")
 	manager := receive(t, "the manager", backend.starts)
-	childID, child := delegatedSession(t, backend, manager, map[string]any{"message": "Deploy to staging"})
+	childID, child := delegatedSession(t, backend, manager, map[string]any{"projectId": c.createProject("delegated-question"), "message": "Deploy to staging"})
 	ctx := context.Background()
 	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
 		return backend.events.UserInputRequested(ctx, child.GetRunId(), child.GetJobId(), &backendv1.UserInputRequested{

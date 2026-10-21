@@ -25,7 +25,7 @@ Typical flow:
 - Session is provider/backend independent.
 - Run is the binding between a Session and one BackendInstance/native provider session.
 - Run is mostly an infrastructure detail and should be nearly invisible in normal UX.
-- Project memory is complemented by owner-global Core facts and decisions, shared across that user's projects. Session history remains project-scoped.
+- Project memory is complemented by owner-global Core facts and decisions, shared across that user's projects. History search remains project-scoped; session tools can explicitly list, read and message sessions owned by the user across projects.
 - No automatic backend scheduling, migration or failover in V1.
 - Explicit behavior over magic.
 - PostgreSQL stores current state, metadata and persistent events.
@@ -657,7 +657,7 @@ Global facts are managed through `/api/v1/me/decisions` and searched through
 `/api/v1/me/memory/search`. Agents use `decision_create` with `scope: global` to
 record shared facts; the default remains `project`. `memory_search` returns active
 facts from the current Project and global memory, or only globals with
-`scope: global`. Project session history remains isolated to its Project.
+`scope: global`. Project history search remains scoped to its Project. Explicit session tools can list, read and message the same user's sessions across Projects; creation can select an owned target Project while inheriting the caller's backend and execution policy. Direct-delegate checks still apply to supervision and permission relays. See [Session management](docs/session-management.md).
 
 ## 14. Tasks
 

@@ -232,7 +232,11 @@ snapshot and repository state in both clients, and
 `session.working_directory_changed` records the change in the audit.
 
 Core also declares the session management tools described in
-[Session management](session-management.md). `session_resolve_validation`
+[Session management](session-management.md). Listing, reading and messaging
+can address any session owned by the calling Job's user, across projects;
+creation accepts an owned target project and keeps the caller's backend and
+execution policy. Supervision operations remain limited to direct delegates.
+`session_resolve_validation`
 requires validation in every execution mode. Its input includes the worker's
 original canonical permission payload and hash, so the approval appears in the
 manager conversation. Core checks a matching human-approved receipt in the

@@ -803,7 +803,7 @@ func (s *Service) afterEvent(ctx context.Context, scope domain.Scope, event *bac
 					s.logger.Warn("could not capture completed review changes", "error", err)
 				}
 			}()
-			s.wakeManagedAttention(ctx, jc.OwnerID, jc.ProjectID, jc.SessionID)
+			s.wakeManagedAttention(ctx, jc.OwnerID, jc.SessionID)
 		}
 	}
 }

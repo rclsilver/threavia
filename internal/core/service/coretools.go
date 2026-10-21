@@ -334,9 +334,9 @@ func stringList(input map[string]any, key string) []string {
 	return out
 }
 
-// jobScope is what a Core Tool call is allowed to act within: the Project, the
-// Session and the backend of the Job that issued it. Nothing in a tool input can
-// widen it.
+// jobScope is the authenticated origin of a Core Tool call. Tools normally use
+// this project, session and backend; session tools may explicitly target other
+// projects of the same owner, with ownership checked independently of input.
 type jobScope struct {
 	ProjectID         domain.ProjectID
 	SessionID         domain.SessionID
