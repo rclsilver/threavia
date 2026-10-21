@@ -1,8 +1,8 @@
 import { PromptAttachments } from '@/components/prompt-attachments';
 import { usePromptAttachments } from '@/lib/prompt-attachments';
 import { Link, useParams } from '@tanstack/react-router';
-import { ArrowUp, LoaderCircle, Pin, Settings2, Square } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ArrowUp, ChevronDown, LoaderCircle, Pin, Settings2, Square } from 'lucide-react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 
 import {
   useBackends,
@@ -39,6 +39,9 @@ export function SessionView() {
   const earlier = useEarlierEvents(sessionId);
   const backends = useBackends();
   const message = useRef<HTMLTextAreaElement>(null);
+  const [expandedSession, setExpandedSession] = useState<string>();
+  const headerDetailsId = useId();
+  const headerExpanded = expandedSession === sessionId;
 
   // A click on the page with nothing under it means "back to writing", as in a
   // terminal: the field takes the focus. Not on a control, not after selecting
@@ -113,7 +116,7 @@ export function SessionView() {
     // field is reachable from the keyboard as it always was.
     <div className="flex min-h-0 flex-1 flex-col" onClick={focusMessage}>
       {/* The frame keeps the window; only what is read is held to a column. */}
-      <header className="border-border/70 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b px-3 py-3 sm:px-5">
+      <header className="border-border/70 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 border-b px-3 py-1 md:gap-x-4 md:px-5 md:py-3" data-tour="session-header">
         {/* The title takes the width the header has: an input sized by its own
             content is about twenty characters wide, which is narrower than
             most of the titles it is there to edit. */}
@@ -124,19 +127,39 @@ export function SessionView() {
               start at the same place or the two read as misaligned.
               The badge rides here rather than beside the title, which has to
               keep the whole width for the moment it becomes a rename field. */}
-          <div className="text-muted flex flex-wrap items-center gap-x-2 gap-y-1 pl-1.5 text-xs">
+          <div className="text-muted flex min-w-0 items-center gap-x-2 pl-1.5 text-xs md:flex-wrap md:gap-y-1">
             {active ? (
-              <Badge tone={active.status === 'RUNNING' ? 'accent' : 'warn'}>
+              <Badge className="shrink-0" tone={active.status === 'RUNNING' ? 'accent' : 'warn'}>
                 {humanise(active.status)}
               </Badge>
             ) : (
-              <Badge>Idle</Badge>
+              <Badge className="shrink-0">Idle</Badge>
             )}
             {/* Which machine does the work: first-class, never a detail. */}
             {backend && (
-              <BackendInfo backend={backend} />
+              <BackendInfo backend={backend} compact />
             )}
-            <Link to="/sessions/$sessionId/settings/$tab" params={{ sessionId, tab: 'model' }} className="inline-flex min-h-11 items-center hover:underline sm:min-h-8" data-tour="session-model">
+            {active && working && (
+              <span className="text-accent hidden shrink-0 md:inline">{humanise(working)}…</span>
+            )}
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-11 md:hidden"
+          aria-label={headerExpanded ? 'Hide session details and actions' : 'Show session details and actions'}
+          aria-expanded={headerExpanded}
+          aria-controls={headerDetailsId}
+          onClick={() => setExpandedSession(headerExpanded ? undefined : sessionId)}
+        >
+          <ChevronDown className={cn(headerExpanded && 'rotate-180')} />
+        </Button>
+        {/* Details stay one tap away on a phone instead of taking several
+            lines from every conversation. Desktop keeps them visible. */}
+        <div id={headerDetailsId} className={cn('col-span-2 min-w-0 pt-1 md:contents', !headerExpanded && 'hidden')}>
+          <div className="text-muted flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-1.5 text-xs">
+            <Link to="/sessions/$sessionId/settings/$tab" params={{ sessionId, tab: 'model' }} className="inline-flex min-h-11 items-center hover:underline md:min-h-8" data-tour="session-model">
               {active && active.status !== 'QUEUED' ? 'Next job · ' : ''}Model: {data.session.model || backend?.modelCatalog?.defaultModel || 'Backend default'} · Effort: {data.session.effort || (data.session.model ? backend?.modelCatalog?.models.find((option) => option.id === data.session.model)?.defaultEffort : backend?.modelCatalog?.defaultEffort) || 'Backend default'}
             </Link>
             {active?.model && active.status !== 'QUEUED' && <span>Current job: {active.model} · {active.effort ? `${active.effort} effort` : 'Effort not reported'}</span>}
@@ -149,22 +172,25 @@ export function SessionView() {
               // there between two things worth remembering. Shown only while a
               // Job is running, because nothing orders these against the
               // timeline and one can arrive after the Job it describes ended.
-              <span className="text-accent">{humanise(working)}…</span>
+              <span className="text-accent md:hidden">{humanise(working)}…</span>
             )}
-            <ActionError error={cancel.error} className="text-xs" />
+          </div>
+          <div className="flex items-center gap-1 md:col-start-2 md:row-span-2 md:row-start-1">
+            <Button asChild size="lg" variant="ghost" className="h-11 md:h-9"><Link to="/sessions/$sessionId/review" params={{ sessionId }} data-tour="open-review">Review</Link></Button>
+            <PinButton session={data.session} />
+            {/* Everything about the Session that is not the conversation is a
+                page of its own, one step away. */}
+            <Button asChild variant="ghost" size="icon" title="Session settings" className="size-11 md:size-8">
+              <Link to="/sessions/$sessionId/settings/$tab" params={{ sessionId, tab: 'permissions' }} aria-label="Session settings">
+                <Settings2 />
+              </Link>
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-1">
-        <Button asChild size="lg" variant="ghost"><Link to="/sessions/$sessionId/review" params={{ sessionId }} data-tour="open-review">Review</Link></Button>
-        <PinButton session={data.session} />
-        {/* Everything about the Session that is not the conversation is a page
-            of its own, one step away. */}
-        <Button asChild variant="ghost" size="icon" title="Session settings">
-          <Link to="/sessions/$sessionId/settings/$tab" params={{ sessionId, tab: 'permissions' }} aria-label="Session settings">
-            <Settings2 />
-          </Link>
-        </Button>
-        </div>
+        {active?.status === 'WAITING_BACKEND' && active.backendWait && !headerExpanded && (
+          <p className="text-warn-text col-span-2 pl-1.5 text-xs md:hidden" role="status">{active.backendWait.message}{active.backendWait.retryAt && ` Next attempt no earlier than ${new Date(active.backendWait.retryAt).toLocaleString()}.`}</p>
+        )}
+        <ActionError error={cancel.error} className="col-span-2 pl-1.5 text-xs" />
       </header>
 
       <ReviewNotice sessionId={sessionId} />
@@ -218,7 +244,7 @@ function PinButton({ session }: { session: Session }) {
       aria-label={label}
       aria-pressed={isPinned}
       onClick={() => pin.mutate({ session, pinned: !isPinned })}
-      className={cn(isPinned && 'text-accent hover:text-accent')}
+      className={cn('size-11 md:size-8', isPinned && 'text-accent hover:text-accent')}
     >
       <Pin className={cn(isPinned && 'fill-current')} />
     </Button>

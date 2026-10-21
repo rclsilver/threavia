@@ -3,7 +3,7 @@ import type { BackendInstance, BackendQuotas as QuotaSnapshot } from '@/api/type
 import claudeIcon from '@/assets/providers/claude.svg';
 import codexIcon from '@/assets/providers/codex.png';
 import { quotaLabel, quotaNumber, quotaPercent, quotaReset } from '@/lib/backend';
-import { humanise } from '@/lib/utils';
+import { cn, humanise } from '@/lib/utils';
 
 export function BackendIcon({ provider, className = 'size-4 shrink-0' }: { provider?: string; className?: string }) {
   const source = provider?.toLowerCase() === 'claude' ? claudeIcon : provider?.toLowerCase() === 'codex' ? codexIcon : undefined;
@@ -49,16 +49,16 @@ export function BackendQuotas({ snapshot }: { snapshot?: QuotaSnapshot }) {
 }
 
 /** Hover, keyboard focus and a touch/click all reveal the same quota report. */
-export function BackendInfo({ backend }: { backend: BackendInstance }) {
+export function BackendInfo({ backend, compact = false }: { backend: BackendInstance; compact?: boolean }) {
   return (
-    <details className="relative"
+    <details className={cn('relative', compact && 'min-w-0')}
       onMouseEnter={(event) => { event.currentTarget.open = true; }}
       onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) event.currentTarget.open = false; }}
       onFocus={(event) => { if (event.target instanceof HTMLElement && event.target.matches(':focus-visible')) event.currentTarget.open = true; }}
       onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false; }}
       onKeyDown={(event) => { if (event.key === 'Escape') { event.currentTarget.open = false; event.stopPropagation(); } }}>
       <summary className="hover:text-text flex cursor-pointer list-none items-center gap-1 rounded focus-visible:outline focus-visible:outline-2 [&::-webkit-details-marker]:hidden" aria-label={`${backend.backend || 'Backend'} ${backend.name}: show quotas`}>
-        <BackendIcon provider={backend.backend} className="size-3.5 shrink-0" />{backend.name}
+        <BackendIcon provider={backend.backend} className="size-3.5 shrink-0" /><span className={cn(compact && 'truncate')}>{backend.name}</span>
       </summary>
       <div className="bg-surface text-text border-border absolute top-full left-0 z-30 max-h-[60vh] w-[min(23rem,calc(100vw-3rem))] overflow-auto rounded-md border p-3 shadow-lg max-sm:fixed max-sm:top-24 max-sm:left-3">
         <p className="mb-2 font-medium">{backend.name} · {backend.backend || 'Unknown provider'}</p>

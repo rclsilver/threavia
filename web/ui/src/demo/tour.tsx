@@ -75,6 +75,12 @@ const STEPS: Step[] = [
   },
   {
     path: SESSION(IDS.certManager),
+    target: '[data-tour="session-header"]',
+    title: 'More room for the conversation',
+    body: 'On a phone, the header keeps the title, status and machine visible. Use its arrow to show model details, Review, pinning and settings; desktop shows them directly.',
+  },
+  {
+    path: SESSION(IDS.certManager),
     target: '[data-tour="composer"]',
     title: 'Talk to work in progress',
     body: 'While a job runs, a message can wait its turn, join at the next step, or interrupt. Paste an image or attach a sound to include it in a new queued prompt; Escape stops the job.',
