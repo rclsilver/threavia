@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -53,12 +52,17 @@ func newRPC(ctx context.Context, input io.Writer, output io.Reader) *rpc {
 }
 func (r *rpc) read(ctx context.Context, output io.Reader) {
 	defer close(r.done)
-	scanner := bufio.NewScanner(output)
-	scanner.Buffer(make([]byte, 64<<10), 8<<20)
-	for scanner.Scan() {
+	// A thread/resume response includes the conversation history in one
+	// message. Decode the stream without a scanner's per-line size limit.
+	decoder := json.NewDecoder(output)
+	for {
 		var msg message
-		if err := json.Unmarshal(scanner.Bytes(), &msg); err != nil {
-			r.err = fmt.Errorf("invalid app-server message: %w", err)
+		if err := decoder.Decode(&msg); err != nil {
+			if errors.Is(err, io.EOF) {
+				r.err = io.ErrUnexpectedEOF
+			} else {
+				r.err = fmt.Errorf("invalid app-server message: %w", err)
+			}
 			return
 		}
 		if msg.Method == "" && len(msg.ID) > 0 {
@@ -76,10 +80,6 @@ func (r *rpc) read(ctx context.Context, output io.Reader) {
 			r.err = ctx.Err()
 			return
 		}
-	}
-	r.err = scanner.Err()
-	if r.err == nil {
-		r.err = io.ErrUnexpectedEOF
 	}
 }
 func (r *rpc) send(value any) error {

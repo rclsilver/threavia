@@ -117,6 +117,8 @@ missing confirmation or provider exit during that wait is a technical
 `PROVIDER_STARTUP_FAILED`, with the startup phase and elapsed time in its
 diagnostic; it is not a human permission refusal. Tools remain gated until
 the handshake. The Job's duration limit and cancellation still apply.
+The JSON transport decodes messages as a stream, without a per-line scanner
+limit, so a resumed thread's history can exceed 8 MiB in a single response.
 Blocked native hooks produce failed tool events even when Codex does not emit
 a native tool item. Native MCP consent forms for the private Threavia server
 are accepted; policy checks and human validations happen at the endpoint.

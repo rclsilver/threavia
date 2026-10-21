@@ -354,6 +354,16 @@ func TestProviderProcess(t *testing.T) {
 				send(map[string]any{"id": msg.ID, "error": map[string]any{"code": -32600, "message": "thread not found"}})
 				continue
 			}
+			if scenario == "resume-large" {
+				if msg.Method != "thread/resume" || p["threadId"] != "thread-1" {
+					os.Exit(45)
+				}
+				response(map[string]any{"thread": map[string]any{
+					"id":    "thread-1",
+					"turns": []any{map[string]any{"text": strings.Repeat("x", (8<<20)+1)}},
+				}})
+				continue
+			}
 			response(map[string]any{"thread": map[string]any{"id": "thread-1"}})
 		case "turn/start":
 			if scenario == "startup-stalled-turn" {
@@ -453,7 +463,10 @@ func TestProviderProcess(t *testing.T) {
 			if scenario == "hang" || strings.HasPrefix(scenario, "helper-") || strings.HasPrefix(scenario, "supervised") {
 				continue
 			}
-			if scenario == "approval" || scenario == "interrupt" || scenario == "queue" {
+			// Wait for the runner to handle a request before simulating a
+			// runtime failure. Otherwise an immediate failed notification can
+			// race turn/start and correctly be classified as a startup failure.
+			if scenario == "approval" || scenario == "interrupt" || scenario == "queue" || scenario == "failed" {
 				item := map[string]any{"id": "cmd-1", "type": "commandExecution", "command": "touch example.txt", "cwd": p["cwd"], "status": "inProgress"}
 				notify("item/started", map[string]any{"threadId": "thread-1", "item": item})
 				send(map[string]any{"id": 7, "method": "item/commandExecution/requestApproval", "params": map[string]any{"threadId": "thread-1", "turnId": turn, "itemId": "cmd-1", "command": "touch example.txt"}})
