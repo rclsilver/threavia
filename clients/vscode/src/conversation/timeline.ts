@@ -19,8 +19,10 @@ export interface ToolCall {
   error?: string;
   /** When it started, so the log reads as a record and not only a list. */
   at: string;
-  /** False while the result has not arrived, which is what makes it look live. */
+  /** False until a result arrives or the work ends. */
   done: boolean;
+  /** The work ended before this call reported a result; its outcome is unknown. */
+  interruption?: 'cancelled' | 'failed' | 'completed';
 }
 
 /** What a fold holds, counted, so it can be judged without opening it. */
@@ -109,6 +111,7 @@ export function rowsOf(events: Event[], now: Date = new Date()): Row[] {
   // When each Job started, so its ending can say how long it took. The
   // timeline already carries both timestamps.
   const startedAt = new Map<string, string>();
+  const ended = new Map<string, NonNullable<ToolCall['interruption']>>();
   let day = '';
 
   // A separator goes in front of the first row of each day, including the
@@ -122,6 +125,9 @@ export function rowsOf(events: Event[], now: Date = new Date()): Row[] {
   };
 
   for (const event of events) {
+    if (event.jobId && ENDINGS.has(event.type)) {
+      ended.set(event.jobId, event.type === 'job.cancelled' ? 'cancelled' : event.type === 'job.failed' ? 'failed' : 'completed');
+    }
     if (event.type === 'job.started' && event.jobId) {
       startedAt.set(event.jobId, event.timestamp);
     }
@@ -188,6 +194,13 @@ export function rowsOf(events: Event[], now: Date = new Date()): Row[] {
         startedAt: event.jobId ? startedAt.get(event.jobId) : undefined,
       });
     }
+  }
+  // A cancelled provider can exit before reporting each tool's final event.
+  // Apply this after pairing, so a later real result still takes precedence.
+  for (const row of rows) {
+    if (row.kind !== 'tool' || row.call.done || !row.jobId) continue;
+    const interruption = ended.get(row.jobId);
+    if (interruption) row.call = { ...row.call, done: true, interruption };
   }
   return rows;
 }

@@ -260,6 +260,9 @@ From the repository root, `make vscode-check` runs the generated-types check,
 the type check, lint and tests (it is part of `make verify`), and
 `make vscode-package` builds the `.vsix`.
 
+After installing or replacing a development VSIX, run **Developer: Reload
+Window** so restored conversations load the new webview bundle.
+
 To run it, open `clients/vscode` in VS Code and press **F5**: a second window
 starts with the extension loaded, rebuilt first. Point it at a local Core with
 **Threavia: Add Core…** (`http://localhost:8080`, mode `none`, needs no
@@ -278,3 +281,11 @@ timeline), a new session's draft and how it becomes the session
 Tasks and Decisions are grouped, which Project the views show and what they
 send (`src/knowledge/model.ts`). The
 rest turns them into views and commands; `src/webview` is the page.
+
+
+### MCP servers
+
+Use **Threavia: Manage MCP Servers** for native project activation, session
+restrictions, server listing and backend connection diagnostics. Full declaration
+editing, import previews and OAuth sign-in are available through its Web settings
+link. Changes apply to subsequent Jobs; credentials remain on each backend.

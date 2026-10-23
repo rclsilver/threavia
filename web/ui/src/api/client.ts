@@ -143,11 +143,11 @@ export async function saveBlob(path: string, filename: string): Promise<void> {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
-async function request<T>(method: string, path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(method: string, path: string, init: RequestInit = {}, notifyChange = true): Promise<T> {
   if (transport) {
     const body = typeof init.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined;
     const result = (await transport.request(method, path, body)) as T;
-    if (method !== 'GET') transport.changed();
+    if (method !== 'GET' && notifyChange) transport.changed();
     return result;
   }
   const response = await authorizedFetch(path, { ...init, method });
@@ -181,6 +181,10 @@ export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown, headers?: HeadersInit) =>
     json<T>('POST', path, body ?? {}, headers),
+  /** A read-only POST must not invalidate the demo cache that requested it. */
+  query: <T>(path: string, body: unknown) => request<T>('POST', path, {
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }, false),
   patch: <T>(path: string, body: unknown) => json<T>('PATCH', path, body),
   put: <T>(path: string, body: unknown) => json<T>('PUT', path, body),
   delete: <T = void>(path: string) => request<T>('DELETE', path),

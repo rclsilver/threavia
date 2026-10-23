@@ -485,12 +485,19 @@ function toolEntry(row: Extract<Row, { kind: 'tool' }>): HTMLElement {
   const { call } = row;
   const open = expanded.has(call.id);
   const failed = Boolean(call.error);
+  const interruption = call.interruption && {
+    cancelled: 'Interrupted when work was cancelled.',
+    failed: 'Interrupted when work failed.',
+    completed: 'Work ended without a tool result.',
+  }[call.interruption];
   const summary = summariseInput(call.input).replace(/\s+/g, ' ');
   const status = !call.done
     ? icon('loading', 'codicon-modifier-spin tone-running')
-    : failed
-      ? icon('warning', 'tone-danger')
-      : icon('terminal', 'muted');
+    : interruption
+      ? icon('circle-slash', 'muted')
+      : failed
+        ? icon('warning', 'tone-danger')
+        : icon('terminal', 'muted');
   const head = button(
     [
       icon(open ? 'chevron-down' : 'chevron-right', 'muted'),
@@ -504,7 +511,7 @@ function toolEntry(row: Extract<Row, { kind: 'tool' }>): HTMLElement {
       persist();
       renderTimeline();
     },
-    { class: 'tool-head', 'aria-expanded': String(open), title: failed ? 'Failed' : call.done ? undefined : 'Running' },
+    { class: 'tool-head', 'aria-expanded': String(open), title: interruption || (failed ? 'Failed' : call.done ? undefined : 'Running') },
   );
   if (!open) return h('div', { class: 'tool' }, head);
 
@@ -520,6 +527,7 @@ function toolEntry(row: Extract<Row, { kind: 'tool' }>): HTMLElement {
       block('Input', formatInput(call.input)),
       call.error !== undefined && block('Error', call.error, 'danger'),
       call.output !== undefined && block('Output', call.output),
+      interruption && h('p', { class: 'muted small' }, interruption),
       !call.done && h('p', { class: 'muted small' }, 'Still running…'),
     ),
   );

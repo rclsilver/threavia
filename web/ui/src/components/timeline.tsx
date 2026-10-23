@@ -128,6 +128,7 @@ function rowsOf(events: Event[]): Row[] {
   // already carries both timestamps; asking the server again would be slower
   // and no more true.
   const startedAt = new Map<string, string>();
+  const ended = new Map<string, NonNullable<ToolCall['interruption']>>();
   let day = '';
 
   // A separator goes in front of the first row of each day, including the
@@ -141,6 +142,9 @@ function rowsOf(events: Event[]): Row[] {
   };
 
   for (const event of events) {
+    if (event.jobId && ENDINGS.has(event.type)) {
+      ended.set(event.jobId, event.type === 'job.cancelled' ? 'cancelled' : event.type === 'job.failed' ? 'failed' : 'completed');
+    }
     if (event.type === 'job.started' && event.jobId) {
       startedAt.set(event.jobId, event.timestamp);
     }
@@ -209,6 +213,13 @@ function rowsOf(events: Event[]): Row[] {
         startedAt: event.jobId ? startedAt.get(event.jobId) : undefined,
       });
     }
+  }
+  // A cancelled provider can exit before reporting each tool's final event.
+  // Apply this after pairing, so a later real result still takes precedence.
+  for (const row of rows) {
+    if (row.kind !== 'tool' || row.call.done || !row.jobId) continue;
+    const interruption = ended.get(row.jobId);
+    if (interruption) row.call = { ...row.call, done: true, interruption };
   }
   return rows;
 }

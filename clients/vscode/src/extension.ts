@@ -1,3 +1,4 @@
+import { manageMCP } from './mcp/manage';
 import { ArtifactsView, type ArtifactNode } from './knowledge/artifacts';
 import * as vscode from 'vscode';
 
@@ -310,6 +311,12 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     if (!core?.ready) return;
     try { await core.client.setDefaultBackend(null); backends.reload(); }
     catch (error) { failed(error, 'Default backend not cleared'); }
+  });
+
+  command('threavia.manageMCP', async (target?: unknown) => {
+    const core = await readyCore('MCP servers', target);
+    if (!core?.ready) return;
+    try { await manageMCP(core); } catch (error) { failed(error, 'MCP servers could not be managed'); }
   });
 
   command('threavia.manageDirectories', async (target?: unknown) => {

@@ -24,8 +24,8 @@ function sources(directory) {
 
 // api.get<T>(`/api/v1/projects/${id}/tasks?x=${y}`) and api.post('/api/v1/me/presence', …),
 // with the generic and the line break that may sit between the call and its path.
-const CALL = /\bapi\.(get|post|patch|put|delete|upload)\s*(?:<(?:[^<>]|<[^<>]*>)*>)?\s*\(\s*(['`])(\/api\/[^'`]*)\2/g;
-const METHOD = { get: 'GET', post: 'POST', patch: 'PATCH', put: 'PUT', delete: 'DELETE', upload: 'POST' };
+const CALL = /\bapi\.(get|post|query|patch|put|delete|upload)\s*(?:<(?:[^<>]|<[^<>]*>)*>)?\s*\(\s*(['`])(\/api\/[^'`]*)\2/g;
+const METHOD = { get: 'GET', post: 'POST', query: 'POST', patch: 'PATCH', put: 'PUT', delete: 'DELETE', upload: 'POST' };
 
 const calls = [];
 for (const file of sources(root)) {

@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Terminal } from 'lucide-react';
+import { AlertTriangle, Ban, ChevronDown, ChevronRight, Loader2, Terminal } from 'lucide-react';
 
 import { FileChangeView } from '@/components/file-change';
 import { changeCounts, fileChangeOf } from '@/lib/file-change';
@@ -13,8 +13,10 @@ export interface ToolCall {
   error?: string;
   /** When it started, so the log reads as a record and not only a list. */
   at: string;
-  /** False while the result has not arrived, which is what makes it look live. */
+  /** False until a result arrives or the work ends. */
   done: boolean;
+  /** The work ended before this call reported a result; its outcome is unknown. */
+  interruption?: 'cancelled' | 'failed' | 'completed';
 }
 
 /**
@@ -57,6 +59,11 @@ export function ToolCallEntry({
 }) {
   const summary = summarise(call.input);
   const failed = Boolean(call.error);
+  const interruption = call.interruption && {
+    cancelled: 'Interrupted when work was cancelled.',
+    failed: 'Interrupted when work failed.',
+    completed: 'Work ended without a tool result.',
+  }[call.interruption];
   const change = fileChangeOf(call.name, call.input);
   const counts = change && changeCounts(change);
 
@@ -71,6 +78,7 @@ export function ToolCallEntry({
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
+        title={interruption}
         className="hover:bg-surface-2 flex w-full items-center gap-2 px-2 py-1 text-left text-xs"
       >
         {expanded ? (
@@ -81,6 +89,8 @@ export function ToolCallEntry({
 
         {!call.done ? (
           <Loader2 className="text-accent size-3.5 shrink-0 animate-spin" />
+        ) : interruption ? (
+          <Ban aria-label="Interrupted" className="text-muted size-3.5 shrink-0" />
         ) : failed ? (
           <AlertTriangle className="text-danger size-3.5 shrink-0" />
         ) : (
@@ -114,6 +124,7 @@ export function ToolCallEntry({
             </Block>
           )}
           {call.output !== undefined && <Block title="Output">{call.output}</Block>}
+          {interruption && <p className="text-muted text-xs">{interruption}</p>}
           {!call.done && <p className="text-muted text-xs">Still running…</p>}
         </div>
       )}

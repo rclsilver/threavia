@@ -216,6 +216,9 @@ export class EventStream {
     }
 
     switch (event.type) {
+      case 'mcp.changed':
+        void this.queries.invalidateQueries({ queryKey: ['mcp'] });
+        break;
       case 'review.changed':
         void this.queries.invalidateQueries({ queryKey: ['review', event.sessionId ?? ''] });
         void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
