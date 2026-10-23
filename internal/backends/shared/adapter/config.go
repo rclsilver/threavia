@@ -103,6 +103,7 @@ func Default() Config {
 	clientCfg.FeatureJobInputNext = true
 	clientCfg.FeaturePromptAttachments = true
 	clientCfg.FeatureHumanReview = true
+	clientCfg.FeatureExternalMCP = true
 
 	return Config{
 		Log:    LogConfig{Level: logging.LevelInfo, Format: logging.FormatText},

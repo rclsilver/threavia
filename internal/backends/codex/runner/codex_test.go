@@ -601,7 +601,7 @@ func TestRunAndResume(t *testing.T) {
 	}
 }
 func TestCancellationAndDeadline(t *testing.T) {
-	for _, scenario := range []string{"cancel", "deadline"} {
+	for _, scenario := range []string{"cancel", "context", "deadline"} {
 		t.Run(scenario, func(t *testing.T) {
 			c, p, sink := provider(t, "hang")
 			sink.started = make(chan struct{})
@@ -609,11 +609,16 @@ func TestCancellationAndDeadline(t *testing.T) {
 				p.Policy.MaxDurationSeconds = 1
 			}
 			done := make(chan error, 1)
-			go func() { done <- c.Run(context.Background(), p, sink) }()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			go func() { done <- c.Run(ctx, p, sink) }()
 			select {
 			case <-sink.started:
 			case <-time.After(5 * time.Second):
 				t.Fatal("did not start")
+			}
+			if scenario == "context" {
+				cancel()
 			}
 			if scenario == "cancel" {
 				if err := c.Cancel(p.JobID); err != nil {

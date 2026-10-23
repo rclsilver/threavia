@@ -266,6 +266,12 @@ func (c *Claude) Cancel(jobID string) error {
 
 // Run implements Runner: it executes one Job to completion.
 func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
+	executionCtx := ctx
+	// Reporting and cleanup outlive execution cancellation.
+	ctx = context.WithoutCancel(ctx)
+	if executionCtx.Err() != nil {
+		return sink.JobCancelled(ctx, params.RunID, params.JobID)
+	}
 	if err := c.Available(); err != nil {
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "PROVIDER_UNAVAILABLE", err.Error(), nil)
 	}
@@ -274,6 +280,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	// prompts is the one started for it.
 	token := uuid.NewString()
 	endpoint := c.tools.Register(params.JobID, token, params.CoreTools)
+	c.tools.RegisterLocalTools(token, params.ExternalTools)
 	defer c.tools.Unregister(token)
 
 	mcpConfig, err := mcp.Config(endpoint)
@@ -301,13 +308,13 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	// The duration limit is enforced here because no permission gate can see
 	// time passing: a Run that asks for nothing can still run forever.
 	attemptStarted := time.Now()
-	runCtx, stop := context.WithCancel(ctx)
+	runCtx, stop := context.WithCancel(executionCtx)
 	if seconds := params.Policy.MaxDurationSeconds; seconds > 0 {
 		remaining := seconds - int(params.ActiveSecondsUsed)
 		if remaining <= 0 {
 			return sink.JobFailed(ctx, params.RunID, params.JobID, "POLICY_LIMIT", "execution duration limit reached across provider attempts", nil)
 		}
-		runCtx, stop = context.WithTimeout(ctx, time.Duration(remaining)*time.Second)
+		runCtx, stop = context.WithTimeout(executionCtx, time.Duration(remaining)*time.Second)
 	}
 	defer stop()
 
@@ -349,6 +356,9 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 		slog.String("cwd", params.WorkingDirectory))
 
 	if err := cmd.Start(); err != nil {
+		if errors.Is(runCtx.Err(), context.Canceled) {
+			return sink.JobCancelled(ctx, params.RunID, params.JobID)
+		}
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "SPAWN_FAILED", err.Error(), nil)
 	}
 	if err := writeUserMessage(stdin, supervised(params.Policy, params.Prompt), params.Attachments...); err != nil {
@@ -397,7 +407,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 
 	// Cancellation wins over whatever the process said on its way out: the user
 	// asked for it to stop, and it did.
-	if cancelled {
+	if cancelled || errors.Is(executionCtx.Err(), context.Canceled) {
 		c.logger.Info("claude code cancelled", slog.String("jobId", params.JobID))
 		return sink.JobCancelled(ctx, params.RunID, params.JobID)
 	}

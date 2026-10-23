@@ -50,7 +50,7 @@
       && (!insideClient || clientKept);
   };
 
-  vendorHash = "sha256-8o2GIj8xgXTEjxGZl1Y3y9yGSL3oogLeU1aVyBWohpA=";
+  vendorHash = "sha256-eVb67yxvsxxAY85totYat4FToy/D2zbIwkrhvmAJtAc=";
 
   subPackages = [ "cmd/threavia-backend-codex" ];
 

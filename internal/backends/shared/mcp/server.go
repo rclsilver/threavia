@@ -67,6 +67,7 @@ type CoreTool struct {
 // LocalTool is implemented by a provider backend, never forwarded to Core.
 // Its handler must enforce the current Job policy before performing work.
 type LocalTool struct {
+	RawResult         bool // Preserve MCP content blocks and isError from an external server.
 	Name, Description string
 	InputSchema       map[string]any
 	Call              func(context.Context, map[string]any) (any, error)
@@ -339,7 +340,16 @@ func (s *Server) dispatch(ctx context.Context, sess *session, msg request) (any,
 	case "tools/list":
 		definitions := toolDefinitions(sess.coreTools)
 		for _, tool := range sess.localTools {
-			definitions = append(definitions, map[string]any{"name": tool.Name, "description": tool.Description, "inputSchema": tool.InputSchema})
+			duplicate := false
+			for _, core := range sess.coreTools {
+				if core.Name == tool.Name {
+					duplicate = true
+					break
+				}
+			}
+			if !duplicate {
+				definitions = append(definitions, map[string]any{"name": tool.Name, "description": tool.Description, "inputSchema": tool.InputSchema})
+			}
 		}
 		return map[string]any{"tools": definitions}, nil
 
@@ -377,6 +387,9 @@ func (s *Server) call(ctx context.Context, sess *session, raw json.RawMessage) (
 			result, err := tool.Call(ctx, params.Arguments)
 			if err != nil {
 				return map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": err.Error()}}}, nil
+			}
+			if tool.RawResult {
+				return result, nil
 			}
 			return map[string]any{"content": []any{map[string]any{"type": "text", "text": fmt.Sprint(result)}}}, nil
 		}

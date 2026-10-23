@@ -810,3 +810,30 @@ func TestAToolThatNeedsValidationIsAskedInEveryMode(t *testing.T) {
 		}
 	}
 }
+
+func TestExecutionContextCancellationStillReportsTheOutcome(t *testing.T) {
+	t.Parallel()
+	binary, _ := fakeClaude(t, "sleep 300")
+	sink := &recordingSink{}
+	claude := newRunner(t, binary)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- claude.Run(ctx, runner.StartParams{RunID: "run-ctx", JobID: "job-ctx", WorkingDirectory: t.TempDir()}, sink)
+	}()
+	waitFor(t, "the job to start", func() bool { return contains(sink.timeline(), "job.started") })
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("context cancellation did not stop the provider")
+	}
+	events := sink.timeline()
+	if !contains(events, "job.cancelled") || contains(events, "job.failed") || contains(events, "job.completed") {
+		t.Fatalf("unexpected outcome: %v", events)
+	}
+}
