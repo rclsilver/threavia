@@ -65,6 +65,7 @@ type Config struct {
 	FeaturePromptAttachments bool
 	FeatureModelSelection    bool
 	FeatureHumanReview       bool
+	FeatureExternalMCP       bool
 	ModelCatalog             *backendv1.ModelCatalog
 	MaxConcurrentRuns        int32
 
@@ -177,5 +178,6 @@ func (c Config) featureFlags() *backendv1.FeatureFlags {
 		PromptAttachments: c.FeaturePromptAttachments,
 		ModelSelection:    c.FeatureModelSelection,
 		HumanReview:       c.FeatureHumanReview,
+		ExternalMcp:       c.FeatureExternalMCP,
 	}
 }

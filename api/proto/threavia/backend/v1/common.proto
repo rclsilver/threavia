@@ -101,6 +101,7 @@ message FeatureFlags {
   bool model_selection = 4;
   // Immutable multi-repository snapshots and mandatory human checkpoints.
   bool human_review = 5;
+  bool external_mcp = 6;
 }
 
 // Provider models and the effort values each accepts, discovered by the backend.

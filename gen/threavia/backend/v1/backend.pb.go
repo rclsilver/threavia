@@ -639,6 +639,7 @@ type BackendToCore struct {
 	//	*BackendToCore_RepositoryStatus
 	//	*BackendToCore_QuotaReport
 	//	*BackendToCore_ReviewWorkspace
+	//	*BackendToCore_McpResponse
 	Message       isBackendToCore_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -807,6 +808,15 @@ func (x *BackendToCore) GetReviewWorkspace() *ReviewWorkspace {
 	return nil
 }
 
+func (x *BackendToCore) GetMcpResponse() *McpResponse {
+	if x != nil {
+		if x, ok := x.Message.(*BackendToCore_McpResponse); ok {
+			return x.McpResponse
+		}
+	}
+	return nil
+}
+
 type isBackendToCore_Message interface {
 	isBackendToCore_Message()
 }
@@ -867,6 +877,10 @@ type BackendToCore_ReviewWorkspace struct {
 	ReviewWorkspace *ReviewWorkspace `protobuf:"bytes,14,opt,name=review_workspace,json=reviewWorkspace,proto3,oneof"`
 }
 
+type BackendToCore_McpResponse struct {
+	McpResponse *McpResponse `protobuf:"bytes,15,opt,name=mcp_response,json=mcpResponse,proto3,oneof"`
+}
+
 func (*BackendToCore_Hello) isBackendToCore_Message() {}
 
 func (*BackendToCore_Heartbeat) isBackendToCore_Message() {}
@@ -895,6 +909,8 @@ func (*BackendToCore_QuotaReport) isBackendToCore_Message() {}
 
 func (*BackendToCore_ReviewWorkspace) isBackendToCore_Message() {}
 
+func (*BackendToCore_McpResponse) isBackendToCore_Message() {}
+
 type CoreToBackend struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Correlation id for CommandResult. Empty for non-command messages.
@@ -916,6 +932,7 @@ type CoreToBackend struct {
 	//	*CoreToBackend_WorkspaceDiffRequest
 	//	*CoreToBackend_RepositoryStatusRequest
 	//	*CoreToBackend_ReviewWorkspaceRequest
+	//	*CoreToBackend_McpRequest
 	Message       isCoreToBackend_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1100,6 +1117,15 @@ func (x *CoreToBackend) GetReviewWorkspaceRequest() *ReviewWorkspaceRequest {
 	return nil
 }
 
+func (x *CoreToBackend) GetMcpRequest() *McpRequest {
+	if x != nil {
+		if x, ok := x.Message.(*CoreToBackend_McpRequest); ok {
+			return x.McpRequest
+		}
+	}
+	return nil
+}
+
 type isCoreToBackend_Message interface {
 	isCoreToBackend_Message()
 }
@@ -1164,6 +1190,10 @@ type CoreToBackend_ReviewWorkspaceRequest struct {
 	ReviewWorkspaceRequest *ReviewWorkspaceRequest `protobuf:"bytes,16,opt,name=review_workspace_request,json=reviewWorkspaceRequest,proto3,oneof"`
 }
 
+type CoreToBackend_McpRequest struct {
+	McpRequest *McpRequest `protobuf:"bytes,17,opt,name=mcp_request,json=mcpRequest,proto3,oneof"`
+}
+
 func (*CoreToBackend_Welcome) isCoreToBackend_Message() {}
 
 func (*CoreToBackend_StartJob) isCoreToBackend_Message() {}
@@ -1194,6 +1224,68 @@ func (*CoreToBackend_RepositoryStatusRequest) isCoreToBackend_Message() {}
 
 func (*CoreToBackend_ReviewWorkspaceRequest) isCoreToBackend_Message() {}
 
+func (*CoreToBackend_McpRequest) isCoreToBackend_Message() {}
+
+type McpResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Result        *structpb.Struct       `protobuf:"bytes,2,opt,name=result,proto3" json:"result,omitempty"`
+	Error         *Error                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *McpResponse) Reset() {
+	*x = McpResponse{}
+	mi := &file_threavia_backend_v1_backend_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *McpResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*McpResponse) ProtoMessage() {}
+
+func (x *McpResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_threavia_backend_v1_backend_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use McpResponse.ProtoReflect.Descriptor instead.
+func (*McpResponse) Descriptor() ([]byte, []int) {
+	return file_threavia_backend_v1_backend_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *McpResponse) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *McpResponse) GetResult() *structpb.Struct {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+func (x *McpResponse) GetError() *Error {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
 // A bounded read of backend-owned review snapshots. Correlated and scoped to
 // the authenticated backend; content is never accepted from another instance.
 type ReviewWorkspace struct {
@@ -1207,7 +1299,7 @@ type ReviewWorkspace struct {
 
 func (x *ReviewWorkspace) Reset() {
 	*x = ReviewWorkspace{}
-	mi := &file_threavia_backend_v1_backend_proto_msgTypes[11]
+	mi := &file_threavia_backend_v1_backend_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1219,7 +1311,7 @@ func (x *ReviewWorkspace) String() string {
 func (*ReviewWorkspace) ProtoMessage() {}
 
 func (x *ReviewWorkspace) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_backend_proto_msgTypes[11]
+	mi := &file_threavia_backend_v1_backend_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1232,7 +1324,7 @@ func (x *ReviewWorkspace) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewWorkspace.ProtoReflect.Descriptor instead.
 func (*ReviewWorkspace) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_backend_proto_rawDescGZIP(), []int{11}
+	return file_threavia_backend_v1_backend_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ReviewWorkspace) GetRequestId() string {
@@ -1271,7 +1363,7 @@ type LocalSkill struct {
 
 func (x *LocalSkill) Reset() {
 	*x = LocalSkill{}
-	mi := &file_threavia_backend_v1_backend_proto_msgTypes[12]
+	mi := &file_threavia_backend_v1_backend_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1283,7 +1375,7 @@ func (x *LocalSkill) String() string {
 func (*LocalSkill) ProtoMessage() {}
 
 func (x *LocalSkill) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_backend_proto_msgTypes[12]
+	mi := &file_threavia_backend_v1_backend_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1296,7 +1388,7 @@ func (x *LocalSkill) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LocalSkill.ProtoReflect.Descriptor instead.
 func (*LocalSkill) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_backend_proto_rawDescGZIP(), []int{12}
+	return file_threavia_backend_v1_backend_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *LocalSkill) GetName() string {
@@ -1329,7 +1421,7 @@ type SkillInventory struct {
 
 func (x *SkillInventory) Reset() {
 	*x = SkillInventory{}
-	mi := &file_threavia_backend_v1_backend_proto_msgTypes[13]
+	mi := &file_threavia_backend_v1_backend_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1341,7 +1433,7 @@ func (x *SkillInventory) String() string {
 func (*SkillInventory) ProtoMessage() {}
 
 func (x *SkillInventory) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_backend_proto_msgTypes[13]
+	mi := &file_threavia_backend_v1_backend_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1354,7 +1446,7 @@ func (x *SkillInventory) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillInventory.ProtoReflect.Descriptor instead.
 func (*SkillInventory) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_backend_proto_rawDescGZIP(), []int{13}
+	return file_threavia_backend_v1_backend_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SkillInventory) GetLocal() []*LocalSkill {
@@ -1378,7 +1470,7 @@ type SkillFetchRequest struct {
 
 func (x *SkillFetchRequest) Reset() {
 	*x = SkillFetchRequest{}
-	mi := &file_threavia_backend_v1_backend_proto_msgTypes[14]
+	mi := &file_threavia_backend_v1_backend_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1390,7 +1482,7 @@ func (x *SkillFetchRequest) String() string {
 func (*SkillFetchRequest) ProtoMessage() {}
 
 func (x *SkillFetchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_backend_proto_msgTypes[14]
+	mi := &file_threavia_backend_v1_backend_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1403,7 +1495,7 @@ func (x *SkillFetchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillFetchRequest.ProtoReflect.Descriptor instead.
 func (*SkillFetchRequest) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_backend_proto_rawDescGZIP(), []int{14}
+	return file_threavia_backend_v1_backend_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SkillFetchRequest) GetRequestId() string {
@@ -1447,7 +1539,7 @@ type WorkspaceDiff struct {
 
 func (x *WorkspaceDiff) Reset() {
 	*x = WorkspaceDiff{}
-	mi := &file_threavia_backend_v1_backend_proto_msgTypes[15]
+	mi := &file_threavia_backend_v1_backend_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1459,7 +1551,7 @@ func (x *WorkspaceDiff) String() string {
 func (*WorkspaceDiff) ProtoMessage() {}
 
 func (x *WorkspaceDiff) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_backend_proto_msgTypes[15]
+	mi := &file_threavia_backend_v1_backend_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1472,7 +1564,7 @@ func (x *WorkspaceDiff) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceDiff.ProtoReflect.Descriptor instead.
 func (*WorkspaceDiff) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_backend_proto_rawDescGZIP(), []int{15}
+	return file_threavia_backend_v1_backend_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *WorkspaceDiff) GetRequestId() string {
@@ -1546,7 +1638,7 @@ type RepositoryStatus struct {
 
 func (x *RepositoryStatus) Reset() {
 	*x = RepositoryStatus{}
-	mi := &file_threavia_backend_v1_backend_proto_msgTypes[16]
+	mi := &file_threavia_backend_v1_backend_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1558,7 +1650,7 @@ func (x *RepositoryStatus) String() string {
 func (*RepositoryStatus) ProtoMessage() {}
 
 func (x *RepositoryStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_threavia_backend_v1_backend_proto_msgTypes[16]
+	mi := &file_threavia_backend_v1_backend_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1571,7 +1663,7 @@ func (x *RepositoryStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RepositoryStatus.ProtoReflect.Descriptor instead.
 func (*RepositoryStatus) Descriptor() ([]byte, []int) {
-	return file_threavia_backend_v1_backend_proto_rawDescGZIP(), []int{16}
+	return file_threavia_backend_v1_backend_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RepositoryStatus) GetRequestId() string {
@@ -1735,7 +1827,7 @@ const file_threavia_backend_v1_backend_proto_rawDesc = "" +
 	"\x06job_id\x18\x03 \x01(\tR\x05jobId\x12\x12\n" +
 	"\x04name\x18\x04 \x01(\tR\x04name\x12-\n" +
 	"\x05input\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x05input\x12\x12\n" +
-	"\x04file\x18\x06 \x01(\fR\x04file\"\xc8\b\n" +
+	"\x04file\x18\x06 \x01(\fR\x04file\"\x8f\t\n" +
 	"\rBackendToCore\x122\n" +
 	"\x05hello\x18\x01 \x01(\v2\x1a.threavia.backend.v1.HelloH\x00R\x05hello\x12>\n" +
 	"\theartbeat\x18\x02 \x01(\v2\x1e.threavia.backend.v1.HeartbeatH\x00R\theartbeat\x12H\n" +
@@ -1751,8 +1843,9 @@ const file_threavia_backend_v1_backend_proto_rawDesc = "" +
 	"\x0eworkspace_diff\x18\v \x01(\v2\".threavia.backend.v1.WorkspaceDiffH\x00R\rworkspaceDiff\x12T\n" +
 	"\x11repository_status\x18\f \x01(\v2%.threavia.backend.v1.RepositoryStatusH\x00R\x10repositoryStatus\x12E\n" +
 	"\fquota_report\x18\r \x01(\v2 .threavia.backend.v1.QuotaReportH\x00R\vquotaReport\x12Q\n" +
-	"\x10review_workspace\x18\x0e \x01(\v2$.threavia.backend.v1.ReviewWorkspaceH\x00R\x0freviewWorkspaceB\t\n" +
-	"\amessage\"\x91\n" +
+	"\x10review_workspace\x18\x0e \x01(\v2$.threavia.backend.v1.ReviewWorkspaceH\x00R\x0freviewWorkspace\x12E\n" +
+	"\fmcp_response\x18\x0f \x01(\v2 .threavia.backend.v1.McpResponseH\x00R\vmcpResponseB\t\n" +
+	"\amessage\"\xd5\n" +
 	"\n" +
 	"\rCoreToBackend\x12\x1d\n" +
 	"\n" +
@@ -1773,8 +1866,15 @@ const file_threavia_backend_v1_backend_proto_rawDesc = "" +
 	"\x11update_job_policy\x18\r \x01(\v2$.threavia.backend.v1.UpdateJobPolicyH\x00R\x0fupdateJobPolicy\x12a\n" +
 	"\x16workspace_diff_request\x18\x0e \x01(\v2).threavia.backend.v1.WorkspaceDiffRequestH\x00R\x14workspaceDiffRequest\x12j\n" +
 	"\x19repository_status_request\x18\x0f \x01(\v2,.threavia.backend.v1.RepositoryStatusRequestH\x00R\x17repositoryStatusRequest\x12g\n" +
-	"\x18review_workspace_request\x18\x10 \x01(\v2+.threavia.backend.v1.ReviewWorkspaceRequestH\x00R\x16reviewWorkspaceRequestB\t\n" +
-	"\amessage\"\x93\x01\n" +
+	"\x18review_workspace_request\x18\x10 \x01(\v2+.threavia.backend.v1.ReviewWorkspaceRequestH\x00R\x16reviewWorkspaceRequest\x12B\n" +
+	"\vmcp_request\x18\x11 \x01(\v2\x1f.threavia.backend.v1.McpRequestH\x00R\n" +
+	"mcpRequestB\t\n" +
+	"\amessage\"\x8f\x01\n" +
+	"\vMcpResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12/\n" +
+	"\x06result\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06result\x120\n" +
+	"\x05error\x18\x03 \x01(\v2\x1a.threavia.backend.v1.ErrorR\x05error\"\x93\x01\n" +
 	"\x0fReviewWorkspace\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12/\n" +
@@ -1837,7 +1937,7 @@ func file_threavia_backend_v1_backend_proto_rawDescGZIP() []byte {
 	return file_threavia_backend_v1_backend_proto_rawDescData
 }
 
-var file_threavia_backend_v1_backend_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_threavia_backend_v1_backend_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_threavia_backend_v1_backend_proto_goTypes = []any{
 	(*Hello)(nil),                   // 0: threavia.backend.v1.Hello
 	(*Heartbeat)(nil),               // 1: threavia.backend.v1.Heartbeat
@@ -1850,108 +1950,114 @@ var file_threavia_backend_v1_backend_proto_goTypes = []any{
 	(*CoreToolRequest)(nil),         // 8: threavia.backend.v1.CoreToolRequest
 	(*BackendToCore)(nil),           // 9: threavia.backend.v1.BackendToCore
 	(*CoreToBackend)(nil),           // 10: threavia.backend.v1.CoreToBackend
-	(*ReviewWorkspace)(nil),         // 11: threavia.backend.v1.ReviewWorkspace
-	(*LocalSkill)(nil),              // 12: threavia.backend.v1.LocalSkill
-	(*SkillInventory)(nil),          // 13: threavia.backend.v1.SkillInventory
-	(*SkillFetchRequest)(nil),       // 14: threavia.backend.v1.SkillFetchRequest
-	(*WorkspaceDiff)(nil),           // 15: threavia.backend.v1.WorkspaceDiff
-	(*RepositoryStatus)(nil),        // 16: threavia.backend.v1.RepositoryStatus
-	(*ProtocolInfo)(nil),            // 17: threavia.backend.v1.ProtocolInfo
-	(*SdkInfo)(nil),                 // 18: threavia.backend.v1.SdkInfo
-	(*BackendInfo)(nil),             // 19: threavia.backend.v1.BackendInfo
-	(Capability)(0),                 // 20: threavia.backend.v1.Capability
-	(*FeatureFlags)(nil),            // 21: threavia.backend.v1.FeatureFlags
-	(*Capacity)(nil),                // 22: threavia.backend.v1.Capacity
-	(*ModelCatalog)(nil),            // 23: threavia.backend.v1.ModelCatalog
-	(*timestamppb.Timestamp)(nil),   // 24: google.protobuf.Timestamp
-	(BackendOperationalStatus)(0),   // 25: threavia.backend.v1.BackendOperationalStatus
-	(*Condition)(nil),               // 26: threavia.backend.v1.Condition
-	(ProviderAuthState)(0),          // 27: threavia.backend.v1.ProviderAuthState
-	(*structpb.Struct)(nil),         // 28: google.protobuf.Struct
-	(JobStatus)(0),                  // 29: threavia.backend.v1.JobStatus
-	(ResumeStatus)(0),               // 30: threavia.backend.v1.ResumeStatus
-	(*Error)(nil),                   // 31: threavia.backend.v1.Error
-	(*JobEvent)(nil),                // 32: threavia.backend.v1.JobEvent
-	(*EphemeralJobEvent)(nil),       // 33: threavia.backend.v1.EphemeralJobEvent
-	(*Welcome)(nil),                 // 34: threavia.backend.v1.Welcome
-	(*StartJob)(nil),                // 35: threavia.backend.v1.StartJob
-	(*CancelJob)(nil),               // 36: threavia.backend.v1.CancelJob
-	(*ValidationResolution)(nil),    // 37: threavia.backend.v1.ValidationResolution
-	(*UserInputResolution)(nil),     // 38: threavia.backend.v1.UserInputResolution
-	(*JobInputNow)(nil),             // 39: threavia.backend.v1.JobInputNow
-	(*JobInputNext)(nil),            // 40: threavia.backend.v1.JobInputNext
-	(*ReconcileInstruction)(nil),    // 41: threavia.backend.v1.ReconcileInstruction
-	(*EventAck)(nil),                // 42: threavia.backend.v1.EventAck
-	(*CoreToolResponse)(nil),        // 43: threavia.backend.v1.CoreToolResponse
-	(*SkillBundle)(nil),             // 44: threavia.backend.v1.SkillBundle
-	(*UpdateJobPolicy)(nil),         // 45: threavia.backend.v1.UpdateJobPolicy
-	(*WorkspaceDiffRequest)(nil),    // 46: threavia.backend.v1.WorkspaceDiffRequest
-	(*RepositoryStatusRequest)(nil), // 47: threavia.backend.v1.RepositoryStatusRequest
-	(*ReviewWorkspaceRequest)(nil),  // 48: threavia.backend.v1.ReviewWorkspaceRequest
+	(*McpResponse)(nil),             // 11: threavia.backend.v1.McpResponse
+	(*ReviewWorkspace)(nil),         // 12: threavia.backend.v1.ReviewWorkspace
+	(*LocalSkill)(nil),              // 13: threavia.backend.v1.LocalSkill
+	(*SkillInventory)(nil),          // 14: threavia.backend.v1.SkillInventory
+	(*SkillFetchRequest)(nil),       // 15: threavia.backend.v1.SkillFetchRequest
+	(*WorkspaceDiff)(nil),           // 16: threavia.backend.v1.WorkspaceDiff
+	(*RepositoryStatus)(nil),        // 17: threavia.backend.v1.RepositoryStatus
+	(*ProtocolInfo)(nil),            // 18: threavia.backend.v1.ProtocolInfo
+	(*SdkInfo)(nil),                 // 19: threavia.backend.v1.SdkInfo
+	(*BackendInfo)(nil),             // 20: threavia.backend.v1.BackendInfo
+	(Capability)(0),                 // 21: threavia.backend.v1.Capability
+	(*FeatureFlags)(nil),            // 22: threavia.backend.v1.FeatureFlags
+	(*Capacity)(nil),                // 23: threavia.backend.v1.Capacity
+	(*ModelCatalog)(nil),            // 24: threavia.backend.v1.ModelCatalog
+	(*timestamppb.Timestamp)(nil),   // 25: google.protobuf.Timestamp
+	(BackendOperationalStatus)(0),   // 26: threavia.backend.v1.BackendOperationalStatus
+	(*Condition)(nil),               // 27: threavia.backend.v1.Condition
+	(ProviderAuthState)(0),          // 28: threavia.backend.v1.ProviderAuthState
+	(*structpb.Struct)(nil),         // 29: google.protobuf.Struct
+	(JobStatus)(0),                  // 30: threavia.backend.v1.JobStatus
+	(ResumeStatus)(0),               // 31: threavia.backend.v1.ResumeStatus
+	(*Error)(nil),                   // 32: threavia.backend.v1.Error
+	(*JobEvent)(nil),                // 33: threavia.backend.v1.JobEvent
+	(*EphemeralJobEvent)(nil),       // 34: threavia.backend.v1.EphemeralJobEvent
+	(*Welcome)(nil),                 // 35: threavia.backend.v1.Welcome
+	(*StartJob)(nil),                // 36: threavia.backend.v1.StartJob
+	(*CancelJob)(nil),               // 37: threavia.backend.v1.CancelJob
+	(*ValidationResolution)(nil),    // 38: threavia.backend.v1.ValidationResolution
+	(*UserInputResolution)(nil),     // 39: threavia.backend.v1.UserInputResolution
+	(*JobInputNow)(nil),             // 40: threavia.backend.v1.JobInputNow
+	(*JobInputNext)(nil),            // 41: threavia.backend.v1.JobInputNext
+	(*ReconcileInstruction)(nil),    // 42: threavia.backend.v1.ReconcileInstruction
+	(*EventAck)(nil),                // 43: threavia.backend.v1.EventAck
+	(*CoreToolResponse)(nil),        // 44: threavia.backend.v1.CoreToolResponse
+	(*SkillBundle)(nil),             // 45: threavia.backend.v1.SkillBundle
+	(*UpdateJobPolicy)(nil),         // 46: threavia.backend.v1.UpdateJobPolicy
+	(*WorkspaceDiffRequest)(nil),    // 47: threavia.backend.v1.WorkspaceDiffRequest
+	(*RepositoryStatusRequest)(nil), // 48: threavia.backend.v1.RepositoryStatusRequest
+	(*ReviewWorkspaceRequest)(nil),  // 49: threavia.backend.v1.ReviewWorkspaceRequest
+	(*McpRequest)(nil),              // 50: threavia.backend.v1.McpRequest
 }
 var file_threavia_backend_v1_backend_proto_depIdxs = []int32{
-	17, // 0: threavia.backend.v1.Hello.protocol:type_name -> threavia.backend.v1.ProtocolInfo
-	18, // 1: threavia.backend.v1.Hello.sdk:type_name -> threavia.backend.v1.SdkInfo
-	19, // 2: threavia.backend.v1.Hello.backend:type_name -> threavia.backend.v1.BackendInfo
-	20, // 3: threavia.backend.v1.Hello.capabilities:type_name -> threavia.backend.v1.Capability
-	21, // 4: threavia.backend.v1.Hello.features:type_name -> threavia.backend.v1.FeatureFlags
-	22, // 5: threavia.backend.v1.Hello.capacity:type_name -> threavia.backend.v1.Capacity
-	23, // 6: threavia.backend.v1.Hello.model_catalog:type_name -> threavia.backend.v1.ModelCatalog
-	24, // 7: threavia.backend.v1.Heartbeat.sent_at:type_name -> google.protobuf.Timestamp
-	22, // 8: threavia.backend.v1.Heartbeat.capacity:type_name -> threavia.backend.v1.Capacity
-	25, // 9: threavia.backend.v1.StatusUpdate.status:type_name -> threavia.backend.v1.BackendOperationalStatus
-	26, // 10: threavia.backend.v1.StatusUpdate.conditions:type_name -> threavia.backend.v1.Condition
-	22, // 11: threavia.backend.v1.StatusUpdate.capacity:type_name -> threavia.backend.v1.Capacity
-	27, // 12: threavia.backend.v1.StatusUpdate.provider_auth_state:type_name -> threavia.backend.v1.ProviderAuthState
-	28, // 13: threavia.backend.v1.QuotaReport.snapshot:type_name -> google.protobuf.Struct
-	29, // 14: threavia.backend.v1.JobState.status:type_name -> threavia.backend.v1.JobStatus
-	30, // 15: threavia.backend.v1.RunState.resume_status:type_name -> threavia.backend.v1.ResumeStatus
+	18, // 0: threavia.backend.v1.Hello.protocol:type_name -> threavia.backend.v1.ProtocolInfo
+	19, // 1: threavia.backend.v1.Hello.sdk:type_name -> threavia.backend.v1.SdkInfo
+	20, // 2: threavia.backend.v1.Hello.backend:type_name -> threavia.backend.v1.BackendInfo
+	21, // 3: threavia.backend.v1.Hello.capabilities:type_name -> threavia.backend.v1.Capability
+	22, // 4: threavia.backend.v1.Hello.features:type_name -> threavia.backend.v1.FeatureFlags
+	23, // 5: threavia.backend.v1.Hello.capacity:type_name -> threavia.backend.v1.Capacity
+	24, // 6: threavia.backend.v1.Hello.model_catalog:type_name -> threavia.backend.v1.ModelCatalog
+	25, // 7: threavia.backend.v1.Heartbeat.sent_at:type_name -> google.protobuf.Timestamp
+	23, // 8: threavia.backend.v1.Heartbeat.capacity:type_name -> threavia.backend.v1.Capacity
+	26, // 9: threavia.backend.v1.StatusUpdate.status:type_name -> threavia.backend.v1.BackendOperationalStatus
+	27, // 10: threavia.backend.v1.StatusUpdate.conditions:type_name -> threavia.backend.v1.Condition
+	23, // 11: threavia.backend.v1.StatusUpdate.capacity:type_name -> threavia.backend.v1.Capacity
+	28, // 12: threavia.backend.v1.StatusUpdate.provider_auth_state:type_name -> threavia.backend.v1.ProviderAuthState
+	29, // 13: threavia.backend.v1.QuotaReport.snapshot:type_name -> google.protobuf.Struct
+	30, // 14: threavia.backend.v1.JobState.status:type_name -> threavia.backend.v1.JobStatus
+	31, // 15: threavia.backend.v1.RunState.resume_status:type_name -> threavia.backend.v1.ResumeStatus
 	4,  // 16: threavia.backend.v1.RunState.jobs:type_name -> threavia.backend.v1.JobState
 	5,  // 17: threavia.backend.v1.ReconcileState.runs:type_name -> threavia.backend.v1.RunState
-	31, // 18: threavia.backend.v1.CommandResult.error:type_name -> threavia.backend.v1.Error
-	28, // 19: threavia.backend.v1.CoreToolRequest.input:type_name -> google.protobuf.Struct
+	32, // 18: threavia.backend.v1.CommandResult.error:type_name -> threavia.backend.v1.Error
+	29, // 19: threavia.backend.v1.CoreToolRequest.input:type_name -> google.protobuf.Struct
 	0,  // 20: threavia.backend.v1.BackendToCore.hello:type_name -> threavia.backend.v1.Hello
 	1,  // 21: threavia.backend.v1.BackendToCore.heartbeat:type_name -> threavia.backend.v1.Heartbeat
 	2,  // 22: threavia.backend.v1.BackendToCore.status_update:type_name -> threavia.backend.v1.StatusUpdate
 	6,  // 23: threavia.backend.v1.BackendToCore.reconcile_state:type_name -> threavia.backend.v1.ReconcileState
-	32, // 24: threavia.backend.v1.BackendToCore.job_event:type_name -> threavia.backend.v1.JobEvent
-	33, // 25: threavia.backend.v1.BackendToCore.ephemeral_job_event:type_name -> threavia.backend.v1.EphemeralJobEvent
+	33, // 24: threavia.backend.v1.BackendToCore.job_event:type_name -> threavia.backend.v1.JobEvent
+	34, // 25: threavia.backend.v1.BackendToCore.ephemeral_job_event:type_name -> threavia.backend.v1.EphemeralJobEvent
 	7,  // 26: threavia.backend.v1.BackendToCore.command_result:type_name -> threavia.backend.v1.CommandResult
 	8,  // 27: threavia.backend.v1.BackendToCore.core_tool_request:type_name -> threavia.backend.v1.CoreToolRequest
-	13, // 28: threavia.backend.v1.BackendToCore.skill_inventory:type_name -> threavia.backend.v1.SkillInventory
-	14, // 29: threavia.backend.v1.BackendToCore.skill_fetch_request:type_name -> threavia.backend.v1.SkillFetchRequest
-	15, // 30: threavia.backend.v1.BackendToCore.workspace_diff:type_name -> threavia.backend.v1.WorkspaceDiff
-	16, // 31: threavia.backend.v1.BackendToCore.repository_status:type_name -> threavia.backend.v1.RepositoryStatus
+	14, // 28: threavia.backend.v1.BackendToCore.skill_inventory:type_name -> threavia.backend.v1.SkillInventory
+	15, // 29: threavia.backend.v1.BackendToCore.skill_fetch_request:type_name -> threavia.backend.v1.SkillFetchRequest
+	16, // 30: threavia.backend.v1.BackendToCore.workspace_diff:type_name -> threavia.backend.v1.WorkspaceDiff
+	17, // 31: threavia.backend.v1.BackendToCore.repository_status:type_name -> threavia.backend.v1.RepositoryStatus
 	3,  // 32: threavia.backend.v1.BackendToCore.quota_report:type_name -> threavia.backend.v1.QuotaReport
-	11, // 33: threavia.backend.v1.BackendToCore.review_workspace:type_name -> threavia.backend.v1.ReviewWorkspace
-	34, // 34: threavia.backend.v1.CoreToBackend.welcome:type_name -> threavia.backend.v1.Welcome
-	35, // 35: threavia.backend.v1.CoreToBackend.start_job:type_name -> threavia.backend.v1.StartJob
-	36, // 36: threavia.backend.v1.CoreToBackend.cancel_job:type_name -> threavia.backend.v1.CancelJob
-	37, // 37: threavia.backend.v1.CoreToBackend.validation_resolution:type_name -> threavia.backend.v1.ValidationResolution
-	38, // 38: threavia.backend.v1.CoreToBackend.user_input_resolution:type_name -> threavia.backend.v1.UserInputResolution
-	39, // 39: threavia.backend.v1.CoreToBackend.job_input_now:type_name -> threavia.backend.v1.JobInputNow
-	40, // 40: threavia.backend.v1.CoreToBackend.job_input_next:type_name -> threavia.backend.v1.JobInputNext
-	41, // 41: threavia.backend.v1.CoreToBackend.reconcile_instruction:type_name -> threavia.backend.v1.ReconcileInstruction
-	42, // 42: threavia.backend.v1.CoreToBackend.event_ack:type_name -> threavia.backend.v1.EventAck
-	43, // 43: threavia.backend.v1.CoreToBackend.core_tool_response:type_name -> threavia.backend.v1.CoreToolResponse
-	44, // 44: threavia.backend.v1.CoreToBackend.skill_bundle:type_name -> threavia.backend.v1.SkillBundle
-	45, // 45: threavia.backend.v1.CoreToBackend.update_job_policy:type_name -> threavia.backend.v1.UpdateJobPolicy
-	46, // 46: threavia.backend.v1.CoreToBackend.workspace_diff_request:type_name -> threavia.backend.v1.WorkspaceDiffRequest
-	47, // 47: threavia.backend.v1.CoreToBackend.repository_status_request:type_name -> threavia.backend.v1.RepositoryStatusRequest
-	48, // 48: threavia.backend.v1.CoreToBackend.review_workspace_request:type_name -> threavia.backend.v1.ReviewWorkspaceRequest
-	28, // 49: threavia.backend.v1.ReviewWorkspace.result:type_name -> google.protobuf.Struct
-	31, // 50: threavia.backend.v1.ReviewWorkspace.error:type_name -> threavia.backend.v1.Error
-	12, // 51: threavia.backend.v1.SkillInventory.local:type_name -> threavia.backend.v1.LocalSkill
-	31, // 52: threavia.backend.v1.WorkspaceDiff.error:type_name -> threavia.backend.v1.Error
-	24, // 53: threavia.backend.v1.RepositoryStatus.fetched_at:type_name -> google.protobuf.Timestamp
-	31, // 54: threavia.backend.v1.RepositoryStatus.error:type_name -> threavia.backend.v1.Error
-	9,  // 55: threavia.backend.v1.BackendControl.Connect:input_type -> threavia.backend.v1.BackendToCore
-	10, // 56: threavia.backend.v1.BackendControl.Connect:output_type -> threavia.backend.v1.CoreToBackend
-	56, // [56:57] is the sub-list for method output_type
-	55, // [55:56] is the sub-list for method input_type
-	55, // [55:55] is the sub-list for extension type_name
-	55, // [55:55] is the sub-list for extension extendee
-	0,  // [0:55] is the sub-list for field type_name
+	12, // 33: threavia.backend.v1.BackendToCore.review_workspace:type_name -> threavia.backend.v1.ReviewWorkspace
+	11, // 34: threavia.backend.v1.BackendToCore.mcp_response:type_name -> threavia.backend.v1.McpResponse
+	35, // 35: threavia.backend.v1.CoreToBackend.welcome:type_name -> threavia.backend.v1.Welcome
+	36, // 36: threavia.backend.v1.CoreToBackend.start_job:type_name -> threavia.backend.v1.StartJob
+	37, // 37: threavia.backend.v1.CoreToBackend.cancel_job:type_name -> threavia.backend.v1.CancelJob
+	38, // 38: threavia.backend.v1.CoreToBackend.validation_resolution:type_name -> threavia.backend.v1.ValidationResolution
+	39, // 39: threavia.backend.v1.CoreToBackend.user_input_resolution:type_name -> threavia.backend.v1.UserInputResolution
+	40, // 40: threavia.backend.v1.CoreToBackend.job_input_now:type_name -> threavia.backend.v1.JobInputNow
+	41, // 41: threavia.backend.v1.CoreToBackend.job_input_next:type_name -> threavia.backend.v1.JobInputNext
+	42, // 42: threavia.backend.v1.CoreToBackend.reconcile_instruction:type_name -> threavia.backend.v1.ReconcileInstruction
+	43, // 43: threavia.backend.v1.CoreToBackend.event_ack:type_name -> threavia.backend.v1.EventAck
+	44, // 44: threavia.backend.v1.CoreToBackend.core_tool_response:type_name -> threavia.backend.v1.CoreToolResponse
+	45, // 45: threavia.backend.v1.CoreToBackend.skill_bundle:type_name -> threavia.backend.v1.SkillBundle
+	46, // 46: threavia.backend.v1.CoreToBackend.update_job_policy:type_name -> threavia.backend.v1.UpdateJobPolicy
+	47, // 47: threavia.backend.v1.CoreToBackend.workspace_diff_request:type_name -> threavia.backend.v1.WorkspaceDiffRequest
+	48, // 48: threavia.backend.v1.CoreToBackend.repository_status_request:type_name -> threavia.backend.v1.RepositoryStatusRequest
+	49, // 49: threavia.backend.v1.CoreToBackend.review_workspace_request:type_name -> threavia.backend.v1.ReviewWorkspaceRequest
+	50, // 50: threavia.backend.v1.CoreToBackend.mcp_request:type_name -> threavia.backend.v1.McpRequest
+	29, // 51: threavia.backend.v1.McpResponse.result:type_name -> google.protobuf.Struct
+	32, // 52: threavia.backend.v1.McpResponse.error:type_name -> threavia.backend.v1.Error
+	29, // 53: threavia.backend.v1.ReviewWorkspace.result:type_name -> google.protobuf.Struct
+	32, // 54: threavia.backend.v1.ReviewWorkspace.error:type_name -> threavia.backend.v1.Error
+	13, // 55: threavia.backend.v1.SkillInventory.local:type_name -> threavia.backend.v1.LocalSkill
+	32, // 56: threavia.backend.v1.WorkspaceDiff.error:type_name -> threavia.backend.v1.Error
+	25, // 57: threavia.backend.v1.RepositoryStatus.fetched_at:type_name -> google.protobuf.Timestamp
+	32, // 58: threavia.backend.v1.RepositoryStatus.error:type_name -> threavia.backend.v1.Error
+	9,  // 59: threavia.backend.v1.BackendControl.Connect:input_type -> threavia.backend.v1.BackendToCore
+	10, // 60: threavia.backend.v1.BackendControl.Connect:output_type -> threavia.backend.v1.CoreToBackend
+	60, // [60:61] is the sub-list for method output_type
+	59, // [59:60] is the sub-list for method input_type
+	59, // [59:59] is the sub-list for extension type_name
+	59, // [59:59] is the sub-list for extension extendee
+	0,  // [0:59] is the sub-list for field type_name
 }
 
 func init() { file_threavia_backend_v1_backend_proto_init() }
@@ -1977,6 +2083,7 @@ func file_threavia_backend_v1_backend_proto_init() {
 		(*BackendToCore_RepositoryStatus)(nil),
 		(*BackendToCore_QuotaReport)(nil),
 		(*BackendToCore_ReviewWorkspace)(nil),
+		(*BackendToCore_McpResponse)(nil),
 	}
 	file_threavia_backend_v1_backend_proto_msgTypes[10].OneofWrappers = []any{
 		(*CoreToBackend_Welcome)(nil),
@@ -1994,6 +2101,7 @@ func file_threavia_backend_v1_backend_proto_init() {
 		(*CoreToBackend_WorkspaceDiffRequest)(nil),
 		(*CoreToBackend_RepositoryStatusRequest)(nil),
 		(*CoreToBackend_ReviewWorkspaceRequest)(nil),
+		(*CoreToBackend_McpRequest)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2001,7 +2109,7 @@ func file_threavia_backend_v1_backend_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_threavia_backend_v1_backend_proto_rawDesc), len(file_threavia_backend_v1_backend_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   17,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -180,6 +180,15 @@ message ProjectContext {
   string project_instructions = 9;
   // Core-managed Skills installed on the Project (spec section 18).
   repeated ProjectSkill skills = 10;
+  // Immutable declarations for this Job; secrets are resolved only on the backend.
+  repeated google.protobuf.Struct mcp_servers = 13;
+}
+
+// An explicit user operation on backend-local MCP state. Never model-supplied secrets.
+message McpRequest {
+  string request_id = 1;
+  string operation = 2;
+  google.protobuf.Struct input = 3;
 }
 
 message StartJob {
