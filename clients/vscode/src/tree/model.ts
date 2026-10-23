@@ -1,10 +1,11 @@
 import type { Project, Repository, Session, UserInputRequest, ValidationRequest } from '../api/types';
+import { sessionsByTitle } from '../../../shared/sessions';
 
 /**
  * What the sidebar shows, decided without an editor.
  *
  * The rules are the web sidebar's (web/ui/src/components/app-shell.tsx): what
- * waits for the user comes first, a permission outranks a question, archived
+ * waits for the user has its own section, a permission outranks a question, archived
  * Sessions stay out of the list, and a Session with nothing going on is quiet.
  * The tree provider only turns these into TreeItems.
  */
@@ -75,22 +76,10 @@ export function stateIcon(state: SessionActivity): IconSpec {
 }
 
 /**
- * The Sessions of a Project as the sidebar lists them: archived ones left out,
- * what waits first whatever its age, then the most recently touched.
+ * The Sessions of a Project in alphabetical title order, archived ones left out.
  */
-export function orderSessions(sessions: Session[], waiting: Map<string, 'validation' | 'input'>): Session[] {
-  const recent = (session: Session) => {
-    const at = Date.parse(session.updatedAt);
-    // An unreadable date sorts last, which beats disappearing from the list.
-    return Number.isNaN(at) ? -Infinity : at;
-  };
-  return sessions
-    .filter((session) => session.status !== 'ARCHIVED')
-    .sort((a, b) => {
-      const waitingA = waiting.has(a.id) ? 0 : 1;
-      const waitingB = waiting.has(b.id) ? 0 : 1;
-      return waitingA - waitingB || recent(b) - recent(a);
-    });
+export function orderSessions(sessions: Session[]): Session[] {
+  return sessionsByTitle(sessions.filter((session) => session.status !== 'ARCHIVED'));
 }
 
 /** Whether a Project is the one this workspace names, by id or by name. */

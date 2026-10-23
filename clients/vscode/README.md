@@ -15,7 +15,8 @@ pinned global decisions are read by agents in all your projects on that Core.
 
 - **Sidebar.** The Threavia view in the activity bar lists what waits for you
   (approvals and questions, across every Project), your pinned sessions, and
-  each Project's sessions, waiting ones first. A session's row shows whether it
+  each Project's sessions, in alphabetical title order. Pinned sessions and
+  session pickers use the same order. A session's row shows whether it
   is working, queued, or waiting for you; hover or select it to see its branch,
   how far it is from its upstream and what is left to commit. Right-click a
   session to pin, rename, archive, refresh its repository from origin, or open
@@ -119,7 +120,7 @@ pinned global decisions are read by agents in all your projects on that Core.
   Explorer), or run **Threavia: Ask Threavia About This…**: the selection, or
   the whole file, is sent with its path and lines and what you ask, to a new
   session (choose the Project, the backend, the working directory) or to a
-  recent one, whose conversation then opens.
+  session from an alphabetical list, whose conversation then opens.
 - **Tasks.** The Tasks view lists what a Project still owes, as the web
   client's Tasks page does: In progress, Ready to start, Waiting on other work
   (with what each one waits on), and Done, folded and counted. Each row offers

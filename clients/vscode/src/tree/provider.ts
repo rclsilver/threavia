@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { sessionsByTitle } from '../../../shared/sessions';
 
 import { ApiError } from '../api/client';
 import type { Project, Repository, Session } from '../api/types';
@@ -256,7 +257,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
 
   private async pinnedChildren(core: Core): Promise<Node[]> {
     const pinned = await this.loadPinned(core);
-    return pinned.map((session): Node => ({ type: 'session', coreId: core.id, session, under: 'pinned' }));
+    return sessionsByTitle(pinned).map((session): Node => ({ type: 'session', coreId: core.id, session, under: 'pinned' }));
   }
 
   private async projectChildren(core: Core, node: ProjectNode): Promise<Node[]> {
@@ -266,7 +267,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
       sessions = await core.client.sessions(node.project.id);
       cache.sessions.set(node.project.id, sessions);
     }
-    const ordered = orderSessions(sessions, waitingBySession(core.attention.current));
+    const ordered = orderSessions(sessions);
     if (ordered.length === 0) return [{ type: 'message', text: 'No sessions yet.', parent: node }];
     return ordered.map((session): Node => ({ type: 'session', coreId: core.id, session, under: 'project' }));
   }

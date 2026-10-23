@@ -310,7 +310,7 @@ Restrained and exact; colour is earned by the action.
 - **Shadow Strategy:** none at rest; `shadow-sm` only for attention cards and the composer (see Elevation).
 
 ### Navigation
-- **Sidebar:** the mark and live badge, then **Waiting** first (inbox icon in `warn-text`, amber count badge, medium weight when something waits), the project select, project nav, then sessions grouped by "Waiting for you" (amber) and by recency. Items are 14px, 6px radius; hover and active take the raised-grey fill, active adds medium weight.
+- **Sidebar:** the mark and live badge, then **Waiting** first (inbox icon in `warn-text`, amber count badge, medium weight when something waits), pinned sessions, the project select, project nav, then sessions in alphabetical title order. Active, archived and pinned lists use the same case- and accent-insensitive order, with natural ordering of numbers. State icons remain visible without moving a session out of its alphabetical position. Items are 14px, 6px radius; hover and active take the raised-grey fill, active adds medium weight.
 - **Rail:** folded, the sidebar keeps 32px icon squares; a waiting count becomes an amber dot ringed in surface.
 - **Phone:** a top bar with the menu, the mark, an amber "N waiting" link that goes straight to the inbox, and the live badge. The drawer slides in over a scrim and is `inert` while closed, so it takes neither keyboard focus nor screen reader attention.
 - **Tabs:** muted text, active text in ink with a 2px accent underline over a hairline.

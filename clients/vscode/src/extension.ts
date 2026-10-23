@@ -24,6 +24,7 @@ import { chooseNewSession } from './start/new';
 import { pickBackend, pickProject } from './start/pickers';
 import { BackendsView } from './tree/backends';
 import { UNTITLED, titleOf } from './tree/model';
+import { sessionsByTitle } from '../../shared/sessions';
 import { SidebarProvider, type Node, type RequestNode, type SessionNode } from './tree/provider';
 import { PathResolver } from './workspace/resolve';
 import { Reviews } from './review/view';
@@ -343,7 +344,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
           if (!project) return;
           path = `/api/v1/projects/${project.id}/policy`; label = project.name;
           if (scope === 'Session') {
-            const sessions = await core.client.sessions(project.id);
+            const sessions = sessionsByTitle(await core.client.sessions(project.id));
             const selected = await vscode.window.showQuickPick(sessions.map((session) => ({ label: titleOf(session), session })), { title: 'Session permissions', ignoreFocusOut: true });
             if (!selected) return;
             path = `/api/v1/sessions/${selected.session.id}/policy`; label = titleOf(selected.session);

@@ -100,10 +100,10 @@ function excerptOf(document: vscode.TextDocument, selection: vscode.Selection | 
 }
 
 async function pickSession(client: CoreClient, project: Project, title: string): Promise<Session | 'new' | undefined> {
-  const sessions = orderSessions(await client.sessions(project.id), new Map()).slice(0, 15);
+  const sessions = orderSessions(await client.sessions(project.id));
   return pick<Session | 'new'>(`${title}: Session`, 'Start a new session, or add to one', [
     { label: '$(add) New session', value: 'new' },
-    ...(sessions.length > 0 ? [{ label: 'Recent sessions', kind: vscode.QuickPickItemKind.Separator, value: 'new' as const }] : []),
+    ...(sessions.length > 0 ? [{ label: 'Sessions', kind: vscode.QuickPickItemKind.Separator, value: 'new' as const }] : []),
     ...sessions.map((session) => ({
       label: titleOf(session),
       description: session.activeJobStatus ? humanise(session.activeJobStatus) : undefined,

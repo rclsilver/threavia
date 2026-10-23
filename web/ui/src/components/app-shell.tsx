@@ -30,6 +30,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { sessionsByTitle } from '../../../../clients/shared/sessions';
 
 import {
   useAttention,
@@ -106,9 +107,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Archived Sessions are read from the same list, because asking for them
   // separately would mean a second shape of answer for the same question.
   const sessions = useSessions(projectId, showArchived);
-  const shown = (sessions.data ?? []).filter((session) =>
+  const shown = sessionsByTitle((sessions.data ?? []).filter((session) =>
     showArchived ? session.status === 'ARCHIVED' : session.status !== 'ARCHIVED',
-  );
+  ));
   const [collapsed, setCollapsed] = useCollapsed();
 
   // Where each Project was left, so coming back to one lands there. Only a
@@ -317,44 +318,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )}
             </div>
           </div>
-          {/*
-           * Grouped by when they were last touched, and titled by nothing else:
-           * a timestamp under every row doubles the height of the list to
-           * answer a question nobody asks per session, only per group.
-           */}
+          {/* A stable place by title, even when a session starts work or waits. */}
           <div className="-mx-1 space-y-4 px-1 md:min-h-0 md:flex-1 md:overflow-y-auto">
             {shown.length === 0 && (
               <p className="text-muted px-2 text-sm">
                 {showArchived ? 'Nothing archived.' : 'No sessions yet.'}
               </p>
             )}
-            {groupSessions(shown, waiting).map((group) => (
-              <div key={group.label} className="space-y-0.5">
-                <p className={cn('px-2 pb-1 text-xs', group.label === 'Waiting for you' ? 'text-warn-text font-medium' : 'text-muted')}>
-                  {group.label}
-                </p>
-                <ul>
-                  {group.sessions.map((session) => (
-                    <li key={session.id}>
-                      <Link
-                        to="/sessions/$sessionId"
-                        params={{ sessionId: session.id }}
-                        title={session.title || 'Untitled session'}
-                        className={cn(
-                          'hover:bg-surface-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm max-md:min-h-11',
-                          params.sessionId === session.id && 'bg-surface-2 font-medium',
-                        )}
-                      >
-                        <span className="min-w-0 flex-1 truncate">
-                          {session.title || 'Untitled session'}
-                        </span>
-                        <SessionState state={sessionState(session, waiting)} />
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            <ul>
+              {shown.map((session) => (
+                <li key={session.id}>
+                  <Link
+                    to="/sessions/$sessionId"
+                    params={{ sessionId: session.id }}
+                    title={session.title || 'Untitled session'}
+                    className={cn(
+                      'hover:bg-surface-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm max-md:min-h-11',
+                      params.sessionId === session.id && 'bg-surface-2 font-medium',
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {session.title || 'Untitled session'}
+                    </span>
+                    <SessionState state={sessionState(session, waiting)} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
 
@@ -417,40 +407,6 @@ function SessionState({ state }: { state: SessionActivity }) {
     case 'idle':
       return null;
   }
-}
-
-/**
- * Sessions bucketed by how recently they were touched.
- *
- * The buckets are the ones a person actually uses to find something again: what
- * they were doing a moment ago, earlier today, this week, before that.
- */
-function groupSessions(
-  sessions: Session[],
-  waiting: Map<string, 'validation' | 'input'>,
-): { label: string; sessions: Session[] }[] {
-  const now = Date.now();
-  const day = 24 * 60 * 60 * 1000;
-  // What waits for a decision comes first, whatever its age: it is the one
-  // row a person opening the list is looking for.
-  const pinned = sessions.filter((session) => waiting.has(session.id));
-  sessions = sessions.filter((session) => !waiting.has(session.id));
-  const buckets: { label: string; within: number; sessions: Session[] }[] = [
-    { label: 'Waiting for you', within: -1, sessions: pinned },
-    { label: 'Today', within: day, sessions: [] },
-    { label: 'Previous 7 days', within: 7 * day, sessions: [] },
-    { label: 'Previous 30 days', within: 30 * day, sessions: [] },
-    { label: 'Older', within: Infinity, sessions: [] },
-  ];
-
-  for (const session of sessions) {
-    const age = now - Date.parse(session.updatedAt);
-    // An unreadable date compares false against every bound and lands in the
-    // last bucket, which beats disappearing from the list.
-    const bucket = buckets.find((candidate) => age < candidate.within) ?? buckets[buckets.length - 1];
-    bucket.sessions.push(session);
-  }
-  return buckets.filter((bucket) => bucket.sessions.length > 0);
 }
 
 /**
@@ -517,7 +473,7 @@ function PinnedSessions({
   const pinned = usePinnedSessions();
   const pin = usePinSession();
   const [unfolded, setUnfolded] = useState(false);
-  const sessions = pinned.data ?? [];
+  const sessions = sessionsByTitle(pinned.data ?? []);
   if (sessions.length === 0) return null;
 
   // Folded on a phone past a few, so the drawer still reaches the session

@@ -90,18 +90,17 @@ describe('session state', () => {
     expect(stateIcon('idle').color).toBeUndefined();
   });
 
-  it('lists what waits first, then the most recent, and leaves archived sessions out', () => {
+  it('lists sessions alphabetically regardless of activity or date, leaving archives out', () => {
     const ordered = orderSessions(
       [
-        session('old', '2026-01-01T00:00:00Z'),
-        session('new', '2026-10-09T00:00:00Z'),
+        session('old', '2026-01-01T00:00:00Z', { activeJobStatus: 'RUNNING' }),
+        session('new', '2026-10-09T00:00:00Z', { activeJobStatus: 'WAITING_INPUT' }),
         session('asks', '2025-01-01T00:00:00Z'),
         session('gone', '2026-10-09T00:00:00Z', { status: 'ARCHIVED' }),
         session('bad', 'not a date'),
       ],
-      new Map([['asks', 'input' as const]]),
     );
-    expect(ordered.map((s) => s.id)).toEqual(['asks', 'new', 'old', 'bad']);
+    expect(ordered.map((s) => s.id)).toEqual(['asks', 'bad', 'new', 'old']);
   });
 });
 

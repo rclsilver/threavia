@@ -39,7 +39,7 @@ const STEPS: Step[] = [
     path: SESSION(IDS.certManager),
     target: '[data-tour="sessions"]',
     title: 'Sessions, by project',
-    body: 'Each conversation with an agent is a session. The mark on the right says what it is doing — working, waiting for you, or idle — and what waits for you comes first.',
+    body: 'Each conversation with an agent is a session, listed alphabetically by title. The mark on the right says what it is doing — working, waiting for you, or idle.',
   },
   {
     path: SESSION(IDS.certManager),
