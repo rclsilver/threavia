@@ -53,9 +53,10 @@ type Adapter struct {
 
 // jobState is what the adapter remembers about a Job it is running.
 type jobState struct {
-	reviewRequired bool
-	runID          string
-	requests       map[string]struct{}
+	executionCancel context.CancelFunc
+	reviewRequired  bool
+	runID           string
+	requests        map[string]struct{}
 	// knownDirectoryID is the KnownDirectory Core resolved for this Job, when
 	// there is one. It attributes a change summary to a directory.
 	knownDirectoryID string
@@ -182,7 +183,9 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 		a.mu.Unlock()
 		return nil // Already running: a redelivered command is not a new Job.
 	}
+	executionCtx, executionCancel := context.WithCancel(context.WithoutCancel(ctx))
 	a.jobs[params.JobID] = &jobState{
+		executionCancel:  executionCancel,
 		runID:            params.RunID,
 		requests:         make(map[string]struct{}),
 		policy:           a.policyFor(cmd.GetRunId(), cmd.GetExecutionPolicy()),
@@ -204,13 +207,16 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 
 	// Detached from the command context: the Job outlives the message that
 	// started it.
-	go a.execute(context.WithoutCancel(ctx), params, cmd.GetProjectContext())
+	go a.execute(executionCtx, params, cmd.GetProjectContext())
 	return nil
 }
 
 // execute drives one Job and cleans up after it.
 func (a *Adapter) execute(ctx context.Context, params runner.StartParams, pc *backendv1.ProjectContext) {
 	defer func() {
+		if cancel := a.executionCancelOf(params.JobID); cancel != nil {
+			cancel()
+		}
 		a.releaseJob(params.JobID, ErrJobAbandoned)
 		a.releaseSkills(params.JobID)
 		a.updateActiveRuns()
@@ -226,6 +232,9 @@ func (a *Adapter) execute(ctx context.Context, params runner.StartParams, pc *ba
 	// guessed directory.
 	workingDirectory, err := a.resolveWorkingDirectory(ctx, params.JobID, pc)
 	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		a.logger.Error("cannot resolve the working directory",
 			slog.String("jobId", params.JobID), slog.String("error", err.Error()))
 		// No provider ran, so there is nothing to account for.
@@ -237,6 +246,15 @@ func (a *Adapter) execute(ctx context.Context, params runner.StartParams, pc *ba
 		return
 	}
 	params.WorkingDirectory = workingDirectory
+	closeMCP, mcpErr := a.prepareMCP(ctx, &params, pc)
+	if mcpErr != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		_ = a.JobFailed(ctx, params.RunID, params.JobID, "MCP_UNAVAILABLE", mcpErr.Error(), nil)
+		return
+	}
+	defer closeMCP()
 	a.mu.Lock()
 	if job, ok := a.jobs[params.JobID]; ok {
 		job.workingDirectory = workingDirectory
@@ -253,15 +271,37 @@ func (a *Adapter) execute(ctx context.Context, params runner.StartParams, pc *ba
 			a.logger.Warn("review baseline could not be captured", "error", err)
 		}
 	}
+	stopped := ctx.Err() != nil
+	if stopped {
+		return
+	}
 	if err := a.runner.Run(ctx, params, a); err != nil {
 		a.logger.Error("job failed to run",
 			slog.String("jobId", params.JobID), slog.String("error", err.Error()))
 	}
 }
 
+func (a *Adapter) executionCancelOf(jobID string) context.CancelFunc {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if job := a.jobs[jobID]; job != nil {
+		return job.executionCancel
+	}
+	return nil
+}
+
 // OnCancelJob asks the runner to stop. Core only moves the Job to CANCELLED
 // once the backend confirms the stop with a job cancelled event.
 func (a *Adapter) OnCancelJob(ctx context.Context, cmd *backendv1.CancelJob) error {
+	a.mu.Lock()
+	var stopExecution context.CancelFunc
+	if job, ok := a.jobs[cmd.GetJobId()]; ok {
+		stopExecution = job.executionCancel
+	}
+	a.mu.Unlock()
+	if stopExecution != nil {
+		stopExecution()
+	}
 	a.logger.Info("cancel requested",
 		slog.String("jobId", cmd.GetJobId()), slog.String("reason", cmd.GetReason()))
 

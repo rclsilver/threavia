@@ -49,7 +49,8 @@ type StartParams struct {
 	// CoreTools are the provider-independent tools Core declared for this Job.
 	// The runner forwards them to the local tool endpoint and never interprets
 	// them: a backend hardcodes no tool name.
-	CoreTools []mcp.CoreTool
+	CoreTools     []mcp.CoreTool
+	ExternalTools []mcp.LocalTool
 	// ProjectInstructions are the provider-independent project rules Core sent,
 	// and LocalInstructions the private ones of this machine (spec section 18).
 	// The adapter maps both onto the provider mechanism; Core models no provider

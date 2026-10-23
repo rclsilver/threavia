@@ -272,6 +272,12 @@ func (c *Codex) UpdatePolicy(jobID string, p policy.Policy) {
 }
 
 func (c *Codex) Run(ctx context.Context, params contract.StartParams, sink contract.Sink) error {
+	executionCtx := ctx
+	// Reporting and cleanup outlive execution cancellation.
+	ctx = context.WithoutCancel(ctx)
+	if executionCtx.Err() != nil {
+		return sink.JobCancelled(ctx, params.RunID, params.JobID)
+	}
 	fail := func(code string, err error) error {
 		return sink.JobFailed(ctx, params.RunID, params.JobID, code, err.Error(), nil)
 	}
@@ -288,7 +294,7 @@ func (c *Codex) Run(ctx context.Context, params contract.StartParams, sink contr
 		return fail("POLICY_UNSUPPORTED", err)
 	}
 	attemptStarted := time.Now()
-	runCtx, stop := context.WithCancel(ctx)
+	runCtx, stop := context.WithCancel(executionCtx)
 	if params.Policy.MaxDurationSeconds > 0 {
 		stop()
 		remaining := params.Policy.MaxDurationSeconds - int(params.ActiveSecondsUsed)
@@ -296,7 +302,7 @@ func (c *Codex) Run(ctx context.Context, params contract.StartParams, sink contr
 			c.mu.Unlock()
 			return fail("POLICY_LIMIT", errors.New("execution duration limit reached across provider attempts"))
 		}
-		runCtx, stop = context.WithTimeout(ctx, time.Duration(remaining)*time.Second)
+		runCtx, stop = context.WithTimeout(executionCtx, time.Duration(remaining)*time.Second)
 	}
 	defer stop()
 	live := &execution{children: make(map[string]*child), foreign: make(map[string]bool), turns: make(map[string]bool), stop: stop, policy: params.Policy, items: make(map[string]map[string]any), requests: make(map[string]context.CancelFunc), done: make(chan struct{}), ctx: runCtx, turnCtx: runCtx, cwd: params.WorkingDirectory, hookReady: make(chan struct{}), policyUpdates: make(chan struct{}, 1), sink: sink, reportCtx: ctx, runID: params.RunID, jobID: params.JobID}
@@ -309,7 +315,7 @@ func (c *Codex) Run(ctx context.Context, params contract.StartParams, sink contr
 	c.tools.RegisterPolicyGate(token, func(ctx context.Context, input map[string]any) (any, error) {
 		return c.preTool(ctx, live, params.JobID, input)
 	})
-	c.tools.RegisterLocalTools(token, append(c.webTools(live, params.JobID), c.planTool(live, params.JobID)))
+	c.tools.RegisterLocalTools(token, append(append(c.webTools(live, params.JobID), c.planTool(live, params.JobID)), params.ExternalTools...))
 	helper, err := os.Executable()
 	if err != nil {
 		return fail("INTERNAL", err)
@@ -358,7 +364,13 @@ func (c *Codex) Run(ctx context.Context, params contract.StartParams, sink contr
 	// the per-Job endpoint token.
 	diagnostics := &tailWriter{}
 	cmd.Stderr = diagnostics
+	if errors.Is(runCtx.Err(), context.Canceled) {
+		return sink.JobCancelled(ctx, params.RunID, params.JobID)
+	}
 	if err := cmd.Start(); err != nil {
+		if errors.Is(runCtx.Err(), context.Canceled) {
+			return sink.JobCancelled(ctx, params.RunID, params.JobID)
+		}
 		return fail("SPAWN_FAILED", err)
 	}
 	r := newRPC(processCtx, stdin, stdout)
@@ -421,7 +433,7 @@ func (c *Codex) Run(ctx context.Context, params contract.StartParams, sink contr
 	live.mu.Lock()
 	cancelled, policyErr := live.cancelled, live.policyError
 	live.mu.Unlock()
-	if cancelled {
+	if cancelled || errors.Is(executionCtx.Err(), context.Canceled) {
 		return sink.JobCancelled(ctx, params.RunID, params.JobID)
 	}
 	if policyErr != nil {
