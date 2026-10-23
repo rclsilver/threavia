@@ -1,3 +1,4 @@
+import { demoMCP } from './mcp';
 import { ApiError } from '@/api/client';
 import { announceJobEnded } from '@/lib/job-ended';
 import { uuid } from '@/lib/uuid';
@@ -324,6 +325,15 @@ function recordScheduleChange(schedule: Json, action: string) {
 type Handler = (match: RegExpMatchArray, body: Json, query: URLSearchParams) => unknown;
 
 const routes: [string, RegExp, Handler][] = [
+  ['GET', /^\/api\/v1\/me\/mcp$/, (m, body) => { const result = demoMCP('list', m[1] || '', body); return result; }],
+  ['POST', /^\/api\/v1\/me\/mcp$/, (m, body) => { const result = demoMCP('create', m[1] || '', body); emitLifecycle('mcp.changed', '', {}); return result; }],
+  ['PUT', /^\/api\/v1\/mcp\/([^/]+)$/, (m, body) => { const result = demoMCP('update', m[1] || '', body); emitLifecycle('mcp.changed', '', {}); return result; }],
+  ['DELETE', /^\/api\/v1\/mcp\/([^/]+)$/, (m, body) => { const result = demoMCP('delete', m[1] || '', body); emitLifecycle('mcp.changed', '', {}); return result; }],
+  ['GET', /^\/api\/v1\/projects\/([^/]+)\/mcp$/, (m, body) => { const result = demoMCP('bindings', m[1] || '', body); return result; }],
+  ['PUT', /^\/api\/v1\/projects\/([^/]+)\/mcp$/, (m, body) => { const result = demoMCP('bind', m[1] || '', body); emitLifecycle('mcp.changed', '', {}); return result; }],
+  ['GET', /^\/api\/v1\/sessions\/([^/]+)\/mcp$/, (m, body) => { const result = demoMCP('restriction', m[1] || '', body); return result; }],
+  ['PUT', /^\/api\/v1\/sessions\/([^/]+)\/mcp$/, (m, body) => { const result = demoMCP('restrict', m[1] || '', body); emitLifecycle('mcp.changed', '', {}); return result; }],
+  ['POST', /^\/api\/v1\/backends\/([^/]+)\/mcp$/, (m, body) => { const result = demoMCP('operation', m[1] || '', body); return result; }],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/review$/, (m) => { sessionOf(m[1]); return demoReview(m[1]); }],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/review\/file$/, (m, _body, query) => { sessionOf(m[1]); return demoReviewFile(m[1], query); }],
   ['POST', /^\/api\/v1\/sessions\/([^/]+)\/review$/, (m, body) => { const session = sessionOf(m[1]); const review = demoReviewAction(m[1], body as unknown as ReviewAction); emitLifecycle('review.changed', text(session.projectId), { version: review.version, status: review.status, required: review.required }, m[1]); return review; }],

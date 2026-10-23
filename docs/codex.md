@@ -128,7 +128,8 @@ the agent can request approval for a specific command instead. The gate is a
 guard rail inside the backend account's real permissions, as for Claude, and
 does not classify every possible shell script as a security boundary.
 
-Only the per-Job Threavia MCP endpoint is enabled; machine and project MCP
+Only the per-Job Threavia MCP endpoint is enabled. Managed external MCP tools
+are proxied through it (see [MCP servers](mcp.md)); unmanaged machine and project MCP
 servers, apps, plugins, browser tools and goals are disabled for these Jobs,
 as Claude's are, and local hooks except the backend's two policy hooks.
 Unified exec runs without a terminal (see [Background commands](#background-commands)).
@@ -321,7 +322,7 @@ and test required RPCs and hooks, with their failure diagnostics, against it.
 
 ### Native extensions — scope to decide
 
-Machine/project MCP servers, apps, plugins, browser/computer tools, goals and
+Unmanaged machine/project MCP servers, apps, plugins, browser/computer tools, goals and
 code mode stay disabled, as Claude's equivalents are (`--strict-mcp-config`,
 `--setting-sources ""`). This is a product decision for both backends, not a
 parity gap. Each extension selected later needs configuration ownership,

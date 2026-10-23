@@ -277,3 +277,11 @@ timeline), a new session's draft and how it becomes the session
 Tasks and Decisions are grouped, which Project the views show and what they
 send (`src/knowledge/model.ts`). The
 rest turns them into views and commands; `src/webview` is the page.
+
+
+### MCP servers
+
+Use **Threavia: Manage MCP Servers** for native project activation, session
+restrictions, server listing and backend connection diagnostics. Full declaration
+editing, import previews and OAuth sign-in are available through its Web settings
+link. Changes apply to subsequent Jobs; credentials remain on each backend.

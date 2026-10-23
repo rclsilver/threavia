@@ -31,7 +31,8 @@ export type Effect =
   | { kind: 'skills'; projectId?: string; skillId?: string }
   | { kind: 'backends' }
   | { kind: 'directories' }
-  | { kind: 'projects' };
+  | { kind: 'projects' }
+  | { kind: 'mcp' };
 
 /** How old an ended Job can be and still be told: a replay is not news. */
 export const JOB_ENDED_FRESH_FOR = 2 * 60_000;
@@ -39,6 +40,8 @@ export const JOB_ENDED_FRESH_FOR = 2 * 60_000;
 export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
   const sessionId = event.sessionId ?? '';
   switch (event.type) {
+    case 'mcp.changed':
+      return [{ kind: 'mcp' }];
     case 'review.changed':
       return [...snapshot(sessionId)];
     case 'backend.status_changed':

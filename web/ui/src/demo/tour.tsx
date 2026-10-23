@@ -30,6 +30,7 @@ const SESSION = (id: string) => `/sessions/${id}`;
 const PROJECT = (page: string) => `/projects/${IDS.homelab}/${page}`;
 
 const STEPS: Step[] = [
+  { path: '/settings/mcp', target: '[data-tour="mcp"]', title: 'Existing MCP servers', body: 'Register existing servers, preview imports and choose their tools and project activation. Credentials stay on the execution backend; these demo connections are fictitious.' },
   {
     path: SESSION(IDS.certManager),
     title: 'Welcome to Threavia',

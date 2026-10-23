@@ -165,6 +165,7 @@ and backend features can require updating both components; see the
 | [VS Code](clients/vscode/README.md) | Installation, sign-in, views, commands and several Cores |
 | [Codex backend](docs/codex.md) | Provider setup, execution modes and supported features |
 | [NixOS](docs/nix.md) | Backend packages and services |
+| [MCP servers](docs/mcp.md) | Existing external servers, credentials, discovery and project/session selection |
 | [Skills](docs/skills.md) | Agent Skills support for Claude Code and Codex |
 | [Session management](docs/session-management.md) | Coordinating and delegating work between sessions |
 | [Provider recovery](docs/provider-recovery.md) | Authentication expiry, exhausted quotas and retry behavior |

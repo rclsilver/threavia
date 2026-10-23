@@ -1,3 +1,4 @@
+import { MCPPane } from '@/components/mcp-pane';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { ArrowLeft, Copy, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
 import { useCallback, useState } from 'react';
@@ -98,6 +99,7 @@ export function SettingsView() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl space-y-5 p-4 sm:p-6">
           <p className="text-muted text-sm">{current.detail}</p>
+          {current.tab === 'mcp' && <MCPPane />}
           {current.tab === 'appearance' && <AppearancePane />}
           {current.tab === 'notifications' && <NotificationsPane />}
           {current.tab === 'backends' && <BackendsPane />}
