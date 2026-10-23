@@ -63,6 +63,143 @@ security:
   - bearerAuth: []
 
 paths:
+  /api/v1/me/mcp:
+    get:
+      summary: List owned external MCP declarations without secrets
+      responses:
+        '200':
+          description: MCP operation result
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/MCPServer' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+    post:
+      summary: Register an existing MCP server without installing or starting it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MCPServer' }
+      responses:
+        '201':
+          description: MCP operation result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MCPServer' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/v1/mcp/{serverId}:
+    parameters:
+      - { name: serverId, in: path, required: true, schema: { type: string } }
+    put:
+      summary: Replace an owned MCP declaration for subsequent Jobs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MCPServer' }
+      responses:
+        '200':
+          description: MCP operation result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MCPServer' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Remove declaration and project bindings without uninstalling software
+      responses:
+        '204':
+          description: MCP operation result
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/v1/projects/{projectId}/mcp:
+    parameters:
+      - { name: projectId, in: path, required: true, schema: { type: string } }
+    get:
+      summary: List project MCP activations
+      responses:
+        '200':
+          description: MCP operation result
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/MCPBinding' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+    put:
+      summary: Activate or deactivate an owned MCP server in this project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MCPBinding' }
+      responses:
+        '204':
+          description: MCP operation result
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/v1/sessions/{sessionId}/mcp:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Read session restrictions on project MCP selection
+      responses:
+        '200':
+          description: MCP operation result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MCPRestriction' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+    put:
+      summary: Restrict next Jobs to selected project MCP servers; null restores inheritance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MCPRestriction' }
+      responses:
+        '204':
+          description: MCP operation result
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/v1/backends/{backendId}/mcp:
+    parameters:
+      - { name: backendId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Probe, import declarations or manage OAuth on the selected owned backend
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MCPBackendOperation' }
+      responses:
+        '200':
+          description: MCP operation result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MCPBackendResult' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
   /api/v1/sessions/{sessionId}/review:
     parameters:
       - { name: sessionId, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
@@ -2378,6 +2515,11 @@ components:
                   message: { type: string }
 
   schemas:
+    MCPServer: {"type":"object","additionalProperties":false,"description":"Portable declaration. Env and headers contain backend environment variable names, never secret values. Tools are selected explicitly.","required":["name","transport","tools","readTools","resources","prompts","enabled","oauth"],"properties":{"revision":{"type":"integer","minimum":0,"description":"Optimistic concurrency revision; include the latest value when replacing a declaration"},"id":{"type":"string","readOnly":true},"name":{"type":"string","pattern":"^[a-z][a-z0-9_]{0,47}$"},"transport":{"type":"string","enum":["stdio","http"]},"command":{"type":"string"},"args":{"type":"array","items":{"type":"string"}},"url":{"type":"string"},"env":{"type":"object","additionalProperties":{"type":"string"}},"headers":{"type":"object","additionalProperties":{"type":"string"}},"oauth":{"type":"boolean"},"oauthClientId":{"type":"string"},"tools":{"type":"array","items":{"type":"string"}},"readTools":{"type":"array","items":{"type":"string"}},"resources":{"type":"boolean"},"prompts":{"type":"boolean"},"enabled":{"type":"boolean"},"projectIds":{"type":"array","items":{"type":"string"},"readOnly":true,"description":"Projects whose activations are removed when this declaration is deleted"}}}
+    MCPBinding: {"type":"object","required":["serverId","enabled","required"],"properties":{"serverId":{"type":"string"},"enabled":{"type":"boolean"},"required":{"type":"boolean"}}}
+    MCPRestriction: {"type":"object","required":["serverIds"],"properties":{"restricted":{"type":"boolean","readOnly":true},"serverIds":{"type":["array","null"],"items":{"type":"string"}}}}
+    MCPBackendOperation: {"type":"object","required":["operation"],"properties":{"operation":{"type":"string","enum":["probe","import","auth_start","auth_finish","logout"]},"serverId":{"type":"string"},"source":{"type":"string","enum":["codex","claude"]},"redirectUri":{"type":"string"},"response":{"type":"string"},"state":{"type":"string"}}}
+    MCPBackendResult: {"type":"object","additionalProperties":true,"description":"Probe result, import preview or OAuth sign-in state. Never contains tokens."}
     Review:
       type: object
       required: [sessionId, version, required, status, repositories, revisions, threads, seen, updatedAt]
@@ -2726,6 +2868,7 @@ components:
               refresh backend instances to read the complete quota snapshot
             - `backend.default_changed`: `{ backendInstanceId }`, owner-scoped;
               empty identifier clears the preference; refresh the backend list.
+            - `mcp.changed`: owner-scoped MCP declaration, activation or restriction changed; refresh MCP views. No credentials are included.
             - `directory.changed`: `{ knownDirectoryId }`, owner-scoped; refresh
               directory lists and bindings after metadata or paths change.
             - `project.created`, `project.archived`, `project.restored`:
@@ -3279,7 +3422,7 @@ components:
             and per-session model selection.
           items:
             type: string
-            enum: [JOB_INPUT_NOW, JOB_INPUT_NEXT, PROMPT_ATTACHMENTS, MODEL_SELECTION, HUMAN_REVIEW]
+            enum: [JOB_INPUT_NOW, JOB_INPUT_NEXT, PROMPT_ATTACHMENTS, MODEL_SELECTION, HUMAN_REVIEW, EXTERNAL_MCP]
         capacity: { $ref: "#/components/schemas/Capacity" }
         conditions:
           type: array

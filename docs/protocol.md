@@ -414,3 +414,19 @@ started Job inherits the current Run latch, with only the explicit correction
 Job exempted. Unrestricted Jobs keep working during a Core outage; a latched
 Job refuses further actions until approval can be confirmed. Permission answers
 are checked again before an already waiting action may execute.
+
+
+## External MCP servers
+
+`FeatureFlags.external_mcp` advertises `EXTERNAL_MCP`. Core snapshots selected
+portable MCP declarations in `ProjectContext.mcp_servers` for each Job; no secret
+values are included. Providers receive only Threavia’s private endpoint; the
+backend proxies explicitly selected tools and independently enforces current
+policy, original tool identity and mandatory write validation.
+
+`McpRequest` / `McpResponse` are correlated backend-local owner operations:
+`probe`, `import`, `auth_start`, `auth_finish`, `logout`. Responses are accepted
+only from the backend bound to that request. OAuth codes/state are transient;
+credentials stay backend-local. Unsupported backends return an explicit error.
+Requests execute outside the stream reader, with bounded waits. See [MCP](mcp.md)
+for supported transports, configuration, authentication and failure behavior.

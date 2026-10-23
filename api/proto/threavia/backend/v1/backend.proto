@@ -106,6 +106,7 @@ message BackendToCore {
     RepositoryStatus repository_status = 12;
     QuotaReport quota_report = 13;
     ReviewWorkspace review_workspace = 14;
+    McpResponse mcp_response = 15;
   }
 }
 
@@ -129,7 +130,14 @@ message CoreToBackend {
     WorkspaceDiffRequest workspace_diff_request = 14;
     RepositoryStatusRequest repository_status_request = 15;
     ReviewWorkspaceRequest review_workspace_request = 16;
+    McpRequest mcp_request = 17;
   }
+}
+
+message McpResponse {
+  string request_id = 1;
+  google.protobuf.Struct result = 2;
+  Error error = 3;
 }
 
 // A bounded read of backend-owned review snapshots. Correlated and scoped to

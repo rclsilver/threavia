@@ -328,6 +328,16 @@ func (c *Client) dispatch(ctx context.Context, msg *backendv1.CoreToBackend) {
 			_ = c.enqueue(ctx, &backendv1.BackendToCore{Message: &backendv1.BackendToCore_ReviewWorkspace{ReviewWorkspace: answer}})
 		}()
 		return
+	case *backendv1.CoreToBackend_McpRequest:
+		go func() {
+			answer := &backendv1.McpResponse{Error: &backendv1.Error{Code: "UNSUPPORTED", Message: "Update this backend to manage external MCP servers."}}
+			if manager, ok := c.handler.(MCPManager); ok {
+				answer = manager.OnMCPRequest(ctx, body.McpRequest)
+			}
+			answer.RequestId = body.McpRequest.GetRequestId()
+			_ = c.enqueue(ctx, &backendv1.BackendToCore{Message: &backendv1.BackendToCore_McpResponse{McpResponse: answer}})
+		}()
+		return
 
 	case *backendv1.CoreToBackend_RepositoryStatusRequest:
 		go c.answerRepositoryStatus(ctx, body.RepositoryStatusRequest)

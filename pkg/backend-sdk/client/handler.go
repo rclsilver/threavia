@@ -60,6 +60,10 @@ type ReviewWorkspaceReader interface {
 	OnReviewWorkspaceRequest(context.Context, *backendv1.ReviewWorkspaceRequest) *backendv1.ReviewWorkspace
 }
 
+type MCPManager interface {
+	OnMCPRequest(context.Context, *backendv1.McpRequest) *backendv1.McpResponse
+}
+
 // RepositoryReader is implemented by a Handler that can tell where a Session's
 // working directory stands in git: branch, distance from its upstream, what is
 // not committed. Optional: a backend without it answers that it cannot.

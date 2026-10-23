@@ -4,6 +4,342 @@
  */
 
 export interface paths {
+    "/api/v1/me/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List owned external MCP declarations without secrets */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description MCP operation result */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["MCPServer"][];
+                        };
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+                503: components["responses"]["Error"];
+            };
+        };
+        put?: never;
+        /** Register an existing MCP server without installing or starting it */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MCPServer"];
+                };
+            };
+            responses: {
+                /** @description MCP operation result */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MCPServer"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+                503: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mcp/{serverId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace an owned MCP declaration for subsequent Jobs */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    serverId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MCPServer"];
+                };
+            };
+            responses: {
+                /** @description MCP operation result */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MCPServer"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+                503: components["responses"]["Error"];
+            };
+        };
+        post?: never;
+        /** Remove declaration and project bindings without uninstalling software */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    serverId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description MCP operation result */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+                503: components["responses"]["Error"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        /** List project MCP activations */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description MCP operation result */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["MCPBinding"][];
+                        };
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+                503: components["responses"]["Error"];
+            };
+        };
+        /** Activate or deactivate an owned MCP server in this project */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MCPBinding"];
+                };
+            };
+            responses: {
+                /** @description MCP operation result */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+                503: components["responses"]["Error"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sessions/{sessionId}/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        /** Read session restrictions on project MCP selection */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description MCP operation result */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MCPRestriction"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+                503: components["responses"]["Error"];
+            };
+        };
+        /** Restrict next Jobs to selected project MCP servers; null restores inheritance */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MCPRestriction"];
+                };
+            };
+            responses: {
+                /** @description MCP operation result */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+                503: components["responses"]["Error"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/backends/{backendId}/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                backendId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Probe, import declarations or manage OAuth on the selected owned backend */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    backendId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MCPBackendOperation"];
+                };
+            };
+            responses: {
+                /** @description MCP operation result */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MCPBackendResult"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+                503: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{sessionId}/review": {
         parameters: {
             query?: never;
@@ -4366,6 +4702,56 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Portable declaration. Env and headers contain backend environment variable names, never secret values. Tools are selected explicitly. */
+        MCPServer: {
+            /** @description Optimistic concurrency revision; include the latest value when replacing a declaration */
+            revision?: number;
+            readonly id?: string;
+            name: string;
+            /** @enum {string} */
+            transport: "stdio" | "http";
+            command?: string;
+            args?: string[];
+            url?: string;
+            env?: {
+                [key: string]: string;
+            };
+            headers?: {
+                [key: string]: string;
+            };
+            oauth: boolean;
+            oauthClientId?: string;
+            tools: string[];
+            readTools: string[];
+            resources: boolean;
+            prompts: boolean;
+            enabled: boolean;
+            /** @description Projects whose activations are removed when this declaration is deleted */
+            readonly projectIds?: string[];
+        };
+        MCPBinding: {
+            serverId: string;
+            enabled: boolean;
+            required: boolean;
+        };
+        MCPRestriction: {
+            readonly restricted?: boolean;
+            serverIds: string[] | null;
+        };
+        MCPBackendOperation: {
+            /** @enum {string} */
+            operation: "probe" | "import" | "auth_start" | "auth_finish" | "logout";
+            serverId?: string;
+            /** @enum {string} */
+            source?: "codex" | "claude";
+            redirectUri?: string;
+            response?: string;
+            state?: string;
+        };
+        /** @description Probe result, import preview or OAuth sign-in state. Never contains tokens. */
+        MCPBackendResult: {
+            [key: string]: unknown;
+        };
         Review: {
             sessionId: string;
             version: number;
@@ -4675,6 +5061,7 @@ export interface components {
              *       refresh backend instances to read the complete quota snapshot
              *     - `backend.default_changed`: `{ backendInstanceId }`, owner-scoped;
              *       empty identifier clears the preference; refresh the backend list.
+             *     - `mcp.changed`: owner-scoped MCP declaration, activation or restriction changed; refresh MCP views. No credentials are included.
              *     - `directory.changed`: `{ knownDirectoryId }`, owner-scoped; refresh
              *       directory lists and bindings after metadata or paths change.
              *     - `project.created`, `project.archived`, `project.restored`:
@@ -5124,7 +5511,7 @@ export interface components {
              *     runs, after interrupting it or at its next step, prompt attachments,
              *     and per-session model selection.
              *      */
-            features?: ("JOB_INPUT_NOW" | "JOB_INPUT_NEXT" | "PROMPT_ATTACHMENTS" | "MODEL_SELECTION" | "HUMAN_REVIEW")[];
+            features?: ("JOB_INPUT_NOW" | "JOB_INPUT_NEXT" | "PROMPT_ATTACHMENTS" | "MODEL_SELECTION" | "HUMAN_REVIEW" | "EXTERNAL_MCP")[];
             capacity: components["schemas"]["Capacity"];
             conditions?: components["schemas"]["Condition"][];
             protocolVersion: number;
