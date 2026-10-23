@@ -406,6 +406,10 @@ func TestScopeAndPermissionToolsRequireValidation(t *testing.T) {
 	start := receive(t, "the dispatched job", backend.starts)
 
 	want := map[string]bool{
+		"mcp_server_add":             true,
+		"mcp_server_update":          true,
+		"mcp_server_delete":          true,
+		"mcp_server_bind":            true,
 		"known_directory_register":   true,
 		"known_directory_bind":       true,
 		"working_directory_set":      true,

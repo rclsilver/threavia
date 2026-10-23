@@ -69,6 +69,7 @@ func registered(t *testing.T) []string {
 	h.registerPolicy(mux)
 	h.registerArtifacts(mux)
 	h.registerSkills(mux)
+	h.registerMCP(mux)
 	h.registerSchedules(mux)
 	h.registerPush(mux)
 	h.registerStream(mux)

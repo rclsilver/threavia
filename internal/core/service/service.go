@@ -69,6 +69,7 @@ type Service struct {
 	// backend's answer, by request id.
 	repositories   sync.Map
 	reviewRequests sync.Map
+	mcpRequests sync.Map
 
 	// pushKeys is the Web Push identity, loaded or made on first use.
 	pushMu   sync.Mutex
