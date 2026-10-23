@@ -147,6 +147,9 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 	// same Run from being dispatched concurrently.
 	var model, effort string
 	err = s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		if err := tx.LockMCP(ctx, jc.OwnerID); err != nil {
+			return err
+		}
 		session, err := tx.LockSession(ctx, jc.OwnerID, jc.SessionID)
 		if err != nil {
 			return err
@@ -200,7 +203,7 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 	})
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
-			message := "The session model settings cannot run on this backend: " + err.Error()
+			message := "This Job cannot start with the current settings: " + err.Error()
 			if transitionTo(ctx, s.store, jobID, domain.JobFailed, &message) == nil {
 				s.emit(ctx, jc.OwnerID, events.TypeJobFailed, domain.Scope{ProjectID: jc.ProjectID, SessionID: jc.SessionID, RunID: jc.Run.ID, JobID: jobID}, JobEndedPayload{Error: message})
 				s.dispatchNext(ctx, jc.Run.ID)
@@ -347,6 +350,25 @@ func (s *Service) projectContext(ctx context.Context, store *postgres.Store, jc 
 		return nil, fmt.Errorf("read the session transfer context: %w", err)
 	}
 	pc.ProjectInstructions += handoff
+	pc.McpServers, err = s.effectiveMCP(ctx, store, jc)
+	if err != nil {
+		return nil, fmt.Errorf("read MCP configuration: %w", err)
+	}
+	if len(pc.McpServers) > 0 {
+		backend, err := store.BackendInstanceByID(ctx, jc.BackendInstanceID)
+		if err != nil {
+			return nil, err
+		}
+		if !backend.HasFeature(domain.FeatureExternalMCP) {
+			for _, server := range pc.McpServers {
+				if server.AsMap()["required"] == true {
+					return nil, fmt.Errorf("%w: update the selected backend to use required external MCP servers", ErrInvalid)
+				}
+			}
+			pc.ProjectInstructions += "\nOptional MCP servers are unavailable: this backend needs an update for external MCP support. Do not claim to use them.\n"
+			pc.McpServers = nil
+		}
+	}
 	return pc, nil
 }
 

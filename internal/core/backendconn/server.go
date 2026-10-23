@@ -260,6 +260,13 @@ func (s *Server) handle(ctx context.Context, instanceID domain.BackendInstanceID
 	case *backendv1.BackendToCore_QuotaReport:
 		s.sink.QuotaReport(ctx, instanceID, body.QuotaReport)
 		return nil
+	case *backendv1.BackendToCore_McpResponse:
+		if sink, ok := s.sink.(interface {
+			McpResponse(context.Context, domain.BackendInstanceID, *backendv1.McpResponse)
+		}); ok {
+			sink.McpResponse(ctx, instanceID, body.McpResponse)
+		}
+		return nil
 	case *backendv1.BackendToCore_ReviewWorkspace:
 		if sink, ok := s.sink.(interface {
 			ReviewWorkspace(context.Context, domain.BackendInstanceID, *backendv1.ReviewWorkspace)

@@ -280,5 +280,5 @@ func Specs() []Spec {
 				"knownDirectoryId": str("Identifier of the known directory to work in."),
 			}, "knownDirectoryId"),
 		},
-	}, append(append(sessionSpecs(), scheduleSpecs()...), reviewSpecs()...)...)
+	}, append(append(append(sessionSpecs(), scheduleSpecs()...), reviewSpecs()...), mcpSpecs()...)...)
 }

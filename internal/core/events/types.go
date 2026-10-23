@@ -12,6 +12,7 @@ type Type string
 // this log is the observable timeline and the realtime synchronization
 // mechanism, not an event-sourcing journal to replay.
 const (
+	TypeMCPChanged          Type = "mcp.changed"
 	TypeReviewChanged       Type = "review.changed"
 	TypeSessionCreated      Type = "session.created"
 	TypeSessionRenamed      Type = "session.renamed"

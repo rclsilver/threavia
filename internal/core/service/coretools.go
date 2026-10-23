@@ -98,6 +98,8 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 	// Job. These values never come from tool input.
 	ctx = context.WithValue(domain.WithChannel(ctx, domain.Channel("agent")), managerJobKey{}, jc.JobID)
 	switch name {
+	case "mcp_server_list", "mcp_server_add", "mcp_server_update", "mcp_server_delete", "mcp_server_bind":
+		return s.mcpTool(ctx, identity, jc, name, input)
 	case tools.NameReviewRepositoryRegister, tools.NameReviewRead, tools.NameReviewRequest, tools.NameReviewReply:
 		return s.reviewTool(ctx, identity, jc, name, input)
 	case tools.NameScheduleList, tools.NameScheduleCreate, tools.NameScheduleUpdate, tools.NameScheduleDelete:
