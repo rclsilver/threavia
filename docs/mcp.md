@@ -151,3 +151,6 @@ and a temporary PostgreSQL instance. They do not use GitHub accounts, actual
 documentation services or paid model inference. Real-provider OAuth quirks and
 visual desktop/mobile/VS Code checks need an installation test; automated
 coverage is not evidence that every MCP server is compatible.
+
+For an isolated recipe without real accounts or devices, use the
+[local OAuth MCP mock](mcp-oauth-mock.md).
