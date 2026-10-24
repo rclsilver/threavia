@@ -314,6 +314,7 @@ Restrained and exact; colour is earned by the action.
 - **Rail:** folded, the sidebar keeps 32px icon squares; a waiting count becomes an amber dot ringed in surface.
 - **Phone:** a top bar with the menu, the mark, an amber "N waiting" link that goes straight to the inbox, and the live badge. The drawer slides in over a scrim and is `inert` while closed, so it takes neither keyboard focus nor screen reader attention.
 - **Tabs:** muted text, active text in ink with a 2px accent underline over a hairline.
+- **Account settings:** a list of page links at `/settings`, with icon, name and short description. Each section has its own title and URL. Large screens keep a vertical menu beside the page; narrower screens provide an **All settings** link back to the list. Navigation never depends on horizontal scrolling; every link has a minimum 44px touch target.
 
 ### Session Log (signature)
 - **Gutter:** a right-aligned mono 11px `HH:MM` column in muted ink, nudged to align with each row's first line. Agent prose leaves its gutter cell empty.

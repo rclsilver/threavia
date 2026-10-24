@@ -78,14 +78,14 @@ const sessionRoute = createRoute({
 
 const reviewRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sessions/$sessionId/review', component: ReviewView });
 
-/** The person's settings, one tab per URL; an unknown tab lands on the first. */
+/** Each settings page keeps its address; unknown pages return to the index. */
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/$tab',
   beforeLoad: ({ params }) => {
     if (!ACCOUNT_TABS.some(({ tab }) => tab === params.tab)) {
       // eslint-disable-next-line @typescript-eslint/only-throw-error
-      throw redirect({ to: '/settings/$tab', params: { tab: 'appearance' } });
+      throw redirect({ to: '/settings' });
     }
   },
   component: SettingsView,
@@ -94,10 +94,7 @@ const settingsRoute = createRoute({
 const settingsIndexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
-  beforeLoad: () => {
-    // eslint-disable-next-line @typescript-eslint/only-throw-error
-    throw redirect({ to: '/settings/$tab', params: { tab: 'appearance' } });
-  },
+  component: SettingsView,
 });
 
 const SETTINGS_TABS: SettingsTab[] = ['permissions', 'schedules', 'backend', 'session', 'model'];

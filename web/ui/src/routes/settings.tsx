@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Copy, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Copy, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
 import { useBackends, useClaimBackend, useIssueBackendToken, useMe, useProjects, useRevokeBackend, useSetDefaultBackend } from '@/api/queries';
@@ -21,7 +21,7 @@ import { Input } from '@/components/ui/input';
 import { MenuItem } from '@/components/ui/menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSelectedProject } from '@/use-project';
-import { ACCOUNT_TABS } from '@/lib/account-tabs';
+import { ACCOUNT_TABS, type AccountTab } from '@/lib/account-tabs';
 import { cn, humanise, when } from '@/lib/utils';
 import { useWideLayout } from '@/use-layout';
 import { useTheme, type Theme } from '@/use-theme';
@@ -33,13 +33,13 @@ import { useShortcut } from '@/use-shortcut';
  *
  * It was a dialog behind the name at the foot of the sidebar, holding the
  * layout, the notifications and every backend one under the other. Each part
- * now has its tab, its URL and the whole width.
+ * now has its page and URL, reached from an index or the desktop navigation.
  */
 export function SettingsView() {
-  const { tab } = useParams({ from: '/settings/$tab' });
+  const { tab } = useParams({ strict: false });
   const navigate = useNavigate();
   const me = useMe();
-  const current = ACCOUNT_TABS.find((entry) => entry.tab === tab) ?? ACCOUNT_TABS[0];
+  const current = ACCOUNT_TABS.find((entry) => entry.tab === tab);
 
   // Escape goes back to where the person was, as it closed the dialog this was.
   useShortcut('Escape', useCallback(() => window.history.length > 1 ? window.history.back() : void navigate({ to: '/' }), [navigate]));
@@ -53,7 +53,7 @@ export function SettingsView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="border-border/70 border-b px-3 pt-3 sm:px-5">
+      <header className="border-border/70 border-b px-3 py-3 sm:px-5">
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -66,49 +66,75 @@ export function SettingsView() {
             <ArrowLeft />
           </Button>
           <Avatar name={name} />
-          <div className="min-w-0">
-            <h2 className="truncate text-[0.9375rem] font-semibold">{name}</h2>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-[0.9375rem] font-semibold">Settings</h2>
             <p className="text-muted truncate text-xs">
-              {anonymous
+              {name} · {anonymous
                 ? 'No authentication is configured: everything here is attributed to one user.'
                 : `Signed in with ${me.data?.authMode} as ${me.data?.userId}`}
             </p>
           </div>
         </div>
-        <nav aria-label="Settings" className="-mb-px mt-3 flex gap-1 overflow-x-auto">
-          {ACCOUNT_TABS.map(({ tab: value, label, Icon }) => (
-            <Link
-              key={value}
-              to="/settings/$tab"
-              params={{ tab: value }}
-              replace
-              aria-current={value === current.tab ? 'page' : undefined}
-              className={cn(
-                'flex min-h-11 shrink-0 items-center gap-1.5 border-b-2 px-3 text-sm whitespace-nowrap sm:min-h-10',
-                value === current.tab ? 'border-accent text-text font-medium' : 'text-muted hover:text-text border-transparent',
-              )}
-            >
-              <Icon className="size-4" />
-              {label}
-            </Link>
-          ))}
-        </nav>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-3xl space-y-5 p-4 sm:p-6">
-          <p className="text-muted text-sm">{current.detail}</p>
-          {current.tab === 'appearance' && <AppearancePane />}
-          {current.tab === 'notifications' && <NotificationsPane />}
-          {current.tab === 'backends' && <BackendsPane />}
-          {current.tab === 'permissions' && <DefaultPolicyPane />}
-          {current.tab === 'directories' && <DirectorySettings />}
-          {current.tab === 'memory' && <CoreMemorySettings />}
-          {current.tab === 'audit' && <AuditTimeline />}
+      <div key={current?.tab ?? 'index'} className="min-h-0 flex-1 overflow-y-auto">
+        <div className={cn('mx-auto w-full p-4 sm:p-6', current ? 'grid max-w-6xl gap-6 xl:grid-cols-[13rem_minmax(0,1fr)]' : 'max-w-3xl')}>
+          <aside className={current ? 'hidden xl:block' : undefined}>
+            {!current && <div className="mb-5 space-y-1">
+              <h1 className="text-lg font-semibold">Your settings</h1>
+              <p className="text-muted text-sm">Choose a page to manage your account, machines or this client.</p>
+            </div>}
+            <SettingsNavigation current={current?.tab} />
+          </aside>
+          {current && <section key={current.tab} aria-labelledby="settings-page-title" className="min-w-0 space-y-5">
+            <Link to="/settings" className="text-muted hover:text-text inline-flex min-h-11 items-center gap-2 text-sm xl:hidden">
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              All settings
+            </Link>
+            <div className="space-y-1">
+              <h1 id="settings-page-title" className="text-lg font-semibold">{current.label}</h1>
+              <p className="text-muted text-sm">{current.detail}</p>
+            </div>
+            {current.tab === 'appearance' && <AppearancePane />}
+            {current.tab === 'notifications' && <NotificationsPane />}
+            {current.tab === 'backends' && <BackendsPane />}
+            {current.tab === 'permissions' && <DefaultPolicyPane />}
+            {current.tab === 'directories' && <DirectorySettings />}
+            {current.tab === 'memory' && <CoreMemorySettings />}
+            {current.tab === 'audit' && <AuditTimeline />}
+          </section>}
         </div>
       </div>
     </div>
   );
+}
+
+function SettingsNavigation({ current }: { current?: AccountTab }) {
+  return <nav aria-label="Settings pages" data-tour="settings-pages">
+    <ul className={cn(current ? 'space-y-1' : 'border-border divide-border divide-y rounded-(--radius-card) border')}>
+      {ACCOUNT_TABS.map(({ tab, label, detail, Icon }) => (
+        <li key={tab}>
+          <Link
+            to="/settings/$tab"
+            params={{ tab }}
+            aria-current={tab === current ? 'page' : undefined}
+            className={cn(
+              'hover:bg-surface-2 flex min-h-11 items-center gap-3 rounded-md text-sm',
+              current ? 'px-3 py-2' : 'p-4',
+              tab === current ? 'bg-surface-2 text-text font-medium' : 'text-muted hover:text-text',
+            )}
+          >
+            <Icon className="size-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              <span className={cn('block', !current && 'text-text font-medium')}>{label}</span>
+              {!current && <span className="text-muted mt-1 block text-sm">{detail}</span>}
+            </span>
+            {!current && <ChevronRight className="size-4 shrink-0" aria-hidden="true" />}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  </nav>;
 }
 
 

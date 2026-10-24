@@ -184,6 +184,12 @@ const STEPS: Step[] = [
     body: 'Projects, tasks, memory, sessions, Skills and permissions, with who changed them and from which device. Names remain after deletion; filters help you find each kind. Account settings also show audit across projects and Core memory.',
   },
   {
+    path: '/settings',
+    target: '[data-tour="settings-pages"]',
+    title: 'Settings, one page at a time',
+    body: 'Choose a page from this list. Each page has its own address, with a side menu on large screens and an All settings link on a phone.',
+  },
+  {
     path: '/settings/backends',
     target: 'main ul',
     title: 'Your machines',
