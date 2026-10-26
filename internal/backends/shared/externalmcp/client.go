@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -31,9 +32,10 @@ func (t headerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	// The SDK sends DELETE during Close with a detached context. Bound this
 	// cleanup so an unresponsive server cannot hold cancellation indefinitely.
 	_, hasDeadline := r.Context().Deadline()
+	var stop context.CancelFunc
 	if r.Method == http.MethodDelete || r.Method == http.MethodPost && !hasDeadline {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-		defer cancel()
+		stop = cancel
 		r = r.Clone(ctx)
 	}
 	q := r.Clone(r.Context())
@@ -42,12 +44,28 @@ func (t headerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		q.Header[k] = v
 	}
 	response, err := t.base.RoundTrip(q)
+	// RoundTrip returns after headers, before the body is consumed. Cancelling
+	// here would truncate stateless JSON MCP responses nondeterministically.
+	if stop != nil {
+		if err != nil || response == nil || response.Body == nil {
+			stop()
+		} else {
+			response.Body = &cancelBody{ReadCloser: response.Body, cancel: stop}
+		}
+	}
 	if r.Method == http.MethodDelete && response != nil && response.Body != nil {
 		_ = response.Body.Close()
 		response.Body = http.NoBody
 	}
 	return response, err
 }
+
+type cancelBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *cancelBody) Close() error { defer b.cancel(); return b.ReadCloser.Close() }
 
 // Connect never installs software or opens a browser. Server failures and
 // authentication failures are explicit; a tool call is never replayed here.

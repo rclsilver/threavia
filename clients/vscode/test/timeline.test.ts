@@ -46,6 +46,9 @@ const kinds = (rows: Row[]) =>
   rows.map((row) => (row.kind === 'event' ? row.event.type : row.kind === 'tool' ? `tool:${row.call.name}` : row.kind));
 
 describe('messageAuthor', () => {
+  it('identifies a remote controller separately from the person and local agent', () => {
+    expect(messageAuthor(event('user.message', { text: 'Run the integration recipe', actorId: 'mcp:fixture' }))).toBe('MCP controller');
+  });
   it('identifies manager instructions and callbacks as agent messages', () => {
     expect(messageAuthor(event('user.message', { text: 'Inspect the parser', actorJobId: 'manager-job' }))).toBe('Agent');
     expect(messageAuthor(event('user.message', { text: 'A worker needs attention', actorJobId: 'worker-job' }))).toBe('Agent');

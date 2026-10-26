@@ -31,9 +31,11 @@ type Server struct {
 	OAuthClientID string            `json:"oauthClientId,omitempty"`
 	Tools         []string          `json:"tools"`
 	ReadTools     []string          `json:"readTools"`
-	Resources     bool              `json:"resources"`
-	Prompts       bool              `json:"prompts"`
-	Enabled       bool              `json:"enabled"`
+	// WriteTools is a human-granted preauthorization, independent of read classification.
+	WriteTools []string `json:"writeTools,omitempty"`
+	Resources  bool     `json:"resources"`
+	Prompts    bool     `json:"prompts"`
+	Enabled    bool     `json:"enabled"`
 }
 
 type Binding struct {
@@ -77,7 +79,7 @@ func (s Server) Validate() error {
 			return fmt.Errorf("HTTP cannot contain a command, arguments or subprocess environment")
 		}
 	}
-	if len(s.Tools) > 256 || len(s.ReadTools) > 256 || len(s.Args) > 128 {
+	if len(s.Tools) > 256 || len(s.ReadTools) > 256 || len(s.WriteTools) > 256 || len(s.Args) > 128 {
 		return fmt.Errorf("too many tools or arguments")
 	}
 	selected := map[string]bool{}
@@ -91,6 +93,13 @@ func (s Server) Validate() error {
 		if !selected[n] {
 			return fmt.Errorf("readTools must be selected tools")
 		}
+	}
+	seenWrites := map[string]bool{}
+	for _, n := range s.WriteTools {
+		if !selected[n] || slices.Contains(s.ReadTools, n) || seenWrites[n] {
+			return fmt.Errorf("writeTools must be unique selected tools, separate from readTools")
+		}
+		seenWrites[n] = true
 	}
 	for k, v := range s.Env {
 		if !envPattern.MatchString(k) || !envPattern.MatchString(v) {

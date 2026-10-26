@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -114,6 +115,23 @@ func run() error {
 	broker := events.NewBroker()
 	svc := service.New(store, broker, registry, logger)
 	svc.SetRegistration(service.RegistrationConfig{SharedKey: cfg.Backend.SharedRegistrationKey})
+	bootstrap := cfg.Control.BootstrapToken
+	if cfg.Control.BootstrapTokenFile != "" {
+		if bootstrap != "" {
+			return fmt.Errorf("configure only one MCP bootstrap token source")
+		}
+		data, err := os.ReadFile(cfg.Control.BootstrapTokenFile)
+		if err != nil {
+			return fmt.Errorf("read MCP bootstrap token file: %w", err)
+		}
+		bootstrap = strings.TrimSpace(string(data))
+		if bootstrap == "" {
+			return fmt.Errorf("MCP bootstrap token file is empty")
+		}
+	}
+	if err := svc.BootstrapControlAccess(ctx, cfg.Control.BootstrapOwner, bootstrap, cfg.Control.BootstrapScopes); err != nil {
+		return fmt.Errorf("MCP bootstrap: %w", err)
+	}
 
 	if cfg.Backend.SharedRegistrationKey == "" {
 		logger.Info("shared key registration is disabled, backends register with one-shot user tokens",

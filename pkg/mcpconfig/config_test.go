@@ -19,3 +19,21 @@ func TestDeclarationsKeepCredentialsInBackendReferences(t *testing.T) {
 		}
 	}
 }
+
+func TestWritePreauthorizationIsSeparateExactAndOptIn(t *testing.T) {
+	base := Server{Name: "dev", Transport: "http", URL: "https://example.test/mcp", Tools: []string{"read", "write"}, ReadTools: []string{"read"}}
+	if err := base.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, names := range [][]string{{"unselected"}, {"*"}, {"read"}, {"write", "write"}} {
+		v := base
+		v.WriteTools = names
+		if v.Validate() == nil {
+			t.Fatalf("invalid write grant accepted: %v", names)
+		}
+	}
+	base.WriteTools = []string{"write"}
+	if err := base.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

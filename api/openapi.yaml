@@ -63,6 +63,76 @@ security:
   - bearerAuth: []
 
 paths:
+  /mcp:
+    post:
+      summary: Public Streamable HTTP MCP control endpoint
+      description: Dedicated control-access Bearer token required even when UI authentication is disabled. Tools use the token owner's services and explicit scopes. Stateless, JSON responses; no cross-request MCP session identity.
+      security: [{ controlAccess: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: MCP JSON-RPC response
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '202': { description: MCP notification accepted }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+    get:
+      summary: No standalone event stream in the stateless MCP transport
+      security: [{ controlAccess: [] }]
+      responses:
+        '401': { $ref: '#/components/responses/Error' }
+        '405': { description: Use session_wait through POST instead }
+    delete:
+      summary: No persistent transport session to delete
+      security: [{ controlAccess: [] }]
+      responses:
+        '401': { $ref: '#/components/responses/Error' }
+        '405': { description: Stateless MCP transport }
+  /api/v1/me/control-accesses:
+    get:
+      summary: List dedicated MCP control accesses without their secrets
+      responses:
+        '200':
+          description: All accesses including expired or revoked records
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ControlAccess' } } } }
+    post:
+      summary: Create a scoped MCP access; show the generated secret once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [label, scopes]
+              properties:
+                label: { type: string, minLength: 1, maxLength: 120 }
+                scopes: { type: array, minItems: 1, uniqueItems: true, items: { type: string, enum: [read, manage, answer, approve] } }
+                expiresAt: { type: string, format: date-time }
+      responses:
+        '201':
+          description: Access metadata and secret; secret is not retrievable again
+          content:
+            application/json:
+              schema: { type: object, required: [access, token], properties: { access: { $ref: '#/components/schemas/ControlAccess' }, token: { type: string } } }
+        '400': { $ref: '#/components/responses/Error' }
+  /api/v1/control-accesses/{accessId}:
+    parameters:
+      - { name: accessId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      summary: Permanently revoke an MCP access; keep the audit and bootstrap record
+      responses:
+        '204': { description: Revoked; repeated revocation is idempotent }
+        '404': { $ref: '#/components/responses/Error' }
   /api/v1/me/mcp:
     get:
       summary: List owned external MCP declarations without secrets
@@ -2427,6 +2497,10 @@ paths:
 
 components:
   securitySchemes:
+    controlAccess:
+      type: http
+      scheme: bearer
+      description: Dedicated scoped MCP machine access. Not accepted by the client API.
     basicAuth:
       type: http
       scheme: basic
@@ -2515,7 +2589,18 @@ components:
                   message: { type: string }
 
   schemas:
-    MCPServer: {"type":"object","additionalProperties":false,"description":"Portable declaration. Env and headers contain backend environment variable names, never secret values. Tools are selected explicitly.","required":["name","transport","tools","readTools","resources","prompts","enabled","oauth"],"properties":{"revision":{"type":"integer","minimum":0,"description":"Optimistic concurrency revision; include the latest value when replacing a declaration"},"id":{"type":"string","readOnly":true},"name":{"type":"string","pattern":"^[a-z][a-z0-9_]{0,47}$"},"transport":{"type":"string","enum":["stdio","http"]},"command":{"type":"string"},"args":{"type":"array","items":{"type":"string"}},"url":{"type":"string"},"env":{"type":"object","additionalProperties":{"type":"string"}},"headers":{"type":"object","additionalProperties":{"type":"string"}},"oauth":{"type":"boolean"},"oauthClientId":{"type":"string"},"tools":{"type":"array","items":{"type":"string"}},"readTools":{"type":"array","items":{"type":"string"}},"resources":{"type":"boolean"},"prompts":{"type":"boolean"},"enabled":{"type":"boolean"},"projectIds":{"type":"array","items":{"type":"string"},"readOnly":true,"description":"Projects whose activations are removed when this declaration is deleted"}}}
+    ControlAccess:
+      type: object
+      required: [id, label, scopes, createdAt, bootstrap]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        scopes: { type: array, items: { type: string, enum: [read, manage, answer, approve] } }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time }
+        bootstrap: { type: boolean }
+    MCPServer: {"type":"object","additionalProperties":false,"description":"Portable declaration. Env and headers contain backend environment variable names, never secret values. Tools are selected explicitly. writeTools is a separate human-granted exact-name list permitting selected writes without per-call approval; explicit policy denials still apply.","required":["name","transport","tools","readTools","resources","prompts","enabled","oauth"],"properties":{"revision":{"type":"integer","minimum":0,"description":"Optimistic concurrency revision; include the latest value when replacing a declaration"},"id":{"type":"string","readOnly":true},"name":{"type":"string","pattern":"^[a-z][a-z0-9_]{0,47}$"},"transport":{"type":"string","enum":["stdio","http"]},"command":{"type":"string"},"args":{"type":"array","items":{"type":"string"}},"url":{"type":"string"},"env":{"type":"object","additionalProperties":{"type":"string"}},"headers":{"type":"object","additionalProperties":{"type":"string"}},"oauth":{"type":"boolean"},"oauthClientId":{"type":"string"},"tools":{"type":"array","items":{"type":"string"}},"readTools":{"type":"array","items":{"type":"string"}},"writeTools":{"type":"array","uniqueItems":true,"items":{"type":"string"}},"resources":{"type":"boolean"},"prompts":{"type":"boolean"},"enabled":{"type":"boolean"},"projectIds":{"type":"array","items":{"type":"string"},"readOnly":true,"description":"Projects whose activations are removed when this declaration is deleted"}}}
     MCPBinding: {"type":"object","required":["serverId","enabled","required"],"properties":{"serverId":{"type":"string"},"enabled":{"type":"boolean"},"required":{"type":"boolean"}}}
     MCPRestriction: {"type":"object","required":["serverIds"],"properties":{"restricted":{"type":"boolean","readOnly":true},"serverIds":{"type":["array","null"],"items":{"type":"string"}}}}
     MCPBackendOperation: {"type":"object","required":["operation"],"properties":{"operation":{"type":"string","enum":["probe","import","auth_start","auth_finish","logout"]},"serverId":{"type":"string"},"source":{"type":"string","enum":["codex","claude"]},"redirectUri":{"type":"string"},"response":{"type":"string"},"state":{"type":"string"}}}
@@ -2869,6 +2954,8 @@ components:
             - `backend.default_changed`: `{ backendInstanceId }`, owner-scoped;
               empty identifier clears the preference; refresh the backend list.
             - `mcp.changed`: owner-scoped MCP declaration, activation or restriction changed; refresh MCP views. No credentials are included.
+            - `control_access.changed`: `{ accessId, action: "created" | "revoked" }`, owner-scoped; refresh MCP accesses and audit. No secret or hash is included.
+            - `user.message` may carry `actorId: "mcp:<accessId>"` for a remote controller, distinct from a human message and from a local delegation's `actorJobId`. The provider receives this provenance with the prompt.
             - `directory.changed`: `{ knownDirectoryId }`, owner-scoped; refresh
               directory lists and bindings after metadata or paths change.
             - `project.created`, `project.archived`, `project.restored`:

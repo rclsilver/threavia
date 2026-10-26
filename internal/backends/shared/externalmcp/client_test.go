@@ -24,6 +24,32 @@ func testServer(calls *atomic.Int64) *sdk.Server {
 	})
 	return s
 }
+
+func TestHeaderTransportKeepsResponseAliveUntilItsBodyIsConsumed(t *testing.T) {
+	release := make(chan struct{})
+	host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		w.(http.Flusher).Flush()
+		<-release
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	defer host.Close()
+	req, err := http.NewRequest("POST", host.URL, strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := (headerTransport{base: http.DefaultTransport}).RoundTrip(req)
+	close(release)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || string(body) != `{"ok":true}` {
+		t.Fatalf("body truncated after headers: %q, %v", body, err)
+	}
+}
 func TestStreamableHTTPDiscoveryAndCallAreNotReplayed(t *testing.T) {
 	var calls atomic.Int64
 	s := testServer(&calls)

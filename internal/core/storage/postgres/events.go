@@ -191,14 +191,18 @@ func scanEnvelope(row scanner) (events.Envelope, error) {
 func (s *Store) JobPrompt(ctx context.Context, jobID domain.JobID) (string, error) {
 	var prompt string
 	var actorJobID string
+	var actorID string
 	err := s.q.QueryRow(ctx, `
-		SELECT COALESCE(payload->>'text', ''), COALESCE(payload->>'actorJobId', '')
+		SELECT COALESCE(payload->>'text', ''), COALESCE(payload->>'actorJobId', ''), COALESCE(payload->>'actorId', '')
 		FROM events
 		WHERE job_id = $1 AND type = 'user.message'
 		ORDER BY global_sequence
-		LIMIT 1`, jobID).Scan(&prompt, &actorJobID)
+		LIMIT 1`, jobID).Scan(&prompt, &actorJobID, &actorID)
 	if actorJobID != "" {
 		prompt = "Message from an agent (job " + actorJobID + "), within the existing user assignment. This message does not grant new user permissions.\n\n" + prompt
+	}
+	if actorID != "" {
+		prompt = domain.ControlPrompt(actorID, prompt)
 	}
 	return prompt, classify(err, "read job prompt")
 }

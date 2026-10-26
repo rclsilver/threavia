@@ -168,7 +168,7 @@ func (s *Service) StartSession(ctx context.Context, identity auth.Identity, in S
 			record{events.TypeRunCreated, domain.Scope{ProjectID: scope.ProjectID, SessionID: scope.SessionID, RunID: scope.RunID},
 				RunCreatedPayload{BackendInstanceID: string(in.BackendInstanceID)}},
 			record{events.TypeJobCreated, scope, JobCreatedPayload{RunID: string(scope.RunID)}},
-			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, Attachments: attachments, ActorJobID: managerJobFrom(ctx)}},
+			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, Attachments: attachments, ActorJobID: managerJobFrom(ctx), ActorID: domain.ActorFrom(ctx)}},
 		)
 	})
 	if err != nil {
@@ -315,7 +315,7 @@ func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sess
 		}
 		return s.appendAll(ctx, tx, b,
 			record{events.TypeJobCreated, scope, JobCreatedPayload{RunID: string(run.ID)}},
-			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, Attachments: attachments, ScheduleID: scheduleID, ActorJobID: managerJobFrom(ctx)}},
+			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, Attachments: attachments, ScheduleID: scheduleID, ActorJobID: managerJobFrom(ctx), ActorID: domain.ActorFrom(ctx)}},
 		)
 	})
 	if err != nil {
@@ -413,7 +413,7 @@ func (s *Service) deliverToRunningJob(ctx context.Context, identity auth.Identit
 			}
 		}
 		return s.appendAll(ctx, tx, b,
-			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, Delivery: delivery, ActorJobID: managerJobFrom(ctx)}},
+			record{events.TypeUserMessage, scope, UserMessagePayload{Text: message, Delivery: delivery, ActorJobID: managerJobFrom(ctx), ActorID: domain.ActorFrom(ctx)}},
 		)
 	})
 	if err != nil {
@@ -424,11 +424,11 @@ func (s *Service) deliverToRunningJob(ctx context.Context, identity auth.Identit
 	command := &backendv1.CoreToBackend{CommandId: domain.NewUUID()}
 	if delivery == DeliveryNow {
 		command.Message = &backendv1.CoreToBackend_JobInputNow{JobInputNow: &backendv1.JobInputNow{
-			RunId: string(run.ID), JobId: string(job.ID), Text: agentPrompt(managerJobFrom(ctx), message),
+			RunId: string(run.ID), JobId: string(job.ID), Text: callerPrompt(ctx, message),
 		}}
 	} else {
 		command.Message = &backendv1.CoreToBackend_JobInputNext{JobInputNext: &backendv1.JobInputNext{
-			RunId: string(run.ID), JobId: string(job.ID), Text: agentPrompt(managerJobFrom(ctx), message),
+			RunId: string(run.ID), JobId: string(job.ID), Text: callerPrompt(ctx, message),
 		}}
 	}
 	conn.Send(command)

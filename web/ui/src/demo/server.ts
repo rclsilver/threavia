@@ -1,4 +1,5 @@
 import { demoMCP } from './mcp';
+import { demoControl } from './control';
 import { ApiError } from '@/api/client';
 import { announceJobEnded } from '@/lib/job-ended';
 import { uuid } from '@/lib/uuid';
@@ -325,6 +326,9 @@ function recordScheduleChange(schedule: Json, action: string) {
 type Handler = (match: RegExpMatchArray, body: Json, query: URLSearchParams) => unknown;
 
 const routes: [string, RegExp, Handler][] = [
+  ['GET', /^\/api\/v1\/me\/control-accesses$/, (_m, body) => demoControl('list', '', body)],
+  ['POST', /^\/api\/v1\/me\/control-accesses$/, (_m, body) => { const result = demoControl('create', '', body); emitLifecycle('control_access.changed', '', { action: 'created' }); return result; }],
+  ['DELETE', /^\/api\/v1\/control-accesses\/([^/]+)$/, (m, body) => { const result = demoControl('revoke', m[1], body); emitLifecycle('control_access.changed', '', { accessId: m[1], action: 'revoked' }); return result; }],
   ['GET', /^\/api\/v1\/me\/mcp$/, (m, body) => { const result = demoMCP('list', m[1] || '', body); return result; }],
   ['POST', /^\/api\/v1\/me\/mcp$/, (m, body) => { const result = demoMCP('create', m[1] || '', body); emitLifecycle('mcp.changed', '', {}); return result; }],
   ['PUT', /^\/api\/v1\/mcp\/([^/]+)$/, (m, body) => { const result = demoMCP('update', m[1] || '', body); emitLifecycle('mcp.changed', '', {}); return result; }],

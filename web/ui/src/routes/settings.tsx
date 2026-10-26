@@ -1,4 +1,5 @@
 import { MCPPane } from '@/components/mcp-pane';
+import { ControlAccessPane } from '@/components/control-access-pane';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { ArrowLeft, ChevronRight, Copy, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
 import { useCallback, useState } from 'react';
@@ -97,6 +98,7 @@ export function SettingsView() {
               <p className="text-muted text-sm">{current.detail}</p>
             </div>
             {current.tab === 'mcp' && <MCPPane />}
+            {current.tab === 'control' && <ControlAccessPane />}
             {current.tab === 'appearance' && <AppearancePane />}
             {current.tab === 'notifications' && <NotificationsPane />}
             {current.tab === 'backends' && <BackendsPane />}

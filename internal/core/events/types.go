@@ -73,6 +73,7 @@ const (
 	TypeProjectDeleted        Type = "project.deleted"
 	TypeDirectoryChanged      Type = "directory.changed"
 	TypeBackendDefaultChanged Type = "backend.default_changed"
+	TypeControlAccessChanged  Type = "control_access.changed"
 
 	// TypeScheduleSkipped says, in the Session, that a scheduled message was
 	// not sent and why.
@@ -85,6 +86,7 @@ const (
 // persistentTypes is the set of event types Core persists and assigns a global
 // sequence to.
 var persistentTypes = map[Type]bool{
+	TypeControlAccessChanged:    true,
 	TypeReviewChanged:           true,
 	TypeProjectCreated:          true,
 	TypeProjectArchived:         true,

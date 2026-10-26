@@ -1,0 +1,47 @@
+# Disposable Linux development target. Always choose a distinct --project-name.
+# The private env file supplies THREAVIA_MCP_BOOTSTRAP_TOKEN (32+ random bytes).
+services:
+  postgres:
+    image: postgres:17-alpine
+    network_mode: host
+    command: ["postgres", "-c", "listen_addresses=127.0.0.1", "-c", "port=55458"]
+    environment:
+      POSTGRES_USER: control_dev
+      POSTGRES_PASSWORD: control_dev
+      POSTGRES_DB: control_dev
+    volumes: ["control-postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 55458 -U control_dev"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  core:
+    image: threavia-control-dev:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/core.Dockerfile
+      network: host
+      args: { VERSION: dev-control-mcp }
+    network_mode: host
+    env_file: ["${THREAVIA_CONTROL_ENV_FILE:?Choose a private bootstrap env file}"]
+    environment:
+      THREAVIA_HTTP_ADDR: "127.0.0.1:18085"
+      THREAVIA_HTTP_ALLOWED_HOSTS: "localhost:18085,127.0.0.1:18085"
+      THREAVIA_GRPC_ADDR: "127.0.0.1:19095"
+      THREAVIA_AUTH_MODE: none
+      THREAVIA_AUTH_DEV_USER_ID: dev
+      THREAVIA_POSTGRES_URL: "postgres://control_dev:control_dev@127.0.0.1:55458/control_dev?sslmode=disable&connect_timeout=5"
+      THREAVIA_MCP_BOOTSTRAP_OWNER: dev
+      THREAVIA_MCP_BOOTSTRAP_SCOPES: "read,manage,answer,approve"
+    depends_on:
+      postgres: { condition: service_healthy }
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:18085/readyz >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+volumes:
+  control-postgres:

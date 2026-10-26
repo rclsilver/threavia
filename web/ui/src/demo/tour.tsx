@@ -57,6 +57,10 @@ const STEPS: Step[] = [
     body: 'Use a backend’s menu to choose the default for new sessions. The demo CI runner cycles through disconnection, starting, ready and sign-in required; badges update without a reload, as they do across your clients.',
   },
   {
+    path: '/settings/control', target: '[data-tour="control-accesses"]', title: 'Control from another Threavia',
+    body: 'Give another instance its own MCP access with explicit rights to read, manage work or answer questions and permissions. Create a fictitious access here, then revoke it from its menu.',
+  },
+  {
     path: SESSION(IDS.certManager),
     target: '[data-tour="waiting"]',
     title: 'Everything waiting for you',

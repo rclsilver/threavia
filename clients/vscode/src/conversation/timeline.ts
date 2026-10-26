@@ -393,9 +393,9 @@ export function toolName(name: string): string {
 }
 
 /** Automated coordination is part of the record, never something the person typed. */
-export function messageAuthor(event: Event): 'Agent' | 'Schedule' | 'You' {
+export function messageAuthor(event: Event): 'Agent' | 'Schedule' | 'You' | 'MCP controller' {
   const message = payloadOf(event, 'user.message');
-  return message?.scheduleId ? 'Schedule' : message?.actorJobId ? 'Agent' : 'You';
+  return message?.actorId ? 'MCP controller' : message?.scheduleId ? 'Schedule' : message?.actorJobId ? 'Agent' : 'You';
 }
 
 /** The line of an event the timeline does not lay out specially. */

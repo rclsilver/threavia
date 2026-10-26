@@ -489,7 +489,12 @@ func (s *Service) ResolveValidation(ctx context.Context, identity auth.Identity,
 		return domain.ValidationRequest{}, translate(err)
 	}
 
-	resolved, err := s.store.ResolveValidationRequest(ctx, id, approved, identity.UserID, channel, note)
+	actor := identity.UserID
+	if delegated := domain.ActorFrom(ctx); delegated != "" {
+		actor = domain.UserID(delegated)
+		channel = "mcp"
+	}
+	resolved, err := s.store.ResolveValidationRequest(ctx, id, approved, actor, channel, note)
 	if err != nil {
 		if errors.Is(err, postgres.ErrNotFound) {
 			return domain.ValidationRequest{}, fmt.Errorf("%w: the request is already resolved", ErrConflict)
@@ -502,7 +507,7 @@ func (s *Service) ResolveValidation(ctx context.Context, identity auth.Identity,
 	s.emit(ctx, identity.UserID, events.TypeValidationResolved, resolved.Scope, ValidationResolvedPayload{
 		ValidationID:  string(resolved.ID),
 		Approved:      approved,
-		ActorUserID:   string(identity.UserID),
+		ActorUserID:   string(actor),
 		Channel:       channel,
 		ActorJobID:    managerJobFrom(ctx),
 		PayloadSHA256: resolved.PayloadSHA256,
@@ -529,7 +534,7 @@ func (s *Service) ResolveValidation(ctx context.Context, identity auth.Identity,
 				JobId:            string(resolved.Scope.JobID),
 				RequestId:        resolved.BackendRequestID,
 				Approved:         approved,
-				ResolvedByUserId: string(identity.UserID),
+				ResolvedByUserId: string(actor),
 				ResolvedAt:       timestamppb.New(s.now()),
 				Note:             note,
 			},
@@ -544,7 +549,12 @@ func (s *Service) ResolveUserInput(ctx context.Context, identity auth.Identity, 
 		return domain.UserInputRequest{}, translate(err)
 	}
 
-	resolved, err := s.store.ResolveUserInputRequest(ctx, id, value, identity.UserID, channel)
+	actor := identity.UserID
+	if delegated := domain.ActorFrom(ctx); delegated != "" {
+		actor = domain.UserID(delegated)
+		channel = "mcp"
+	}
+	resolved, err := s.store.ResolveUserInputRequest(ctx, id, value, actor, channel)
 	if err != nil {
 		if errors.Is(err, postgres.ErrNotFound) {
 			return domain.UserInputRequest{}, fmt.Errorf("%w: the request is already resolved", ErrConflict)
@@ -555,7 +565,7 @@ func (s *Service) ResolveUserInput(ctx context.Context, identity auth.Identity, 
 	s.emit(ctx, identity.UserID, events.TypeUserInputResolved, resolved.Scope, UserInputResolvedPayload{
 		RequestID:   string(resolved.ID),
 		Value:       value,
-		ActorUserID: string(identity.UserID),
+		ActorUserID: string(actor),
 		Channel:     channel,
 		ActorJobID:  managerJobFrom(ctx),
 	})
@@ -568,7 +578,7 @@ func (s *Service) ResolveUserInput(ctx context.Context, identity auth.Identity, 
 				JobId:            string(resolved.Scope.JobID),
 				RequestId:        resolved.BackendRequestID,
 				Value:            value,
-				ResolvedByUserId: string(identity.UserID),
+				ResolvedByUserId: string(actor),
 				ResolvedAt:       timestamppb.New(s.now()),
 			},
 		},

@@ -45,6 +45,15 @@ type Config struct {
 	Auth     auth.Config
 	Backend  BackendConfig
 	Metrics  MetricsConfig
+	Control  ControlConfig
+}
+
+// ControlConfig optionally initializes one insert-only MCP machine access.
+type ControlConfig struct {
+	BootstrapToken     string
+	BootstrapTokenFile string
+	BootstrapOwner     string
+	BootstrapScopes    []string
 }
 
 // MetricsConfig controls the dedicated, unauthenticated management listener.
@@ -216,6 +225,10 @@ func Load() (Config, error) {
 	cfg.Backend.HeartbeatInterval = l.Duration("BACKEND_HEARTBEAT_INTERVAL", cfg.Backend.HeartbeatInterval)
 	cfg.Backend.OfflineAfter = l.Duration("BACKEND_OFFLINE_AFTER", cfg.Backend.OfflineAfter)
 	cfg.Backend.SharedRegistrationKey = l.String("BACKEND_SHARED_REGISTRATION_KEY", cfg.Backend.SharedRegistrationKey)
+	cfg.Control.BootstrapToken = l.String("MCP_BOOTSTRAP_TOKEN", "")
+	cfg.Control.BootstrapTokenFile = l.String("MCP_BOOTSTRAP_TOKEN_FILE", "")
+	cfg.Control.BootstrapOwner = l.String("MCP_BOOTSTRAP_OWNER", "")
+	cfg.Control.BootstrapScopes = l.StringSlice("MCP_BOOTSTRAP_SCOPES", []string{"read"})
 
 	cfg.HTTP.AllowedHosts = l.StringSlice("HTTP_ALLOWED_HOSTS", cfg.HTTP.AllowedHosts)
 	if len(cfg.HTTP.AllowedHosts) == 0 && cfg.Auth.Mode == auth.ModeNone {

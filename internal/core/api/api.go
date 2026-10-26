@@ -61,8 +61,9 @@ type handler struct {
 	// routes records every pattern registered, so the OpenAPI document can be
 	// checked against what the server actually serves rather than against what
 	// someone remembered to write down.
-	routes []string
-	logger *slog.Logger
+	routes    []string
+	logger    *slog.Logger
+	endpoints map[string]func(http.ResponseWriter, *http.Request, auth.Identity)
 }
 
 // NewRouter builds the Core HTTP handler.
@@ -94,6 +95,7 @@ func NewRouter(opts Options) http.Handler {
 	h.registerPush(mux)
 	h.registerStream(mux)
 	h.registerSpec(mux)
+	h.registerControl(mux)
 
 	// Anything else under the versioned prefix is a route that does not exist
 	// yet; answering 501 keeps a client from reading it as an empty result.
@@ -173,6 +175,10 @@ func (h *handler) Routes() []string { return slices.Clone(h.routes) }
 // the cast and turning a typo into a 500.
 func (h *handler) handle(mux *http.ServeMux, pattern string, fn func(http.ResponseWriter, *http.Request, auth.Identity)) {
 	h.routes = append(h.routes, pattern)
+	if h.endpoints == nil {
+		h.endpoints = make(map[string]func(http.ResponseWriter, *http.Request, auth.Identity))
+	}
+	h.endpoints[pattern] = fn
 
 	wildcards := pathWildcards(pattern)
 	mux.Handle(pattern, h.secured(func(w http.ResponseWriter, r *http.Request, identity auth.Identity) {

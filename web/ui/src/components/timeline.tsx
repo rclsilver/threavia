@@ -721,14 +721,14 @@ function Entry({
       <div data-tour={user.actorJobId ? 'delegated-message' : undefined} className="bg-surface-2 border-border space-y-1 rounded-(--radius-card) border px-3 py-2">
         <p className="text-muted flex flex-wrap items-center gap-x-2 text-xs">
           <span className="text-text font-medium">
-            {!user.actorJobId && user.scheduleId ? (
+            {!user.actorId && !user.actorJobId && user.scheduleId ? (
               // Nobody typed it: a schedule did, and the reader should not
               // wonder when they wrote this.
               <span className="flex items-center gap-1">
                 <CalendarClock className="size-3" /> Schedule
               </span>
             ) : (
-              user.actorJobId ? 'Agent' : 'You'
+              user.actorId ? 'MCP controller' : user.actorJobId ? 'Agent' : 'You'
             )}
           </span>
           {/* Sent while the agent worked: it changed the course of a Job
@@ -813,7 +813,7 @@ function StickyPrompt({ event, onJump }: { event: Event; onJump: () => void }) {
             className="min-w-0 flex-1 py-0.5 text-left"
           >
             <span className="text-muted flex items-center gap-1.5 text-xs">
-              <span className="text-text font-medium">{user.actorJobId ? 'Agent' : user.scheduleId ? 'Schedule' : 'You'}</span>
+              <span className="text-text font-medium">{user.actorId ? 'MCP controller' : user.actorJobId ? 'Agent' : user.scheduleId ? 'Schedule' : 'You'}</span>
               {clock(event.timestamp)}
             </span>
             <span

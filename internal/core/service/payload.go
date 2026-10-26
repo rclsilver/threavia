@@ -86,6 +86,7 @@ type UserMessagePayload struct {
 	Attachments []ArtifactPayload `json:"attachments,omitempty"`
 	Text        string            `json:"text"`
 	ActorJobID  domain.JobID      `json:"actorJobId,omitempty"`
+	ActorID     string            `json:"actorId,omitempty"`
 	// Delivery says how a message sent while a Job ran reached it: NOW or
 	// NEXT. Absent for a message that started a Job of its own.
 	Delivery Delivery `json:"delivery,omitempty"`

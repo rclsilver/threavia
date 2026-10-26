@@ -31,6 +31,10 @@ type AuditEntry struct {
 // RecordAudit appends an audit entry. Use wall time rather than transaction
 // start time so related entries (registration, then claim) retain their order.
 func (s *Store) RecordAudit(ctx context.Context, entry AuditEntry) error {
+	if actor := domain.ActorFrom(ctx); actor != "" {
+		entry.ActorID = actor
+		entry.Channel = "mcp"
+	}
 	detail := entry.Detail
 	if len(detail) == 0 {
 		detail = json.RawMessage(`{}`)

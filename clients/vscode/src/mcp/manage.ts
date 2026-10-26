@@ -10,8 +10,9 @@ type Restriction = components['schemas']['MCPRestriction'];
 /** Native selection and diagnostics. Complete configuration stays in Web. */
 export async function manageMCP(core: Core) {
   for (;;) {
-    const action = await vscode.window.showQuickPick(['List servers and test a connection', 'Activate servers in a project', 'Restrict servers for a session', 'Open MCP configuration in Web'], { title: 'MCP servers', ignoreFocusOut: true });
+    const action = await vscode.window.showQuickPick(['List servers and test a connection', 'Activate servers in a project', 'Restrict servers for a session', 'Open MCP configuration in Web', 'Manage incoming MCP access in Web'], { title: 'MCP servers', ignoreFocusOut: true });
     if (!action) return;
+    if (action === 'Manage incoming MCP access in Web') { await vscode.env.openExternal(vscode.Uri.parse(core.setting.url + '/settings/control')); continue; }
     if (action === 'Open MCP configuration in Web') { await vscode.env.openExternal(vscode.Uri.parse(core.setting.url + '/settings/mcp')); continue; }
     const { items: servers } = await core.client.get<{ items: Server[] }>('/api/v1/me/mcp');
     if (action === 'List servers and test a connection') {

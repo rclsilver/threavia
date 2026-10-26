@@ -1,7 +1,7 @@
 package tools
 
 func mcpSpecs() []Spec {
-	decl := map[string]any{"type": "object", "description": "Portable MCP declaration: name, transport (stdio/http), command/args or url, env/header variable-name references, oauth, tools and readTools exact-name lists, resources/prompts, enabled. No secret values. Changes apply to the next Job."}
+	decl := map[string]any{"type": "object", "description": "Portable MCP declaration: name, transport (stdio/http), command/args or url, env/header variable-name references, oauth, tools and readTools exact-name lists, optional human-authorized writeTools exact names (separate from reads), resources/prompts, enabled. Never add writeTools without explicit user authorization. No secret values. Changes apply to the next Job."}
 	return []Spec{
 		{Name: "mcp_server_list", Description: "List MCP server declarations owned by this account and their activation in this project, without secrets.", InputSchema: object(map[string]any{})},
 		{Name: "mcp_server_add", RequiresValidation: true, Description: "Add an existing MCP server declaration to Threavia after user validation. Does not install software or enable it in a project. Never put secret values in arguments, URLs or configuration.", InputSchema: object(map[string]any{"server": decl}, "server")},

@@ -73,6 +73,7 @@ func registered(t *testing.T) []string {
 	h.registerSchedules(mux)
 	h.registerPush(mux)
 	h.registerStream(mux)
+	h.registerControl(mux)
 
 	routes := h.Routes()
 	slices.Sort(routes)

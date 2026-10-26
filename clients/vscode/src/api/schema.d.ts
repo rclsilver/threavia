@@ -4,6 +4,211 @@
  */
 
 export interface paths {
+    "/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** No standalone event stream in the stateless MCP transport */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                401: components["responses"]["Error"];
+                /** @description Use session_wait through POST instead */
+                405: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Public Streamable HTTP MCP control endpoint
+         * @description Dedicated control-access Bearer token required even when UI authentication is disabled. Tools use the token owner's services and explicit scopes. Stateless, JSON responses; no cross-request MCP session identity.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            responses: {
+                /** @description MCP JSON-RPC response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description MCP notification accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["Error"];
+                401: components["responses"]["Error"];
+                403: components["responses"]["Error"];
+            };
+        };
+        /** No persistent transport session to delete */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                401: components["responses"]["Error"];
+                /** @description Stateless MCP transport */
+                405: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/control-accesses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List dedicated MCP control accesses without their secrets */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description All accesses including expired or revoked records */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["ControlAccess"][];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a scoped MCP access; show the generated secret once */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        label: string;
+                        scopes: ("read" | "manage" | "answer" | "approve")[];
+                        /** Format: date-time */
+                        expiresAt?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Access metadata and secret; secret is not retrievable again */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            access: components["schemas"]["ControlAccess"];
+                            token: string;
+                        };
+                    };
+                };
+                400: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control-accesses/{accessId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accessId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Permanently revoke an MCP access; keep the audit and bootstrap record */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    accessId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Revoked; repeated revocation is idempotent */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["Error"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/mcp": {
         parameters: {
             query?: never;
@@ -4702,7 +4907,20 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description Portable declaration. Env and headers contain backend environment variable names, never secret values. Tools are selected explicitly. */
+        ControlAccess: {
+            /** Format: uuid */
+            id: string;
+            label: string;
+            scopes: ("read" | "manage" | "answer" | "approve")[];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: date-time */
+            revokedAt?: string;
+            bootstrap: boolean;
+        };
+        /** @description Portable declaration. Env and headers contain backend environment variable names, never secret values. Tools are selected explicitly. writeTools is a separate human-granted exact-name list permitting selected writes without per-call approval; explicit policy denials still apply. */
         MCPServer: {
             /** @description Optimistic concurrency revision; include the latest value when replacing a declaration */
             revision?: number;
@@ -4723,6 +4941,7 @@ export interface components {
             oauthClientId?: string;
             tools: string[];
             readTools: string[];
+            writeTools?: string[];
             resources: boolean;
             prompts: boolean;
             enabled: boolean;
@@ -5062,6 +5281,8 @@ export interface components {
              *     - `backend.default_changed`: `{ backendInstanceId }`, owner-scoped;
              *       empty identifier clears the preference; refresh the backend list.
              *     - `mcp.changed`: owner-scoped MCP declaration, activation or restriction changed; refresh MCP views. No credentials are included.
+             *     - `control_access.changed`: `{ accessId, action: "created" | "revoked" }`, owner-scoped; refresh MCP accesses and audit. No secret or hash is included.
+             *     - `user.message` may carry `actorId: "mcp:<accessId>"` for a remote controller, distinct from a human message and from a local delegation's `actorJobId`. The provider receives this provenance with the prompt.
              *     - `directory.changed`: `{ knownDirectoryId }`, owner-scoped; refresh
              *       directory lists and bindings after metadata or paths change.
              *     - `project.created`, `project.archived`, `project.restored`:

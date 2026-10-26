@@ -166,6 +166,7 @@ and backend features can require updating both components; see the
 | [Codex backend](docs/codex.md) | Provider setup, execution modes and supported features |
 | [NixOS](docs/nix.md) | Backend packages and services |
 | [MCP servers](docs/mcp.md) | Existing external servers, credentials, discovery and project/session selection |
+| [Control over MCP](docs/control-mcp.md) | Pilot another Threavia with scoped accesses, session events and delegated permission decisions |
 | [Skills](docs/skills.md) | Agent Skills support for Claude Code and Codex |
 | [Session management](docs/session-management.md) | Coordinating and delegating work between sessions |
 | [Provider recovery](docs/provider-recovery.md) | Authentication expiry, exhausted quotas and retry behavior |

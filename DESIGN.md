@@ -93,6 +93,10 @@ spacing:
   reading: "46rem"
   page: "64rem"
 components:
+  # Settings → MCP access follows RecordList/RecordRow. New accesses default to
+  # read only; approval delegation is a separate checkbox. A generated token is
+  # masked, shown once, never cached in lists, with copy/manual-copy recovery.
+  # Write preauthorization names each server/tool and confirms it on its own line.
   button-primary:
     backgroundColor: "{colors.accent}"
     textColor: "{colors.accent-text}"

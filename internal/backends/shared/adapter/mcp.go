@@ -226,6 +226,15 @@ func (a *Adapter) callExternalMCP(ctx context.Context, jobID string, v mcpconfig
 	if read {
 		kind = "Read"
 	}
+	preauthorized := !read && slices.Contains(v.WriteTools, name)
+	if preauthorized {
+		// Additive ALLOW: inherited DENY and ASK rules still win in the evaluator.
+		p.Rules = append(append([]policy.Rule(nil), p.Rules...), policy.Rule{
+			Effect:     backendv1.PermissionEffect_PERMISSION_EFFECT_ALLOW,
+			Capability: backendv1.PermissionCapability_PERMISSION_CAPABILITY_TOOL,
+			Match:      actual,
+		})
+	}
 	if v.Transport == "http" && !p.AllowNetwork {
 		return nil, fmt.Errorf("network access is disabled")
 	}
@@ -233,7 +242,7 @@ func (a *Adapter) callExternalMCP(ctx context.Context, jobID string, v mcpconfig
 	if d.Verdict == policy.Deny {
 		return nil, fmt.Errorf("%s", d.Reason)
 	}
-	if !read || d.Verdict == policy.Ask {
+	if (!read && !preauthorized) || d.Verdict == policy.Ask {
 		decision, err := a.AskValidation(ctx, jobID, actual, input)
 		if err != nil {
 			return nil, err

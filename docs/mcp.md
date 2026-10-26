@@ -41,6 +41,14 @@ session policies and explicit refusals still apply. Resources and prompts are
 separate opt-in read surfaces, exposed through capability-aware wrapper tools.
 Sampling, elicitation and server-initiated automations are not enabled.
 
+To automate a trusted connection, **Write permissions** separately authorizes
+exact selected mutation names in `writeTools`. The list is empty by default;
+adding a tool requires explicit human confirmation. Never put mutations in
+`readTools`. Unclassified writes still ask even in autonomous mode. An
+authorized write keeps explicit policy `ASK`/`DENY`, network restrictions and
+the review checkpoint. Changes apply to subsequent Jobs. For a Threavia target,
+also create its separate scoped access: see [Control over MCP](control-mcp.md).
+
 A declaration's `revision` prevents stale edits from overwriting a newer
 configuration. Reload after a conflict. Deletion removes the declaration and
 project activations, not software or backend-local credentials. Existing Jobs
