@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -46,12 +45,7 @@ func sandboxCommand(ctx context.Context, dir, command string, writable, network 
 	args = append(args, "--", bash, "--noprofile", "--norc", "-c", command)
 	cmd := exec.CommandContext(ctx, bwrap, args...)
 	cmd.Dir = dir
-	for _, v := range os.Environ() {
-		name, _, _ := strings.Cut(v, "=")
-		if name != "BASH_ENV" && name != "ENV" && name != "LD_PRELOAD" && name != "LD_LIBRARY_PATH" && !strings.HasPrefix(name, "THREAVIA_") {
-			cmd.Env = append(cmd.Env, v)
-		}
-	}
+	cmd.Env = monitorEnvironment()
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {

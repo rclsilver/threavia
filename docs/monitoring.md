@@ -35,18 +35,38 @@ never new user permissions.
 
 ## Execution and limits
 
-The first implementation requires a Linux backend, Bash, bubblewrap and working
-user namespaces. NixOS service toolboxes and Linux backend images include
-bubblewrap. Container runtimes must permit nested namespaces and a private `/proc` mount. The backend checks this at startup and advertises support only when isolation works. When the isolation cannot be provided, a command fails explicitly;
-it is never launched directly on the host as a fallback.
+Both Claude and Codex use the same platform-specific launcher:
 
-The sandbox mounts the host filesystem read-only, isolates processes, IPC and
-networking, and supplies a private temporary directory. Network access is
-enabled only if the effective policy permits it. With filesystem writes
-permitted, only the resolved Job working directory is writable. Filesystem,
-network and shell refusals still apply before asking for approval. This is not
+- Linux (amd64/arm64): Bash, bubblewrap and working user namespaces are required.
+  NixOS service toolboxes and Linux backend images include bubblewrap. Container
+  runtimes must permit nested namespaces and a private `/proc` mount. The sandbox
+  mounts the host filesystem read-only and isolates processes, IPC and networking.
+- macOS (Intel/Apple Silicon): the launcher uses the OS-provided
+  `/usr/bin/sandbox-exec` and `/bin/bash`. Seatbelt starts with a deny-by-default
+  profile, permits filesystem reads, and grants writes only to a private
+  temporary directory and, when allowed, the canonical Job working directory.
+  Network operations, including Unix-domain sockets, are denied unless the
+  effective policy permits network access. Sandboxed commands cannot signal
+  the trusted supervisor outside their sandbox.
+
+On both platforms, the backend probes the real sandbox at startup and only
+advertises support when initialization succeeds. It never falls back to an
+unrestricted host shell. macOS `sandbox-exec` is deprecated by Apple; removal
+or a profile incompatibility makes this capability unavailable explicitly.
+
+Network access is enabled only if the effective policy permits it. Filesystem,
+network and shell refusals still apply before asking for approval. These are not
 a replacement for the account's operating-system permissions. Shell rules do
 not inspect every operation of an arbitrary program.
+
+On macOS a separate supervisor owns the command's process group, a private
+temporary directory and a backend lifetime pipe. A stop, timeout, backend
+SIGKILL, or EOF on that pipe kills the command group; normal command completion
+also cleans up its remaining group members. Commands must remain in the
+foreground of that group: daemonization, `setsid` and deliberate group escape
+are not supported. Seatbelt restrictions remain inherited even by detached
+descendants, but unlike Linux PID namespaces, macOS process groups do not
+provide a kernel guarantee of killing a deliberately detached daemon.
 
 There are at most five active watches per session and twenty per backend.
 A configured policy maximum duration also bounds each command's requested
@@ -70,7 +90,8 @@ A backend restart never adopts an old PID or reruns a command. Saved running
 watches become interrupted. Complete inventories also reconcile registrations
 whose process never reached local persistence; fresh registrations have a
 thirty-second launch grace. Inventories do not interrupt watches registered
-after the connection began. Backend exit kills its child sandboxes.
+after the connection began. Backend exit terminates supervised commands as
+described in the platform-specific execution limits above.
 
 A session archive, deletion, handoff to another Run, or change to the effective
 execution policy requests stopping its old watches on the next report. A
@@ -92,3 +113,29 @@ Apply migration 28 and update Core and both backends. The backend advertises
 the tools when both sides support them. Older backends retain temporary
 background execution. This change does not automatically update or restart
 already installed services.
+
+## Testing without a local Mac
+
+The `Monitor platforms` GitHub Actions workflow runs on real hosted macOS 15
+Intel and Apple Silicon runners (`macos-15-intel` and `macos-15`). A feature-branch
+push or a pull request can run it before any merge or deployment. These tests
+require the real sandbox; they fail rather than skip when it is unavailable.
+They cover workspace read/write boundaries, private scratch space, symlink
+escapes, TCP and Unix-socket denial, permitted loopback, refusal to signal the
+supervisor, individual stop, process-group cleanup and backend SIGKILL. Shared
+backend, policy and provider-runner tests run under the race detector, then both
+native backend binaries are built. No provider credentials or paid model calls
+are required.
+
+On Linux, portable tests exercise profile construction, environment filtering,
+normal exit, cancellation and supervisor lifetime after backend SIGKILL. Both
+macOS test binaries and backend binaries can also be cross-compiled with
+`CGO_ENABLED=0 GOOS=darwin GOARCH=amd64` or `arm64`. Cross-compilation and a mocked
+`sandbox-exec` do not validate Seatbelt enforcement. Docker on Linux cannot run
+these native macOS checks. A successful native workflow is required before
+claiming the macOS launcher has been runtime-validated. Full Web/VS Code visual
+acceptance and a real provider session remain separate checks.
+
+Platform references: [Apple sandbox-exec manual](https://keith.github.io/xcode-man-pages/sandbox-exec.1.html),
+[Codex Seatbelt base policy](https://github.com/openai/codex/blob/main/codex-rs/sandboxing/src/seatbelt_base_policy.sbpl),
+and [GitHub-hosted macOS runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).

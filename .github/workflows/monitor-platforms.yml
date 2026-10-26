@@ -1,0 +1,54 @@
+name: "Monitor platforms"
+
+on:
+  pull_request:
+    branches: ["master"]
+    paths:
+      - "internal/backends/**"
+      - "pkg/monitor/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/monitor-platforms.yml"
+  push:
+    branches: ["feat/persistent-monitors-macos"]
+  workflow_dispatch:
+
+permissions:
+  contents: "read"
+
+jobs:
+  macos:
+    name: "Seatbelt (${{ matrix.runner }})"
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ["macos-15-intel", "macos-15"]
+    runs-on: "${{ matrix.runner }}"
+    timeout-minutes: 15
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v7.0.1"
+      - name: "Set up Go"
+        uses: "actions/setup-go@v7.0.0"
+        with:
+          go-version-file: "go.mod"
+          cache: true
+      - name: "Show native platform and sandbox"
+        run: |
+          uname -m
+          sw_vers
+          test -x /usr/bin/sandbox-exec
+      - name: "Exercise real isolation, supervision and shared backend integration"
+        env:
+          CGO_ENABLED: "1"
+        run: >-
+          go test -race -count=1 -timeout=5m -v
+          ./internal/backends/shared/...
+          ./internal/backends/claude/runner
+          ./internal/backends/codex/runner
+      - name: "Build both native backends"
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          go build -o "${RUNNER_TEMP}/threavia-backend-claude" ./cmd/threavia-backend-claude
+          go build -o "${RUNNER_TEMP}/threavia-backend-codex" ./cmd/threavia-backend-codex
