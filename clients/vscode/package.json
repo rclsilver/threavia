@@ -152,6 +152,7 @@
       }
     ],
     "commands": [
+      { "command": "threavia.manageMonitors", "title": "Background Monitors", "category": "Threavia", "icon": "$(radio-tower)" },
       { "command": "threavia.manageMCP", "title": "Manage MCP Servers", "category": "Threavia" },
       { "command": "threavia.managePermissions", "title": "Manage Permissions…", "category": "Threavia", "icon": "$(shield)" },
       { "command": "threavia.manageDirectories", "title": "Manage Known Directories…", "category": "Threavia", "icon": "$(folder)" },
@@ -782,6 +783,7 @@
         }
       ],
       "view/item/context": [
+        { "command": "threavia.manageMonitors", "when": "view == threavia.sidebar && viewItem =~ /^session/", "group": "2_directories" },
         { "command": "threavia.manageMCP", "when": "view == threavia.sidebar && (viewItem == project || viewItem =~ /^core\\.ready/)", "group": "2_directories" },
         { "command": "threavia.manageDirectories", "when": "view == threavia.sidebar && (viewItem == project || viewItem =~ /^core\\.ready/)", "group": "2_directories" },
         { "command": "threavia.managePermissions", "when": "view == threavia.sidebar && (viewItem == project || viewItem =~ /^session/ || viewItem =~ /^core\\.ready/)", "group": "2_permissions" },
@@ -1014,6 +1016,7 @@
         }
       ],
       "editor/title": [
+        { "command": "threavia.manageMonitors", "when": "activeWebviewPanelId == threavia.conversation && !threavia.conversationDraft", "group": "navigation@5" },
         {
           "command": "threavia.pinSession",
           "when": "activeWebviewPanelId == 'threavia.conversation' && !threavia.conversationPinned && !threavia.conversationDraft",

@@ -250,6 +250,7 @@ in
         pkgs.openssh
         pkgs.coreutils
         pkgs.bash
+        pkgs.bubblewrap
         pkgs.gnugrep
         pkgs.gnused
         pkgs.gawk

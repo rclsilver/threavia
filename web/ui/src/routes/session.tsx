@@ -21,6 +21,7 @@ import { BackendInfo } from '@/components/backend-info';
 import { ActionError } from '@/components/ui/action-error';
 import { Badge } from '@/components/ui/badge';
 import { RepositoryStatus } from '@/components/repository-status';
+import { MonitorsPanel } from '@/components/monitors';
 import { ReviewNotice } from '@/components/review-notice';
 import { Timeline, type Pending } from '@/components/timeline';
 import { Button } from '@/components/ui/button';
@@ -194,6 +195,7 @@ export function SessionView() {
       </header>
 
       <ReviewNotice sessionId={sessionId} />
+      <MonitorsPanel sessionId={sessionId} working={Boolean(active)} />
 
       <Timeline
         events={data.events}

@@ -344,3 +344,11 @@ with ALLOW, ASK and DENY.
 - Native automatic supervision can judge differently from Claude's reviewer.
 - The sandbox mounts a private `/tmp`: a file under `/tmp` written outside the
   sandbox (for instance a skill cache placed there) needs approval to be read.
+
+### Persistent background monitoring
+
+For watches that must survive a final reply, both providers use the shared
+Threavia monitor_start/list/stop tools. Native background command execution
+still ends with its Job. The backend supervises persistent watch processes
+independently, with Core storing observations and queueing event-driven agent
+resumptions. See [monitoring.md](monitoring.md) for isolation, limits and outages.

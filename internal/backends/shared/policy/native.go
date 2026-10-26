@@ -61,7 +61,7 @@ func (n Native) Settings() (string, error) {
 
 // Native translates the policy into provider configuration.
 func (p Policy) Native() Native {
-	native := Native{Mode: "default", Deny: append([]string{}, nativeScheduleTools...)}
+	native := Native{Mode: "default", Deny: append(append([]string{}, nativeScheduleTools...), "Monitor")}
 
 	// The switches first, as refusals. Each is also enforced by the gate below,
 	// because a rule here matches the text of a command and nothing more: the

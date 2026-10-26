@@ -7,6 +7,7 @@ package adapter
 
 import (
 	"errors"
+	"github.com/rclsilver/threavia/internal/backends/shared/monitors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,6 +105,7 @@ func Default() Config {
 	clientCfg.FeaturePromptAttachments = true
 	clientCfg.FeatureHumanReview = true
 	clientCfg.FeatureExternalMCP = true
+	clientCfg.FeaturePersistentMonitors = monitors.Available()
 
 	return Config{
 		Log:    LogConfig{Level: logging.LevelInfo, Format: logging.FormatText},

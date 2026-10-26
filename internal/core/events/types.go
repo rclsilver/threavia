@@ -12,6 +12,7 @@ type Type string
 // this log is the observable timeline and the realtime synchronization
 // mechanism, not an event-sourcing journal to replay.
 const (
+	TypeMonitorChanged      Type = "monitor.changed"
 	TypeMCPChanged          Type = "mcp.changed"
 	TypeReviewChanged       Type = "review.changed"
 	TypeSessionCreated      Type = "session.created"
@@ -86,6 +87,7 @@ const (
 // persistentTypes is the set of event types Core persists and assigns a global
 // sequence to.
 var persistentTypes = map[Type]bool{
+	TypeMonitorChanged:          true,
 	TypeControlAccessChanged:    true,
 	TypeReviewChanged:           true,
 	TypeProjectCreated:          true,

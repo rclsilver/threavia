@@ -22,6 +22,8 @@ message Welcome {
   bool provider_recovery = 5;
   // The Core understands human reviews and the internal review checkpoint.
   bool human_review = 6;
+  // Allows MonitorReport and session-owned monitors outside Jobs.
+  bool persistent_monitors = 7;
 }
 
 // SNAPSHOT captures the working tree and protects the objects using ref_id.

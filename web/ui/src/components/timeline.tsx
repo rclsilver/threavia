@@ -728,7 +728,7 @@ function Entry({
                 <CalendarClock className="size-3" /> Schedule
               </span>
             ) : (
-              user.actorId ? 'MCP controller' : user.actorJobId ? 'Agent' : 'You'
+              user.monitorId ? 'Monitor' : user.actorId ? 'MCP controller' : user.actorJobId ? 'Agent' : 'You'
             )}
           </span>
           {/* Sent while the agent worked: it changed the course of a Job
@@ -813,7 +813,7 @@ function StickyPrompt({ event, onJump }: { event: Event; onJump: () => void }) {
             className="min-w-0 flex-1 py-0.5 text-left"
           >
             <span className="text-muted flex items-center gap-1.5 text-xs">
-              <span className="text-text font-medium">{user.actorId ? 'MCP controller' : user.actorJobId ? 'Agent' : user.scheduleId ? 'Schedule' : 'You'}</span>
+              <span className="text-text font-medium">{user.monitorId ? 'Monitor' : user.actorId ? 'MCP controller' : user.actorJobId ? 'Agent' : user.scheduleId ? 'Schedule' : 'You'}</span>
               {clock(event.timestamp)}
             </span>
             <span

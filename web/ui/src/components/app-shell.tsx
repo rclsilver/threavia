@@ -51,6 +51,7 @@ import { DEMO } from '@/demo/mode';
 import { SelectedProject } from '@/use-project';
 import { useStream } from '@/use-stream';
 import { JobEndedNotices } from '@/components/job-ended-notices';
+import { MonitorBadge } from '@/components/monitors';
 import { Logo } from '@/components/logo';
 import { ActionError } from '@/components/ui/action-error';
 import { Avatar } from '@/components/ui/avatar';
@@ -340,7 +341,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <span className="min-w-0 flex-1 truncate">
                       {session.title || 'Untitled session'}
                     </span>
-                    <SessionState state={sessionState(session, waiting)} />
+                    <MonitorBadge session={session} /><SessionState state={sessionState(session, waiting)} />
                   </Link>
                 </li>
               ))}
@@ -511,7 +512,7 @@ function PinnedSessions({
                 {elsewhere && (
                   <span className="text-muted max-w-24 shrink-0 truncate text-xs font-normal">{elsewhere}</span>
                 )}
-                <SessionState state={sessionState(session, waiting)} />
+                <MonitorBadge session={session} /><SessionState state={sessionState(session, waiting)} />
                 {/* Room for the unpin button, which sits over the row's end. */}
                 <span className="w-0 shrink-0 transition-[width] md:group-focus-within:w-5 md:group-hover:w-5" />
               </Link>

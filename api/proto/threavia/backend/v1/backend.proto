@@ -107,6 +107,7 @@ message BackendToCore {
     QuotaReport quota_report = 13;
     ReviewWorkspace review_workspace = 14;
     McpResponse mcp_response = 15;
+    MonitorReport monitor_report = 16;
   }
 }
 
@@ -131,7 +132,25 @@ message CoreToBackend {
     RepositoryStatusRequest repository_status_request = 15;
     ReviewWorkspaceRequest review_workspace_request = 16;
     McpRequest mcp_request = 17;
+    MonitorControl monitor_control = 18;
   }
+}
+
+// Replayed session watch observation, independent of a provider Job's lifetime.
+message MonitorReport {
+  google.protobuf.Struct snapshot = 1;
+  // Complete local inventory; cutoff is Welcome.server_time for this connection.
+  bool inventory_complete = 2;
+  repeated string monitor_ids = 3;
+  google.protobuf.Timestamp connected_at = 4;
+}
+
+// Acknowledges a persisted observation and/or requests stopping one exact watch.
+message MonitorControl {
+  string monitor_id = 1;
+  string run_id = 2;
+  uint64 ack_sequence = 3;
+  bool stop = 4;
 }
 
 message McpResponse {

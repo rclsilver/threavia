@@ -430,3 +430,29 @@ only from the backend bound to that request. OAuth codes/state are transient;
 credentials stay backend-local. Unsupported backends return an explicit error.
 Requests execute outside the stream reader, with bounded waits. See [MCP](mcp.md)
 for supported transports, configuration, authentication and failure behavior.
+
+### Session-owned background monitors
+
+A backend advertises FeatureFlags.persistent_monitors and Core acknowledges it
+with Welcome.persistent_monitors. MonitorReport is independent of JobEvent and
+may arrive after its origin Job is terminal. Its snapshot follows Monitor in
+the HTTP contract; Core derives owner/session/backend from the registered
+origin, never from report input. Core alone assigns registration metadata.
+
+Snapshot.sequence is monotonic per watch. The backend retains terminal local
+state until MonitorControl.ack_sequence confirms durable observation and
+notification delivery. A wakeup Job and the snapshot's delivery marker commit in
+one transaction under the monitor row lock, preventing duplicate concurrent Jobs. Active snapshots repeat for liveness. MonitorControl
+also addresses an individual watch by monitor_id and run_id with stop=true;
+stop remains pending until the backend reports a terminal outcome.
+
+An inventory_complete report carries all local monitor_ids and connected_at
+from Welcome.server_time. It reconciles missing processes created before that
+connection, with a thirty-second grace for STARTING registrations. It does not
+reexecute commands. Missing terminal observations with pending wakes are also
+retried, allowing recovery without keeping an agent Job alive.
+
+Core emits persistent monitor.changed notices in the session scope. Monitoring
+wakeups are queued Jobs with origin channel monitor and user.message.monitorId;
+their output is system-originated command data, not human authorization. See
+[Persistent background monitoring](monitoring.md) for limits and recovery.

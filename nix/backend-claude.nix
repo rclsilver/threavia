@@ -3,6 +3,10 @@
   buildGoModule,
   go_1_26,
   version ? "dev",
+  stdenv,
+  makeWrapper,
+  bubblewrap,
+  bash,
 }:
 
 # The Claude backend, for a machine that holds the code.
@@ -59,6 +63,11 @@
     "-w"
     "-X main.version=${version}"
   ];
+
+  nativeBuildInputs = lib.optionals stdenv.hostPlatform.isLinux [ makeWrapper ];
+  postInstall = lib.optionalString stdenv.hostPlatform.isLinux ''
+    wrapProgram "$out/bin/threavia-backend-claude" --prefix PATH : "${lib.makeBinPath [ bubblewrap bash ]}"
+  '';
 
   # The suite needs a PostgreSQL to talk to and a Docker daemon for the
   # end-to-end paths, neither of which exists in a build sandbox. It runs in CI,

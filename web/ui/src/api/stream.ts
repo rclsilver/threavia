@@ -220,6 +220,9 @@ export class EventStream {
         void this.queries.invalidateQueries({ queryKey: ['control-accesses'] });
         void this.queries.invalidateQueries({ queryKey: ['audit'] });
         break;
+      case 'monitor.changed':
+        void this.queries.invalidateQueries({ queryKey: ['monitors'] });
+        break;
       case 'mcp.changed':
         void this.queries.invalidateQueries({ queryKey: ['mcp'] });
         break;

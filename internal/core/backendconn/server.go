@@ -121,6 +121,7 @@ func (s *Server) Connect(stream backendv1.BackendControl_ConnectServer) error {
 				HeartbeatIntervalSeconds: uint32(s.opts.HeartbeatInterval.Seconds()),
 				ProviderRecovery:         true,
 				HumanReview:              true,
+				PersistentMonitors:       true,
 			},
 		},
 	}
@@ -259,6 +260,18 @@ func (s *Server) handle(ctx context.Context, instanceID domain.BackendInstanceID
 
 	case *backendv1.BackendToCore_QuotaReport:
 		s.sink.QuotaReport(ctx, instanceID, body.QuotaReport)
+		return nil
+	case *backendv1.BackendToCore_MonitorReport:
+		if sink, ok := s.sink.(interface {
+			MonitorReport(context.Context, domain.BackendInstanceID, *backendv1.MonitorReport) (*backendv1.MonitorControl, error)
+		}); ok {
+			control, err := sink.MonitorReport(ctx, instanceID, body.MonitorReport)
+			if err != nil {
+				logger.Error("cannot record monitor", "error", err)
+			} else if control != nil {
+				conn.Send(&backendv1.CoreToBackend{Message: &backendv1.CoreToBackend_MonitorControl{MonitorControl: control}})
+			}
+		}
 		return nil
 	case *backendv1.BackendToCore_McpResponse:
 		if sink, ok := s.sink.(interface {

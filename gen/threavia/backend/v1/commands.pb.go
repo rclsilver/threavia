@@ -271,9 +271,11 @@ type Welcome struct {
 	// terminal failure behavior rather than strand a Job on an older Core.
 	ProviderRecovery bool `protobuf:"varint,5,opt,name=provider_recovery,json=providerRecovery,proto3" json:"provider_recovery,omitempty"`
 	// The Core understands human reviews and the internal review checkpoint.
-	HumanReview   bool `protobuf:"varint,6,opt,name=human_review,json=humanReview,proto3" json:"human_review,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	HumanReview bool `protobuf:"varint,6,opt,name=human_review,json=humanReview,proto3" json:"human_review,omitempty"`
+	// Allows MonitorReport and session-owned monitors outside Jobs.
+	PersistentMonitors bool `protobuf:"varint,7,opt,name=persistent_monitors,json=persistentMonitors,proto3" json:"persistent_monitors,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Welcome) Reset() {
@@ -344,6 +346,13 @@ func (x *Welcome) GetProviderRecovery() bool {
 func (x *Welcome) GetHumanReview() bool {
 	if x != nil {
 		return x.HumanReview
+	}
+	return false
+}
+
+func (x *Welcome) GetPersistentMonitors() bool {
+	if x != nil {
+		return x.PersistentMonitors
 	}
 	return false
 }
@@ -2261,7 +2270,7 @@ var File_threavia_backend_v1_commands_proto protoreflect.FileDescriptor
 
 const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"\n" +
-	"\"threavia/backend/v1/commands.proto\x12\x13threavia.backend.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a threavia/backend/v1/common.proto\"\xa9\x02\n" +
+	"\"threavia/backend/v1/commands.proto\x12\x13threavia.backend.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a threavia/backend/v1/common.proto\"\xda\x02\n" +
 	"\aWelcome\x12#\n" +
 	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId\x12.\n" +
 	"\x13backend_instance_id\x18\x02 \x01(\tR\x11backendInstanceId\x12;\n" +
@@ -2269,7 +2278,8 @@ const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"serverTime\x12<\n" +
 	"\x1aheartbeat_interval_seconds\x18\x04 \x01(\rR\x18heartbeatIntervalSeconds\x12+\n" +
 	"\x11provider_recovery\x18\x05 \x01(\bR\x10providerRecovery\x12!\n" +
-	"\fhuman_review\x18\x06 \x01(\bR\vhumanReview\"\x86\x03\n" +
+	"\fhuman_review\x18\x06 \x01(\bR\vhumanReview\x12/\n" +
+	"\x13persistent_monitors\x18\a \x01(\bR\x12persistentMonitors\"\x86\x03\n" +
 	"\x16ReviewWorkspaceRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1c\n" +

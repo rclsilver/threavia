@@ -40,6 +40,8 @@ export const JOB_ENDED_FRESH_FOR = 2 * 60_000;
 export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
   const sessionId = event.sessionId ?? '';
   switch (event.type) {
+    case 'monitor.changed':
+      return [{ kind: 'sessions' }];
     case 'mcp.changed':
       return [{ kind: 'mcp' }];
     case 'review.changed':

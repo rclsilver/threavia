@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"google.golang.org/protobuf/types/known/structpb"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/backends/shared/mcp"
+	"github.com/rclsilver/threavia/internal/backends/shared/monitors"
 	"github.com/rclsilver/threavia/internal/backends/shared/policy"
 	"github.com/rclsilver/threavia/internal/backends/shared/runner"
 	"github.com/rclsilver/threavia/internal/backends/shared/skills"
@@ -36,19 +38,23 @@ type Adapter struct {
 	localSkills []skills.Local
 	logger      *slog.Logger
 
-	mu               sync.Mutex
-	nativeMu         sync.Mutex // orders lost bindings and their replacements
-	client           *client.Client
-	jobs             map[string]*jobState
-	waiters          map[string]*waiter
-	quotaCancel      context.CancelFunc
-	quotaMu          sync.Mutex
-	quotaSnapshot    *quotas.Status
-	providerMu       sync.Mutex
-	providerBlock    *runner.ProviderBlock
-	providerRecovery bool
-	humanReview      bool
-	reviewGates      map[string]reviewGate
+	mu                 sync.Mutex
+	nativeMu           sync.Mutex // orders lost bindings and their replacements
+	client             *client.Client
+	jobs               map[string]*jobState
+	waiters            map[string]*waiter
+	monitors           *monitors.Manager
+	monitorCancel      context.CancelFunc
+	monitorsEnabled    bool
+	monitorConnectedAt time.Time
+	quotaCancel        context.CancelFunc
+	quotaMu            sync.Mutex
+	quotaSnapshot      *quotas.Status
+	providerMu         sync.Mutex
+	providerBlock      *runner.ProviderBlock
+	providerRecovery   bool
+	humanReview        bool
+	reviewGates        map[string]reviewGate
 }
 
 // jobState is what the adapter remembers about a Job it is running.
@@ -81,6 +87,7 @@ type waiter struct {
 func New(cfg Config, providerRunner runner.Runner, store state.Store, logger *slog.Logger) *Adapter {
 	return &Adapter{
 		cfg:         cfg,
+		monitors:    monitors.New(cfg.StatePath + ".monitors.json"),
 		runner:      providerRunner,
 		store:       store,
 		logger:      logger,
@@ -129,6 +136,7 @@ func (a *Adapter) OnConnected(ctx context.Context, welcome *backendv1.Welcome) e
 	a.reportSkills(ctx)
 	err := a.refreshProviderStatus(ctx)
 	a.startQuotaReporting(ctx)
+	a.startMonitorReporting(ctx, welcome.GetPersistentMonitors(), welcome.GetServerTime().AsTime())
 	return err
 }
 
@@ -137,6 +145,10 @@ func (a *Adapter) OnConnected(ctx context.Context, welcome *backendv1.Welcome) e
 // durably until Core comes back.
 func (a *Adapter) OnDisconnected(_ context.Context, cause error) {
 	a.mu.Lock()
+	if a.monitorCancel != nil {
+		a.monitorCancel()
+		a.monitorCancel = nil
+	}
 	if a.quotaCancel != nil {
 		a.quotaCancel()
 		a.quotaCancel = nil
@@ -260,6 +272,8 @@ func (a *Adapter) execute(ctx context.Context, params runner.StartParams, pc *ba
 		job.workingDirectory = workingDirectory
 	}
 	a.mu.Unlock()
+
+	a.prepareMonitors(&params)
 
 	// Capture the initial cwd before the provider can modify or commit files.
 	// Extra repositories are declared by the agent before it works in them.

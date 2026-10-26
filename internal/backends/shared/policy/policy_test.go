@@ -186,8 +186,8 @@ func TestEverySwitchBecomesAProviderRefusal(t *testing.T) {
 	}
 
 	// Provider timers are structurally forbidden even under an open policy.
-	if open := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED).Native(); len(open.Deny) != 4 {
-		t.Errorf("an open policy should only refuse the four native scheduling tools: %v", open.Deny)
+	if open := permissive(backendv1.ExecutionMode_EXECUTION_MODE_GUARDED).Native(); len(open.Deny) != 5 || !contains(open.Deny, "Monitor") {
+		t.Errorf("an open policy should refuse native scheduling tools and Monitor: %v", open.Deny)
 	}
 }
 
@@ -635,6 +635,16 @@ func TestSupervisedHandsTheQuestionToTheProvider(t *testing.T) {
 		}
 		if native.Mode != "default" {
 			t.Errorf("%v = %q, want default", mode, native.Mode)
+		}
+	}
+}
+
+func TestNativeMonitorCannotBeRestoredByAnAllowRule(t *testing.T) {
+	for _, mode := range []backendv1.ExecutionMode{backendv1.ExecutionMode_EXECUTION_MODE_INTERACTIVE, backendv1.ExecutionMode_EXECUTION_MODE_GUARDED, backendv1.ExecutionMode_EXECUTION_MODE_SUPERVISED, backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS} {
+		p := permissive(mode)
+		p.Rules = []policy.Rule{{Effect: backendv1.PermissionEffect_PERMISSION_EFFECT_ALLOW, Capability: backendv1.PermissionCapability_PERMISSION_CAPABILITY_TOOL, Match: "Monitor"}}
+		if d := p.EvaluateInvocation("Monitor", map[string]any{"command": "watch checks"}, "."); d.Verdict != policy.Deny {
+			t.Fatalf("mode %s restored native Monitor: %+v", mode, d)
 		}
 	}
 }

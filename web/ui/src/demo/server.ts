@@ -1,3 +1,4 @@
+import { monitors } from './monitors';
 import { demoMCP } from './mcp';
 import { demoControl } from './control';
 import { ApiError } from '@/api/client';
@@ -326,6 +327,13 @@ function recordScheduleChange(schedule: Json, action: string) {
 type Handler = (match: RegExpMatchArray, body: Json, query: URLSearchParams) => unknown;
 
 const routes: [string, RegExp, Handler][] = [
+ ['GET', /^\/api\/v1\/sessions\/([^/]+)\/monitors$/, ([, id]) => ({ items: monitors.filter(m => m.sessionId === id) })],
+ ['GET', /^\/api\/v1\/projects\/([^/]+)\/monitors$/, ([, id]) => ({ items: monitors.filter(m => state.sessions.some(s => s.id === m.sessionId && s.projectId === id)) })],
+ ['POST', /^\/api\/v1\/monitors\/([^/]+)\/stop$/, ([, id]) => {
+  const m = monitors.find(m => m.id === id); if (!m) throw notFound('This monitor');
+  m.state = 'STOPPED'; m.updatedAt = nowIso(); emitLifecycle('monitor.changed', state.sessions.find(s => s.id === m.sessionId)?.projectId as string, { id, state: m.state }, m.sessionId);
+ }],
+
   ['GET', /^\/api\/v1\/me\/control-accesses$/, (_m, body) => demoControl('list', '', body)],
   ['POST', /^\/api\/v1\/me\/control-accesses$/, (_m, body) => { const result = demoControl('create', '', body); emitLifecycle('control_access.changed', '', { action: 'created' }); return result; }],
   ['DELETE', /^\/api\/v1\/control-accesses\/([^/]+)$/, (m, body) => { const result = demoControl('revoke', m[1], body); emitLifecycle('control_access.changed', '', { accessId: m[1], action: 'revoked' }); return result; }],

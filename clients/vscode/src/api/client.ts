@@ -1,6 +1,7 @@
 import { mediaType } from '../../../shared/media';
 import type {
   Artifact,
+  Monitor,
   Attention,
   AuthPublic,
   BackendInstance,
@@ -222,6 +223,10 @@ export class CoreClient {
   me() {
     return this.get<Me>('/api/v1/me');
   }
+
+  async sessionMonitors(sessionId: string): Promise<Monitor[]> { return (await this.get<List<Monitor>>(`/api/v1/sessions/${sessionId}/monitors`)).items; }
+  async projectMonitors(projectId: string): Promise<Monitor[]> { return (await this.get<List<Monitor>>(`/api/v1/projects/${projectId}/monitors`)).items; }
+  async stopMonitor(id: string): Promise<void> { await this.post(`/api/v1/monitors/${id}/stop`); }
 
   projects() {
     return this.get<List<Project>>('/api/v1/projects').then(items);

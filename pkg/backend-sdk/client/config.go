@@ -59,15 +59,16 @@ type Config struct {
 	BackendName    string
 	BackendVersion string
 
-	Capabilities             []backendv1.Capability
-	FeatureJobInputNow       bool
-	FeatureJobInputNext      bool
-	FeaturePromptAttachments bool
-	FeatureModelSelection    bool
-	FeatureHumanReview       bool
-	FeatureExternalMCP       bool
-	ModelCatalog             *backendv1.ModelCatalog
-	MaxConcurrentRuns        int32
+	Capabilities              []backendv1.Capability
+	FeatureJobInputNow        bool
+	FeatureJobInputNext       bool
+	FeaturePromptAttachments  bool
+	FeatureModelSelection     bool
+	FeatureHumanReview        bool
+	FeatureExternalMCP        bool
+	FeaturePersistentMonitors bool
+	ModelCatalog              *backendv1.ModelCatalog
+	MaxConcurrentRuns         int32
 
 	TLS TLSConfig
 
@@ -173,11 +174,12 @@ func (c Config) dialOptions() ([]grpc.DialOption, error) {
 // featureFlags builds the advertised optional CODE feature flags.
 func (c Config) featureFlags() *backendv1.FeatureFlags {
 	return &backendv1.FeatureFlags{
-		JobInputNow:       c.FeatureJobInputNow,
-		JobInputNext:      c.FeatureJobInputNext,
-		PromptAttachments: c.FeaturePromptAttachments,
-		ModelSelection:    c.FeatureModelSelection,
-		HumanReview:       c.FeatureHumanReview,
-		ExternalMcp:       c.FeatureExternalMCP,
+		JobInputNow:        c.FeatureJobInputNow,
+		JobInputNext:       c.FeatureJobInputNext,
+		PromptAttachments:  c.FeaturePromptAttachments,
+		ModelSelection:     c.FeatureModelSelection,
+		HumanReview:        c.FeatureHumanReview,
+		ExternalMcp:        c.FeatureExternalMCP,
+		PersistentMonitors: c.FeaturePersistentMonitors,
 	}
 }

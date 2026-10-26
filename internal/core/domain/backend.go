@@ -155,8 +155,9 @@ func (s ProviderAuthState) Valid() bool {
 type Feature string
 
 const (
-	FeatureHumanReview Feature = "HUMAN_REVIEW"
-	FeatureExternalMCP Feature = "EXTERNAL_MCP"
+	FeatureHumanReview        Feature = "HUMAN_REVIEW"
+	FeatureExternalMCP        Feature = "EXTERNAL_MCP"
+	FeaturePersistentMonitors Feature = "PERSISTENT_MONITORS"
 	// FeatureJobInputNow: a message can interrupt the running Job and reorient
 	// it at once.
 	FeatureJobInputNow Feature = "JOB_INPUT_NOW"

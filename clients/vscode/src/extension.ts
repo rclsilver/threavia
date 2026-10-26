@@ -1,3 +1,4 @@
+import { manageMonitors } from './monitors';
 import { manageMCP } from './mcp/manage';
 import { ArtifactsView, type ArtifactNode } from './knowledge/artifacts';
 import * as vscode from 'vscode';
@@ -311,6 +312,13 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     if (!core?.ready) return;
     try { await core.client.setDefaultBackend(null); backends.reload(); }
     catch (error) { failed(error, 'Default backend not cleared'); }
+  });
+
+  command('threavia.manageMonitors', async (target?: unknown) => {
+    const ref = (target ? sessionRefOf(target, cores.ids) : undefined) ?? panels.activeSession;
+    const core = ref && cores.get(ref.coreId);
+    if (!ref || !core) { void vscode.window.showInformationMessage('Open a session to inspect its monitors.'); return; }
+    try { await manageMonitors(core, ref.sessionId); sidebar.invalidateSessions(core.id); } catch (error) { failed(error, 'Background monitors could not be managed'); }
   });
 
   command('threavia.manageMCP', async (target?: unknown) => {

@@ -102,6 +102,7 @@ message FeatureFlags {
   // Immutable multi-repository snapshots and mandatory human checkpoints.
   bool human_review = 5;
   bool external_mcp = 6;
+  bool persistent_monitors = 7;
 }
 
 // Provider models and the effort values each accepts, discovered by the backend.

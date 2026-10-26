@@ -114,8 +114,14 @@ func TestControlTwoCoresThroughRealBackendMCPProxy(t *testing.T) {
 	main.mustDo("PUT", "/api/v1/projects/"+project+"/policy", map[string]any{"mode": "GUARDED", "allowNetwork": true}, nil, 200)
 	session := main.startSession(project, backendID, "", "Drive target")
 	params := receive(t, "controller with remote tools", local.started)
-	if len(params.ExternalTools) != 3 {
-		t.Fatalf("controller received %d tools", len(params.ExternalTools))
+	remote := 0
+	for _, tool := range params.ExternalTools {
+		if strings.HasPrefix(tool.Name, "external_dev_") {
+			remote++
+		}
+	}
+	if remote != 3 {
+		t.Fatalf("controller received %d remote MCP tools", remote)
 	}
 	invoke := func(name string, args map[string]any) map[string]any {
 		t.Helper()

@@ -83,6 +83,7 @@ func replaceNUL(value any) any {
 // UserMessagePayload is the body of a user.message event. Messages are events:
 // there is no separate message history.
 type UserMessagePayload struct {
+	MonitorID   string            `json:"monitorId,omitempty"`
 	Attachments []ArtifactPayload `json:"attachments,omitempty"`
 	Text        string            `json:"text"`
 	ActorJobID  domain.JobID      `json:"actorJobId,omitempty"`

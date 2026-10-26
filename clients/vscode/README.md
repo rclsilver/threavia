@@ -289,3 +289,9 @@ Use **Threavia: Manage MCP Servers** for native project activation, session
 restrictions, server listing and backend connection diagnostics. Full declaration
 editing, import previews and OAuth sign-in are available through its Web settings
 link. Changes apply to subsequent Jobs; credentials remain on each backend.
+
+Background monitoring is shown in session descriptions even after the agent's
+Job ends. Use **Background Monitors** from a session's context menu or its
+conversation title bar to inspect bounded output or stop one watch. The
+command uses native editor controls. Activity is marked unconfirmed when its
+backend is offline or the observation is stale.

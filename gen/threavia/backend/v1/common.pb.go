@@ -649,10 +649,11 @@ type FeatureFlags struct {
 	PromptAttachments bool `protobuf:"varint,3,opt,name=prompt_attachments,json=promptAttachments,proto3" json:"prompt_attachments,omitempty"`
 	ModelSelection    bool `protobuf:"varint,4,opt,name=model_selection,json=modelSelection,proto3" json:"model_selection,omitempty"`
 	// Immutable multi-repository snapshots and mandatory human checkpoints.
-	HumanReview   bool `protobuf:"varint,5,opt,name=human_review,json=humanReview,proto3" json:"human_review,omitempty"`
-	ExternalMcp   bool `protobuf:"varint,6,opt,name=external_mcp,json=externalMcp,proto3" json:"external_mcp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	HumanReview        bool `protobuf:"varint,5,opt,name=human_review,json=humanReview,proto3" json:"human_review,omitempty"`
+	ExternalMcp        bool `protobuf:"varint,6,opt,name=external_mcp,json=externalMcp,proto3" json:"external_mcp,omitempty"`
+	PersistentMonitors bool `protobuf:"varint,7,opt,name=persistent_monitors,json=persistentMonitors,proto3" json:"persistent_monitors,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *FeatureFlags) Reset() {
@@ -723,6 +724,13 @@ func (x *FeatureFlags) GetHumanReview() bool {
 func (x *FeatureFlags) GetExternalMcp() bool {
 	if x != nil {
 		return x.ExternalMcp
+	}
+	return false
+}
+
+func (x *FeatureFlags) GetPersistentMonitors() bool {
+	if x != nil {
+		return x.PersistentMonitors
 	}
 	return false
 }
@@ -930,14 +938,15 @@ const file_threavia_backend_v1_common_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\tR\aversion\";\n" +
 	"\vBackendInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"\xf6\x01\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"\xa7\x02\n" +
 	"\fFeatureFlags\x12\"\n" +
 	"\rjob_input_now\x18\x01 \x01(\bR\vjobInputNow\x12$\n" +
 	"\x0ejob_input_next\x18\x02 \x01(\bR\fjobInputNext\x12-\n" +
 	"\x12prompt_attachments\x18\x03 \x01(\bR\x11promptAttachments\x12'\n" +
 	"\x0fmodel_selection\x18\x04 \x01(\bR\x0emodelSelection\x12!\n" +
 	"\fhuman_review\x18\x05 \x01(\bR\vhumanReview\x12!\n" +
-	"\fexternal_mcp\x18\x06 \x01(\bR\vexternalMcp\"r\n" +
+	"\fexternal_mcp\x18\x06 \x01(\bR\vexternalMcp\x12/\n" +
+	"\x13persistent_monitors\x18\a \x01(\bR\x12persistentMonitors\"r\n" +
 	"\vModelOption\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +

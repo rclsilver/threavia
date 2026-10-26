@@ -15,6 +15,7 @@ export type JobStatus = Schemas['JobStatus'];
 export type Event = Schemas['Event'];
 export type FileDiff = Schemas['FileDiff'];
 export type Repository = Schemas['Repository'];
+export type Monitor = Schemas['Monitor'];
 export type Schedule = Schemas['Schedule'];
 export type PushConfig = Schemas['PushConfig'];
 export type Snapshot = Schemas['Snapshot'];
@@ -76,7 +77,7 @@ export interface EventPayloads {
   'session.deleted': { sessionId?: string; title?: string; artifactsDeleted?: boolean };
   'skill.installed': { skillId: string; name: string; installedRevision: string; replaced: boolean };
   'skill.removed': { skillId: string; name: string; installedRevision: string };
-  'user.message': { text: string; attachments?: { artifactId: string; filename: string; mimeType: string; size: number }[]; delivery?: 'NOW' | 'NEXT'; scheduleId?: string; actorJobId?: string; actorId?: string };
+  'user.message': { text: string; attachments?: { artifactId: string; filename: string; mimeType: string; size: number }[]; delivery?: 'NOW' | 'NEXT'; monitorId?: string; scheduleId?: string; actorJobId?: string; actorId?: string };
   'schedule.skipped': { scheduleId: string; outcome: string; reason: string; due: string };
   'schedule.created': { scheduleId: string; cron: string; timezone: string; message: string; enabled: boolean; actorJobId?: string };
   'schedule.updated': { scheduleId: string; cron: string; timezone: string; message: string; enabled: boolean; actorJobId?: string };

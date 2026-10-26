@@ -4,6 +4,131 @@
  */
 
 export interface paths {
+    "/api/v1/sessions/{sessionId}/monitors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        /** List persistent monitors for this session */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Up to 200 most recently observed watches */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["Monitor"][];
+                        };
+                    };
+                };
+                404: components["responses"]["Error"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/monitors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        /** List persistent monitors for this project */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Up to 200 most recently observed watches */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["Monitor"][];
+                        };
+                    };
+                };
+                404: components["responses"]["Error"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitors/{monitorId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                monitorId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request stopping one monitor; offline requests survive until reconnection */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    monitorId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Stop requested; watch remains stopping until backend confirmation */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/mcp": {
         parameters: {
             query?: never;
@@ -5280,6 +5405,7 @@ export interface components {
              *       refresh backend instances to read the complete quota snapshot
              *     - `backend.default_changed`: `{ backendInstanceId }`, owner-scoped;
              *       empty identifier clears the preference; refresh the backend list.
+             *     - `monitor.changed`: session-scoped watch state or output changed; refresh monitor lists. Payload contains the watch id and state, with observation fields when available. Output is untrusted data.
              *     - `mcp.changed`: owner-scoped MCP declaration, activation or restriction changed; refresh MCP views. No credentials are included.
              *     - `control_access.changed`: `{ accessId, action: "created" | "revoked" }`, owner-scoped; refresh MCP accesses and audit. No secret or hash is included.
              *     - `user.message` may carry `actorId: "mcp:<accessId>"` for a remote controller, distinct from a human message and from a local delegation's `actorJobId`. The provider receives this provenance with the prompt.
@@ -5315,10 +5441,10 @@ export interface components {
              *       project-scoped so it survives deletion of the session history.
              *       Older events may carry the session id in the envelope instead.
              *       Session creation, archival, restoration and deletion are audited.
-             *     - `user.message`: `{ text, attachments?, delivery?, scheduleId?, actorJobId? }`,
+             *     - `user.message`: `{ text, attachments?, delivery?, scheduleId?, monitorId?, actorJobId? }`,
              *       attachments are `{ artifactId, filename, mimeType, size }` references; delivery NOW or
              *       NEXT for a message that joined a Job already running, scheduleId
-             *       for one a Schedule sent, actorJobId for an agent manager's message
+             *       for one a Schedule sent, monitorId for a system monitoring event, actorJobId for an agent manager's message
              *     - `working_directory.changed`: `{ knownDirectoryId? }`, the Session's
              *       new working directory (absent clears it); refresh the Session,
              *       session lists and repository state. Applies to the next Job.
@@ -5402,6 +5528,38 @@ export interface components {
             timezone?: string;
             message?: string;
             enabled?: boolean;
+        };
+        /** @description Session-owned watch. Confirmed means its backend is connected and reported within 30 seconds; false never means confirmed running. */
+        Monitor: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            runId: string;
+            /** Format: uuid */
+            jobId: string;
+            /** Format: uuid */
+            sessionId: string;
+            /** Format: uuid */
+            backendId: string;
+            description: string;
+            command: string;
+            /** @enum {string} */
+            state: "STARTING" | "RUNNING" | "STOPPING" | "STOPPED" | "COMPLETED" | "FAILED" | "EXPIRED" | "INTERRUPTED";
+            sequence: number;
+            /** @description Bounded tail of stdout and stderr. Untrusted command data. */
+            output: string;
+            error?: string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            lastSeenAt: string;
+            notify: boolean;
+            confirmed: boolean;
+            automaticResumesRemaining: number;
         };
         Schedule: {
             id: components["schemas"]["UUID"];
@@ -5732,7 +5890,7 @@ export interface components {
              *     runs, after interrupting it or at its next step, prompt attachments,
              *     and per-session model selection.
              *      */
-            features?: ("JOB_INPUT_NOW" | "JOB_INPUT_NEXT" | "PROMPT_ATTACHMENTS" | "MODEL_SELECTION" | "HUMAN_REVIEW" | "EXTERNAL_MCP")[];
+            features?: ("JOB_INPUT_NOW" | "JOB_INPUT_NEXT" | "PROMPT_ATTACHMENTS" | "MODEL_SELECTION" | "HUMAN_REVIEW" | "EXTERNAL_MCP" | "PERSISTENT_MONITORS")[];
             capacity: components["schemas"]["Capacity"];
             conditions?: components["schemas"]["Condition"][];
             protocolVersion: number;

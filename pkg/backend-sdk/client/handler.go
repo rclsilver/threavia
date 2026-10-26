@@ -60,6 +60,10 @@ type ReviewWorkspaceReader interface {
 	OnReviewWorkspaceRequest(context.Context, *backendv1.ReviewWorkspaceRequest) *backendv1.ReviewWorkspace
 }
 
+type MonitorManager interface {
+	OnMonitorControl(context.Context, *backendv1.MonitorControl)
+}
+
 type MCPManager interface {
 	OnMCPRequest(context.Context, *backendv1.McpRequest) *backendv1.McpResponse
 }

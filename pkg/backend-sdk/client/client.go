@@ -328,6 +328,11 @@ func (c *Client) dispatch(ctx context.Context, msg *backendv1.CoreToBackend) {
 			_ = c.enqueue(ctx, &backendv1.BackendToCore{Message: &backendv1.BackendToCore_ReviewWorkspace{ReviewWorkspace: answer}})
 		}()
 		return
+	case *backendv1.CoreToBackend_MonitorControl:
+		if manager, ok := c.handler.(MonitorManager); ok {
+			manager.OnMonitorControl(ctx, body.MonitorControl)
+		}
+		return
 	case *backendv1.CoreToBackend_McpRequest:
 		go func() {
 			answer := &backendv1.McpResponse{Error: &backendv1.Error{Code: "UNSUPPORTED", Message: "Update this backend to manage external MCP servers."}}
@@ -434,6 +439,16 @@ func (c *Client) SendStatus(ctx context.Context, status backendv1.BackendOperati
 			},
 		},
 	})
+}
+
+// SendMonitorInventory reconciles watches which never reached local durable launch.
+func (c *Client) SendMonitorInventory(ctx context.Context, ids []string, connectedAt time.Time) error {
+	return c.enqueue(ctx, &backendv1.BackendToCore{Message: &backendv1.BackendToCore_MonitorReport{MonitorReport: &backendv1.MonitorReport{InventoryComplete: true, MonitorIds: ids, ConnectedAt: timestamppb.New(connectedAt)}}})
+}
+
+// SendMonitor reports a durable watch snapshot; the supervisor retains it until acknowledged.
+func (c *Client) SendMonitor(ctx context.Context, snapshot *structpb.Struct) error {
+	return c.enqueue(ctx, &backendv1.BackendToCore{Message: &backendv1.BackendToCore_MonitorReport{MonitorReport: &backendv1.MonitorReport{Snapshot: snapshot}}})
 }
 
 // SendQuotas reports quota state independently from operational readiness.

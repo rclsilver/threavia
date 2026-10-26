@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { sessionsByTitle } from '../../../shared/sessions';
 
 import { ApiError } from '../api/client';
-import type { Project, Repository, Session } from '../api/types';
+import type { Monitor, Project, Repository, Session } from '../api/types';
 import type { Core } from '../cores/core';
 import type { Cores } from '../cores/registry';
 import {
@@ -52,6 +52,7 @@ type RepositoryEntry = { repo?: Repository; error?: string; at: number };
 class CoreCache {
   projects: Project[] | undefined;
   pinned: Session[] | undefined;
+  readonly monitors = new Map<string, Monitor[]>();
   readonly sessions = new Map<string, Session[]>();
   readonly repositories = new Map<string, RepositoryEntry>();
   readonly loadingRepositories = new Map<string, Promise<void>>();
@@ -75,6 +76,7 @@ class CoreCache {
     this.projects = undefined;
     this.pinned = undefined;
     this.sessions.clear();
+    this.monitors.clear();
   }
 }
 
@@ -99,6 +101,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(private readonly cores: Cores) {
+    const monitorTimer = setInterval(() => { if (!this.visible) return; for (const cache of this.caches.values()) cache.forgetLists(); this.redraw(); }, 15_000);
+    this.disposables.push({ dispose: () => clearInterval(monitorTimer) });
     this.disposables.push(
       cores.onAttention(() => this.redraw()),
       cores.on('effect', (core, effect) => {
@@ -255,8 +259,17 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     return items.map((item): Node => ({ type: 'request', coreId: core.id, item }));
   }
 
+  private async loadMonitors(core: Core, projectId: string) {
+    const cache = this.cache(core.id);
+    if (!cache.monitors.has(projectId)) {
+      try { cache.monitors.set(projectId, await core.client.projectMonitors(projectId)); }
+      catch { cache.monitors.set(projectId, []); }
+    }
+  }
+
   private async pinnedChildren(core: Core): Promise<Node[]> {
     const pinned = await this.loadPinned(core);
+    await Promise.all([...new Set(pinned.map(s => s.projectId))].map(id => this.loadMonitors(core, id)));
     return sessionsByTitle(pinned).map((session): Node => ({ type: 'session', coreId: core.id, session, under: 'pinned' }));
   }
 
@@ -267,6 +280,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
       sessions = await core.client.sessions(node.project.id);
       cache.sessions.set(node.project.id, sessions);
     }
+    await this.loadMonitors(core, node.project.id);
     const ordered = orderSessions(sessions);
     if (ordered.length === 0) return [{ type: 'message', text: 'No sessions yet.', parent: node }];
     return ordered.map((session): Node => ({ type: 'session', coreId: core.id, session, under: 'project' }));
@@ -404,7 +418,11 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
       node.under === 'pinned' ? pinnedDescription(session, cache.projects ?? [], core?.projectSetting ?? '') : undefined;
     const entry = cache.repositories.get(session.id);
     const git = entry?.repo ? repositoryDescription(entry.repo) : undefined;
-    item.description = [git, elsewhere].filter(Boolean).join(' · ') || undefined;
+    const monitors = cache.monitors.get(session.projectId)?.filter(m => m.sessionId === session.id && ['STARTING', 'RUNNING', 'STOPPING'].includes(m.state)) ?? [];
+    const live = monitors.every(m => m.confirmed && Date.now() - Date.parse(m.lastSeenAt) < 30_000);
+    const watching = monitors.length ? `${monitors.length} monitor${monitors.length > 1 ? 's' : ''}${live ? ' active' : ' unconfirmed'}` : undefined;
+    if (watching && !session.activeJobStatus) item.iconPath = new vscode.ThemeIcon('radio-tower');
+    item.description = [watching, git, elsewhere].filter(Boolean).join(' · ') || undefined;
     item.command = {
       command: 'threavia.openSession',
       title: 'Open Session',

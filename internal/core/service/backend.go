@@ -40,6 +40,9 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 	}
 
 	var features []domain.Feature
+	if hello.GetFeatures().GetPersistentMonitors() {
+		features = append(features, domain.FeaturePersistentMonitors)
+	}
 	if hello.GetFeatures().GetExternalMcp() {
 		features = append(features, domain.FeatureExternalMCP)
 	}
