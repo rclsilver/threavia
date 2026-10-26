@@ -320,7 +320,7 @@ for arg in "$@"; do
   [ "$prev" = "--mcp-config" ] && config="$arg"
   prev="$arg"
 done
-stat -c %a "$config" > `+filepath.Join(seen, "mode")+`
+if [ "$(uname -s)" = Darwin ]; then stat -f %Lp "$config"; else stat -c %a "$config"; fi > `+filepath.Join(seen, "mode")+`
 cat "$config" > `+filepath.Join(seen, "config")+`
 echo '{"type":"result","subtype":"success","is_error":false,"result":"ok"}'
 `)

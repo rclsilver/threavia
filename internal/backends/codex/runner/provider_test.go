@@ -42,7 +42,7 @@ func TestCodexProviderRefusalsWaitWithoutHidingOtherErrors(t *testing.T) {
 			}
 			if tc.reason == "" {
 				if sink.block != nil || sink.code != "PROVIDER_ERROR" {
-					t.Fatal(sink)
+					t.Fatalf("unexpected provider result: block=%+v code=%q detail=%q", sink.block, sink.code, sink.summary)
 				}
 				return
 			}

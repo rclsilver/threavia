@@ -466,7 +466,7 @@ func TestProviderProcess(t *testing.T) {
 			// Wait for the runner to handle a request before simulating a
 			// runtime failure. Otherwise an immediate failed notification can
 			// race turn/start and correctly be classified as a startup failure.
-			if scenario == "approval" || scenario == "interrupt" || scenario == "queue" || scenario == "failed" {
+			if scenario == "approval" || scenario == "interrupt" || scenario == "queue" || scenario == "failed" || scenario == "provider-generic" {
 				item := map[string]any{"id": "cmd-1", "type": "commandExecution", "command": "touch example.txt", "cwd": p["cwd"], "status": "inProgress"}
 				notify("item/started", map[string]any{"threadId": "thread-1", "item": item})
 				send(map[string]any{"id": 7, "method": "item/commandExecution/requestApproval", "params": map[string]any{"threadId": "thread-1", "turnId": turn, "itemId": "cmd-1", "command": "touch example.txt"}})
