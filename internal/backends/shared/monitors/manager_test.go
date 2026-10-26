@@ -52,7 +52,12 @@ func TestMonitorSurvivesCallerAndStopsOnlyChosenProcess(t *testing.T) {
 		if err := m.Start(snapshot(id), dir, false, false); err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = m.Stop(id, "run") })
+		t.Cleanup(func() {
+			if err := m.Stop(id, "run"); err == nil {
+				// Stop is asynchronous; let the final persistence finish before TempDir removal.
+				waitState(t, m, id, "STOPPED")
+			}
+		})
 	}
 	caller, cancel := context.WithCancel(context.Background())
 	cancel()
