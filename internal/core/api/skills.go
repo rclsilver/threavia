@@ -12,7 +12,11 @@ import (
 func (h *handler) registerSkills(mux *http.ServeMux) {
 	h.handle(mux, "GET /api/v1/projects/{projectId}/skills", h.listSkills)
 	h.handle(mux, "POST /api/v1/projects/{projectId}/skills", h.installSkill)
+	h.handle(mux, "PUT /api/v1/projects/{projectId}/skills/{skillId}/activation", h.setSkillActivation)
+	h.handle(mux, "GET /api/v1/me/skills", h.listGlobalSkills)
+	h.handle(mux, "POST /api/v1/me/skills", h.installSkill)
 	h.handle(mux, "GET /api/v1/skills/{skillId}/files", h.skillFiles)
+	h.handle(mux, "POST /api/v1/skills/{skillId}/global", h.makeSkillGlobal)
 	h.handle(mux, "DELETE /api/v1/skills/{skillId}", h.uninstallSkill)
 	h.handle(mux, "GET /api/v1/backends/{backendId}/skills", h.listBackendSkills)
 }
@@ -26,6 +30,46 @@ func (h *handler) listSkills(w http.ResponseWriter, r *http.Request, identity au
 	writeList(w, installed)
 }
 
+// listGlobalSkills returns the Skills every Project of the user uses unless it
+// turned them off.
+func (h *handler) listGlobalSkills(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	installed, err := h.svc.ListGlobalSkills(r.Context(), identity)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeList(w, installed)
+}
+
+func (h *handler) makeSkillGlobal(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	skill, err := h.svc.MakeSkillGlobal(r.Context(), identity, domain.SkillID(r.PathValue("skillId")))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, skill)
+}
+
+// setSkillActivation turns a global Skill on or off in one Project.
+func (h *handler) setSkillActivation(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	body, ok := decode[struct {
+		Enabled *bool `json:"enabled"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	if body.Enabled == nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "enabled is required")
+		return
+	}
+	if err := h.svc.SetSkillProjectEnabled(r.Context(), identity, domain.ProjectID(r.PathValue("projectId")),
+		domain.SkillID(r.PathValue("skillId")), *body.Enabled); err != nil {
+		h.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // skillFiles lists what an installed Skill holds, with the text of what can be
 // read.
 func (h *handler) skillFiles(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
@@ -37,8 +81,9 @@ func (h *handler) skillFiles(w http.ResponseWriter, r *http.Request, identity au
 	writeList(w, files)
 }
 
-// installSkill acquires a Skill. A JSON body names a git or archive source; a
-// raw or multipart body carries an uploaded archive.
+// installSkill acquires a Skill, global when the route names no Project. A JSON
+// body names a git or archive source; a raw or multipart body carries an
+// uploaded archive.
 func (h *handler) installSkill(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
 	projectID := domain.ProjectID(r.PathValue("projectId"))
 

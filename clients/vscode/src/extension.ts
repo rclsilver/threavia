@@ -14,6 +14,7 @@ import { Cores } from './cores/registry';
 import { hostOf, newCoreId } from './cores/settings';
 import { VirtualDocuments } from './diff/documents';
 import { manageDirectories } from './directories/manage';
+import { manageSkills } from './skills/manage';
 import { createIdentity } from './identity';
 import { CurrentProject } from './knowledge/current';
 import { MemoryView } from './knowledge/memory';
@@ -46,6 +47,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
   // start with the Core's id.
   const documents = new VirtualDocuments('threavia-diff');
   const artifactDocuments = new VirtualDocuments('threavia-artifact');
+  const skillDocuments = new VirtualDocuments('threavia-skill');
   const cores = new Cores(context, identity, artifactDocuments);
   const reviews = new Reviews(cores);
   context.subscriptions.push(reviews);
@@ -101,6 +103,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     paths,
     documents,
     artifactDocuments,
+    skillDocuments,
     sidebar,
     tree,
     tree.onDidChangeVisibility((event) => sidebar.setVisible(event.visible)),
@@ -335,6 +338,16 @@ export function activate(context: vscode.ExtensionContext): Threavia {
       const project = node?.type === 'project' && node.project ? await core.client.project(node.project.id) : (currentProject.core?.id === core.id ? currentProject.project : undefined);
       await manageDirectories(core, project);
     } catch (error) { failed(error, 'Directories could not be managed'); }
+  });
+
+  command('threavia.manageSkills', async (target?: unknown) => {
+    const core = await readyCore('Skills', target);
+    if (!core?.ready) return;
+    try {
+      const node = target as { type?: string; project?: { id: string } } | undefined;
+      const project = node?.type === 'project' && node.project ? await core.client.project(node.project.id) : (currentProject.core?.id === core.id ? currentProject.project : undefined);
+      await manageSkills(core, skillDocuments, project);
+    } catch (error) { failed(error, 'Skills could not be managed'); }
   });
 
   command('threavia.managePermissions', async (target?: unknown) => {

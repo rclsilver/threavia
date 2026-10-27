@@ -335,6 +335,20 @@ func (s *Service) projectContext(ctx context.Context, store *postgres.Store, jc 
 	if err != nil {
 		return nil, fmt.Errorf("read the project skills: %w", err)
 	}
+	global, err := store.ActiveGlobalSkills(ctx, jc.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("read the global skills: %w", err)
+	}
+	// A Project Skill takes precedence over a global one of the same name.
+	projectNames := make(map[string]bool, len(installed))
+	for _, skill := range installed {
+		projectNames[skill.Name] = true
+	}
+	for _, skill := range global {
+		if !projectNames[skill.Name] {
+			installed = append(installed, skill)
+		}
+	}
 	for _, skill := range installed {
 		pc.Skills = append(pc.Skills, &backendv1.ProjectSkill{
 			SkillId:           string(skill.ID),

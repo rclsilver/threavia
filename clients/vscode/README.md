@@ -47,6 +47,12 @@ pinned global decisions are read by agents in all your projects on that Core.
   directories shared by your projects. Create or edit their metadata, add or
   update paths on backends, and forget paths or entries. Forgetting never
   removes files, and a directory used by a session cannot be forgotten.
+- **Skills.** **Threavia: Manage Skills…**, also on a Project or Core's context
+  menu, manages project skills and global skills shared by your projects.
+  Install from a git repository, an archive URL, a local `.zip` or `.tar.gz`,
+  or a local folder holding `SKILL.md` (without its `.git`). Read the files an
+  agent is given, turn a global skill off in one project, make a project skill
+  global, or uninstall one. Changes apply to the next Job.
 - **Permissions.** **Threavia: Manage Permissions…** edits instance, backend,
   project or session permissions in an editor tab. Project, session and backend
   rows also offer it in their context menu. Set the mode, switches, supervision,

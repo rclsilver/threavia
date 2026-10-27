@@ -21,7 +21,7 @@ Threavia gives you one place to direct that work and keep its context.
 | Leave an agent working without keeping an editor open | Run it on a backend independently of your client. Closing a tab or VS Code does not stop execution. |
 | Handle approvals away from your desk | See pending permissions and questions in the web client, including on a phone, and answer from either client. An answer is reflected in the other views. |
 | Use several machines or providers | Choose the backend and working directory for each session, with its status and provider quotas visible. |
-| Avoid repeating project context | Keep instructions, tasks, decisions, searchable history and Skills with the project. Share selected memory and known directories across your own projects. |
+| Avoid repeating project context | Keep instructions, tasks, decisions, searchable history and Skills with the project. Share selected memory, known directories and Skills across your own projects. |
 | Control what an agent can do | Set execution modes, capability switches and rules; review requests, inspect diffs, stop work and read its audit trail. |
 | Pick up a long-running project later | Resume conversations, inspect published artifacts and schedule recurring session messages. |
 
@@ -137,7 +137,7 @@ sign in. You can connect several Cores at once.
 - Follow sessions and answer approvals or questions in conversation editor tabs.
 - Use **Ask Threavia About This…** on a file or selection to send code context.
 - Open changed files and diffs, preview or save artifacts, and manage tasks,
-  memory, directories and permissions from the editor.
+  memory, directories, skills and permissions from the editor.
 - See backend status and quotas, and keep pending requests visible in the sidebar
   and status bar.
 
