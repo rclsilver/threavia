@@ -1,4 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { isLearningRequest } from '../../../../clients/shared/learnings';
 import {
   AlertTriangle,
   ArrowDown,
@@ -739,7 +740,10 @@ function Entry({
             </span>
           )}
         </p>
-        <p className="text-sm whitespace-pre-wrap">{user.text}</p>
+        {isLearningRequest(user.text) ? <details className="text-sm">
+          <summary className="min-h-11 cursor-pointer py-2 md:min-h-0 md:py-0">Capture learnings from this resolution</summary>
+          <p className="text-muted mt-2 whitespace-pre-wrap">{user.text}</p>
+        </details> : <p className="text-sm whitespace-pre-wrap">{user.text}</p>}
         {user.attachments?.map((attachment) => <ArtifactCard key={attachment.artifactId} {...attachment} />)}
         {jobId && status && <Stop status={status} onStop={() => onStop(jobId)} />}
       </div>

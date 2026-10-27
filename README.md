@@ -169,6 +169,7 @@ and backend features can require updating both components; see the
 | [MCP servers](docs/mcp.md) | Existing external servers, credentials, discovery and project/session selection |
 | [Control over MCP](docs/control-mcp.md) | Pilot another Threavia with scoped accesses, session events and delegated permission decisions |
 | [Skills](docs/skills.md) | Agent Skills support for Claude Code and Codex |
+| [Capture learnings](docs/learnings.md) | Revisit a completed resolution and review proposed memory, procedures or project rules |
 | [Session management](docs/session-management.md) | Coordinating and delegating work between sessions |
 | [Provider recovery](docs/provider-recovery.md) | Authentication expiry, exhausted quotas and retry behavior |
 | [Audit](docs/audit.md) · [Metrics](docs/metrics.md) | Activity records and operational monitoring |

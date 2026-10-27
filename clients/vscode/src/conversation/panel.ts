@@ -1,4 +1,5 @@
 import { mediaType } from '../../../shared/media';
+import { learningSource, requestLearningCapture } from '../../../shared/learnings';
 import { artifactKind } from './format';
 import * as vscode from 'vscode';
 
@@ -301,6 +302,8 @@ class ConversationPanel {
   private repository: Repository | undefined;
   private fetchingRepository = false;
   private savingModel = false;
+  private capturingLearnings = false;
+  private learningError: string | undefined;
   private modelError: string | undefined;
   private repositoryError: string | undefined;
   private repositoryWatch: vscode.Disposable | undefined;
@@ -544,6 +547,7 @@ class ConversationPanel {
       backendTooltip: this.backend && backendTooltip(this.backend),
       backendQuotas: this.backend?.quotas,
       modelSettings: { model: this.session.model || '', effort: this.session.effort || '', supported: this.backend?.features?.includes('MODEL_SELECTION') ?? false, catalog: this.backend?.modelCatalog, saving: this.savingModel, error: this.modelError },
+      learnings: { sourceJobId: learningSource({ session: this.session, jobs: this.jobs })?.id, pending: this.capturingLearnings, error: this.learningError },
       repository: repo && text ? { text, status: repo, fetching: this.fetchingRepository, error: this.repositoryError } : undefined,
       activity: active?.status === 'RUNNING' && fresh ? humanise(fresh) : undefined,
       pending: pendingJobs(this.jobs),
@@ -566,6 +570,31 @@ class ConversationPanel {
     const { client, answers, artifacts } = this.core;
     const { paths, documents } = this.services;
     switch (message.type) {
+      case 'captureLearnings': {
+        if (this.capturingLearnings || this.savingModel || !this.session) return;
+        const source = learningSource({ session: this.session, jobs: this.jobs });
+        if (!source) return;
+        this.capturingLearnings = true;
+        this.learningError = undefined;
+        this.postView();
+        try {
+          const answer = await vscode.window.showInformationMessage('Capture learnings from this resolution?', {
+            modal: true,
+            detail: `Ask the agent on ${this.backend?.name ?? 'this session’s backend'} to compare this result with existing memory and propose up to three useful facts, procedures or project rules. Review them in this conversation and choose Save, Edit or Ignore for each. This starts a normal turn using the session’s model and subscription quota, without a separate model service.`,
+          }, 'Propose learnings');
+          if (answer !== 'Propose learnings') return;
+          const sessionId = this.session.id;
+          await requestLearningCapture(source.id, () => client.snapshot(sessionId), (text, key) => client.post<Job>(
+            `/api/v1/sessions/${sessionId}/messages`, { message: text, delivery: 'QUEUE', afterJobId: source.id }, { 'Idempotency-Key': key }));
+          await this.reload();
+        } catch (error) {
+          this.learningError = `Learning capture could not be confirmed: ${reason(error)}. Check the conversation before retrying; a request may already have been accepted.`;
+        } finally {
+          this.capturingLearnings = false;
+          this.postView();
+        }
+        return;
+      }
       case 'archive': {
         if (!this.sessionId) return;
         try {

@@ -24,6 +24,7 @@ import { ActionError } from '@/components/ui/action-error';
 import { Badge } from '@/components/ui/badge';
 import { RepositoryStatus } from '@/components/repository-status';
 import { MonitorsPanel } from '@/components/monitors';
+import { LearningCapture } from '@/components/learning-capture';
 import { ReviewNotice } from '@/components/review-notice';
 import { Timeline, type Pending } from '@/components/timeline';
 import { Button } from '@/components/ui/button';
@@ -175,6 +176,7 @@ export function SessionView() {
             )}
           </div>
           <div className="flex items-center gap-1 md:col-start-2 md:row-span-2 md:row-start-1">
+            <LearningCapture key={sessionId} snapshot={data} backend={backend} />
             <Button asChild size="lg" variant="ghost" className="h-11 md:h-9"><Link to="/sessions/$sessionId/review" params={{ sessionId }} data-tour="open-review">Review</Link></Button>
             <PinButton session={data.session} />
             {/* Everything about the Session that is not the conversation is a

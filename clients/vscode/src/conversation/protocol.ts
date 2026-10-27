@@ -21,6 +21,7 @@ export interface SessionView {
   backendTooltip?: string;
   backendQuotas?: BackendQuotas;
   modelSettings: { model: string; effort: string; supported: boolean; catalog?: BackendInstance['modelCatalog']; saving?: boolean; error?: string };
+  learnings?: { sourceJobId?: string; pending: boolean; error?: string };
   /** The compact branch label and the Git status shown in its hover panel. */
   repository?: { text: string; status: Repository; fetching?: boolean; error?: string };
   /** A liveness signal, shown only while a Job runs. */
@@ -75,6 +76,7 @@ export type WebviewMessage =
   | { type: 'refreshRepository' }
   | { type: 'setModelSettings'; model: string; effort: string }
   | { type: 'archive' }
+  | { type: 'captureLearnings' }
   | { type: 'resolvePaths'; paths: string[] }
   | { type: 'openPath'; path: string }
   | { type: 'openLink'; href: string }

@@ -199,6 +199,7 @@ button.ghost:not(:disabled):hover {
   border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, var(--border));
 }
 .header-title { display: flex; align-items: center; gap: 8px; }
+.learning-actions:has(button:not([hidden])), .learning-actions:has(.error:not([hidden])) { margin-top: 6px; }
 .header-title .title { flex: 1; min-width: 0; }
 body.full-width { --reading: 100%; }
 .meta-popover { position: relative; }

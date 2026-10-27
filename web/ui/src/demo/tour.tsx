@@ -30,6 +30,7 @@ const SESSION = (id: string) => `/sessions/${id}`;
 const PROJECT = (page: string) => `/projects/${IDS.homelab}/${page}`;
 
 const STEPS: Step[] = [
+  { path: SESSION(IDS.grafana), target: '[data-tour="capture-learnings"]', title: 'Capture learnings', body: 'After a completed result, ask the agent to propose useful memory, skills or project rules. Try the scripted example: review its text, then Save, Edit or Ignore; only Save records the fictitious fact.' },
  { path: SESSION(IDS.grafana), target: '[data-tour="monitors"]', title: 'Background monitoring', body: 'The agent can finish its reply while a Threavia monitor keeps watching. Expand this panel to see its state and recent output, or stop this fictitious watch.' },
 
   { path: '/settings/mcp', target: '[data-tour="mcp"]', title: 'Existing MCP servers', body: 'Register existing servers, preview imports and choose their tools and project activation. Credentials stay on the execution backend; these demo connections are fictitious.' },

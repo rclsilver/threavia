@@ -1,4 +1,5 @@
 import { payloadOf, type Delivery, type Event, type UserInputRequest, type ValidationRequest } from '../api/types';
+import { isLearningRequest } from '../../../shared/learnings';
 import { artifactKind, bytes, clock, cost, duration, humanise, tokens } from '../conversation/format';
 import type { BackendQuotas } from '../api/types';
 import claudeIcon from '../../media/providers/claude.svg';
@@ -113,7 +114,14 @@ const archive = button([icon('archive'), 'Archive'], () => {
   archive.disabled = true;
   post({ type: 'archive' });
 }, { class: 'ghost small', title: 'Archive this session', hidden: true });
-const header = h('header', { class: 'header' }, h('div', { class: 'header-title' }, title, archive, widthToggle), meta);
+const captureLearnings = button([icon('book'), 'Capture learnings'], () => {
+  if (!view?.learnings?.sourceJobId || captureLearnings.disabled) return;
+  captureLearnings.disabled = true;
+  post({ type: 'captureLearnings' });
+}, { class: 'ghost small', hidden: true, title: 'Propose reusable facts, procedures or project rules from this result' });
+const learningError = h('p', { class: 'error small', role: 'alert', hidden: true });
+const header = h('header', { class: 'header' }, h('div', { class: 'header-title' }, title, archive, widthToggle), meta,
+  h('div', { class: 'learning-actions' }, captureLearnings, learningError));
 
 const list = h('div', { class: 'timeline', role: 'list', 'aria-label': 'Conversation' });
 const stickySlot = h('div', { class: 'sticky-slot' });
@@ -296,6 +304,10 @@ function renderMeta(children: HTMLElement[]) {
 
 function renderHeader() {
   archive.hidden = !sessionId || !view;
+  captureLearnings.hidden = !view?.learnings?.sourceJobId && !view?.learnings?.pending;
+  captureLearnings.disabled = !view?.learnings?.sourceJobId || view?.learnings?.pending === true || view?.modelSettings.saving === true;
+  learningError.textContent = view?.learnings?.error ?? '';
+  learningError.hidden = !view?.learnings?.error;
   if (!view && start) return renderDraftHeader(start);
   if (!view) return;
   title.textContent = view.title;
@@ -573,7 +585,9 @@ function eventEntry(event: Event, startedAt?: string): HTMLElement {
             user.delivery === 'NOW' ? 'interrupted the job' : 'added to the running job',
           ),
       ),
-      h('p', { class: 'message-text' }, user.text),
+      isLearningRequest(user.text)
+        ? h('details', {}, h('summary', {}, 'Capture learnings from this resolution'), h('p', { class: 'message-text' }, user.text))
+        : h('p', { class: 'message-text' }, user.text),
       ...(user.attachments ?? []).map(artifactCard),
       event.jobId && status && stopControl(event.jobId, status),
     );

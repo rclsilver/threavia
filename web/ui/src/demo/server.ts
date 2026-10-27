@@ -2,6 +2,7 @@ import { monitors } from './monitors';
 import { demoMCP } from './mcp';
 import { demoControl } from './control';
 import { ApiError } from '@/api/client';
+import { LEARNING_REQUEST, learningSource } from '../../../../clients/shared/learnings';
 import { announceJobEnded } from '@/lib/job-ended';
 import { uuid } from '@/lib/uuid';
 import type { Event } from '@/api/types';
@@ -225,8 +226,12 @@ function previewHandoff(sessionId: string, target: string) {
     workingDirectory: directory ? { knownDirectoryId: directory.id, name: directory.name, ...(binding && { path: binding.path }), resolution: binding ? 'bound' : 'resolve' } : { resolution: 'backend_default' } };
 }
 
-function answer(sessionId: string, text: string, delivery?: string, artifactIds?: string[]) {
+function answer(sessionId: string, text: string, delivery?: string, artifactIds?: string[], afterJobId?: string) {
   const timeline = timelineOf(sessionId);
+  if (afterJobId) {
+    const source = learningSource({ session: sessionOf(sessionId) as unknown as { id: string; status: string }, jobs: timeline.jobs as unknown as { id: string; status: string; createdAt: string }[] });
+    if ((delivery && delivery !== 'QUEUE') || source?.id !== afterJobId) throw new ApiError(409, 'conflict', 'The completed result is no longer current. Reload the session.');
+  }
   const running = timeline.jobs.find((job) => !['COMPLETED', 'FAILED', 'CANCELLED'].includes(String(job.status)));
   const attachments = (artifactIds ?? []).map((id) => {
     const artifact = state.artifacts.find((entry) => entry.id === id);
@@ -256,6 +261,15 @@ function answer(sessionId: string, text: string, delivery?: string, artifactIds?
   pushEvent(sessionId, 'job.created', { runId: job.runId }, jobId);
   pushEvent(sessionId, 'user.message', { text, attachments }, jobId);
   pushEvent(sessionId, 'job.started', settings, jobId);
+  if (text.startsWith(LEARNING_REQUEST)) {
+    job.status = 'WAITING_USER_INPUT';
+    delete job.endedAt;
+    const content = 'After changing a service, check readiness and the expected behaviour. Keep the verification results with the resolution.';
+    pushEvent(sessionId, 'agent.message', { text: 'This is a scripted example; no model was called. Proposed project memory: **Resolution verification**.\n\n' + content + '\n\nThis would preserve a reusable procedure. Nothing has been saved. The following question lets you save, edit or ignore this fictitious proposal.' }, jobId);
+    askLearning(sessionId, jobId, content);
+    settle(sessionId);
+    return job;
+  }
   pushEvent(
     sessionId,
     'agent.message',
@@ -267,6 +281,43 @@ function answer(sessionId: string, text: string, delivery?: string, artifactIds?
   pushEvent(sessionId, 'job.completed', { ...settings, summary: 'Answered (the demo agent).', usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 } }, jobId);
   settle(sessionId);
   return job;
+}
+
+const learningQuestions = new Map<string, { sessionId: string; jobId: string; content: string; editing: boolean }>();
+
+function askLearning(sessionId: string, jobId: string, content: string, editing = false) {
+  const id = newId();
+  const session = sessionOf(sessionId);
+  const scope = { projectId: session.projectId, sessionId, runId: timelineOf(sessionId).runs.at(-1)?.id, jobId };
+  const prompt = editing ? 'Enter the revised text for this example. You will review it again before saving.'
+    : `Save this fictitious proposal to project memory (NORMAL)?\n\nResolution verification\n${content}\n\nSource: this demo session, job ${jobId}. Existing memory is unchanged until you choose Save.`;
+  const request = { id, scope, status: 'PENDING', prompt, choices: editing ? [] : ['Save', 'Edit', 'Ignore'], freeText: true, originChannel: 'web', notify: false, createdAt: nowIso() };
+  learningQuestions.set(id, { sessionId, jobId, content, editing });
+  state.userInputs.push(request);
+  pushEvent(sessionId, 'user_input.requested', { requestId: id, prompt, choices: request.choices }, jobId);
+}
+
+function resolveLearning(id: string, value: string) {
+  const proposal = learningQuestions.get(id)!;
+  learningQuestions.delete(id);
+  const { sessionId, jobId, content, editing } = proposal;
+  if (editing || (value !== 'Save' && value !== 'Ignore')) {
+    askLearning(sessionId, jobId, editing ? value.trim() || content : content, !editing);
+    settle(sessionId);
+    return;
+  }
+  let result = 'Ignored. Project memory is unchanged.';
+  if (value === 'Save') {
+    const projectId = String(sessionOf(sessionId).projectId);
+    const existing = state.decisions.find(d => d.projectId === projectId && d.status === 'ACTIVE' && d.title === 'Resolution verification' && d.content === content);
+    const decision = existing ?? recordDecision({ title: 'Resolution verification', content, importance: 'NORMAL' }, projectId);
+    result = `${existing ? 'Already recorded' : 'Saved'} in project memory: ${String(decision.id)}. (Demo data only.)`;
+  }
+  const job = timelineOf(sessionId).jobs.find(j => j.id === jobId);
+  if (job) Object.assign(job, { status: 'COMPLETED', endedAt: nowIso() });
+  pushEvent(sessionId, 'agent.message', { text: result }, jobId);
+  pushEvent(sessionId, 'job.completed', { summary: result }, jobId);
+  settle(sessionId);
 }
 
 function snapshot(sessionId: string) {
@@ -739,7 +790,7 @@ const routes: [string, RegExp, Handler][] = [
     recordSessionLifecycle(session, 'session.deleted', { sessionId: session.id, title: session.title, artifactsDeleted: query.get('artifacts') === 'delete' });
   }],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/events$/, () => list([])],
-  ['POST', /^\/api\/v1\/sessions\/([^/]+)\/messages$/, (m, body) => answer(m[1], text(body.message), body.delivery as string | undefined, body.artifactIds as string[] | undefined)],
+  ['POST', /^\/api\/v1\/sessions\/([^/]+)\/messages$/, (m, body) => answer(m[1], text(body.message), body.delivery as string | undefined, body.artifactIds as string[] | undefined, body.afterJobId as string | undefined)],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/diff$/, (_m, _b, query) => ({ path: query.get('path'), diff: data.ingressDiff, binary: false, truncated: false })],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/repository$/, (m, _b, query) => {
     const repo = data.repositories[m[1]];
@@ -829,6 +880,7 @@ const routes: [string, RegExp, Handler][] = [
     const scope = request.scope as Json;
     Object.assign(request, { status: 'RESOLVED', value: body.value, resolvedAt: nowIso() });
     pushEvent(String(scope.sessionId), 'user_input.resolved', { requestId: request.id, value: body.value }, String(scope.jobId));
+    if (learningQuestions.has(m[1])) { resolveLearning(m[1], text(body.value)); return request; }
     pushEvent(String(scope.sessionId), 'agent.message', { text: `Noted: “${String(body.value)}”. (In the demo the agent stops here; for real it would carry on from your answer.)` }, String(scope.jobId));
     const job = timelineOf(String(scope.sessionId)).jobs.find((entry) => entry.id === scope.jobId);
     if (job) Object.assign(job, { status: 'COMPLETED', endedAt: nowIso() });
