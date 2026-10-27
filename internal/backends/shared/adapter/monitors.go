@@ -118,12 +118,12 @@ func (a *Adapter) prepareMonitors(p *runner.StartParams) {
 			return nil, fmt.Errorf("monitor duration exceeds the execution policy limit of %d seconds", pol.MaxDurationSeconds)
 		}
 		invocation := map[string]any{"command": command, "cwd": p.WorkingDirectory}
-		if err := monitorPolicyError(pol, invocation, p.WorkingDirectory); err != nil {
+		if err := monitorPolicyError(pol, invocation, p.WorkingDirectory, a.monitors.Sandboxed()); err != nil {
 			return nil, err
 		}
 		// A persistent command outlives the approved Job. Ask for its exact command
 		// and duration even where a native one-shot read would be auto-approved.
-		approved, err := a.AskValidation(ctx, p.JobID, "monitor_start", map[string]any{"command": command, "description": description, "timeoutSeconds": seconds, "cwd": p.WorkingDirectory, "allowFilesystemWrite": pol.AllowFilesystemWrite, "allowNetwork": pol.AllowNetwork})
+		approved, err := a.AskValidation(ctx, p.JobID, "monitor_start", map[string]any{"command": command, "description": description, "timeoutSeconds": seconds, "cwd": p.WorkingDirectory, "allowFilesystemWrite": pol.AllowFilesystemWrite, "allowNetwork": pol.AllowNetwork, "sandboxed": a.monitors.Sandboxed()})
 		if err != nil {
 			return nil, err
 		}
@@ -135,7 +135,7 @@ func (a *Adapter) prepareMonitors(p *runner.StartParams) {
 		}
 		// Re-read policy after the approval, which can have waited indefinitely.
 		current := a.policyOf(p.JobID)
-		if err := monitorPolicyError(current, invocation, p.WorkingDirectory); err != nil {
+		if err := monitorPolicyError(current, invocation, p.WorkingDirectory, a.monitors.Sandboxed()); err != nil {
 			return nil, err
 		}
 		if current.AllowFilesystemWrite != pol.AllowFilesystemWrite || current.AllowNetwork != pol.AllowNetwork {
@@ -164,7 +164,13 @@ func (a *Adapter) prepareMonitors(p *runner.StartParams) {
 	}})
 }
 
-func monitorPolicyError(p policy.Policy, input map[string]any, cwd string) error {
+// monitorPolicyError refuses what the policy forbids. Without a sandbox it also
+// refuses a policy that forbids writes or network access: nothing would hold
+// those limits, and a refusal before the approval beats a launch failure after.
+func monitorPolicyError(p policy.Policy, input map[string]any, cwd string, sandboxed bool) error {
+	if !sandboxed && (!p.AllowFilesystemWrite || !p.AllowNetwork) {
+		return fmt.Errorf("this backend runs monitors without a sandbox, which cannot enforce a policy that forbids filesystem writes or network access")
+	}
 	for _, tool := range []string{"monitor_start", "mcp__threavia__monitor_start", "Bash"} {
 		if d := p.EvaluateInvocation(tool, input, cwd); d.Verdict == policy.Deny {
 			return fmt.Errorf("%s", d.Reason)

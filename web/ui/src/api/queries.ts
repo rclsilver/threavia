@@ -891,11 +891,12 @@ export function useDeleteArtifact(projectId: string) {
 
 // -------------------------------------------------------------------- skills
 
+/** The Skills of a Project, or the global ones of the user without a Project. */
 export function useSkills(projectId: string | undefined) {
   return useQuery({
     queryKey: keys.skills(projectId ?? ''),
-    queryFn: () => api.get<List<Skill>>(`/api/v1/projects/${projectId}/skills`).then(items),
-    enabled: Boolean(projectId),
+    queryFn: () => api.get<List<Skill>>(projectId ? `/api/v1/projects/${projectId}/skills` : '/api/v1/me/skills').then(items),
+    enabled: projectId !== undefined,
   });
 }
 
@@ -912,16 +913,18 @@ export function useSkillFiles(skillId: string | undefined) {
   });
 }
 
+/** Installs a Skill in a Project, or a global one without a Project. */
 export function useInstallSkill(projectId: string) {
   const queries = useQueryClient();
+  const path = projectId ? `/api/v1/projects/${projectId}/skills` : '/api/v1/me/skills';
   return useMutation({
     mutationFn: (input: { source: SkillSource; file?: File; name?: string }) =>
       input.file
-        ? api.upload<Skill>(`/api/v1/projects/${projectId}/skills`, input.file, {
+        ? api.upload<Skill>(path, input.file, {
             name: input.name ?? '',
             path: input.source.path ?? '',
           })
-        : api.post<Skill>(`/api/v1/projects/${projectId}/skills`, {
+        : api.post<Skill>(path, {
             name: input.name,
             source: input.source,
           }),
@@ -933,13 +936,39 @@ export function useInstallSkill(projectId: string) {
   });
 }
 
-export function useUninstallSkill(projectId: string) {
+export function useUninstallSkill() {
   const queries = useQueryClient();
   return useMutation({
     mutationFn: (skillId: string) => api.delete(`/api/v1/skills/${skillId}`),
     onSuccess: () => {
-      void queries.invalidateQueries({ queryKey: keys.skills(projectId) });
+      // A global Skill is listed in every Project's page too.
+      void queries.invalidateQueries({ queryKey: ['skills'] });
       void queries.invalidateQueries({ queryKey: ['skill-files'] });
+      void queries.invalidateQueries({ queryKey: keys.audit() });
+    },
+  });
+}
+
+/** Moves a Project Skill to the global ones: it leaves one list for the other. */
+export function useMakeSkillGlobal() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (skillId: string) => api.post<Skill>(`/api/v1/skills/${skillId}/global`),
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: ['skills'] });
+      void queries.invalidateQueries({ queryKey: keys.audit() });
+    },
+  });
+}
+
+/** Turns a global Skill on or off in one Project. */
+export function useSetSkillActivation(projectId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: ({ skillId, enabled }: { skillId: string; enabled: boolean }) =>
+      api.put(`/api/v1/projects/${projectId}/skills/${skillId}/activation`, { enabled }),
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: keys.skills('') });
       void queries.invalidateQueries({ queryKey: keys.audit() });
     },
   });

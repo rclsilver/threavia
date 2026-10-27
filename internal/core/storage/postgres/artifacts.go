@@ -6,15 +6,16 @@ import (
 	"github.com/rclsilver/threavia/internal/core/domain"
 )
 
-const artifactColumns = `a.id, a.owner_id, a.project_id, a.filename, a.mime_type,
+const artifactColumns = `a.id, a.owner_id, COALESCE(a.project_id::text, ''), a.filename, a.mime_type,
 	a.size, a.sha256, a.object_key, a.session_id, a.job_id, a.created_at`
 
-// CreateArtifact records the metadata of a stored blob.
+// CreateArtifact records the metadata of a stored blob. One without a Project
+// belongs to its owner alone: the bundle of a global Skill.
 func (s *Store) CreateArtifact(ctx context.Context, artifact *domain.Artifact) error {
 	err := s.q.QueryRow(ctx, `
 		INSERT INTO artifacts (id, owner_id, project_id, filename, mime_type,
 		                       size, sha256, object_key, session_id, job_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		VALUES ($1, $2, NULLIF($3::text, '')::uuid, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING created_at`,
 		artifact.ID, artifact.OwnerID, artifact.ProjectID, artifact.Filename,
 		artifact.MimeType, artifact.Size, artifact.SHA256, artifact.ObjectKey,

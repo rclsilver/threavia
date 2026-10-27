@@ -550,6 +550,8 @@ jobs:
           \`\`\`
           ghcr.io/${owner}/threavia-core:${version#v}
           ghcr.io/${owner}/threavia-backend-claude:${version#v}
+          ghcr.io/${owner}/threavia-backend-codex:${version#v}
+          ghcr.io/${owner}/threavia-executor:${version#v}
           \`\`\`
 
           ## Helm chart
@@ -557,6 +559,8 @@ jobs:
           \`\`\`
           helm install threavia oci://ghcr.io/${owner}/charts/threavia --version ${version#v}
           helm install laptop oci://ghcr.io/${owner}/charts/threavia-backend-claude --version ${version#v}
+          helm install codex oci://ghcr.io/${owner}/charts/threavia-backend-codex --version ${version#v}
+          helm install executor oci://ghcr.io/${owner}/charts/threavia-executor --version ${version#v}
           \`\`\`
 
           ## VS Code extension

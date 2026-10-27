@@ -170,7 +170,13 @@ const STEPS: Step[] = [
     path: PROJECT('skills'),
     target: 'main ul',
     title: 'Skills',
-    body: 'Instructions and scripts an agent may use here, installed from git or an archive. View their contents; installations, replacements and removals are recorded in the audit.',
+    body: 'Instructions and scripts an agent may use here, installed from git or an archive. Global skills apply to every project; untick one to turn it off here.',
+  },
+  {
+    path: '/settings/skills',
+    target: '[data-tour="global-skills"]',
+    title: 'Skills for all your projects',
+    body: 'Install a skill once and every project gets it. A project can turn one off, or replace it with its own skill of the same name.',
   },
   {
     path: PROJECT('instructions'),

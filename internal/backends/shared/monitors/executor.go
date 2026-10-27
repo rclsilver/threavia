@@ -20,7 +20,7 @@ type Executor interface {
 var ErrStopUnconfirmed = errors.New("monitor execution stop is unconfirmed")
 
 func NewWithExecutor(path string, executor Executor) *Manager {
-	m := New(path)
+	m := New(path, false)
 	m.executor = executor
 	return m
 }
@@ -28,7 +28,7 @@ func (m *Manager) Available() bool {
 	if m.executor != nil {
 		return m.executor.Available() == nil
 	}
-	return Available()
+	return m.unsandboxed || Probe() == nil
 }
 func (m *Manager) startRemote(s monitor.Snapshot, dir string, writable, network bool) error {
 	m.mu.Lock()

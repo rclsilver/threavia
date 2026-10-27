@@ -11,7 +11,7 @@ import { DefaultPolicyPane } from '@/components/default-policy';
 import { DirectoriesPane } from '@/components/directories-pane';
 import { BackendIcon, BackendQuotas } from '@/components/backend-info';
 import { ConfirmLine, NewButton, RecordList, RecordRow } from '@/components/record-list';
-import { DecisionsPane } from '@/routes/project';
+import { DecisionsPane, SkillsPane } from '@/routes/project';
 import { AuditTimeline } from '@/components/audit-timeline';
 import { ActionError } from '@/components/ui/action-error';
 import { Avatar } from '@/components/ui/avatar';
@@ -98,6 +98,7 @@ export function SettingsView() {
               <p className="text-muted text-sm">{current.detail}</p>
             </div>
             {current.tab === 'mcp' && <MCPPane />}
+            {current.tab === 'skills' && <SkillSettings />}
             {current.tab === 'control' && <ControlAccessPane />}
             {current.tab === 'appearance' && <AppearancePane />}
             {current.tab === 'notifications' && <NotificationsPane />}
@@ -154,6 +155,15 @@ function CoreMemorySettings() {
   return <section data-tour="global-memory" className="space-y-4">
     <div className="flex justify-end">{!creating && <NewButton label="Record decision" onClick={() => setCreating(true)} />}</div>
     <DecisionsPane projectId="" creating={creating} onCreatingChange={setCreating} />
+  </section>;
+}
+
+function SkillSettings() {
+  const [creating, setCreating] = useState(false);
+  useShortcut('n', useCallback(() => setCreating(true), []));
+  return <section data-tour="global-skills" className="space-y-4">
+    <div className="flex justify-end">{!creating && <NewButton label="Install skill" onClick={() => setCreating(true)} />}</div>
+    <SkillsPane projectId="" creating={creating} onCreatingChange={setCreating} />
   </section>;
 }
 

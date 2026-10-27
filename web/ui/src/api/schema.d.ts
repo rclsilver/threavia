@@ -4822,16 +4822,17 @@ export interface paths {
          * Install a Skill from a git url, an archive url or an upload
          * @description A JSON body names a git or archive source; any other content type
          *     carries an uploaded archive. Core fetches, inspects and repacks. It
-         *     never runs anything the source contains.
+         *     never runs anything the source contains. A Skill of the same name in
+         *     the Project is replaced, and takes precedence over a global one.
          *
          */
         post: {
             parameters: {
                 query?: {
                     /** @description Selects the archive format of an upload. It shapes nothing stored. */
-                    filename?: string;
-                    name?: string;
-                    path?: string;
+                    filename?: components["parameters"]["SkillUploadFilename"];
+                    name?: components["parameters"]["SkillUploadName"];
+                    path?: components["parameters"]["SkillUploadPath"];
                 };
                 header?: never;
                 path: {
@@ -4839,21 +4840,136 @@ export interface paths {
                 };
                 cookie?: never;
             };
+            requestBody: components["requestBodies"]["SkillInstall"];
+            responses: {
+                /** @description The installed Skill */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Skill"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                503: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/skills/{skillId}/activation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectID"];
+                skillId: components["parameters"]["SkillID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Turn a global Skill on or off in a Project
+         * @description Global Skills are on in every Project until turned off. The change
+         *     applies to the next Job. A Project Skill is uninstalled rather than
+         *     turned off, and is refused here.
+         *
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectID"];
+                    skillId: components["parameters"]["SkillID"];
+                };
+                cookie?: never;
+            };
             requestBody: {
                 content: {
                     "application/json": {
-                        name?: string;
-                        source: components["schemas"]["SkillSource"];
+                        enabled: boolean;
                     };
-                    "multipart/form-data": {
-                        /** Format: binary */
-                        file: string;
-                        name?: string;
-                        path?: string;
-                    };
-                    "application/gzip": string;
                 };
             };
+            responses: {
+                /** @description Saved */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The global Skills of the user
+         * @description Every Project of the user gives them to its Jobs, unless it turned one
+         *     off or has a Skill of the same name.
+         *
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The global Skills, by name */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["Skill"][];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Install a global Skill from a git url, an archive url or an upload
+         * @description Same sources as a Project Skill. A global Skill of the same name is
+         *     replaced. Its bundle belongs to the user, not to a Project.
+         *
+         */
+        post: {
+            parameters: {
+                query?: {
+                    /** @description Selects the archive format of an upload. It shapes nothing stored. */
+                    filename?: components["parameters"]["SkillUploadFilename"];
+                    name?: components["parameters"]["SkillUploadName"];
+                    path?: components["parameters"]["SkillUploadPath"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: components["requestBodies"]["SkillInstall"];
             responses: {
                 /** @description The installed Skill */
                 201: {
@@ -4908,6 +5024,54 @@ export interface paths {
                 404: components["responses"]["Error"];
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/skills/{skillId}/global": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skillId: components["parameters"]["SkillID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make a Project Skill global
+         * @description Moves it, with its identifier and bundle, to the user's global Skills:
+         *     every Project then uses it unless it turns it off. A global Skill is
+         *     returned unchanged. Refuses a global name collision.
+         *
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    skillId: components["parameters"]["SkillID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The global Skill */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Skill"];
+                    };
+                };
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -5433,10 +5597,16 @@ export interface components {
              *
              *     - `artifact.deleted`: `{ artifactId }`, project-scoped metadata removal
              *     - `skill.installed`: `{ skillId, name, installedRevision, replaced }`,
-             *       project-scoped installation or replacement. Refresh skills, open
-             *       skill files and audit; skill content is never in the event.
-             *     - `skill.removed`: `{ skillId, name, installedRevision }`,
-             *       project-scoped removal. Refresh skills and audit.
+             *       installation or replacement. Refresh skills, open skill files and
+             *       audit; skill content is never in the event.
+             *     - `skill.removed`: `{ skillId, name, installedRevision }`, removal.
+             *       Refresh skills and audit.
+             *     - `skill.changed`: `{ skillId, name, action }`, action `made_global`
+             *       (with previousProjectId), `enabled` or `disabled` (a global Skill
+             *       turned on or off in the event's project, with projectName).
+             *       Refresh skills and audit.
+             *       Skill events are project-scoped for a Project Skill or an
+             *       activation, owner-scoped without a project id for a global Skill.
              *     - `session.deleted`: `{ sessionId, title, artifactsDeleted }`,
              *       project-scoped so it survives deletion of the session history.
              *       Older events may carry the session id in the envelope instead.
@@ -6032,11 +6202,17 @@ export interface components {
             /** @description The requested branch, tag or commit. It may move; installedRevision never does. */
             revision?: string;
         };
-        /** @description A Core-managed Project Skill, an immutable versioned artefact with provenance. */
+        /** @description A Core-managed Skill, an immutable versioned artefact with provenance.
+         *     Without a projectId it is global: every Project of its owner uses it
+         *     unless the Project turned it off or has a Skill of the same name.
+         *      */
         Skill: {
             id: components["schemas"]["UUID"];
             ownerId: string;
-            projectId: components["schemas"]["UUID"];
+            /** @description The Project the Skill belongs to; absent for a global Skill. */
+            projectId?: components["schemas"]["UUID"];
+            /** @description The Projects that turned this global Skill off. Only in the list of global Skills. */
+            disabledProjectIds?: components["schemas"]["UUID"][];
             name: string;
             description?: string;
             source: components["schemas"]["SkillSource"];
@@ -6122,6 +6298,11 @@ export interface components {
         BackendID: components["schemas"]["UUID"];
         DirectoryID: components["schemas"]["UUID"];
         ArtifactID: components["schemas"]["UUID"];
+        SkillID: components["schemas"]["UUID"];
+        /** @description Selects the archive format of an upload. It shapes nothing stored. */
+        SkillUploadFilename: string;
+        SkillUploadName: string;
+        SkillUploadPath: string;
         IncludeArchived: boolean;
         /** @description A retry returns what the first attempt created rather than creating a
          *     second one. A key belongs to the person who sent it: the same key from
@@ -6141,7 +6322,23 @@ export interface components {
          *      */
         Channel: components["schemas"]["Channel"];
     };
-    requestBodies: never;
+    requestBodies: {
+        SkillInstall: {
+            content: {
+                "application/json": {
+                    name?: string;
+                    source: components["schemas"]["SkillSource"];
+                };
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                    name?: string;
+                    path?: string;
+                };
+                "application/gzip": string;
+            };
+        };
+    };
     headers: never;
     pathItems: never;
 }

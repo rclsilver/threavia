@@ -25,17 +25,23 @@ type entry struct {
 	lastPublished time.Time
 }
 type Manager struct {
-	mu       sync.Mutex
-	path     string
-	entries  map[string]*entry
-	err      error
-	launch   func(context.Context, string, string, bool, bool) (*exec.Cmd, error)
-	executor Executor
+	executor    Executor
+	mu          sync.Mutex
+	path        string
+	entries     map[string]*entry
+	err         error
+	launch      func(context.Context, string, string, bool, bool) (*exec.Cmd, error)
+	unsandboxed bool
 }
 
 // New recovers observations, never PIDs or commands with unknown side effects.
-func New(path string) *Manager {
-	m := &Manager{path: path, entries: make(map[string]*entry), launch: sandboxCommand}
+// An unsandboxed Manager runs commands on the host: only for an operator who
+// accepted it on a machine where the sandbox cannot start.
+func New(path string, unsandboxed bool) *Manager {
+	m := &Manager{path: path, entries: make(map[string]*entry), launch: sandboxCommand, unsandboxed: unsandboxed}
+	if unsandboxed {
+		m.launch = unsandboxedCommand
+	}
 	raw, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		m.err = err
@@ -95,6 +101,9 @@ func (m *Manager) persist() error {
 	}
 	return err
 }
+
+// Sandboxed reports whether commands run under OS isolation.
+func (m *Manager) Sandboxed() bool { return !m.unsandboxed }
 
 // Start is called only after policy approval; the launcher adds OS isolation.
 func (m *Manager) Start(s monitor.Snapshot, dir string, writable, network bool) error {

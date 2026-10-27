@@ -22,6 +22,9 @@ import type {
   Repository,
   Run,
   Session,
+  Skill,
+  SkillFile,
+  SkillSource,
   Snapshot,
   Task,
   TaskStatus,
@@ -366,6 +369,43 @@ export class CoreClient {
 
   unbindDirectory(id: string, backendId: string) {
     return this.request<void>('DELETE', `/api/v1/directories/${id}/bindings/${backendId}`);
+  }
+
+  /** A Project's own Skills, or the global ones without a Project. */
+  skills(projectId = '') {
+    return this.get<List<Skill>>(projectId ? `/api/v1/projects/${projectId}/skills` : '/api/v1/me/skills').then(items);
+  }
+
+  /** Installs from a git or archive URL, in a Project or globally without one. */
+  installSkill(projectId: string, source: SkillSource) {
+    return this.post<Skill>(projectId ? `/api/v1/projects/${projectId}/skills` : '/api/v1/me/skills', { source });
+  }
+
+  /** Installs an archive; `filename` tells Core its format, `path` the skill inside it. */
+  async uploadSkill(projectId: string, filename: string, bytes: Uint8Array, path = ''): Promise<Skill> {
+    const query = new URLSearchParams({ filename, path });
+    const response = await this.raw(`${projectId ? `/api/v1/projects/${projectId}/skills` : '/api/v1/me/skills'}?${query}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: new Blob([new Uint8Array(bytes)]) });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as ErrorBody | null;
+      throw new ApiError(response.status, body?.error?.code ?? 'unknown', body?.error?.message ?? 'The skill could not be installed.');
+    }
+    return await response.json() as Skill;
+  }
+
+  skillFiles(id: string) {
+    return this.get<List<SkillFile>>(`/api/v1/skills/${id}/files`).then(items);
+  }
+
+  setSkillActivation(projectId: string, id: string, enabled: boolean) {
+    return this.request<void>('PUT', `/api/v1/projects/${projectId}/skills/${id}/activation`, { enabled });
+  }
+
+  makeSkillGlobal(id: string) {
+    return this.post<Skill>(`/api/v1/skills/${id}/global`);
+  }
+
+  uninstallSkill(id: string) {
+    return this.request<void>('DELETE', `/api/v1/skills/${id}`);
   }
 
   /**

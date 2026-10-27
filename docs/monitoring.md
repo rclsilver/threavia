@@ -50,9 +50,12 @@ Both Claude and Codex use the same platform-specific launcher:
   the trusted supervisor outside their sandbox.
 
 On both platforms, the backend probes the real sandbox at startup and only
-advertises support when initialization succeeds. It never falls back to an
-unrestricted host shell. macOS `sandbox-exec` is deprecated by Apple; removal
-or a profile incompatibility makes this capability unavailable explicitly.
+advertises support when initialization succeeds. When it fails, the backend
+logs `persistent monitors are unavailable` with the reason, including what the
+sandbox printed. It never falls back to an unrestricted host shell unless its
+operator opted in (see below). macOS `sandbox-exec` is deprecated by Apple;
+removal or a profile incompatibility makes this capability unavailable
+explicitly.
 
 Network access is enabled only if the effective policy permits it. Filesystem,
 network and shell refusals still apply before asking for approval. These are not
@@ -73,6 +76,27 @@ A configured policy maximum duration also bounds each command's requested
 duration. A monitor is not an additional agent Job and does not hold its
 execution slot. Its explicit timeout bounds its lifetime independently of the
 agent's provider execution accounting.
+
+### Without a sandbox
+
+Some machines cannot run the sandbox and cannot be changed to: no bubblewrap
+and no root to install it, or a kernel that refuses unprivileged user
+namespaces. Their operator can set `THREAVIA_BACKEND_UNSANDBOXED_MONITORS=true`
+to run watches directly on the host instead. It is off by default and applies
+only where the probe fails: a backend whose sandbox starts keeps using it.
+
+The backend then logs `persistent monitors run without a sandbox` at startup,
+with the reason the probe failed, and advertises `PERSISTENT_MONITORS`. A watch
+runs in Bash with the account's full access for its whole duration: nothing
+keeps it to the working directory, off the network or away from other
+processes. The approval request carries `sandboxed: false`. The supervisor
+described above for macOS owns its process group on Linux too, so a stop, the
+timeout or the backend's death ends the processes it started, within the same
+limits on daemonization and `setsid`.
+
+A sandbox is what makes a read-only or offline policy hold for a watch. Without
+one, `monitor_start` is refused, before any approval, when the effective policy
+forbids filesystem writes or network access.
 
 ## State, outages and recovery
 

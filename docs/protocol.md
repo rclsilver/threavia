@@ -300,14 +300,20 @@ lock. A connection authenticated just before revocation is rejected with
 
 ## Skills
 
-Core persists project-scoped `skill.installed` (including replacement) and
-`skill.removed` events together with the skill mutation and its audit entry.
+Core persists `skill.installed` (including replacement), `skill.removed` and
+`skill.changed` events together with the skill mutation and its audit entry.
 Payloads identify the skill, name and installed revision; installation also
-reports `replaced`. No skill content is broadcast. Clients refresh skill lists,
-open skill files and the audit. Backend-local inventory reports are unchanged.
+reports `replaced`, and `skill.changed` its `action`: `made_global`, or
+`enabled`/`disabled` in the event's project. Events of a Project Skill or of an
+activation are project-scoped; those of a global Skill are owner-scoped. No
+skill content is broadcast. Clients refresh skill lists, open skill files and
+the audit. Backend-local inventory reports are unchanged.
 
-`ProjectContext` names the Core-managed Project Skills of a Run — identity,
-revision and bundle checksum, never content. A backend that has a revision
+`ProjectContext` names the Core-managed Skills of a Run — identity, revision
+and bundle checksum, never content: the Project's own Skills, then the global
+Skills of its owner that the Project did not turn off and has no Skill of the
+same name for. Core resolves that precedence, so a backend sees one Skill per
+name and needs no change for global Skills. A backend that has a revision
 cached uses it; otherwise it sends `SkillFetchRequest` and Core answers with a
 stream of `SkillBundle` chunks carrying the same `request_id`. The backend
 verifies the checksum before unpacking, so a Skill cannot change identity in

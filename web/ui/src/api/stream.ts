@@ -391,6 +391,12 @@ export class EventStream {
         break;
       }
 
+      // Made global, or turned on or off in a Project: it moves between lists.
+      case 'skill.changed':
+        void this.queries.invalidateQueries({ queryKey: ['skills'] });
+        void this.queries.invalidateQueries({ queryKey: keys.audit() });
+        break;
+
       // An agent published a file: the project's list has one more.
       case 'artifact.created':
       case 'artifact.deleted':

@@ -209,6 +209,17 @@ function describe(entry: AuditEntry, context: Context): { Icon: LucideIcon; tone
     };
   }
 
+  if (entry.action === 'skill.changed') {
+    const name = <span className="font-medium">{text(detail.name) || 'an unnamed skill'}</span>;
+    return {
+      Icon: SlidersHorizontal,
+      tone: detail.action === 'disabled' ? TONES.muted : TONES.accent,
+      title: detail.action === 'made_global'
+        ? <>Made skill {name} global</>
+        : <>{detail.action === 'disabled' ? 'Turned off' : 'Turned on'} global skill {name} in {text(detail.projectName) || 'a project'}</>,
+    };
+  }
+
   if (entry.action === 'validation.resolved') {
     const approved = detail.approved === true;
     // "Bash: go test" — the tool in words, the command as a command.
