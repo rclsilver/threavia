@@ -654,6 +654,21 @@ export const skills = [
     createdAt: at(60 * 24 * 8),
     updatedAt: at(60 * 24 * 8),
   },
+  // Global: every project uses it, except the website, which turned it off.
+  {
+    id: id('d000000d', 3),
+    ownerId: 'alex',
+    name: 'commit-messages',
+    description: 'Write commit subjects that say what changes for the person using it.',
+    source: { type: 'GIT', url: 'https://git.home.example/alex/skills', path: 'commit-messages', revision: 'main' },
+    installedRevision: '9b8a7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b',
+    installedAt: at(60 * 24 * 12),
+    artifactId: id('d000000c', 92),
+    bundleSha256: '2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c',
+    disabledProjectIds: [IDS.website],
+    createdAt: at(60 * 24 * 12),
+    updatedAt: at(60 * 24 * 12),
+  },
 ];
 
 export const skillFiles: Record<string, { path: string; size: number; text?: string }[]> = {
@@ -670,6 +685,9 @@ export const skillFiles: Record<string, { path: string; size: number; text?: str
       text: '#!/bin/sh\n# Lists the pods on a node that ask for host port 443.\nset -eu\nnode="$1"\nkubectl get pods -A -o json --field-selector "spec.nodeName=$node" |\n  jq -r \'.items[] | select(any(.spec.containers[].ports[]?; .hostPort == 443)) | "\\(.metadata.namespace)/\\(.metadata.name)"\'\n',
     },
     { path: 'assets/diagram.png', size: 48211 },
+  ],
+  [skills[2].id]: [
+    { path: 'SKILL.md', size: 240, text: '---\nname: commit-messages\ndescription: Write commit subjects that say what changes for the person using it.\n---\n\nFollow `type(scope): description`. The description says what changes for the person using it, not which file moved. One concern per commit.\n' },
   ],
   [skills[1].id]: [
     { path: 'SKILL.md', size: 220, text: '---\nname: helm-pinning\ndescription: Pin every chart version and bump it in its own commit.\n---\n\nEvery `helmCharts` entry carries an exact `version`. An upgrade changes one version, in a commit of its own.\n' },

@@ -52,7 +52,7 @@ tags:
   - name: artifacts
     description: Stored blobs
   - name: skills
-    description: Core-managed project skills and backend-local skills
+    description: Core-managed project and global skills, and backend-local skills
   - name: backends
     description: BackendInstances and their registration
   - name: stream
@@ -2432,38 +2432,84 @@ paths:
       description: |
         A JSON body names a git or archive source; any other content type
         carries an uploaded archive. Core fetches, inspects and repacks. It
-        never runs anything the source contains.
+        never runs anything the source contains. A Skill of the same name in
+        the Project is replaced, and takes precedence over a global one.
       parameters:
-        - name: filename
-          in: query
-          schema: { type: string }
-          description: Selects the archive format of an upload. It shapes nothing stored.
-        - name: name
-          in: query
-          schema: { type: string }
-        - name: path
-          in: query
-          schema: { type: string }
+        - $ref: "#/components/parameters/SkillUploadFilename"
+        - $ref: "#/components/parameters/SkillUploadName"
+        - $ref: "#/components/parameters/SkillUploadPath"
+      requestBody:
+        $ref: "#/components/requestBodies/SkillInstall"
+      responses:
+        "201":
+          description: The installed Skill
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Skill" }
+        "400":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/projects/{projectId}/skills/{skillId}/activation:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+      - $ref: "#/components/parameters/SkillID"
+    put:
+      tags: [skills]
+      summary: Turn a global Skill on or off in a Project
+      description: |
+        Global Skills are on in every Project until turned off. The change
+        applies to the next Job. A Project Skill is uninstalled rather than
+        turned off, and is refused here.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [source]
+              required: [enabled]
               properties:
-                name: { type: string }
-                source: { $ref: "#/components/schemas/SkillSource" }
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file]
-              properties:
-                file: { type: string, format: binary }
-                name: { type: string }
-                path: { type: string }
-          application/gzip:
-            schema: { type: string, format: binary }
+                enabled: { type: boolean }
+      responses:
+        "204":
+          description: Saved
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/me/skills:
+    get:
+      tags: [skills]
+      summary: The global Skills of the user
+      description: |
+        Every Project of the user gives them to its Jobs, unless it turned one
+        off or has a Skill of the same name.
+      responses:
+        "200":
+          description: The global Skills, by name
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Skill" }
+    post:
+      tags: [skills]
+      summary: Install a global Skill from a git url, an archive url or an upload
+      description: |
+        Same sources as a Project Skill. A global Skill of the same name is
+        replaced. Its bundle belongs to the user, not to a Project.
+      parameters:
+        - $ref: "#/components/parameters/SkillUploadFilename"
+        - $ref: "#/components/parameters/SkillUploadName"
+        - $ref: "#/components/parameters/SkillUploadPath"
+      requestBody:
+        $ref: "#/components/requestBodies/SkillInstall"
       responses:
         "201":
           description: The installed Skill
@@ -2488,6 +2534,27 @@ paths:
         "204":
           description: Uninstalled
         "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/skills/{skillId}/global:
+    parameters:
+      - $ref: "#/components/parameters/SkillID"
+    post:
+      tags: [skills]
+      summary: Make a Project Skill global
+      description: |
+        Moves it, with its identifier and bundle, to the user's global Skills:
+        every Project then uses it unless it turns it off. A global Skill is
+        returned unchanged. Refuses a global name collision.
+      responses:
+        "200":
+          description: The global Skill
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Skill" }
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
 
   /api/v1/skills/{skillId}/files:
@@ -2600,6 +2667,24 @@ components:
       in: path
       required: true
       schema: { $ref: "#/components/schemas/UUID" }
+    SkillID:
+      name: skillId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UUID" }
+    SkillUploadFilename:
+      name: filename
+      in: query
+      schema: { type: string }
+      description: Selects the archive format of an upload. It shapes nothing stored.
+    SkillUploadName:
+      name: name
+      in: query
+      schema: { type: string }
+    SkillUploadPath:
+      name: path
+      in: query
+      schema: { type: string }
     IncludeArchived:
       name: includeArchived
       in: query
@@ -2627,6 +2712,28 @@ components:
         the client keeps ([A-Za-z0-9_-], at most 64), and X-Threavia-Client-Name,
         the device name its person chose, URI-encoded. The stream also takes
         X-Threavia-Active (true or false), the presence when it opens.
+
+  requestBodies:
+    SkillInstall:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [source]
+            properties:
+              name: { type: string }
+              source: { $ref: "#/components/schemas/SkillSource" }
+        multipart/form-data:
+          schema:
+            type: object
+            required: [file]
+            properties:
+              file: { type: string, format: binary }
+              name: { type: string }
+              path: { type: string }
+        application/gzip:
+          schema: { type: string, format: binary }
 
   responses:
     Error:
@@ -3037,10 +3144,16 @@ components:
 
             - `artifact.deleted`: `{ artifactId }`, project-scoped metadata removal
             - `skill.installed`: `{ skillId, name, installedRevision, replaced }`,
-              project-scoped installation or replacement. Refresh skills, open
-              skill files and audit; skill content is never in the event.
-            - `skill.removed`: `{ skillId, name, installedRevision }`,
-              project-scoped removal. Refresh skills and audit.
+              installation or replacement. Refresh skills, open skill files and
+              audit; skill content is never in the event.
+            - `skill.removed`: `{ skillId, name, installedRevision }`, removal.
+              Refresh skills and audit.
+            - `skill.changed`: `{ skillId, name, action }`, action `made_global`
+              (with previousProjectId), `enabled` or `disabled` (a global Skill
+              turned on or off in the event's project, with projectName).
+              Refresh skills and audit.
+              Skill events are project-scoped for a Project Skill or an
+              activation, owner-scoped without a project id for a global Skill.
             - `session.deleted`: `{ sessionId, title, artifactsDeleted }`,
               project-scoped so it survives deletion of the session history.
               Older events may carry the session id in the envelope instead.
@@ -3774,12 +3887,21 @@ components:
 
     Skill:
       type: object
-      description: A Core-managed Project Skill, an immutable versioned artefact with provenance.
-      required: [id, ownerId, projectId, name, source, installedRevision, installedAt, artifactId, bundleSha256, createdAt, updatedAt]
+      description: |
+        A Core-managed Skill, an immutable versioned artefact with provenance.
+        Without a projectId it is global: every Project of its owner uses it
+        unless the Project turned it off or has a Skill of the same name.
+      required: [id, ownerId, name, source, installedRevision, installedAt, artifactId, bundleSha256, createdAt, updatedAt]
       properties:
         id: { $ref: "#/components/schemas/UUID" }
         ownerId: { type: string }
-        projectId: { $ref: "#/components/schemas/UUID" }
+        projectId:
+          $ref: "#/components/schemas/UUID"
+          description: The Project the Skill belongs to; absent for a global Skill.
+        disabledProjectIds:
+          type: array
+          items: { $ref: "#/components/schemas/UUID" }
+          description: The Projects that turned this global Skill off. Only in the list of global Skills.
         name: { type: string }
         description: { type: string }
         source: { $ref: "#/components/schemas/SkillSource" }

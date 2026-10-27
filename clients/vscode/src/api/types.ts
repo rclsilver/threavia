@@ -37,6 +37,9 @@ export type Task = Schemas['Task'];
 export type TaskStatus = Schemas['TaskStatus'];
 export type Decision = Schemas['Decision'];
 export type DecisionImportance = Schemas['DecisionImportance'];
+export type Skill = Schemas['Skill'];
+export type SkillFile = Schemas['SkillFile'];
+export type SkillSource = Schemas['SkillSource'];
 
 /** The envelope every collection response uses. */
 export interface List<T> {
@@ -75,6 +78,7 @@ export interface EventPayloads {
   'session.deleted': { sessionId?: string; title?: string; artifactsDeleted?: boolean };
   'skill.installed': { skillId: string; name: string; installedRevision: string; replaced: boolean };
   'skill.removed': { skillId: string; name: string; installedRevision: string };
+  'skill.changed': { skillId: string; name: string; action: 'made_global' | 'enabled' | 'disabled'; previousProjectId?: string; projectName?: string };
   'user.message': { text: string; attachments?: { artifactId: string; filename: string; mimeType: string; size: number }[]; delivery?: 'NOW' | 'NEXT'; monitorId?: string; scheduleId?: string; actorJobId?: string; actorId?: string };
   'schedule.skipped': { scheduleId: string; outcome: string; reason: string; due: string };
   'schedule.created': { scheduleId: string; cron: string; timezone: string; message: string; enabled: boolean; actorJobId?: string };

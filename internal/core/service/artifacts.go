@@ -75,27 +75,36 @@ func (s *Service) UploadArtifact(ctx context.Context, identity auth.Identity, pr
 		artifact.JobID = &scope.JobID
 	}
 
-	stored, err := s.objects.Put(ctx, artifact.ObjectKey, body, s3.ObjectMeta{ContentType: mimeType})
+	if err := s.storeArtifact(ctx, &artifact, body); err != nil {
+		return domain.Artifact{}, err
+	}
+	if scope.JobID == "" {
+		s.emit(ctx, identity.UserID, events.TypeArtifactCreated, domain.Scope{ProjectID: projectID}, ArtifactPayload{ArtifactID: string(artifact.ID), Filename: artifact.Filename, MimeType: artifact.MimeType, Size: artifact.Size})
+	}
+	return artifact, nil
+}
+
+// storeArtifact writes the bytes of an Artifact and records its metadata,
+// filling in what only the write knows: its size, checksum and content type.
+func (s *Service) storeArtifact(ctx context.Context, artifact *domain.Artifact, body io.Reader) error {
+	stored, err := s.objects.Put(ctx, artifact.ObjectKey, body, s3.ObjectMeta{ContentType: artifact.MimeType})
 	if err != nil {
-		return domain.Artifact{}, fmt.Errorf("%w: %s", ErrInvalid, err)
+		return fmt.Errorf("%w: %s", ErrInvalid, err)
 	}
 	artifact.Size = stored.Size
 	artifact.SHA256 = stored.SHA256
 	artifact.MimeType = stored.ContentType
 
-	if err := s.store.CreateArtifact(ctx, &artifact); err != nil {
+	if err := s.store.CreateArtifact(ctx, artifact); err != nil {
 		// The bytes are already there; leaving them orphaned would be worse than
 		// the failed request.
 		if removeErr := s.objects.Delete(ctx, artifact.ObjectKey); removeErr != nil {
 			s.logger.Error("cannot remove the bytes of a failed upload",
 				"objectKey", artifact.ObjectKey, "error", removeErr)
 		}
-		return domain.Artifact{}, translate(err)
+		return translate(err)
 	}
-	if scope.JobID == "" {
-		s.emit(ctx, identity.UserID, events.TypeArtifactCreated, domain.Scope{ProjectID: projectID}, ArtifactPayload{ArtifactID: string(artifact.ID), Filename: artifact.Filename, MimeType: artifact.MimeType, Size: artifact.Size})
-	}
-	return artifact, nil
+	return nil
 }
 
 // errArtifactScope is the one answer to a Session or Job an upload cannot be

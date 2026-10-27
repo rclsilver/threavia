@@ -27,6 +27,9 @@ import {
   useDeleteArtifact,
   useDeleteDecision,
   useInstallSkill,
+  useMakeSkillGlobal,
+  useProjects,
+  useSetSkillActivation,
   useMakeDecisionGlobal,
   useProject,
   useProjectPolicy,
@@ -617,7 +620,11 @@ function ArtifactRow({ artifact, projectId }: { artifact: Artifact; projectId: s
 
 // -------------------------------------------------------------------- skills
 
-function SkillsPane({
+/**
+ * The Skills of a Project, then the global ones its Jobs also get unless it
+ * turns them off. Without a Project, the global Skills alone.
+ */
+export function SkillsPane({
   projectId,
   creating,
   onCreatingChange,
@@ -627,16 +634,43 @@ function SkillsPane({
   onCreatingChange: (open: boolean) => void;
 }) {
   const skills = useSkills(projectId);
+  const globalSkills = useSkills(projectId ? '' : undefined);
   const all = skills.data ?? [];
+  const shared = projectId ? (globalSkills.data ?? []) : [];
+  // A Project Skill takes precedence over a global one of the same name.
+  const own = new Set(all.map((skill) => skill.name));
+  const pending = skills.isPending || (Boolean(projectId) && globalSkills.isPending);
 
   return (
     <>
       {creating && <NewSkill projectId={projectId} onClose={() => onCreatingChange(false)} />}
-      {skills.isPending ? null : all.length === 0 && !creating ? (
+      {pending ? null : all.length === 0 && shared.length === 0 && !creating ? (
         <EmptyState>
           No skills yet. Install one from a git repository, an archive, or a file with{' '}
           <span className="text-text font-medium">Install skill</span>.
+          {projectId ? ' Global skills, installed in Settings, appear here too.' : ' Every project uses a global skill unless it turns it off.'}
         </EmptyState>
+      ) : projectId ? (
+        <>
+          {all.length > 0 && (
+            <RecordGroup title="This project">
+              <RecordList>
+                {all.map((skill) => (
+                  <SkillRow key={skill.id} skill={skill} projectId={projectId} />
+                ))}
+              </RecordList>
+            </RecordGroup>
+          )}
+          {shared.length > 0 && (
+            <RecordGroup title="Global — all my projects">
+              <RecordList>
+                {shared.map((skill) => (
+                  <SkillRow key={skill.id} skill={skill} projectId={projectId} replaced={own.has(skill.name)} />
+                ))}
+              </RecordList>
+            </RecordGroup>
+          )}
+        </>
       ) : (
         all.length > 0 && (
           <RecordList>
@@ -746,10 +780,23 @@ function NewSkill({ projectId, onClose }: { projectId: string; onClose: () => vo
   );
 }
 
-function SkillRow({ skill, projectId }: { skill: Skill; projectId: string }) {
-  const uninstall = useUninstallSkill(projectId);
+/**
+ * One Skill. A global one seen from a Project can be turned off there; seen
+ * from Settings, it says where it is off.
+ */
+function SkillRow({ skill, projectId, replaced = false }: { skill: Skill; projectId: string; replaced?: boolean }) {
+  const uninstall = useUninstallSkill();
+  const makeGlobal = useMakeSkillGlobal();
+  const activation = useSetSkillActivation(projectId);
+  const projects = useProjects();
   const [asking, setAsking] = useState(false);
   const [viewing, setViewing] = useState(false);
+  const global = !skill.projectId;
+  const disabled = skill.disabledProjectIds ?? [];
+  const switchable = global && Boolean(projectId);
+  const offIn = projectId
+    ? ''
+    : disabled.map((id) => projects.data?.find((project) => project.id === id)?.name ?? id).join(', ');
 
   return (
     <>
@@ -762,7 +809,7 @@ function SkillRow({ skill, projectId }: { skill: Skill; projectId: string }) {
         body={skill.description}
         // The installed revision is what is actually there, which is not the
         // same as the branch someone asked for.
-        meta={`${skill.installedRevision.slice(0, 12)} · ${skill.source.url || 'uploaded'} · ${when(skill.installedAt)}`}
+        meta={`${skill.installedRevision.slice(0, 12)} · ${skill.source.url || 'uploaded'} · ${when(skill.installedAt)}${offIn ? ` · off in ${offIn}` : ''}`}
         // What the agent is given, read before it is relied on.
         action={
           <Button size="sm" className="max-sm:size-11 max-sm:p-0" onClick={() => setViewing(true)} aria-label={`View ${skill.name}`}>
@@ -783,6 +830,12 @@ function SkillRow({ skill, projectId }: { skill: Skill; projectId: string }) {
               <Check className="text-muted size-4" />
               Copy installed revision
             </MenuItem>
+            {!global && (
+              <MenuItem disabled={makeGlobal.isPending} onSelect={() => makeGlobal.mutate(skill.id)}>
+                <Globe className="size-4" />
+                Make global — all my projects
+              </MenuItem>
+            )}
             <MenuSeparator />
             <MenuItem className="text-danger" onSelect={() => setAsking(true)}>
               <Trash2 className="size-4" />
@@ -791,18 +844,41 @@ function SkillRow({ skill, projectId }: { skill: Skill; projectId: string }) {
           </>
         }
         below={
-          (asking || uninstall.error) && (
+          (switchable || asking || uninstall.error || makeGlobal.error) && (
             <>
-              <ConfirmLine
-                question="Uninstall this skill?"
-                confirm="Uninstall"
-                pending={uninstall.isPending}
-                onConfirm={() => uninstall.mutate(skill.id)}
-                onCancel={() => {
-                  setAsking(false);
-                  uninstall.reset();
-                }}
+              {switchable && (
+                <>
+                  <div className="[&_label]:min-h-11">
+                    <CheckboxField
+                      checked={!disabled.includes(projectId)}
+                      disabled={activation.isPending}
+                      onCheckedChange={(enabled) => activation.mutate({ skillId: skill.id, enabled })}
+                    >
+                      Active in this project
+                    </CheckboxField>
+                  </div>
+                  {replaced && <p className="text-muted text-xs">This project's skill of the same name is used instead.</p>}
+                  <ActionError error={activation.error} outcome="Not changed" recovery="Try again." className="mt-1 text-xs" />
+                </>
+              )}
+              <ActionError
+                error={makeGlobal.error}
+                outcome="Skill not made global"
+                recovery="If a global skill has this name, uninstall one and try again."
+                className="mt-1 text-xs"
               />
+              {(asking || uninstall.error) && (
+                <ConfirmLine
+                  question={global ? 'Uninstall this skill from all your projects?' : 'Uninstall this skill?'}
+                  confirm="Uninstall"
+                  pending={uninstall.isPending}
+                  onConfirm={() => uninstall.mutate(skill.id)}
+                  onCancel={() => {
+                    setAsking(false);
+                    uninstall.reset();
+                  }}
+                />
+              )}
               <ActionError error={uninstall.error} recovery="It is still installed; try again." className="mt-1 text-xs" />
             </>
           )

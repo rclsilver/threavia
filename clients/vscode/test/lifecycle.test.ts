@@ -42,6 +42,35 @@ describe('lifecycle events across clients', () => {
     queries.clear();
   });
 
+  it('refreshes every skill list when a skill becomes global or is turned off in a project', () => {
+    const { queries, invalidated, web } = webCache();
+    const editor = new EventBus();
+    const effects: unknown[] = [];
+    editor.on('effect', (effect) => effects.push(effect));
+    // Made global, a skill leaves its project's list for the global one, so no
+    // single list is enough to refresh.
+    queries.setQueryData(['skills', 'project'], [{ id: 'skill' }]);
+    queries.setQueryData(['skills', ''], []);
+    const events: Event[] = [
+      { id: 'global', type: 'skill.changed', sequence: 1, timestamp: new Date().toISOString(),
+        payload: { skillId: 'skill', name: 'deploy', action: 'made_global', previousProjectId: 'project' } },
+      { id: 'off', type: 'skill.changed', sequence: 2, timestamp: new Date().toISOString(), projectId: 'other',
+        payload: { skillId: 'skill', name: 'deploy', action: 'disabled' } },
+    ];
+    for (const event of events) {
+      web.deliver(event);
+      editor.publish(event);
+    }
+    expect(queries.getQueryState(['skills', 'project'])?.isInvalidated).toBe(true);
+    expect(queries.getQueryState(['skills', ''])?.isInvalidated).toBe(true);
+    expect(invalidated).toEqual([['skills'], ['audit'], ['skills'], ['audit']]);
+    expect(effects).toEqual([
+      { kind: 'skills', projectId: undefined, skillId: 'skill' },
+      { kind: 'skills', projectId: 'other', skillId: 'skill' },
+    ]);
+    queries.clear();
+  });
+
   it('refreshes the deleted session from the durable payload and accepts older envelopes', () => {
     const { queries, invalidated, web } = webCache();
     for (const legacy of [false, true]) {

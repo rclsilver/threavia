@@ -55,8 +55,9 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
     case 'artifact.deleted':
       return [{ kind: 'artifacts', projectId: event.projectId }];
     case 'skill.installed':
-    case 'skill.removed': {
-      const payload = payloadOf(event, 'skill.installed') ?? payloadOf(event, 'skill.removed');
+    case 'skill.removed':
+    case 'skill.changed': {
+      const payload = payloadOf(event, 'skill.installed') ?? payloadOf(event, 'skill.removed') ?? payloadOf(event, 'skill.changed');
       return [{ kind: 'skills', projectId: event.projectId, skillId: payload?.skillId }];
     }
     case 'backend.registered':

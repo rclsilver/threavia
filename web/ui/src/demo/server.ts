@@ -600,13 +600,42 @@ const routes: [string, RegExp, Handler][] = [
   }],
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/skills$/, (m) => list(state.skills.filter((entry) => entry.projectId === m[1]))],
   ['POST', /^\/api\/v1\/projects\/([^/]+)\/skills$/, () => { throw unavailable('Installing a skill'); }],
+  ['GET', /^\/api\/v1\/me\/skills$/, () => list(state.skills.filter((entry) => !entry.projectId))],
+  ['POST', /^\/api\/v1\/me\/skills$/, () => { throw unavailable('Installing a skill'); }],
+  ['PUT', /^\/api\/v1\/projects\/([^/]+)\/skills\/([^/]+)\/activation$/, (m, body) => {
+    const skill = state.skills.find((entry) => entry.id === m[2] && !entry.projectId);
+    if (!skill) throw new ApiError(400, 'invalid', 'Only a global skill can be turned off in a project.');
+    const others = ((skill.disabledProjectIds as string[] | undefined) ?? []).filter((id) => id !== m[1]);
+    skill.disabledProjectIds = body.enabled ? others : [...others, m[1]];
+    const project = state.projects.find((entry) => entry.id === m[1]);
+    const detail = { skillId: skill.id, name: skill.name, action: body.enabled ? 'enabled' : 'disabled', projectName: project?.name };
+    record('skill.changed', { projectId: m[1], subjectId: skill.id, detail });
+    emitLifecycle('skill.changed', m[1], detail);
+  }],
+  ['POST', /^\/api\/v1\/skills\/([^/]+)\/global$/, (m) => {
+    const skill = state.skills.find((entry) => entry.id === m[1]);
+    if (!skill) throw notFound('This skill');
+    if (!skill.projectId) return skill;
+    if (state.skills.some((entry) => !entry.projectId && entry.name === skill.name)) {
+      throw new ApiError(409, 'conflict', `A global skill is already named ${String(skill.name)}; uninstall one first.`);
+    }
+    const previousProjectId = skill.projectId;
+    delete skill.projectId;
+    skill.updatedAt = nowIso();
+    const detail = { skillId: skill.id, name: skill.name, action: 'made_global', previousProjectId };
+    record('skill.changed', { subjectId: skill.id, detail });
+    emitLifecycle('skill.changed', undefined, detail);
+    return skill;
+  }],
   ['DELETE', /^\/api\/v1\/skills\/([^/]+)$/, (m) => {
     const skill = state.skills.find((entry) => entry.id === m[1]);
     if (!skill) throw notFound('This skill');
     state.skills = state.skills.filter((entry) => entry.id !== m[1]);
     const detail = { skillId: skill.id, name: skill.name, installedRevision: skill.installedRevision };
-    record('skill.removed', { projectId: skill.projectId, subjectId: skill.id, detail });
-    emitLifecycle('skill.removed', String(skill.projectId), detail);
+    // A global skill belongs to no project: its events are the owner's.
+    const projectId = typeof skill.projectId === 'string' ? skill.projectId : undefined;
+    record('skill.removed', { ...(projectId && { projectId }), subjectId: skill.id, detail });
+    emitLifecycle('skill.removed', projectId, detail);
   }],
   ['GET', /^\/api\/v1\/skills\/([^/]+)\/files$/, (m) => list(data.skillFiles[m[1]] ?? [])],
 

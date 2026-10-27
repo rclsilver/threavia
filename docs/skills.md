@@ -2,10 +2,32 @@
 
 Threavia keeps the Agent Skills directory format: `SKILL.md`, with optional
 `scripts/`, `references/` and `assets/`. Both CODE backends consume the same
-effective set: Core-managed project skills, followed by skills configured on
-the backend machine. A project skill wins a name collision. Provider adapters
+effective set: Core-managed skills, followed by skills configured on the
+backend machine. A Core-managed skill wins a name collision. Provider adapters
 expose this set for each Job without editing the repository or the user's
 persistent provider configuration.
+
+## Project and global skills
+
+Core-managed skills are installed in a project (**Project → Skills**) or
+globally for your account (**Settings → Skills**, `POST /api/v1/me/skills`).
+A global skill is active in every project, including projects created later.
+A project can turn one off in its Skills page (**Active in this project**, or
+`PUT /api/v1/projects/{projectId}/skills/{skillId}/activation`). A project
+skill takes precedence over a global skill of the same name, so a project can
+also replace one with its own version. **Make global — all my projects** moves a
+project skill, with its identifier and bundle, to the global skills; it is
+refused when a global skill already has that name. In VS Code, **Threavia:
+Manage Skills…** does the same from the editor, and also installs a local
+folder holding `SKILL.md`.
+
+Core resolves the effective set when a Job is dispatched: the project's skills,
+then the active global skills it does not replace. Changes apply to the next
+Job. A global skill's bundle belongs to your account rather than a project, so
+deleting a project keeps the global skills the others use. Uninstalling a
+global skill removes it from every project. Installs, promotions, activations
+and removals are recorded in the audit. Global skills need Core with migration
+29; backends are unchanged.
 
 This matrix describes the implementation reviewed on 2026-10-15. Codex's
 packaged CLI is pinned to 0.161.0; Claude's Docker build defaults to `latest`,
@@ -60,6 +82,7 @@ The provider-independent wire contract is described in
 written in another language can implement it directly:
 
 1. Read `ProjectContext.skills`: skill id, installed revision and checksum.
+   Core already merged project and global skills into one entry per name.
 2. Reuse a cached immutable revision or send `SkillFetchRequest` with a unique
    `request_id`, skill id and installed revision.
 3. Reassemble `SkillBundle.chunk` by `chunk_index` until `last`, handle an

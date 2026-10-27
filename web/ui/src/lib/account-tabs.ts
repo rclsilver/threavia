@@ -1,11 +1,12 @@
-import { Bell, BookText, KeyRound, Plug, Folder, History, Monitor, Server, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { Bell, BookText, KeyRound, Plug, Folder, History, Monitor, Server, ShieldCheck, Sparkles, type LucideIcon } from 'lucide-react';
 
 // Shared by the settings page, user menu and route validation.
-export type AccountTab = 'mcp' | 'control' | 'appearance' | 'notifications' | 'backends' | 'permissions' | 'directories' | 'memory' | 'audit';
+export type AccountTab = 'mcp' | 'skills' | 'control' | 'appearance' | 'notifications' | 'backends' | 'permissions' | 'directories' | 'memory' | 'audit';
 
 export const ACCOUNT_TABS: { tab: AccountTab; label: string; Icon: LucideIcon; detail: string }[] = [
 	{ tab: 'control', label: 'MCP access', Icon: KeyRound, detail: 'Dedicated, revocable rights for another Threavia or MCP client to control your resources on this Core.' },
   { tab: 'mcp', label: 'MCP servers', Icon: Plug, detail: 'Existing MCP servers, project activation and backend connections. Credentials stay on the backend.' },
+  { tab: 'skills', label: 'Skills', Icon: Sparkles, detail: 'Skills every project gives its agents unless it turns one off. A project skill of the same name takes precedence.' },
   { tab: 'memory', label: 'Core memory', Icon: BookText, detail: 'Facts and decisions shared across all your projects on this Core. Pinned ones travel with every Job; the others remain searchable.' },
   { tab: 'audit', label: 'Audit', Icon: History, detail: 'Who changed what across your projects and Core memory. Records remain available after a project or its subjects are deleted.' },
   { tab: 'directories', label: 'Directories', Icon: Folder, detail: 'Manage known directories on this Core, in a project or globally across your projects.' },

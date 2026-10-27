@@ -2,7 +2,7 @@ package domain
 
 import "time"
 
-// SkillID identifies a Core-managed Project Skill.
+// SkillID identifies a Core-managed Skill.
 type SkillID string
 
 // NewSkillID returns a fresh SkillID.
@@ -42,14 +42,17 @@ type SkillSource struct {
 	Revision string `json:"revision,omitempty"`
 }
 
-// Skill is a Core-managed Project Skill: an immutable, versioned artefact with
+// Skill is a Core-managed Skill: an immutable, versioned artefact with
 // provenance (spec section 18).
+//
+// A Skill without a ProjectID is global: every Project of its owner uses it,
+// unless that Project turned it off or has a Skill of the same name.
 //
 // Core acquires and stores it; it never runs anything the bundle contains.
 type Skill struct {
 	ID          SkillID   `json:"id"`
 	OwnerID     UserID    `json:"ownerId"`
-	ProjectID   ProjectID `json:"projectId"`
+	ProjectID   ProjectID `json:"projectId,omitempty"`
 	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
 
@@ -63,6 +66,10 @@ type Skill struct {
 	// cached copy from a stale one without asking for the bytes.
 	ArtifactID   ArtifactID `json:"artifactId"`
 	BundleSHA256 string     `json:"bundleSha256"`
+
+	// DisabledProjectIDs lists the Projects in which a global Skill is turned
+	// off. It is only filled in when global Skills are listed.
+	DisabledProjectIDs []ProjectID `json:"disabledProjectIds,omitempty"`
 
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
