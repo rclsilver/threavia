@@ -80,12 +80,21 @@ type RegistrationConfig struct {
 	SharedKey string
 }
 
+type ExecutionConfig struct {
+	Mode      string
+	Endpoint  string
+	CAFile    string
+	TokenFile string
+}
+
 // Config is the complete backend configuration.
 type Config struct {
-	Log          LogConfig
-	Client       client.Config
-	Provider     ProviderConfig
-	Registration RegistrationConfig
+	Log             LogConfig
+	Client          client.Config
+	Provider        ProviderConfig
+	Registration    RegistrationConfig
+	MonitorExecutor monitors.Executor
+	Execution       ExecutionConfig
 
 	// StatePath is where the durable local execution state lives
 	// (spec section 10).
@@ -108,8 +117,9 @@ func Default() Config {
 	clientCfg.FeaturePersistentMonitors = monitors.Available()
 
 	return Config{
-		Log:    LogConfig{Level: logging.LevelInfo, Format: logging.FormatText},
-		Client: clientCfg,
+		Log:       LogConfig{Level: logging.LevelInfo, Format: logging.FormatText},
+		Client:    clientCfg,
+		Execution: ExecutionConfig{Mode: "local"},
 		Provider: ProviderConfig{
 			Binary:                  "claude",
 			DefaultWorkingDirectory: defaultWorkingDirectory(),
@@ -181,6 +191,10 @@ func LoadFor(provider string) (Config, error) {
 	cfg.Registration.SharedKey = l.String("SHARED_KEY", cfg.Registration.SharedKey)
 
 	cfg.StatePath = l.String("STATE_PATH", cfg.StatePath)
+	cfg.Execution.Mode = l.String("EXECUTION_MODE", cfg.Execution.Mode)
+	cfg.Execution.Endpoint = l.String("EXECUTOR_ENDPOINT", "")
+	cfg.Execution.CAFile = l.String("EXECUTOR_CA_FILE", "")
+	cfg.Execution.TokenFile = l.String("EXECUTOR_TOKEN_FILE", "")
 
 	// A CODE backend must support the whole mandatory CODE semantic contract;
 	// the capability set is therefore not configurable here.
@@ -197,6 +211,12 @@ func LoadFor(provider string) (Config, error) {
 
 // Validate checks the loaded configuration.
 func (c Config) Validate() error {
+	if c.Execution.Mode != "" && c.Execution.Mode != "local" && c.Execution.Mode != "kubernetes" {
+		return errors.New(EnvPrefix + "EXECUTION_MODE: expected local or kubernetes")
+	}
+	if c.Execution.Mode == "kubernetes" && (c.Execution.Endpoint == "" || c.Execution.CAFile == "" || c.Execution.TokenFile == "") {
+		return errors.New("Kubernetes execution requires an executor endpoint, CA file and token file")
+	}
 	if !logging.ValidLevel(c.Log.Level) {
 		return errors.New(EnvPrefix + "LOG_LEVEL: unknown level " + c.Log.Level)
 	}

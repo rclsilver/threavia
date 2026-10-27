@@ -1,0 +1,26 @@
+nameOverride: ""
+fullnameOverride: ""
+image:
+  repository: ghcr.io/rclsilver/threavia-executor
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+# One controller instance owns a durable journal. Do not scale this StatefulSet.
+controllerID: ""
+publicURL: ""
+tls:
+  # Empty: generate and retain a private CA/server certificate at installation.
+  existingSecret: ""
+  caSecret: ""
+persistence:
+  existingClaim: ""
+  storageClass: ""
+  size: 1Gi
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {cpu: "1", memory: 512Mi}
+nodeSelector: {}
+tolerations: []
+# Each item: spec (fixed worker profile), tokenSecret, maxJobs, maxMonitors.
+# An empty list boots no executor: configure at least one profile for use.
+profiles: []

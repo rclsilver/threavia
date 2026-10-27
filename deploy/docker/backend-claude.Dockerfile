@@ -24,7 +24,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 FROM node:22-bookworm-slim
 
 # Pinned at build time so an image rebuild is reproducible.
-ARG CLAUDE_CODE_VERSION=latest
+ARG CLAUDE_CODE_VERSION=2.1.311
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates git openssh-client bubblewrap bash \

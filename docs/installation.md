@@ -291,6 +291,13 @@ your provider setup.
 
 ### Kubernetes backend
 
+For per-Job Pods and persistent Monitors, use the
+[Kubernetes execution guide](kubernetes-execution.md). It separates the trusted
+control backend, executor, native provider state and shared workspaces. It does
+not require nested Bubblewrap or privileged workers. The same-process layout
+below remains available in the default `local` execution mode for existing
+installations; it does not provide the Kubernetes executor's isolation contract.
+
 Use the separate [Claude](../deploy/helm/threavia-backend-claude/README.md) or
 [Codex](../deploy/helm/threavia-backend-codex/README.md) chart. Each uses a
 StatefulSet and persists the whole home, including backend and provider state.

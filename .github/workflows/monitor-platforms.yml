@@ -5,6 +5,7 @@ on:
     branches: ["master"]
     paths:
       - "internal/backends/**"
+      - "internal/execution/**"
       - "pkg/monitor/**"
       - "go.mod"
       - "go.sum"

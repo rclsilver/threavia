@@ -1,0 +1,35 @@
+name: Kubernetes execution
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'internal/execution/**'
+      - 'internal/backends/**'
+      - 'cmd/threavia-backend-*/**'
+      - 'cmd/threavia-executor/**'
+      - 'deploy/kubernetes/**'
+      - 'deploy/helm/**'
+      - 'deploy/docker/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'shell.nix'
+      - '.github/workflows/kubernetes.yml'
+  push:
+    branches: [master]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: cachix/install-nix-action@v31
+      - uses: DeterminateSystems/magic-nix-cache-action@v13
+      - name: Exercise real pods, provider transports, volumes and monitors
+        env:
+          THREAVIA_TEST_DIR: '${{ runner.temp }}/threavia-execution'
+          THREAVIA_TEST_CLUSTER: threavia-execution-ci
+          THREAVIA_TEST_NATIVE: '1'
+        run: nix develop --no-write-lock-file -c bash deploy/kubernetes/test/run.sh

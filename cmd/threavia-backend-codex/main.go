@@ -20,6 +20,8 @@ import (
 	"github.com/rclsilver/threavia/internal/backends/codex/runner"
 	"github.com/rclsilver/threavia/internal/backends/shared/adapter"
 	"github.com/rclsilver/threavia/internal/backends/shared/mcp"
+	"github.com/rclsilver/threavia/internal/execution/integration"
+	"github.com/rclsilver/threavia/internal/execution/worker"
 	"github.com/rclsilver/threavia/internal/logging"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/client"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/state"
@@ -29,6 +31,13 @@ import (
 var version = "dev"
 
 func main() {
+	if handled, err := worker.Bootstrap(version); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == "--codex-policy-hook" {
 		hook.Run(os.Getenv("THREAVIA_CODEX_POLICY_ENDPOINT"), os.Stdin, os.Stdout)
 		return
@@ -98,7 +107,7 @@ func run() error {
 		_ = tools.Close(shutdownCtx)
 	}()
 
-	codex := runner.New(cfg.Provider.Binary, tools, runner.Options{
+	localCodex := runner.New(cfg.Provider.Binary, tools, runner.Options{
 		APIKey:          os.Getenv("OPENAI_API_KEY"),
 		Version:         version,
 		Model:           cfg.Provider.Model,
@@ -108,8 +117,13 @@ func run() error {
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
 		defer cancel()
-		_ = codex.Close(shutdownCtx)
+		_ = localCodex.Close(shutdownCtx)
 	}()
+	codex, closeExecution, err := integration.Select(ctx, &cfg, localCodex, logger)
+	if err != nil {
+		return err
+	}
+	defer closeExecution()
 	if err := codex.Available(); err != nil {
 		// Not fatal: the backend connects anyway and reports DEGRADED so the
 		// user can see why it cannot work.
@@ -117,13 +131,21 @@ func run() error {
 	}
 
 	codexAdapter := adapter.New(cfg, codex, store, logger)
-	codex.SetAsker(codexAdapter)
+	if setter, ok := codex.(interface{ SetAsker(mcp.Asker) }); ok {
+		setter.SetAsker(codexAdapter)
+	}
 	tools.SetAsker(codexAdapter)
-	if err := tools.Start(); err != nil {
-		return err
+	if cfg.Execution.Mode != "kubernetes" {
+		if err := tools.Start(); err != nil {
+			return err
+		}
 	}
 
-	modelCtx, modelCancel := context.WithTimeout(ctx, 15*time.Second)
+	probeTimeout := 15 * time.Second
+	if cfg.Execution.Mode == "kubernetes" {
+		probeTimeout = 2 * time.Minute
+	}
+	modelCtx, modelCancel := context.WithTimeout(ctx, probeTimeout)
 	catalog, modelErr := codex.Models(modelCtx)
 	modelCancel()
 	if modelErr != nil {

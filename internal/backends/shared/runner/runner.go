@@ -50,7 +50,7 @@ type StartParams struct {
 	// The runner forwards them to the local tool endpoint and never interprets
 	// them: a backend hardcodes no tool name.
 	CoreTools     []mcp.CoreTool
-	ExternalTools []mcp.LocalTool
+	ExternalTools []mcp.LocalTool `json:"-"`
 	// ProjectInstructions are the provider-independent project rules Core sent,
 	// and LocalInstructions the private ones of this machine (spec section 18).
 	// The adapter maps both onto the provider mechanism; Core models no provider

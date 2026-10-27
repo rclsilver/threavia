@@ -16,6 +16,7 @@ require (
 	golang.org/x/net v0.59.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.23.0
+	golang.org/x/sys v0.48.0
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.60.1
@@ -51,7 +52,6 @@ require (
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect

@@ -1,0 +1,31 @@
+# Replace RELEASE_VERSION with the same Threavia release as the control backend.
+fullnameOverride: coding-executor
+profiles:
+  - tokenSecret: codex-executor-client
+    maxJobs: 2
+    maxMonitors: 20
+    spec:
+      name: codex
+      provider: codex
+      image: ghcr.io/rclsilver/threavia-backend-codex:RELEASE_VERSION
+      workerBinary: /usr/local/bin/threavia-backend-codex
+      providerBinary: codex
+      home: /home/agent
+      workingDirectory: /workspace
+      uid: 65532
+      gid: 65532
+      resources:
+        requests: {cpu: 100m, memory: 256Mi}
+        limits: {cpu: "2", memory: 2Gi}
+      providerEnv:
+        - {Name: OPENAI_API_KEY, SecretName: codex-provider, SecretKey: apiKey}
+      # Baseline HTTPS for provider authentication/inference. For tighter
+      # control, replace this with egress to your approved inference proxy.
+      providerEgress:
+        - ports: [{protocol: TCP, port: 443}]
+      mounts:
+        - {name: workspace, claim: coding-workspaces, path: /workspace, role: workspace}
+        - {name: native, claim: codex-native, path: /home/agent, role: provider}
+        - {name: scratch, claim: coding-shared, path: /shared/scratch, subPath: scratch, role: scratch}
+        - {name: skills, claim: coding-shared, path: /shared/skills/jobs, subPath: skills/jobs, role: skills, readOnly: true}
+        - {name: bundles, claim: coding-shared, path: /shared/skills/bundles, subPath: skills/bundles, role: tools, readOnly: true}

@@ -19,6 +19,8 @@ import (
 	"github.com/rclsilver/threavia/internal/backends/claude/runner"
 	"github.com/rclsilver/threavia/internal/backends/shared/adapter"
 	"github.com/rclsilver/threavia/internal/backends/shared/mcp"
+	"github.com/rclsilver/threavia/internal/execution/integration"
+	"github.com/rclsilver/threavia/internal/execution/worker"
 	"github.com/rclsilver/threavia/internal/logging"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/client"
 	"github.com/rclsilver/threavia/pkg/backend-sdk/state"
@@ -28,6 +30,13 @@ import (
 var version = "dev"
 
 func main() {
+	if handled, err := worker.Bootstrap(version); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 3 && os.Args[1] == "--review-hook" {
 		mcp.RunReviewHook(os.Args[2], os.Stdin, os.Stdout)
 		return
@@ -97,10 +106,15 @@ func run() error {
 		_ = tools.Close(shutdownCtx)
 	}()
 
-	claude := runner.NewClaude(cfg.Provider.Binary, tools, runner.Options{
+	localClaude := runner.NewClaude(cfg.Provider.Binary, tools, runner.Options{
 		Readable: cfg.Provider.DiscoveryRoots,
 		Scratch:  cfg.Provider.ScratchPath,
 	}, logger)
+	claude, closeExecution, err := integration.Select(ctx, &cfg, localClaude, logger)
+	if err != nil {
+		return err
+	}
+	defer closeExecution()
 	if err := claude.Available(); err != nil {
 		// Not fatal: the backend connects anyway and reports DEGRADED so the
 		// user can see why it cannot work.
@@ -108,12 +122,21 @@ func run() error {
 	}
 
 	claudeAdapter := adapter.New(cfg, claude, store, logger)
+	if setter, ok := claude.(interface{ SetAsker(mcp.Asker) }); ok {
+		setter.SetAsker(claudeAdapter)
+	}
 	tools.SetAsker(claudeAdapter)
-	if err := tools.Start(); err != nil {
-		return err
+	if cfg.Execution.Mode != "kubernetes" {
+		if err := tools.Start(); err != nil {
+			return err
+		}
 	}
 
-	modelCtx, modelCancel := context.WithTimeout(ctx, 15*time.Second)
+	probeTimeout := 15 * time.Second
+	if cfg.Execution.Mode == "kubernetes" {
+		probeTimeout = 2 * time.Minute
+	}
+	modelCtx, modelCancel := context.WithTimeout(ctx, probeTimeout)
 	catalog, modelErr := claude.Models(modelCtx)
 	modelCancel()
 	if modelErr != nil {

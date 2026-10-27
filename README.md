@@ -75,6 +75,7 @@ explicit: Threavia does not silently move work or synchronize repositories.
 | Release binaries | Run Core or a backend directly on Linux or macOS | [Binary installation](docs/installation.md#release-binaries) |
 | Laptop or server backend | Work in existing checkouts with local tools and provider credentials | [Connect Claude Code or Codex](docs/installation.md#connect-a-backend) |
 | Container or Kubernetes backend | Give execution its own persistent environment | [Container and cluster backends](docs/installation.md#container-and-kubernetes-backends) |
+| Kubernetes execution | Separate Job and Monitor Pods for Claude and Codex | [Executor, storage and tests](docs/kubernetes-execution.md) |
 | NixOS backend | Manage a backend as a system service | [NixOS modules](docs/nix.md) |
 
 ### Try Core with Docker

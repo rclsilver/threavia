@@ -29,6 +29,13 @@ pkgs.mkShell {
 
     # `helm lint deploy/helm/threavia` and `helm template`.
     pkgs.kubernetes-helm
+    pkgs.kubectl
+    pkgs.jq
+    pkgs.openssl
+  ] ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+    # Isolated integration cluster with K3s' NetworkPolicy controller. No
+    # access to a developer's production kubeconfig is needed by these tests.
+    pkgs.k3d
   ];
 
   # buf, protoc-gen-go and protoc-gen-go-grpc are deliberately absent: the

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -85,13 +86,17 @@ type waiter struct {
 
 // New builds the shared provider adapter.
 func New(cfg Config, providerRunner runner.Runner, store state.Store, logger *slog.Logger) *Adapter {
+	bundles := cfg.Provider.SkillCachePath
+	if cfg.Execution.Mode == "kubernetes" {
+		bundles = filepath.Join(bundles, "bundles")
+	}
 	return &Adapter{
 		cfg:         cfg,
-		monitors:    monitors.New(cfg.StatePath + ".monitors.json"),
+		monitors:    monitors.NewWithExecutor(cfg.StatePath+".monitors.json", cfg.MonitorExecutor),
 		runner:      providerRunner,
 		store:       store,
 		logger:      logger,
-		skillCache:  skills.NewCache(cfg.Provider.SkillCachePath),
+		skillCache:  skills.NewCache(bundles),
 		localSkills: skills.Discover(cfg.Provider.LocalSkillRoots),
 		jobs:        make(map[string]*jobState),
 		waiters:     make(map[string]*waiter),

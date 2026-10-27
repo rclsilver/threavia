@@ -6,7 +6,6 @@ import (
 	"fmt"
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/backends/shared/mcp"
-	"github.com/rclsilver/threavia/internal/backends/shared/monitors"
 	"github.com/rclsilver/threavia/internal/backends/shared/policy"
 	"github.com/rclsilver/threavia/internal/backends/shared/runner"
 	"github.com/rclsilver/threavia/pkg/monitor"
@@ -82,7 +81,7 @@ func (a *Adapter) prepareMonitors(p *runner.StartParams) {
 	a.mu.Lock()
 	enabled := a.monitorsEnabled
 	a.mu.Unlock()
-	if !enabled || !monitors.Available() {
+	if !enabled || !a.monitors.Available() {
 		return
 	}
 	schema := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"command", "description"}, "properties": map[string]any{
