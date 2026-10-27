@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -38,7 +39,8 @@ func TestMonitorStateIsPrivateToEachBackendDatabase(t *testing.T) {
 }
 
 // When the sandbox cannot start, monitor_start silently disappears from every
-// Job. The startup log is the one place that says why.
+// Job. The startup log is the one place that says why, and whether the
+// operator's opt-in made monitors run on the host instead.
 func TestBackendSaysWhyMonitorsLackTheirSandbox(t *testing.T) {
 	reason := monitors.Probe()
 	if reason == nil {
@@ -46,10 +48,19 @@ func TestBackendSaysWhyMonitorsLackTheirSandbox(t *testing.T) {
 	}
 	cfg := Default()
 	cfg.StatePath = filepath.Join(t.TempDir(), "claude.db")
-	var log bytes.Buffer
-	New(cfg, nil, state.NewMemoryStore(), slog.New(slog.NewJSONHandler(&log, nil)))
-	var entry struct{ Msg, Error string }
-	if err := json.Unmarshal(log.Bytes(), &entry); err != nil || entry.Error != reason.Error() {
-		t.Fatalf("the probe failure was not logged: %q", log.String())
+	for _, optIn := range []bool{false, true} {
+		cfg.UnsandboxedMonitors = optIn
+		var log bytes.Buffer
+		a := New(cfg, nil, state.NewMemoryStore(), slog.New(slog.NewJSONHandler(&log, nil)))
+		var entry struct{ Msg, Error string }
+		if err := json.Unmarshal(log.Bytes(), &entry); err != nil || entry.Error != reason.Error() {
+			t.Fatalf("the probe failure was not logged: %q", log.String())
+		}
+		if a.monitors.Sandboxed() == optIn {
+			t.Fatalf("opt-in %v: sandboxed=%v", optIn, a.monitors.Sandboxed())
+		}
+		if optIn != strings.Contains(entry.Msg, "without a sandbox") {
+			t.Fatalf("opt-in %v not reflected in the log: %q", optIn, entry.Msg)
+		}
 	}
 }
