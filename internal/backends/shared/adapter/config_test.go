@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"github.com/rclsilver/threavia/internal/backends/shared/monitors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -55,6 +56,29 @@ func TestCodexEnvironmentOverrides(t *testing.T) {
 	}
 	if cfg.StatePath != "/tmp/codex-state.db" || cfg.Provider.SkillCachePath != "/tmp/codex-skills" || cfg.Provider.ScratchPath != "/tmp/codex-scratch" {
 		t.Fatal("operator paths were replaced by defaults")
+	}
+}
+
+// Only an explicit opt-in may advertise monitors the sandbox cannot run: by
+// default, the advertisement must follow the sandbox, or Jobs get a tool whose
+// every call fails.
+func TestUnsandboxedMonitorsAreAnExplicitOptIn(t *testing.T) {
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UnsandboxedMonitors || cfg.Client.FeaturePersistentMonitors != (monitors.Probe() == nil) {
+		t.Fatalf("default: unsandboxed=%v advertised=%v", cfg.UnsandboxedMonitors, cfg.Client.FeaturePersistentMonitors)
+	}
+	t.Setenv("THREAVIA_BACKEND_UNSANDBOXED_MONITORS", "true")
+	for _, provider := range []string{"claude", "codex"} {
+		cfg, err = LoadFor(provider)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !cfg.UnsandboxedMonitors || !cfg.Client.FeaturePersistentMonitors {
+			t.Fatalf("%s ignored the opt-in: unsandboxed=%v advertised=%v", provider, cfg.UnsandboxedMonitors, cfg.Client.FeaturePersistentMonitors)
+		}
 	}
 }
 

@@ -27,8 +27,8 @@ func darwinRun(t *testing.T, dir, command string, writable, network bool) ([]byt
 func TestRealSeatbeltCapabilityAndFilesystem(t *testing.T) {
 	// This must fail, rather than skip, on the native macOS CI runners if
 	// sandbox-exec has disappeared or the profile is rejected by that OS.
-	if !Available() {
-		t.Fatal("the real macOS sandbox preflight failed")
+	if err := Probe(); err != nil {
+		t.Fatal("the real macOS sandbox preflight failed:", err)
 	}
 	root := t.TempDir()
 	dir := filepath.Join(root, "workspace")
@@ -117,7 +117,7 @@ func TestRealSeatbeltCannotSignalSupervisor(t *testing.T) {
 
 func TestRealSeatbeltMonitorSurvivesCallerAndStopsDescendants(t *testing.T) {
 	dir := t.TempDir()
-	m := New(filepath.Join(dir, "monitors.json"))
+	m := New(filepath.Join(dir, "monitors.json"), false)
 	s := snapshot("mac-watch")
 	s.Command = `echo $$; sleep 60 & echo $!; wait`
 	if err := m.Start(s, dir, false, false); err != nil {
@@ -168,7 +168,7 @@ func TestSeatbeltBackendFixture(t *testing.T) {
 	if dir == "" {
 		return
 	}
-	m := New(filepath.Join(dir, "monitors.json"))
+	m := New(filepath.Join(dir, "monitors.json"), false)
 	s := snapshot("mac-backend-kill")
 	s.Command = `echo $$ > leader; sleep 60 & echo $! > descendant; wait`
 	if err := m.Start(s, dir, true, false); err != nil {

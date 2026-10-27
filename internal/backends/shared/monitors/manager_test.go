@@ -14,7 +14,7 @@ import (
 
 func testManager(t *testing.T) *Manager {
 	t.Helper()
-	m := New(filepath.Join(t.TempDir(), "monitors.json"))
+	m := New(filepath.Join(t.TempDir(), "monitors.json"), false)
 	m.launch = func(ctx context.Context, dir, command string, _, _ bool) (*exec.Cmd, error) {
 		cmd := exec.CommandContext(ctx, "sh", "-c", command)
 		cmd.Dir = dir
@@ -100,7 +100,7 @@ func TestRestartNeverReexecutesAndRetainsTerminalOutput(t *testing.T) {
 	if err := os.WriteFile(path, raw, 0600); err != nil {
 		t.Fatal(err)
 	}
-	m := New(path)
+	m := New(path, false)
 	values, err := m.Snapshots()
 	if err != nil {
 		t.Fatal(err)
@@ -146,7 +146,7 @@ func TestOutputBoundedCoalescedAndExpiry(t *testing.T) {
 func TestUnreadableStateFailsClosed(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "monitors.json")
 	_ = os.WriteFile(path, []byte("not JSON"), 0600)
-	m := New(path)
+	m := New(path, false)
 	if _, err := m.Snapshots(); err == nil {
 		t.Fatal("corrupt state ignored")
 	}

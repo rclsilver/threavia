@@ -90,6 +90,12 @@ type Config struct {
 	// StatePath is where the durable local execution state lives
 	// (spec section 10).
 	StatePath string
+
+	// UnsandboxedMonitors lets persistent monitors run directly on the host when
+	// their sandbox cannot start, as on a machine without bubblewrap or user
+	// namespaces. Off by default: the operator accepts that a watch runs with
+	// this account's full access for its whole duration.
+	UnsandboxedMonitors bool
 }
 
 // Default returns the configuration before any environment override.
@@ -105,7 +111,7 @@ func Default() Config {
 	clientCfg.FeaturePromptAttachments = true
 	clientCfg.FeatureHumanReview = true
 	clientCfg.FeatureExternalMCP = true
-	clientCfg.FeaturePersistentMonitors = monitors.Available()
+	clientCfg.FeaturePersistentMonitors = monitors.Probe() == nil
 
 	return Config{
 		Log:    LogConfig{Level: logging.LevelInfo, Format: logging.FormatText},
@@ -181,6 +187,9 @@ func LoadFor(provider string) (Config, error) {
 	cfg.Registration.SharedKey = l.String("SHARED_KEY", cfg.Registration.SharedKey)
 
 	cfg.StatePath = l.String("STATE_PATH", cfg.StatePath)
+
+	cfg.UnsandboxedMonitors = l.Bool("UNSANDBOXED_MONITORS", cfg.UnsandboxedMonitors)
+	cfg.Client.FeaturePersistentMonitors = cfg.Client.FeaturePersistentMonitors || cfg.UnsandboxedMonitors
 
 	// A CODE backend must support the whole mandatory CODE semantic contract;
 	// the capability set is therefore not configurable here.
