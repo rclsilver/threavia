@@ -264,6 +264,8 @@ Two content bounds: **reading** (46rem) for anything read top to bottom (the ses
 
 The log row is a two-column grid: a fixed gutter (2.75rem on the phone, 3.25rem from 640px) and the entry, 8px apart; rows breathe 6px vertically. The session stacks header, log, attention cards (capped at 45vh, scrollable) and composer; nothing else lives between the log and the hand.
 
+Session model and reasoning effort are selects inside the composer, below the message field, saved on change for new jobs. They do not appear in the header. Finished jobs keep their actual model and effort on the Done line. Both Web and VS Code follow this placement.
+
 Spacing is the 4px Tailwind rhythm: 8px between siblings, 12px inside cards, 16px page padding on the phone and 24px from 640px.
 
 **The One Margin Rule.** Every entry in the log starts at the same left edge. The speaker is marked by a tinted row and a word, never by sending a message to the other side of the page or by a coloured side stripe.

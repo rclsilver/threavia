@@ -456,9 +456,12 @@ export function useSessionModel(sessionId: string) {
   const queries = useQueryClient();
   return useMutation({
     mutationFn: (settings: { model: string; effort: string }) => api.patch<Session>(`/api/v1/sessions/${sessionId}`, settings),
-    onSuccess: () => {
-      void queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
+    onSuccess: async (session) => {
+      queries.setQueryData<Snapshot>(keys.snapshot(sessionId), (snapshot) => snapshot && (
+        Date.parse(snapshot.session.updatedAt) > Date.parse(session.updatedAt) ? snapshot : { ...snapshot, session }
+      ));
       void queries.invalidateQueries({ queryKey: ['sessions'] });
+      await queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
     },
   });
 }

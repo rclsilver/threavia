@@ -84,7 +84,7 @@ const STEPS: Step[] = [
     path: SESSION(IDS.certManager),
     target: '[data-tour="session-header"]',
     title: 'More room for the conversation',
-    body: 'On a phone, the header keeps the title, status and machine visible. Use its arrow to show model details, Review, pinning and settings; desktop shows them directly.',
+    body: 'On a phone, the header keeps the title, status and machine visible. Use its arrow to show repository details, Review, pinning and settings; desktop shows them directly.',
   },
   {
     path: SESSION(IDS.certManager),
@@ -93,10 +93,10 @@ const STEPS: Step[] = [
     body: 'While a job runs, a message can wait its turn, join at the next step, or interrupt. Paste an image or attach a sound to include it in a new queued prompt; Escape stops the job.',
   },
   {
-    path: `${SESSION(IDS.certManager)}/settings/model`,
-    target: '[data-tour="model-settings"]',
+    path: SESSION(IDS.certManager),
+    target: '[data-tour="session-model"]',
     title: 'A model for each session',
-    body: 'Choose a model and reasoning effort for this session from what its backend supports. Settings are saved across devices and apply to the next job; finished work keeps the model it used.',
+    body: 'Choose a model and reasoning effort directly below the message field. Each choice is saved across devices for new jobs; the Done line keeps the model and effort used by finished work.',
   },
   {
     path: SESSION(IDS.ingress),

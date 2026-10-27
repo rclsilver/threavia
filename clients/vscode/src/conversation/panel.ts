@@ -300,6 +300,8 @@ class ConversationPanel {
   private backendGeneration = 0;
   private repository: Repository | undefined;
   private fetchingRepository = false;
+  private savingModel = false;
+  private modelError: string | undefined;
   private repositoryError: string | undefined;
   private repositoryWatch: vscode.Disposable | undefined;
   private activity: { kind: string; at: number } | undefined;
@@ -433,7 +435,9 @@ class ConversationPanel {
         return;
       }
       const wasPinned = this.pinned;
-      this.session = snapshot.session;
+      if (!this.session || Date.parse(snapshot.session.updatedAt) >= Date.parse(this.session.updatedAt)) {
+        this.session = snapshot.session;
+      }
       this.runs = snapshot.runs;
       // The snapshot's Jobs are the truth at its point; events after it,
       // already applied, are applied again on top of them.
@@ -446,7 +450,7 @@ class ConversationPanel {
       };
       for (const event of this.events) if (event.sequence > snapshot.cursor) this.snapshotAttention = applyToAttention(this.snapshotAttention, event);
       this.events = mergeEvents(this.events, snapshot.events);
-      this.panel.title = titleOf(snapshot.session);
+      this.panel.title = titleOf(this.session);
       const firstRead = !this.loaded;
       this.loaded = true;
       if (this.pinned !== wasPinned) this.onPinned();
@@ -539,7 +543,7 @@ class ConversationPanel {
       backendType: this.backend?.backend,
       backendTooltip: this.backend && backendTooltip(this.backend),
       backendQuotas: this.backend?.quotas,
-      modelSettings: { model: this.session.model || this.backend?.modelCatalog?.defaultModel || 'Backend default', effort: this.session.effort || (this.session.model ? this.backend?.modelCatalog?.models.find((model) => model.id === this.session?.model)?.defaultEffort : this.backend?.modelCatalog?.defaultEffort) || 'Backend default', supported: this.backend?.features?.includes('MODEL_SELECTION') ?? false },
+      modelSettings: { model: this.session.model || '', effort: this.session.effort || '', supported: this.backend?.features?.includes('MODEL_SELECTION') ?? false, catalog: this.backend?.modelCatalog, saving: this.savingModel, error: this.modelError },
       repository: repo && text ? { text, status: repo, fetching: this.fetchingRepository, error: this.repositoryError } : undefined,
       activity: active?.status === 'RUNNING' && fresh ? humanise(fresh) : undefined,
       pending: pendingJobs(this.jobs),
@@ -572,25 +576,25 @@ class ConversationPanel {
         }
         return;
       }
-      case 'configureModel': {
-        if (!this.session || !this.backend?.features?.includes('MODEL_SELECTION')) return;
-        const catalog = this.backend.modelCatalog;
-        const selected = await vscode.window.showQuickPick([
-          { label: 'Backend default', description: catalog?.defaultModel, model: '' },
-          ...(catalog?.models ?? []).map((model) => ({ label: model.name, description: model.id, model: model.id })),
-        ], { title: 'Session model', placeHolder: 'Saved on Core; applies when the next job starts' });
-        if (!selected) return;
-        const option = catalog?.models.find((model) => model.id === (selected.model || catalog.defaultModel));
-        const efforts = option?.efforts ?? [];
-        const reasoning = await vscode.window.showQuickPick([
-          { label: 'Backend default', description: option?.defaultEffort, effort: '' },
-          ...efforts.map((effort) => ({ label: effort, effort })),
-        ], { title: 'Session reasoning effort', placeHolder: 'Running work keeps its current settings' });
-        if (!reasoning) return;
-        try {
-          this.session = await client.setSessionModel(this.session.id, selected.model, reasoning.effort);
+      case 'setModelSettings': {
+        if (this.savingModel || !this.session) return;
+        if (!this.backend?.features?.includes('MODEL_SELECTION')) {
+          this.modelError = 'Model settings not saved: the backend no longer supports model selection. Reconnect it and try again.';
           this.postView();
-        } catch (error) { void vscode.window.showErrorMessage(`Model settings not saved: ${error instanceof Error ? error.message : String(error)}`); }
+          return;
+        }
+        if (typeof message.model !== 'string' || typeof message.effort !== 'string') return;
+        this.savingModel = true;
+        this.modelError = undefined;
+        this.postView();
+        try {
+          this.session = await client.setSessionModel(this.session.id, message.model, message.effort);
+        } catch (error) {
+          this.modelError = `Model settings not saved: ${reason(error)}. Choose the model or effort again to retry.`;
+        } finally {
+          this.savingModel = false;
+          this.postView();
+        }
         return;
       }
       case 'ready':
@@ -731,6 +735,10 @@ class ConversationPanel {
   }
 
   private async send(text: string, delivery: Delivery, artifactIds?: string[]) {
+    if (this.savingModel) {
+      this.post({ type: 'sendFailed', text, error: 'Model settings are still saving. Send your message again when saving finishes.' });
+      return;
+    }
     const action = onSend(this.target);
     if (action === 'start') return this.start(text, artifactIds);
     if (action === 'wait') await this.starting;

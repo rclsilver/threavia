@@ -964,6 +964,35 @@ body.full-width { --reading: 100%; }
   padding: 4px 6px;
   border-top: 1px solid var(--vscode-input-border, var(--border));
 }
+.model-settings {
+  padding: 4px 6px;
+  border-top: 1px solid var(--vscode-input-border, var(--border));
+  font-size: 0.85em;
+}
+.model-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.model-controls label {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.model-controls select {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 28px;
+  border: 1px solid var(--vscode-dropdown-border, var(--border));
+  border-radius: var(--radius);
+  color: var(--vscode-dropdown-foreground, var(--text));
+  background: var(--vscode-dropdown-background, var(--surface));
+  font: inherit;
+}
 .deliveries {
   display: flex;
   padding: 1px;

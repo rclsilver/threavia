@@ -79,6 +79,9 @@ pinned global decisions are read by agents in all your projects on that Core.
   - **Write.** Enter sends, Shift+Enter is a newline. While a job runs, choose
     Queue, Next step or Interrupt (as far as the backend allows), and Stop it
     with the button or Escape. What you were writing is kept until sent.
+  - **Model and effort.** Select both below the message field; choices are
+    saved for this session across devices and apply to new jobs. Running work
+    keeps its settings, and the Done line shows the model and effort it used.
   - **Copy Markdown.** Copy an agent response with its original headings,
     lists, links and fenced code blocks, ready to paste into another application.
   - **Pin, unpin, open in the browser** from the tab's title bar.

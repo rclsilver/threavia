@@ -13,9 +13,11 @@ import {
   usePinSession,
   usePinnedSessions,
   useSnapshot,
+  useSessionModel,
   type Delivery,
 } from '@/api/queries';
-import type { Session } from '@/api/types';
+import type { BackendInstance, Session } from '@/api/types';
+import { ComposerModelSelects } from '@/components/composer-model-selects';
 import { AttentionPanel } from '@/components/attention';
 import { BackendInfo } from '@/components/backend-info';
 import { ActionError } from '@/components/ui/action-error';
@@ -160,10 +162,6 @@ export function SessionView() {
             lines from every conversation. Desktop keeps them visible. */}
         <div id={headerDetailsId} className={cn('col-span-2 min-w-0 pt-1 md:contents', !headerExpanded && 'hidden')}>
           <div className="text-muted flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-1.5 text-xs">
-            <Link to="/sessions/$sessionId/settings/$tab" params={{ sessionId, tab: 'model' }} className="inline-flex min-h-11 items-center hover:underline md:min-h-8" data-tour="session-model">
-              {active && active.status !== 'QUEUED' ? 'Next job · ' : ''}Model: {data.session.model || backend?.modelCatalog?.defaultModel || 'Backend default'} · Effort: {data.session.effort || (data.session.model ? backend?.modelCatalog?.models.find((option) => option.id === data.session.model)?.defaultEffort : backend?.modelCatalog?.defaultEffort) || 'Backend default'}
-            </Link>
-            {active?.model && active.status !== 'QUEUED' && <span>Current job: {active.model} · {active.effort ? `${active.effort} effort` : 'Effort not reported'}</span>}
             {active?.status === 'WAITING_BACKEND' && active.backendWait && (
               <span className="text-warn-text" role="status">{active.backendWait.message}{active.backendWait.retryAt && ` Next attempt no earlier than ${new Date(active.backendWait.retryAt).toLocaleString()}.`}</span>
             )}
@@ -219,6 +217,8 @@ export function SessionView() {
         key={sessionId}
         sessionId={sessionId}
         projectId={data.session.projectId}
+        session={data.session}
+        backend={backend}
         active={active}
         deliveries={deliveries}
         onStop={() => active && cancel.mutate(active.id)}
@@ -386,6 +386,8 @@ function DeliveryChoice({
 function Composer({
   sessionId,
   projectId,
+  session,
+  backend,
   active,
   deliveries,
   onStop,
@@ -394,6 +396,8 @@ function Composer({
   sessionId: string;
   active?: { id: string; status: string };
   projectId: string;
+  session: Session;
+  backend?: BackendInstance;
   /** What the running work can take besides a queued message. */
   deliveries: ('NEXT' | 'NOW')[];
   onStop: () => void;
@@ -402,6 +406,7 @@ function Composer({
 }) {
   const touchKeyboard = useTouchKeyboard();
   const send = usePostMessage(sessionId);
+  const modelSettings = useSessionModel(sessionId);
   const attachments = usePromptAttachments(projectId, send.isPending);
   const [message, setMessage] = useDraft(sessionId);
 
@@ -430,7 +435,7 @@ function Composer({
 
   const submit = () => {
     const text = message.trim();
-    if (send.isPending || attachments.busy || (!text && attachments.files.length === 0)) return;
+    if (send.isPending || modelSettings.isPending || attachments.busy || (!text && attachments.files.length === 0)) return;
     setMessage('');
     send.mutate(
       { message: text, delivery: attachments.files.length ? 'QUEUE' : chosen, artifactIds: attachments.files.map((file) => file.id) },
@@ -458,9 +463,8 @@ function Composer({
           submit();
         }}
       >
-        {/* One panel: the field and its send on one line, then — only while
-            something runs — a toolbar with how the message goes, what is
-            running and its stop. Idle, it is just a field. */}
+        {/* One panel holds the message and its model choices; running work
+            adds delivery choices and Stop below them. */}
         <div className="bg-surface border-border focus-within:border-muted/60 rounded-xl border shadow-xs transition-colors">
           <PromptAttachments attachments={attachments} disabled={send.isPending} />
           <div className="flex items-end gap-2 py-1.5 pr-1.5 pl-3.5">
@@ -489,10 +493,14 @@ function Composer({
               title={send.isPending ? 'Sending…' : touchKeyboard ? 'Send' : 'Send (Enter)'}
               aria-label={send.isPending ? 'Sending…' : 'Send'}
               aria-busy={send.isPending}
-              disabled={send.isPending || attachments.busy || (!message.trim() && !attachments.files.length)}
+              disabled={send.isPending || modelSettings.isPending || attachments.busy || (!message.trim() && !attachments.files.length)}
             >
               {send.isPending ? <LoaderCircle className="animate-spin" /> : <ArrowUp />}
             </Button>
+          </div>
+          <div className="border-border flex flex-wrap items-center gap-2 border-t px-1.5 py-1.5">
+            <ComposerModelSelects session={session} backend={backend} disabled={modelSettings.isPending || send.isPending} onChange={(settings) => modelSettings.mutate(settings)} />
+            {(modelSettings.isPending || (active && active.status !== 'QUEUED')) && <span className="text-muted text-xs" role="status">{modelSettings.isPending ? 'Saving…' : 'Applies to new jobs'}</span>}
           </div>
           {active && (
             <div className="border-border flex items-center gap-2 border-t px-1.5 py-1.5">
@@ -525,6 +533,7 @@ function Composer({
           )}
         </div>
       </form>
+      <ActionError error={modelSettings.error} outcome="Model settings not saved" recovery="Choose the model or effort again to retry." className="mt-2" />
       {/* The text is kept in the field when sending fails; this says why. */}
       <ActionError
         error={send.error}

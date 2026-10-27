@@ -1,4 +1,4 @@
-import type { BackendQuotas, Delivery, Event, Job, JobStatus, Repository, UserInputRequest, ValidationRequest } from '../api/types';
+import type { BackendInstance, BackendQuotas, Delivery, Event, Job, JobStatus, Repository, UserInputRequest, ValidationRequest } from '../api/types';
 import type { DraftStart } from './draft';
 import type { StateTone } from './state';
 
@@ -20,7 +20,7 @@ export interface SessionView {
   backendType?: string;
   backendTooltip?: string;
   backendQuotas?: BackendQuotas;
-  modelSettings: { model: string; effort: string; supported: boolean };
+  modelSettings: { model: string; effort: string; supported: boolean; catalog?: BackendInstance['modelCatalog']; saving?: boolean; error?: string };
   /** The compact branch label and the Git status shown in its hover panel. */
   repository?: { text: string; status: Repository; fetching?: boolean; error?: string };
   /** A liveness signal, shown only while a Job runs. */
@@ -73,7 +73,7 @@ export type WebviewMessage =
   | { type: 'loadEarlier' }
   | { type: 'copyResponse'; sequence: number }
   | { type: 'refreshRepository' }
-  | { type: 'configureModel' }
+  | { type: 'setModelSettings'; model: string; effort: string }
   | { type: 'archive' }
   | { type: 'resolvePaths'; paths: string[] }
   | { type: 'openPath'; path: string }

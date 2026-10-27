@@ -26,6 +26,7 @@ import { parsePathRef } from '../workspace/paths';
 import { append, button, h, icon } from './dom';
 import { Follower } from './follow';
 import { renderMarkdown } from './markdown';
+import { createModelSettings } from './model-settings';
 
 /**
  * The conversation, drawn in a webview.
@@ -72,6 +73,7 @@ const asked = new Set<string>();
  */
 let starting = false;
 let sendingMessage = false;
+let savingModel = false;
 let attaching = 0;
 let reservedBytes = 0;
 let attachments = saved.attachments ?? [];
@@ -137,10 +139,16 @@ filePicker.addEventListener('change', () => { void addFiles(Array.from(filePicke
 const attachButton = button([icon('attach'), 'Attach files'], () => filePicker.click(), { class: 'ghost small' });
 const sendError = h('p', { class: 'error', role: 'alert', hidden: true });
 const hint = h('p', { class: 'hint' });
+const modelSettings = createModelSettings((model, effort) => {
+  if (savingModel || sendingMessage) return;
+  savingModel = true;
+  post({ type: 'setModelSettings', model, effort });
+  renderComposer();
+});
 const composer = h(
   'form',
   { class: 'composer' },
-  h('div', { class: 'panel' }, attachmentList, filePicker, attachButton, h('div', { class: 'field-row' }, field, send), toolbar),
+  h('div', { class: 'panel' }, attachmentList, filePicker, attachButton, h('div', { class: 'field-row' }, field, send), modelSettings.element, toolbar),
   sendError,
   hint,
 );
@@ -161,6 +169,7 @@ window.addEventListener('message', (message: MessageEvent<HostMessage>) => {
   switch (data.type) {
     case 'session':
       view = data.view;
+      savingModel = view.modelSettings?.saving ?? false;
       renderHeader();
       renderAttention();
       renderComposer();
@@ -245,6 +254,7 @@ window.addEventListener('message', (message: MessageEvent<HostMessage>) => {
       sendError.hidden = false;
       autosize();
       updateSend();
+      renderComposer();
       persist();
       break;
     case 'answered': {
@@ -300,8 +310,6 @@ function renderHeader() {
     ...(view.backend
       ? [backendMeta(view.backend, view.backendType, view.backendQuotas)]
       : []),
-    h('button', { type: 'button', class: 'meta-item', disabled: !view.modelSettings?.supported, title: 'Change the session model and effort; applies to the next job', onclick: () => post({ type: 'configureModel' }) }, `${view.active && view.active.status !== 'QUEUED' ? 'Next job · ' : ''}Model: ${view.modelSettings?.model ?? 'Backend default'} · Effort: ${view.modelSettings?.effort ?? 'Backend default'}`),
-    ...(view.active?.model && view.active.status !== 'QUEUED' ? [h('span', { class: 'meta-item' }, `Current job: ${view.active.model} · ${view.active.effort ? `${view.active.effort} effort` : 'Effort not reported'}`)] : []),
     ...(view.active?.status === 'WAITING_BACKEND' && view.active.backendWait ? [h('span', { class: 'meta-item', role: 'status' }, view.active.backendWait.message + (view.active.backendWait.retryAt ? ` Next attempt no earlier than ${new Date(view.active.backendWait.retryAt).toLocaleString()}.` : ''))] : []),
     ...(view.repository
       ? [repositoryMeta(view.repository)]
@@ -1068,6 +1076,8 @@ function chosen(): Delivery {
 
 function renderComposer() {
   const active = view?.active;
+  modelSettings.update(view?.modelSettings && { ...view.modelSettings, saving: savingModel }, savingModel || sendingMessage, Boolean(active && active.status !== 'QUEUED'));
+  updateSend();
   field.placeholder = !view && start ? 'First message…' : PLACEHOLDERS[active ? chosen() : 'IDLE'];
   hint.textContent = `Enter sends · Shift+Enter for a newline${active ? ' · Esc stops' : ''}`;
   if (!active) {
@@ -1130,9 +1140,10 @@ function stop() {
 
 function submit() {
   const text = field.value.trim();
-  if ((!text && !attachments.length) || starting || sendingMessage || attaching) return;
+  if ((!text && !attachments.length) || starting || sendingMessage || savingModel || attaching) return;
   starting = Boolean(start);
   sendingMessage = true;
+  renderComposer();
   post({ type: 'send', text, delivery: attachments.length ? 'QUEUE' : view?.active ? chosen() : 'QUEUE', artifactIds: attachments.map((file) => file.artifactId) });
   renderAttachments();
   field.value = '';
@@ -1166,7 +1177,7 @@ field.addEventListener('keydown', (event) => {
 // but not while it closes something else: an answer being typed, a menu.
 window.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
-  if (event.target instanceof HTMLInputElement) return;
+  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
   stop();
 });
 
@@ -1198,7 +1209,7 @@ if (start) {
 }
 post({ type: 'ready' });
 
-function updateSend() { send.disabled = starting || sendingMessage || attaching > 0 || (!field.value.trim() && attachments.length === 0); }
+function updateSend() { send.disabled = starting || sendingMessage || savingModel || attaching > 0 || (!field.value.trim() && attachments.length === 0); }
 function renderAttachments() {
   if (attaching === 0) reservedBytes = 0;
   attachmentList.replaceChildren(...attachments.map((file) => h('div', {class: 'attached-file'},
