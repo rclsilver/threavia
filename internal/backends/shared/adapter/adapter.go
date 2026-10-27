@@ -85,6 +85,11 @@ type waiter struct {
 
 // New builds the shared provider adapter.
 func New(cfg Config, providerRunner runner.Runner, store state.Store, logger *slog.Logger) *Adapter {
+	// Said once at startup: without it, the only sign of a sandbox that cannot
+	// start is a monitor_start tool missing from every Job.
+	if err := monitors.Probe(); err != nil {
+		logger.Warn("persistent monitors are unavailable", slog.String("error", err.Error()))
+	}
 	return &Adapter{
 		cfg:         cfg,
 		monitors:    monitors.New(cfg.StatePath + ".monitors.json"),

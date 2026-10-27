@@ -14,19 +14,21 @@ import (
 
 var availability struct {
 	sync.Once
-	ready bool
+	err error
 }
 
-func Available() bool {
+// Probe starts the real sandbox once and reports why it cannot, or nil.
+func Probe() error {
 	availability.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		cmd, err := sandboxCommand(ctx, "/", "true", false, false)
 		if err == nil {
-			availability.ready = cmd.Run() == nil
+			err = runProbe(cmd)
 		}
+		availability.err = err
 	})
-	return availability.ready
+	return availability.err
 }
 func sandboxCommand(ctx context.Context, dir, command string, writable, network bool) (*exec.Cmd, error) {
 	bwrap, err := exec.LookPath("bwrap")

@@ -50,9 +50,11 @@ Both Claude and Codex use the same platform-specific launcher:
   the trusted supervisor outside their sandbox.
 
 On both platforms, the backend probes the real sandbox at startup and only
-advertises support when initialization succeeds. It never falls back to an
-unrestricted host shell. macOS `sandbox-exec` is deprecated by Apple; removal
-or a profile incompatibility makes this capability unavailable explicitly.
+advertises support when initialization succeeds. When it fails, the backend
+logs `persistent monitors are unavailable` with the reason, including what the
+sandbox printed. It never falls back to an unrestricted host shell. macOS
+`sandbox-exec` is deprecated by Apple; removal or a profile incompatibility
+makes this capability unavailable explicitly.
 
 Network access is enabled only if the effective policy permits it. Filesystem,
 network and shell refusals still apply before asking for approval. These are not

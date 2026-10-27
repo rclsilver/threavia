@@ -105,7 +105,7 @@ func Default() Config {
 	clientCfg.FeaturePromptAttachments = true
 	clientCfg.FeatureHumanReview = true
 	clientCfg.FeatureExternalMCP = true
-	clientCfg.FeaturePersistentMonitors = monitors.Available()
+	clientCfg.FeaturePersistentMonitors = monitors.Probe() == nil
 
 	return Config{
 		Log:    LogConfig{Level: logging.LevelInfo, Format: logging.FormatText},
