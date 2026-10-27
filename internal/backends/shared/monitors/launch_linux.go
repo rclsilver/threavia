@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -35,12 +37,24 @@ func sandboxCommand(ctx context.Context, dir, command string, writable, network 
 	if err != nil {
 		return nil, err
 	}
+	dir, err = filepath.EvalSymlinks(dir)
+	if err != nil {
+		return nil, err
+	}
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
 	args := []string{"--die-with-parent", "--new-session", "--unshare-user", "--unshare-pid", "--unshare-ipc", "--unshare-uts", "--ro-bind", "/", "/", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--chdir", dir}
 	if !network {
 		args = append(args, "--unshare-net")
 	}
 	if writable {
 		args = append(args, "--bind", dir, dir)
+	} else if dir == "/tmp" || strings.HasPrefix(dir, "/tmp/") {
+		// The private /tmp hides host workspaces there; restore only the approved
+		// directory, with its original read-only permission.
+		args = append(args, "--ro-bind", dir, dir)
 	}
 	args = append(args, "--", bash, "--noprofile", "--norc", "-c", command)
 	cmd := exec.CommandContext(ctx, bwrap, args...)

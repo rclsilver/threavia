@@ -20,7 +20,8 @@ it('opens the rendered document, toggles the unchanged source, isolates diagrams
   expect(preview.hidden).toBe(false);
   expect(source.hidden).toBe(true);
   expect(source.textContent).toBe(text);
-  await vi.waitFor(() => expect(preview.querySelector('iframe')).not.toBeNull());
+  // Rendering lazy-loads Mermaid; a cold import can exceed one second on CI.
+  await vi.waitFor(() => expect(preview.querySelector('iframe')).not.toBeNull(), { timeout: 5_000 });
   const iframe = preview.querySelector('iframe')!;
   expect(iframe.getAttribute('sandbox')).toBe('');
   expect(iframe.srcdoc).toContain("default-src 'none'");
