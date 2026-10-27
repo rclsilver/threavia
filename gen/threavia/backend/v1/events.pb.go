@@ -1334,6 +1334,11 @@ type JobWaitingBackend struct {
 	// Rounded-up wall time of this stopped attempt, measured on the backend.
 	// Provider waiting time is excluded; zero means not reported.
 	ActiveSeconds uint32 `protobuf:"varint,5,opt,name=active_seconds,json=activeSeconds,proto3" json:"active_seconds,omitempty"`
+	// SHA-256 of job_id + NUL + native_session_id, only when the provider
+	// acknowledged this Job's initial user input. Core may omit that input and
+	// its attachments on later retries in the same conversation. Empty means
+	// unknown/not delivered; older backends retain conservative replay behavior.
+	InputReceipt  string `protobuf:"bytes,6,opt,name=input_receipt,json=inputReceipt,proto3" json:"input_receipt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1401,6 +1406,13 @@ func (x *JobWaitingBackend) GetActiveSeconds() uint32 {
 		return x.ActiveSeconds
 	}
 	return 0
+}
+
+func (x *JobWaitingBackend) GetInputReceipt() string {
+	if x != nil {
+		return x.InputReceipt
+	}
+	return ""
 }
 
 var File_threavia_backend_v1_events_proto protoreflect.FileDescriptor
@@ -1502,13 +1514,14 @@ const file_threavia_backend_v1_events_proto_rawDesc = "" +
 	"\tJobFailed\x120\n" +
 	"\x05error\x18\x01 \x01(\v2\x1a.threavia.backend.v1.ErrorR\x05error\x120\n" +
 	"\x05usage\x18\x02 \x01(\v2\x1a.threavia.backend.v1.UsageR\x05usage\"\x0e\n" +
-	"\fJobCancelled\"\xd5\x01\n" +
+	"\fJobCancelled\"\xfa\x01\n" +
 	"\x11JobWaitingBackend\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x125\n" +
 	"\bretry_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\aretryAt\x120\n" +
 	"\x05usage\x18\x04 \x01(\v2\x1a.threavia.backend.v1.UsageR\x05usage\x12%\n" +
-	"\x0eactive_seconds\x18\x05 \x01(\rR\ractiveSeconds*\x86\x01\n" +
+	"\x0eactive_seconds\x18\x05 \x01(\rR\ractiveSeconds\x12#\n" +
+	"\rinput_receipt\x18\x06 \x01(\tR\finputReceipt*\x86\x01\n" +
 	"\tFileState\x12\x1a\n" +
 	"\x16FILE_STATE_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10FILE_STATE_ADDED\x10\x01\x12\x17\n" +

@@ -115,7 +115,7 @@ func translateJobEvent(event *backendv1.JobEvent) (events.Type, any, error) {
 
 	case *backendv1.JobEvent_JobWaitingBackend:
 		wait := body.JobWaitingBackend
-		payload := JobWaitingBackendPayload{BackendWait: domain.BackendWait{Reason: wait.GetReason(), Message: wait.GetMessage()}, Usage: usageFromProto(wait.GetUsage())}
+		payload := JobWaitingBackendPayload{BackendWait: domain.BackendWait{Reason: wait.GetReason(), Message: wait.GetMessage()}, Usage: usageFromProto(wait.GetUsage()), InputReceipt: wait.GetInputReceipt()}
 		if at := wait.GetRetryAt(); at != nil && at.CheckValid() == nil {
 			value := at.AsTime()
 			payload.RetryAt = &value

@@ -14,6 +14,11 @@ import (
 func (a *Adapter) ProviderBlocked(ctx context.Context, runID, jobID string, block *runner.ProviderBlock, usage *backendv1.Usage) error {
 	copy := *block
 	next := time.Now().UTC().Add(time.Minute)
+	if copy.Reason == "QUOTA_EXCEEDED" {
+		// No provider reset time is known: avoid polling paid inference every
+		// minute while retaining explicit provider retry hints unchanged.
+		next = time.Now().UTC().Add(5 * time.Minute)
+	}
 	if copy.RetryAt == nil || !copy.RetryAt.After(time.Now()) {
 		copy.RetryAt = &next
 	}
@@ -28,7 +33,7 @@ func (a *Adapter) ProviderBlocked(ctx context.Context, runID, jobID string, bloc
 	a.recordTerminal(ctx, runID, jobID, backendv1.JobStatus_JOB_STATUS_WAITING_BACKEND)
 	return a.send(ctx, func() (*backendv1.JobEvent, error) {
 		return a.sdk().Events().JobWaitingBackend(ctx, runID, jobID, &backendv1.JobWaitingBackend{
-			Reason: copy.Reason, Message: copy.Message, RetryAt: timestamppb.New(*copy.RetryAt), Usage: usage, ActiveSeconds: copy.ActiveSeconds,
+			Reason: copy.Reason, Message: copy.Message, RetryAt: timestamppb.New(*copy.RetryAt), Usage: usage, ActiveSeconds: copy.ActiveSeconds, InputReceipt: copy.InputReceipt,
 		})
 	})
 }

@@ -96,6 +96,12 @@ type execution struct {
 	// turns are the turns this Job started or saw start, root and children:
 	// the only ones whose token usage it is charged for.
 	turns map[string]bool
+
+	// Only the initial turn's complete user input can acknowledge delivery.
+	inputTurnID    string
+	inputText      string
+	inputImages    string
+	inputEchoTurns map[string]bool
 }
 
 // child is one sub-agent thread. Its activity is reported as a Task tool call,
@@ -471,6 +477,7 @@ func (c *Codex) Run(ctx context.Context, params contract.StartParams, sink contr
 		}
 		if block != nil {
 			block.ActiveSeconds = contract.ProviderAttemptSeconds(attemptStarted)
+			block.InputReceipt = live.inputReceipt(params.JobID)
 			return contract.ReportProviderBlock(ctx, sink, params.RunID, params.JobID, block, outcome.usage)
 		}
 		if _, permanent := resume.FailureReason(outcome.code); permanent {

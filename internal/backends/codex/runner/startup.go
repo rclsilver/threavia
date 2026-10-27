@@ -131,6 +131,7 @@ func (c *Codex) startFirstTurn(ctx context.Context, r *rpc, live *execution, sta
 					return nil, phase(), fmt.Errorf("decode %s: %w", msg.Method, err)
 				}
 			}
+			live.observeInitialInput(msg.Method, payload)
 			live.mu.Lock()
 			root, turn := live.threadID, live.turnID
 			live.mu.Unlock()

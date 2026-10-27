@@ -16,6 +16,9 @@ type ProviderBlock struct {
 	Message       string
 	RetryAt       *time.Time
 	ActiveSeconds uint32
+	// InputReceipt is scoped to this Job and its native conversation, and is
+	// set only after the provider echoed the initial user input.
+	InputReceipt string
 }
 
 func ProviderAttemptSeconds(started time.Time) uint32 {
@@ -31,7 +34,7 @@ func ProviderBlockFor(provider, code, message string) *ProviderBlock {
 	switch code {
 	case "authentication_required", "authentication_failed", "authentication_error", "unauthorized", "invalid_api_key", "401":
 		reason = "AUTHENTICATION_REQUIRED"
-	case "usagelimitexceeded", "insufficient_quota", "quota_exceeded", "billing_error":
+	case "usagelimitexceeded", "usage_limit_exceeded", "insufficient_quota", "quota_exceeded", "billing_error":
 		reason = "QUOTA_EXCEEDED"
 	case "ratelimitexceeded", "rate_limit", "rate_limit_error", "429":
 		reason = "RATE_LIMITED"

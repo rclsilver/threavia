@@ -366,6 +366,25 @@ func TestProviderProcess(t *testing.T) {
 			}
 			response(map[string]any{"thread": map[string]any{"id": "thread-1"}})
 		case "turn/start":
+			if strings.HasPrefix(scenario, "provider-input-") {
+				content := p["input"]
+				if scenario == "provider-input-without-image" {
+					input, _ := content.([]any)
+					content = []any{input[0]}
+				}
+				echo := func() {
+					notify("item/completed", map[string]any{"threadId": "thread-1", "turnId": turn, "item": map[string]any{"type": "userMessage", "content": content}})
+				}
+				if scenario == "provider-input-before-response" {
+					echo()
+				}
+				response(map[string]any{"turn": map[string]any{"id": turn}})
+				if scenario == "provider-input-after-response" || scenario == "provider-input-without-image" {
+					echo()
+				}
+				notify("turn/completed", map[string]any{"threadId": "thread-1", "turn": map[string]any{"id": turn, "status": "failed", "error": map[string]any{"codexErrorInfo": "usageLimitExceeded", "message": "Quota exhausted"}}})
+				continue
+			}
 			if scenario == "startup-stalled-turn" {
 				continue
 			}

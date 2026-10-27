@@ -144,7 +144,7 @@ func fakeClaude(t *testing.T, script string) (binary, argsFile string) {
 	return binary, argsFile
 }
 
-func newRunner(t *testing.T, binary string) *runner.Claude {
+func newRunner(t *testing.T, binary string, options ...runner.Options) *runner.Claude {
 	t.Helper()
 
 	tools := mcp.New(slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -154,7 +154,11 @@ func newRunner(t *testing.T, binary string) *runner.Claude {
 	}
 	t.Cleanup(func() { _ = tools.Close(context.Background()) })
 
-	return runner.NewClaude(binary, tools, runner.Options{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	var opts runner.Options
+	if len(options) > 0 {
+		opts = options[0]
+	}
+	return runner.NewClaude(binary, tools, opts, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 func readArgs(t *testing.T, path string) []string {

@@ -254,7 +254,9 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 		live.userMessages = append(live.userMessages, text)
 		live.mu.Unlock()
 		approval, reviewer := nativeApproval(currentPolicy)
-		params := map[string]any{"threadId": thread.Thread.ID, "input": skillInput(supervised(currentPolicy, text), skills),
+		inputText := supervised(currentPolicy, text)
+		initial := firstInput
+		params := map[string]any{"threadId": thread.Thread.ID, "input": skillInput(inputText, skills),
 			"approvalPolicy": approval, "approvalsReviewer": reviewer, "sandboxPolicy": map[string]any{"type": "readOnly", "networkAccess": false}}
 		if c.options.ExternalSandbox {
 			params["sandboxPolicy"] = map[string]any{"type": "externalSandbox", "networkAccess": "enabled"}
@@ -267,6 +269,9 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 				}
 			}
 			params["input"] = input
+			live.mu.Lock()
+			live.inputText, live.inputImages = inputText, inputImagesFingerprint(input)
+			live.mu.Unlock()
 			firstInput = false
 		}
 		if model != "" {
@@ -288,6 +293,9 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 		}
 		live.mu.Lock()
 		live.turnID = response.Turn.ID
+		if initial {
+			live.inputTurnID = response.Turn.ID
+		}
 		live.turns[response.Turn.ID] = true
 		live.mu.Unlock()
 		return nil
@@ -362,6 +370,7 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 				return out
 			}
 		}
+		live.observeInitialInput(msg.Method, payload)
 		if msg.Method == "account/rateLimits/updated" {
 			_ = contract.ReportQuotas(reportCtx, sink, codexRateLimits(payload), false)
 			continue

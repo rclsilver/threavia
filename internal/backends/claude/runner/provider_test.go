@@ -9,11 +9,59 @@ import (
 	"github.com/rclsilver/threavia/internal/backends/claude/runner"
 	"github.com/rclsilver/threavia/internal/backends/shared/policy"
 	shared "github.com/rclsilver/threavia/internal/backends/shared/runner"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/resume"
 )
 
 type blockingSink struct {
 	recordingSink
 	block *shared.ProviderBlock
+}
+
+func TestClaudeQuotaReceiptRequiresEchoAndResumableBinding(t *testing.T) {
+	for _, tc := range []struct {
+		name                              string
+		resumed, echo, assistant, receipt bool
+	}{
+		{"before-input", true, false, false, false},
+		{"after-input", true, true, false, true},
+		{"new-unbound", false, true, false, false},
+		{"new-bound", false, true, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			script := ""
+			if tc.echo {
+				script += "printf '%s\\n' \"$first\" | sed 's/^{/{\"isReplay\":true,/'\n"
+			}
+			if tc.assistant {
+				script += "echo '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Working\"}]}}'\n"
+			}
+			script += "echo '{\"type\":\"rate_limit_event\",\"rate_limit_info\":{\"status\":\"rejected\"}}'\nsleep 30"
+			binary, _ := fakeClaude(t, script)
+			p := runner.StartParams{RunID: "run", JobID: "job", WorkingDirectory: t.TempDir(), Prompt: "continue"}
+			p.Attachments = []*backendv1.PromptAttachment{{Filename: "screen.png", MimeType: "image/png", Content: []byte{0, 1, 2}}}
+			if tc.resumed {
+				p.NativeSessionID = "native-existing"
+			}
+			sink := &blockingSink{}
+			if err := newRunner(t, binary, runner.Options{Scratch: t.TempDir()}).Run(context.Background(), p, sink); err != nil {
+				t.Fatal(err)
+			}
+			if sink.block == nil {
+				t.Fatalf("expected quota wait: %+v", sink)
+			}
+			want := ""
+			if tc.receipt {
+				native := p.NativeSessionID
+				if native == "" {
+					native = sink.native
+				}
+				want = resume.InputReceipt(p.JobID, native)
+			}
+			if sink.block.InputReceipt != want || (tc.receipt && want == "") {
+				t.Fatalf("receipt=%q want=%q", sink.block.InputReceipt, want)
+			}
+		})
+	}
 }
 
 func (s *blockingSink) ProviderBlocked(_ context.Context, _, _ string, block *shared.ProviderBlock, usage *backendv1.Usage) error {

@@ -5,12 +5,36 @@ import (
 	"encoding/json"
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	shared "github.com/rclsilver/threavia/internal/backends/shared/runner"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/resume"
 	"testing"
 )
 
 type blockingSink struct {
 	*recordingSink
 	block *shared.ProviderBlock
+}
+
+func TestCodexQuotaReceiptRequiresObservedInputIncludingBeforeRPCResponse(t *testing.T) {
+	for _, scenario := range []string{"provider-input-before-response", "provider-input-after-response", "provider-input-missing", "provider-input-without-image"} {
+		t.Run(scenario, func(t *testing.T) {
+			c, p, recorded := provider(t, scenario)
+			p.Attachments = []*backendv1.PromptAttachment{{Filename: "screen.png", MimeType: "image/png", Content: []byte{0, 1, 2}}}
+			sink := &blockingSink{recordingSink: recorded}
+			if err := c.Run(context.Background(), p, sink); err != nil {
+				t.Fatal(err)
+			}
+			if sink.block == nil {
+				t.Fatalf("expected quota wait, got %s %s", sink.code, sink.summary)
+			}
+			want := resume.InputReceipt(p.JobID, "thread-1")
+			if scenario == "provider-input-missing" || scenario == "provider-input-without-image" {
+				want = ""
+			}
+			if sink.block.InputReceipt != want {
+				t.Fatalf("receipt=%q, want %q", sink.block.InputReceipt, want)
+			}
+		})
+	}
 }
 
 func TestProviderRPCErrorPreservesOptionalData(t *testing.T) {

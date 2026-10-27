@@ -10,6 +10,7 @@ func TestProviderFailuresRequireSpecificEvidence(t *testing.T) {
 		{"authentication_failed", "details", "AUTHENTICATION_REQUIRED"},
 		{"unauthorized", "details", "AUTHENTICATION_REQUIRED"},
 		{"usageLimitExceeded", "details", "QUOTA_EXCEEDED"},
+		{"usage_limit_exceeded", "details", "QUOTA_EXCEEDED"},
 		{"rateLimitExceeded", "details", "RATE_LIMITED"},
 		{"", "API Error: 401 unauthorized", "AUTHENTICATION_REQUIRED"},
 		{"", "You've hit your limit · resets later", "QUOTA_EXCEEDED"},

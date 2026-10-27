@@ -17,6 +17,7 @@ import (
 	"github.com/rclsilver/threavia/internal/core/events"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 	"github.com/rclsilver/threavia/internal/core/tools"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/resume"
 )
 
 // How much of the project knowledge a Run context carries. Section 12 asks for a
@@ -100,7 +101,6 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 		if err != nil {
 			return
 		}
-		prompt = recoveryPrompt(recovery, jc.NativeSessionID != nil)
 	}
 
 	attachmentIDs, err := s.store.JobAttachmentIDs(ctx, jobID)
@@ -177,7 +177,11 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 			return err
 		}
 		if jc.Job.BackendWait != nil {
-			prompt = recoveryPrompt(recovery, jc.NativeSessionID != nil)
+			delivered := recovery.InputReceipts[resume.InputReceipt(string(jobID), derefString(jc.NativeSessionID))]
+			prompt = recoveryPrompt(recovery, jc.NativeSessionID != nil, delivered)
+			if delivered {
+				attachments = nil
+			}
 		}
 		backend, err := tx.BackendInstanceByID(ctx, jc.BackendInstanceID)
 		if err != nil {

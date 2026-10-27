@@ -3176,11 +3176,13 @@ components:
               session-scoped schedule changes. Refresh schedules and audit.
               actorJobId identifies the originating agent Job when present.
             - `agent.message`: `{ text }`
-            - `job.waiting_backend`: `{ reason, message, retryAt?, usage? }`,
+            - `job.waiting_backend`: `{ reason, message, retryAt?, usage?, inputReceipt? }`,
               a provider attempt has stopped for authentication or quota.
               Refresh job/session state, backends and attention. The same Job
               retains its slot and can be cancelled. `job.started` clears the
               wait on resumption; terminal usage includes all prior attempts.
+              inputReceipt is an opaque acknowledgement of the initial input
+              in one native conversation, used to avoid replaying attachments.
             - `tool.started`: `{ toolCallId, name, input }`
             - `tool.completed`: `{ toolCallId, name, output }`, the output a
               bounded excerpt marked with an ellipsis when it was cut

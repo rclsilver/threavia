@@ -428,6 +428,9 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 
 	if outcome.blocked != nil {
 		outcome.blocked.ActiveSeconds = runner.ProviderAttemptSeconds(attemptStarted)
+		if outcome.inputDelivered && (resuming || outcome.nativeBound) {
+			outcome.blocked.InputReceipt = resume.InputReceipt(params.JobID, nativeSessionID)
+		}
 		return runner.ReportProviderBlock(ctx, sink, params.RunID, params.JobID, outcome.blocked, outcome.usage)
 	}
 	if resuming && !outcome.bound && (!outcome.completed || outcome.failed) {
@@ -461,6 +464,9 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 		}
 		if block := runner.ProviderBlockFor("claude", "", message); block != nil {
 			block.ActiveSeconds = runner.ProviderAttemptSeconds(attemptStarted)
+			if outcome.inputDelivered && (resuming || outcome.nativeBound) {
+				block.InputReceipt = resume.InputReceipt(params.JobID, nativeSessionID)
+			}
 			return runner.ReportProviderBlock(ctx, sink, params.RunID, params.JobID, block, outcome.usage)
 		}
 		if resuming {

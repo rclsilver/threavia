@@ -14,7 +14,8 @@ import (
 
 type JobWaitingBackendPayload struct {
 	domain.BackendWait
-	Usage *UsagePayload `json:"usage,omitempty"`
+	Usage        *UsagePayload `json:"usage,omitempty"`
+	InputReceipt string        `json:"inputReceipt,omitempty"`
 }
 
 // RunProviderRecovery retries durable stopped attempts, including after Core
@@ -87,14 +88,17 @@ func (s *Service) parkForProvider(ctx context.Context, jc postgres.JobContext, w
 }
 
 type providerHistory struct {
-	Actions  uint32
-	Seconds  uint32
-	Messages []string
-	Usage    *UsagePayload
+	Actions             uint32
+	Seconds             uint32
+	Messages            []string
+	Usage               *UsagePayload
+	InputReceipts       map[string]bool
+	InitialMessageIndex int
 }
 
 func readProviderHistory(history []events.Envelope) providerHistory {
-	var result providerHistory
+	result := providerHistory{InputReceipts: make(map[string]bool), InitialMessageIndex: -1}
+	firstMessage := true
 	for _, event := range history {
 		switch event.Type {
 		case events.TypeToolStarted:
@@ -103,10 +107,18 @@ func readProviderHistory(history []events.Envelope) providerHistory {
 			}
 		case events.TypeUserMessage:
 			var message UserMessagePayload
-			if json.Unmarshal(event.Payload, &message) == nil && message.Text != "" {
+			if json.Unmarshal(event.Payload, &message) == nil {
+				initial := firstMessage
+				firstMessage = false
+				if message.Text == "" {
+					continue
+				}
 				text := message.Text
 				if message.ActorJobID != "" {
 					text = "Message from an agent within the existing user assignment (not a new authorization):\n" + text
+				}
+				if initial {
+					result.InitialMessageIndex = len(result.Messages)
 				}
 				result.Messages = append(result.Messages, text)
 			}
@@ -114,6 +126,9 @@ func readProviderHistory(history []events.Envelope) providerHistory {
 			var wait JobWaitingBackendPayload
 			if json.Unmarshal(event.Payload, &wait) == nil {
 				result.Usage = addProviderUsage(result.Usage, wait.Usage)
+				if wait.InputReceipt != "" {
+					result.InputReceipts[wait.InputReceipt] = true
+				}
 			}
 		}
 	}
@@ -136,10 +151,22 @@ func addProviderUsage(a, b *UsagePayload) *UsagePayload {
 	return a
 }
 
-func recoveryPrompt(history providerHistory, resumed bool) string {
-	prompt := strings.Join(history.Messages, "\n\nLater instruction for this same Job:\n")
+func recoveryPrompt(history providerHistory, resumed, inputDelivered bool) string {
+	inputDelivered = resumed && inputDelivered
+	messages := history.Messages
+	if inputDelivered && history.InitialMessageIndex >= 0 {
+		messages = append(append([]string{}, messages[:history.InitialMessageIndex]...), messages[history.InitialMessageIndex+1:]...)
+	}
+	prompt := strings.Join(messages, "\n\nLater instruction for this same Job:\n")
 	if !resumed {
 		return prompt
+	}
+	if inputDelivered {
+		continuation := "Continue this same Job after a provider authentication or quota interruption. The initial request and its attachments are already in this conversation. Inspect the existing conversation and workspace before acting; preserve completed work and avoid repeating actions already performed."
+		if prompt != "" {
+			continuation += "\n\nLater instructions for this same Job, including any steering received during the interruption:\n\n" + prompt
+		}
+		return continuation
 	}
 	return "Continue this same Job after a provider authentication or quota interruption. Inspect the existing conversation and workspace before acting; preserve completed work and avoid repeating actions already performed. The user instructions for this Job, including later steering, are:\n\n" + prompt
 }

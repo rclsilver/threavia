@@ -250,6 +250,29 @@ writer. Pending waits are cancelled when the control stream ends.
 
 ## Backend lifecycle
 
+### Provider interruptions and input delivery
+
+`JobWaitingBackend.input_receipt` is optional. A backend sets it only after
+the provider acknowledges the Job's initial user message, including its visual
+input, in a known resumable native conversation. It is the hexadecimal SHA-256
+of `job_id + NUL + native_session_id`; native identifiers remain private.
+A process start, native-session binding, or accepted turn without a user-message
+acknowledgement is insufficient. Codex observes the root turn's completed
+`userMessage` item, including while the startup handshake fails; Claude observes
+its initial `isReplay` acknowledgement and requires a resumable binding.
+
+Core persists the receipt in `job.waiting_backend` history. Further attempts of
+that same Job in that same native conversation use a short continuation rather
+than replaying the original text and attachments. Later steering is retained.
+A different Job or native conversation, or absent acknowledgement, retains full
+input delivery. Older peers can omit/ignore this field: deploy both Core and
+backends to enable deduplication. Existing polluted native histories are not
+rewritten by this change.
+
+Explicit future provider retry hints are retained. Without one, backends wait
+five minutes after an exhausted quota, and one minute after authentication or
+rate-limit failures. These delays open retry windows, not promises of a reset.
+
 ### Native conversation resume
 
 A backend attempts the requested native-session id; Core never expires it by

@@ -79,8 +79,10 @@ type outcome struct {
 	stoppedBy string
 	// usage is nil when the provider reported none, which a terminal event
 	// carries through: no accounting is not the same as a free Job.
-	usage   *backendv1.Usage
-	blocked *contract.ProviderBlock
+	usage          *backendv1.Usage
+	blocked        *contract.ProviderBlock
+	inputDelivered bool
+	nativeBound    bool
 }
 
 // consume reads the provider output stream and emits normalised events.
@@ -113,6 +115,9 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 		}
 		if err := json.Unmarshal([]byte(raw), &head); err == nil && head.Type == "user" && head.IsReplay {
 			c.consumedInput(params.JobID, echoes == 0)
+			if echoes == 0 {
+				result.inputDelivered = acknowledgedInitialInput([]byte(raw), params)
+			}
 			echoes++
 			continue
 		}
@@ -163,7 +168,7 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 				continue
 			}
 			if !bound && params.NativeSessionID != "" {
-				_ = sink.NativeSessionBound(ctx, params.RunID, params.JobID, params.NativeSessionID)
+				result.nativeBound = sink.NativeSessionBound(ctx, params.RunID, params.JobID, params.NativeSessionID) == nil
 				bound = true
 			}
 			if stopped := c.emitAssistant(ctx, params, line, toolNames, sink, &actions); stopped != "" {

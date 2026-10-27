@@ -177,4 +177,9 @@ message JobWaitingBackend {
   // Rounded-up wall time of this stopped attempt, measured on the backend.
   // Provider waiting time is excluded; zero means not reported.
   uint32 active_seconds = 5;
+  // SHA-256 of job_id + NUL + native_session_id, only when the provider
+  // acknowledged this Job's initial user input. Core may omit that input and
+  // its attachments on later retries in the same conversation. Empty means
+  // unknown/not delivered; older backends retain conservative replay behavior.
+  string input_receipt = 6;
 }
