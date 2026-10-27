@@ -241,6 +241,17 @@ func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessi
 	return s.queueMessage(ctx, identity, sessionID, message, idempotencyKey, "", attachments...)
 }
 
+type completedResultKey struct{}
+
+// PostMessageFromResult starts an explicit follow-up only while the reviewed
+// result is still current. The precondition and insertion share the session lock.
+func (s *Service) PostMessageFromResult(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, source domain.JobID, message, key string, delivery Delivery, artifactIDs ...domain.ArtifactID) (domain.Job, error) {
+	if source == "" || (delivery != "" && delivery != DeliveryQueue) {
+		return domain.Job{}, fmt.Errorf("%w: afterJobId requires a completed job and QUEUE delivery", ErrInvalid)
+	}
+	return s.PostMessage(context.WithValue(ctx, completedResultKey{}, source), identity, sessionID, message, key, delivery, artifactIDs...)
+}
+
 // queueMessage makes a message a Job of its own on the current Run. A
 // scheduled one carries the Schedule that sent it, so the timeline says it was
 // not typed by anyone.
@@ -307,6 +318,36 @@ func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sess
 		if locked.Status != domain.SessionActive || latest.ID != run.ID {
 			return fmt.Errorf("%w: the session changed while sending; retry the message", ErrConflict)
 		}
+		if source, guarded := ctx.Value(completedResultKey{}).(domain.JobID); guarded {
+			// A concurrent client may have accepted the same capture while this
+			// request waited for the lock. Reuse its Job instead of rejecting it
+			// or dispatching another turn.
+			if idempotencyKey != "" {
+				previous, err := tx.JobByIdempotencyKey(ctx, identity.UserID, idempotencyKey)
+				if err == nil {
+					if previous.RunID != run.ID {
+						return fmt.Errorf("%w: this key belongs to another run", ErrConflict)
+					}
+					job = previous
+					return nil
+				}
+				if !errors.Is(err, postgres.ErrNotFound) {
+					return err
+				}
+			}
+			jobs, err := tx.ListJobs(ctx, sessionID)
+			if err != nil {
+				return err
+			}
+			if len(jobs) == 0 || jobs[len(jobs)-1].ID != source || jobs[len(jobs)-1].Status != domain.JobCompleted {
+				return fmt.Errorf("%w: the completed result is no longer current; reload the session", ErrConflict)
+			}
+			for _, previous := range jobs {
+				if !previous.Status.Terminal() {
+					return fmt.Errorf("%w: wait for all session work to finish before capturing learnings", ErrConflict)
+				}
+			}
+		}
 		if err := tx.CreateJob(ctx, &job); err != nil {
 			return err
 		}
@@ -323,7 +364,9 @@ func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sess
 	}
 
 	s.flush(b)
-	s.DispatchJob(ctx, job.ID)
+	if len(b.records) > 0 {
+		s.DispatchJob(ctx, job.ID)
+	}
 	return job, nil
 }
 

@@ -2528,6 +2528,14 @@ export interface paths {
                 content: {
                     "application/json": {
                         message: string;
+                        /** @description Optional precondition for a follow-up on a completed result.
+                         *     Requires QUEUE delivery. Core checks under the session lock
+                         *     that this is the latest job and it completed successfully,
+                         *     with no unfinished jobs in the session. Otherwise 409 and
+                         *     nothing is queued. An accepted Idempotency-Key is replayed
+                         *     before checking this precondition again.
+                         *      */
+                        afterJobId?: components["schemas"]["UUID"];
                         /** @description Files from this project attached to the prompt (3 MiB total). Requires QUEUE delivery. */
                         artifactIds?: components["schemas"]["UUID"][];
                         /**

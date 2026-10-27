@@ -262,14 +262,21 @@ func (h *handler) postMessage(w http.ResponseWriter, r *http.Request, identity a
 		Message     string              `json:"message"`
 		Delivery    service.Delivery    `json:"delivery"`
 		ArtifactIDs []domain.ArtifactID `json:"artifactIds"`
+		AfterJobID  *domain.JobID       `json:"afterJobId"`
 	}](w, r)
 	if !ok {
 		return
 	}
 
-	job, err := h.svc.PostMessage(r.Context(), identity,
-		domain.SessionID(r.PathValue("sessionId")), body.Message,
-		r.Header.Get("Idempotency-Key"), body.Delivery, body.ArtifactIDs...)
+	var job domain.Job
+	var err error
+	if body.AfterJobID != nil {
+		job, err = h.svc.PostMessageFromResult(r.Context(), identity, domain.SessionID(r.PathValue("sessionId")), *body.AfterJobID,
+			body.Message, r.Header.Get("Idempotency-Key"), body.Delivery, body.ArtifactIDs...)
+	} else {
+		job, err = h.svc.PostMessage(r.Context(), identity, domain.SessionID(r.PathValue("sessionId")), body.Message,
+			r.Header.Get("Idempotency-Key"), body.Delivery, body.ArtifactIDs...)
+	}
 	if err != nil {
 		h.fail(w, err)
 		return
