@@ -3,6 +3,18 @@
      sessions all live on its volume, and a replacement pod must come back as
      the same instance rather than registering a second one. */}}
 apiVersion: apps/v1
+{{- if not (has .Values.execution.mode (list "local" "kubernetes")) }}
+{{- fail "execution.mode must be local or kubernetes" }}
+{{- end }}
+{{- if eq .Values.execution.mode "kubernetes" }}
+{{- $workspace := .Values.execution.workspacePath }}
+{{- if or (eq $workspace "/") (not (hasPrefix "/" $workspace)) (hasPrefix "/home/threavia" $workspace) (hasPrefix "/etc/threavia-execution" $workspace) (hasPrefix "/shared" $workspace) }}
+{{- fail "execution.workspacePath must be an absolute workspace outside private backend, executor and shared-state paths" }}
+{{- end }}
+{{- if not (or (eq $workspace .Values.backend.defaultWorkingDirectory) (hasPrefix (printf "%s/" $workspace) .Values.backend.defaultWorkingDirectory)) }}
+{{- fail "Kubernetes backend.defaultWorkingDirectory must belong to execution.workspacePath" }}
+{{- end }}
+{{- end }}
 kind: StatefulSet
 metadata:
   name: {{ include "backend.fullname" . }}
@@ -23,13 +35,21 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      {{- if and (eq .Values.execution.mode "kubernetes") (ne (int .Values.replicaCount) 1) }}
+      {{- fail "a Kubernetes control backend must have exactly one replica per execution profile" }}
+      {{- end }}
+      automountServiceAccountToken: false
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "backend.serviceAccountName" . }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $podSecurity := deepCopy .Values.podSecurityContext }}
+        {{- if and (eq .Values.execution.mode "kubernetes") (not (hasKey $podSecurity "seccompProfile")) }}
+        {{- $_ := set $podSecurity "seccompProfile" (dict "type" "RuntimeDefault") }}
+        {{- end }}
+        {{- toYaml $podSecurity | nindent 8 }}
       containers:
         - name: backend
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -101,7 +121,15 @@ spec:
             - name: THREAVIA_BACKEND_STATE_PATH
               value: "/home/threavia/.threavia/backend.db"
             - name: THREAVIA_BACKEND_SKILL_CACHE_PATH
-              value: "/home/threavia/.threavia/skills"
+              value: {{ if eq .Values.execution.mode "kubernetes" }}"/shared/skills"{{ else }}"/home/threavia/.threavia/skills"{{ end }}
+            {{- if eq .Values.execution.mode "kubernetes" }}
+            - {name: THREAVIA_BACKEND_EXECUTION_MODE, value: kubernetes}
+            - name: THREAVIA_BACKEND_EXECUTOR_ENDPOINT
+              value: {{ required "execution.endpoint is required" .Values.execution.endpoint | quote }}
+            - {name: THREAVIA_BACKEND_EXECUTOR_CA_FILE, value: /etc/threavia-execution/ca/ca.crt}
+            - {name: THREAVIA_BACKEND_EXECUTOR_TOKEN_FILE, value: /etc/threavia-execution/client/token}
+            - {name: THREAVIA_BACKEND_SCRATCH_PATH, value: /shared/scratch}
+            {{- end }}
             - name: THREAVIA_BACKEND_DEFAULT_WORKING_DIRECTORY
               value: {{ .Values.backend.defaultWorkingDirectory | quote }}
             {{- with .Values.backend.discoveryRoots }}
@@ -118,6 +146,7 @@ spec:
             {{- end }}
 
             # --- Provider ---
+            {{- if ne .Values.execution.mode "kubernetes" }}
             {{- with .Values.provider.model }}
             - name: THREAVIA_BACKEND_CODEX_MODEL
               value: {{ . | quote }}
@@ -132,18 +161,39 @@ spec:
                   name: {{ if .Values.provider.existingSecret }}{{ .Values.provider.existingSecret }}{{ else }}{{ include "backend.secretName" . }}{{ end }}
                   key: {{ if .Values.provider.existingSecret }}{{ .Values.provider.existingSecretKey }}{{ else }}apiKey{{ end }}
                   optional: true
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
           volumeMounts:
             - name: state
               mountPath: /home/threavia
+            {{- if eq .Values.execution.mode "kubernetes" }}
+            - {name: executor-ca, mountPath: /etc/threavia-execution/ca, readOnly: true}
+            - {name: executor-client, mountPath: /etc/threavia-execution/client, readOnly: true}
+            - {name: shared, mountPath: /shared}
+            - {name: workspace, mountPath: {{ .Values.execution.workspacePath }}}
+            {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
+        {{- if eq .Values.execution.mode "kubernetes" }}
+        - name: executor-ca
+          secret:
+            secretName: {{ required "execution.caSecret is required" .Values.execution.caSecret }}
+            items: [{key: ca.crt, path: ca.crt}]
+        - name: executor-client
+          secret:
+            secretName: {{ required "execution.tokenSecret is required" .Values.execution.tokenSecret }}
+            items: [{key: {{ .Values.execution.tokenKey }}, path: token}]
+        - name: shared
+          persistentVolumeClaim: {claimName: {{ required "execution.sharedClaim is required" .Values.execution.sharedClaim }}}
+        - name: workspace
+          persistentVolumeClaim: {claimName: {{ required "execution.workspaceClaim is required" .Values.execution.workspaceClaim }}}
+        {{- end }}
         {{- if not .Values.persistence.enabled }}
         - name: state
           emptyDir: {}

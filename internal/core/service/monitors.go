@@ -184,7 +184,7 @@ func (s *Service) MonitorReport(ctx context.Context, backend domain.BackendInsta
 		return nil, ErrInvalid
 	}
 	switch observed.State {
-	case "RUNNING", "STOPPING", "COMPLETED", "FAILED", "STOPPED", "EXPIRED", "INTERRUPTED":
+	case "STARTING", "RUNNING", "STOPPING", "COMPLETED", "FAILED", "STOPPED", "EXPIRED", "INTERRUPTED":
 	default:
 		return nil, ErrInvalid
 	}

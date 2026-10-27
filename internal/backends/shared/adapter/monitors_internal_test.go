@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"github.com/rclsilver/threavia/internal/backends/shared/monitors"
@@ -35,6 +36,29 @@ func TestMonitorStateIsPrivateToEachBackendDatabase(t *testing.T) {
 	values, err = reopened.monitors.Snapshots()
 	if err != nil || len(values) != 1 {
 		t.Fatal("original backend lost monitor history", values, err)
+	}
+}
+
+type availableMonitorExecutor struct{}
+
+func (availableMonitorExecutor) Available() error { return nil }
+func (availableMonitorExecutor) Start(context.Context, monitor.Snapshot, string, bool, bool, io.Writer, io.Writer) (monitors.Process, error) {
+	return nil, errors.New("not used by this test")
+}
+
+func TestRemoteMonitorsIgnoreLocalUnsandboxedOptIn(t *testing.T) {
+	cfg := Default()
+	cfg.StatePath = filepath.Join(t.TempDir(), "remote.db")
+	cfg.Execution.Mode = "kubernetes"
+	cfg.MonitorExecutor = availableMonitorExecutor{}
+	cfg.UnsandboxedMonitors = true
+	var log bytes.Buffer
+	a := New(cfg, nil, state.NewMemoryStore(), slog.New(slog.NewJSONHandler(&log, nil)))
+	if !a.monitors.Available() || !a.monitors.Sandboxed() {
+		t.Fatal("remote monitors must use executor isolation regardless of the local opt-in")
+	}
+	if log.Len() != 0 {
+		t.Fatalf("remote monitors incorrectly reported a local sandbox failure: %s", log.String())
 	}
 }
 

@@ -19,11 +19,13 @@ import (
 type entry struct {
 	Snapshot      monitor.Snapshot
 	cmd           *exec.Cmd
+	process       Process
 	stop          context.CancelFunc
 	dirty         bool
 	lastPublished time.Time
 }
 type Manager struct {
+	executor    Executor
 	mu          sync.Mutex
 	path        string
 	entries     map[string]*entry
@@ -105,6 +107,9 @@ func (m *Manager) Sandboxed() bool { return !m.unsandboxed }
 
 // Start is called only after policy approval; the launcher adds OS isolation.
 func (m *Manager) Start(s monitor.Snapshot, dir string, writable, network bool) error {
+	if m.executor != nil {
+		return m.startRemote(s, dir, writable, network)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.err != nil {
@@ -154,12 +159,21 @@ func (m *Manager) Start(s monitor.Snapshot, dir string, writable, network bool) 
 	return nil
 }
 func (m *Manager) wait(ctx context.Context, e *entry) {
-	err := e.cmd.Wait()
+	var err error
+	if e.process != nil {
+		err = e.process.Wait()
+	} else {
+		err = e.cmd.Wait()
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	defer e.stop()
 	s := &e.Snapshot
 	switch {
+	case errors.Is(err, ErrStopUnconfirmed):
+		s.State = "STOPPING"
+		s.Error = err.Error()
+		s.Notify = false
 	case s.State == "STOPPING":
 		s.State = "STOPPED"
 		s.Notify = false

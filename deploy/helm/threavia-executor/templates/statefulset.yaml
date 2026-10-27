@@ -1,0 +1,91 @@
+{{- $name := include "executor.name" . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+spec:
+  replicas: 1
+  serviceName: {{ $name }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $name }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: true
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: executor
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          ports:
+            - name: https
+              containerPort: 8443
+          readinessProbe:
+            httpGet: {scheme: HTTPS, path: /readyz, port: https}
+          livenessProbe:
+            httpGet: {scheme: HTTPS, path: /healthz, port: https}
+          startupProbe:
+            httpGet: {scheme: HTTPS, path: /healthz, port: https}
+            failureThreshold: 90
+            periodSeconds: 2
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - {name: state, mountPath: /state}
+            - {name: config, mountPath: /etc/threavia-executor/config.json, subPath: config.json, readOnly: true}
+            - {name: tls, mountPath: /etc/threavia-executor/tls, readOnly: true}
+            {{- range .Values.profiles }}
+            - name: client-{{ .spec.name }}
+              mountPath: /etc/threavia-executor/clients/{{ .spec.name }}
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: config
+          configMap: {name: {{ $name }}}
+        - name: tls
+          secret: {secretName: {{ include "executor.tls" . }}}
+        {{- if .Values.persistence.existingClaim }}
+        - name: state
+          persistentVolumeClaim: {claimName: {{ .Values.persistence.existingClaim }}}
+        {{- end }}
+        {{- range .Values.profiles }}
+        - name: client-{{ .spec.name }}
+          secret:
+            secretName: {{ required "each execution profile needs its own tokenSecret" .tokenSecret }}
+            items:
+              - {key: {{ .tokenKey | default "token" }}, path: token}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if not .Values.persistence.existingClaim }}
+  volumeClaimTemplates:
+    - metadata: {name: state}
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests: {storage: {{ .Values.persistence.size | quote }}}
+  {{- end }}

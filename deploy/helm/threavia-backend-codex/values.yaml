@@ -7,6 +7,18 @@
 
 replicaCount: 1
 
+# Kubernetes mode keeps this pod as a trusted control backend. Native provider
+# state belongs to separate worker volumes declared in the executor profile.
+execution:
+  mode: local
+  endpoint: ""
+  caSecret: ""
+  tokenSecret: ""
+  tokenKey: token
+  workspaceClaim: ""
+  sharedClaim: ""
+  workspacePath: /workspace
+
 image:
   repository: ghcr.io/rclsilver/threavia-backend-codex
   tag: ""

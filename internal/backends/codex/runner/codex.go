@@ -30,7 +30,13 @@ type endpoint interface {
 	RegisterPolicyGate(string, func(context.Context, map[string]any) (any, error))
 	RegisterLocalTools(string, []mcp.LocalTool)
 }
-type Options struct{ Model, ReasoningEffort, Scratch, Version, APIKey string }
+type Options struct {
+	Model, ReasoningEffort, Scratch, Version, APIKey string
+	// ExternalSandbox is set only by the Kubernetes worker entrypoint. The pod
+	// runtime supplies filesystem/process/network isolation; native hooks and
+	// approvals stay enabled. Local backends keep Codex's own sandbox.
+	ExternalSandbox bool
+}
 type Codex struct {
 	binary            string
 	tools             endpoint
@@ -507,7 +513,13 @@ var _ io.Writer = (*tailWriter)(nil)
 // instructions is the prompt every provider receives, plus what only Codex
 // needs: the backend's web tools replace its hosted search, and a command left
 // running is read back rather than written to.
-func instructions(params contract.StartParams, available []string, scratch string) string {
+func instructions(params contract.StartParams, available []string, scratch string, external ...bool) string {
+	tail := "Commands start in a read-only sandbox. One that fails there within its yield time is retried outside " +
+		"it once approved, but one still running when it fails is not: when you start a background command " +
+		"that writes files or uses the network, request escalated sandbox permissions with a justification.\n"
+	if len(external) > 0 && external[0] {
+		tail = "Commands run inside this Job's isolated Kubernetes pod. The pod's filesystem mounts and network policy enforce its runtime boundary. Threavia's permission hooks still apply to every action. A forbidden mount or network destination cannot be opened by requesting a native sandbox escape; report the constraint. Use Threavia Monitors for work that must outlive this Job.\n"
+	}
 	return contract.SystemPrompt(params, available, scratch) +
 		"\nPass the question to mcp__threavia__ask_user in its required prompt argument, with an optional choices array.\n" +
 		"Use mcp__threavia__web_search to search the web and mcp__threavia__web_fetch to read a URL. " +
@@ -515,7 +527,5 @@ func instructions(params contract.StartParams, available []string, scratch strin
 		"For work of several steps, keep your plan with mcp__threavia__update_plan: the user follows it there.\n" +
 		"A long command can keep running in the background: start it with a short yield time and read its " +
 		"output later. Its stdin is closed, so give it its input as arguments or files rather than typing it.\n" +
-		"Commands start in a read-only sandbox. One that fails there within its yield time is retried outside " +
-		"it once approved, but one still running when it fails is not: when you start a background command " +
-		"that writes files or uses the network, request escalated sandbox permissions with a justification.\n"
+		tail
 }

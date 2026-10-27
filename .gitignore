@@ -1,5 +1,6 @@
 # Build output
 /bin/
+/.test-artifacts/
 
 # Local environment
 .env

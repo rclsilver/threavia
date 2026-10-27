@@ -81,7 +81,7 @@ func (a *Adapter) prepareMonitors(p *runner.StartParams) {
 	a.mu.Lock()
 	enabled := a.monitorsEnabled
 	a.mu.Unlock()
-	if !enabled || !a.cfg.Client.FeaturePersistentMonitors {
+	if !enabled || !a.monitors.Available() {
 		return
 	}
 	schema := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"command", "description"}, "properties": map[string]any{

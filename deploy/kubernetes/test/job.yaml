@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata: {name: execution-integration}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: tests
+          image: threavia-execution-test:local
+          imagePullPolicy: Never
+          command: [/usr/local/bin/execution-cluster-tests, -test.v, -test.timeout=9m]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          env:
+            - {name: EXECUTION_TEST_ENDPOINT, value: 'https://test-executor.execution-test.svc:8443'}
+          volumeMounts:
+            - {name: ca, mountPath: /executor-ca, readOnly: true}
+            - {name: claude-client, mountPath: /executor-clients/claude, readOnly: true}
+            - {name: codex-client, mountPath: /executor-clients/codex, readOnly: true}
+            - {name: shared, mountPath: /shared}
+            - {name: workspace, mountPath: /workspace}
+      volumes:
+        - name: ca
+          secret: {secretName: test-executor-ca}
+        - name: claude-client
+          secret: {secretName: claude-executor-client}
+        - name: codex-client
+          secret: {secretName: codex-executor-client}
+        - name: shared
+          persistentVolumeClaim: {claimName: shared}
+        - name: workspace
+          persistentVolumeClaim: {claimName: workspaces}

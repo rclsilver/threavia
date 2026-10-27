@@ -1,0 +1,23 @@
+core:
+  api: https://threavia.example.com
+  address: backends.threavia.example.com:443
+  tls: {enabled: true}
+  # Contains only the Core registrationToken/token, never provider credentials.
+  existingSecret: codex-core
+execution:
+  mode: kubernetes
+  endpoint: https://coding-executor.threavia.svc:8443
+  caSecret: coding-executor-ca
+  tokenSecret: codex-executor-client
+  workspaceClaim: coding-workspaces
+  sharedClaim: coding-shared
+backend:
+  defaultWorkingDirectory: /workspace
+  discoveryRoots: [/workspace]
+  maxConcurrentRuns: 2
+persistence:
+  enabled: true
+  size: 1Gi
+# Pin these to the same node as RWO worker PVCs, or use storage that supports
+# concurrent mounts from the selected nodes. See docs/kubernetes-execution.md.
+nodeSelector: {}

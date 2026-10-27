@@ -39,6 +39,34 @@ func sendMonitor(t *testing.T, c *core, v monitor.Snapshot, backend string) *bac
 	}
 	return ctrl
 }
+
+func TestMonitorStartingIsVisibleWithoutWakingIdleSession(t *testing.T) {
+	c, b, project, dir := setup(t)
+	id := c.startSession(project, c.backendID, dir, "Watch")
+	start := receive(t, "originating job", b.starts)
+	v := registerMonitor(t, c, b, start)
+	completeDelegatedJob(t, c, b, start)
+	v.State = "STARTING"
+	v.Sequence = 1
+	v.Notify = false
+	v.UpdatedAt = time.Now().UTC()
+	sendMonitor(t, c, v.Snapshot, c.backendID)
+	var list struct {
+		Items []monitor.View `json:"items"`
+	}
+	c.mustDo(http.MethodGet, "/api/v1/sessions/"+id+"/monitors", nil, &list, http.StatusOK)
+	if len(list.Items) != 1 || list.Items[0].State != "STARTING" || !list.Items[0].Confirmed {
+		t.Fatalf("scheduling monitor not visible: %+v", list)
+	}
+	expectNothing(t, "a model wake while scheduling", b.starts)
+	v.State = "RUNNING"
+	v.Sequence = 2
+	sendMonitor(t, c, v.Snapshot, c.backendID)
+	c.mustDo(http.MethodGet, "/api/v1/sessions/"+id+"/monitors", nil, &list, http.StatusOK)
+	if len(list.Items) != 1 || list.Items[0].State != "RUNNING" {
+		t.Fatal("monitor did not leave scheduling state")
+	}
+}
 func TestMonitorSurvivesJobAndWakesSessionOnce(t *testing.T) {
 	c, b, project, dir := setup(t)
 	id := c.startSession(project, c.backendID, dir, "Watch the deployment")

@@ -1,0 +1,29 @@
+{{- if not .Values.tls.existingSecret }}
+{{- $name := include "executor.name" . }}
+{{- $oldTLS := lookup "v1" "Secret" .Release.Namespace (include "executor.tls" .) }}
+{{- $oldCA := lookup "v1" "Secret" .Release.Namespace (include "executor.ca" .) }}
+{{- $ca := genCA (printf "%s-ca" $name) 3650 }}
+{{- $host := printf "%s.%s.svc" $name .Release.Namespace }}
+{{- $cert := genSignedCert $host nil (list $name (printf "%s.%s" $name .Release.Namespace) $host (printf "%s.cluster.local" $host)) 365 $ca }}
+{{- if ne (empty $oldTLS) (empty $oldCA) }}
+{{- fail "executor TLS and CA secrets must exist together; restore them or rotate both during a stopped maintenance window" }}
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "executor.tls" . }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ if $oldTLS }}{{ index $oldTLS.data "tls.crt" }}{{ else }}{{ $cert.Cert | b64enc }}{{ end }}
+  tls.key: {{ if $oldTLS }}{{ index $oldTLS.data "tls.key" }}{{ else }}{{ $cert.Key | b64enc }}{{ end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "executor.ca" . }}
+type: Opaque
+data:
+  ca.crt: {{ if $oldCA }}{{ index $oldCA.data "ca.crt" }}{{ else }}{{ $ca.Cert | b64enc }}{{ end }}
+{{- else }}
+{{- $_ := required "tls.caSecret must contain only ca.crt when supplying tls.existingSecret" .Values.tls.caSecret }}
+{{- end }}

@@ -70,9 +70,9 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 			return out
 		}
 	}
-	// Keep all mutations behind the host permission gate, including autonomous
-	// runs: autonomous approval is decided from the current Threavia policy,
-	// never by switching Codex to an unrestricted sandbox.
+	// Keep mutations behind the permission gate in every runtime. Kubernetes
+	// workers use Codex's explicit externalSandbox turn policy, with the pod
+	// supplying the OS boundary; local backends retain the native sandbox.
 	config := map[string]any{
 		"mcp_servers": map[string]any{"threavia": map[string]any{"url": url, "required": true, "tool_timeout_sec": 2147483647}},
 		"web_search":  "disabled", "features.hooks": true,
@@ -171,7 +171,7 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 	live.mu.Unlock()
 	approval, reviewer := nativeApproval(p.Policy)
 	args := map[string]any{"cwd": p.WorkingDirectory, "approvalPolicy": approval, "sandbox": "read-only", "approvalsReviewer": reviewer,
-		"developerInstructions": instructions(p, c.available, contract.ScratchDir(c.options.Scratch, p.RunID)), "config": config}
+		"developerInstructions": instructions(p, c.available, contract.ScratchDir(c.options.Scratch, p.RunID), c.options.ExternalSandbox), "config": config}
 	model := p.Model
 	if model == "" {
 		model = c.options.Model
@@ -256,6 +256,9 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 		approval, reviewer := nativeApproval(currentPolicy)
 		params := map[string]any{"threadId": thread.Thread.ID, "input": skillInput(supervised(currentPolicy, text), skills),
 			"approvalPolicy": approval, "approvalsReviewer": reviewer, "sandboxPolicy": map[string]any{"type": "readOnly", "networkAccess": false}}
+		if c.options.ExternalSandbox {
+			params["sandboxPolicy"] = map[string]any{"type": "externalSandbox", "networkAccess": "enabled"}
+		}
 		if firstInput {
 			input := params["input"].([]any)
 			for _, attachment := range p.Attachments {

@@ -1,0 +1,13 @@
+{{- $name := include "executor.name" . }}
+{{- $profiles := list }}
+{{- range .Values.profiles }}
+{{- $spec := deepCopy .spec }}
+{{- $_ := set $spec "serviceAccount" (printf "%s-worker" $name) }}
+{{- $profiles = append $profiles (dict "spec" $spec "tokenFile" (printf "/etc/threavia-executor/clients/%s/token" .spec.name) "maxJobs" (.maxJobs | default 2) "maxMonitors" (.maxMonitors | default 20)) }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+data:
+  config.json: {{ dict "id" (.Values.controllerID | default $name) "namespace" .Release.Namespace "publicURL" (include "executor.url" .) "statePath" "/state/executor.json" "caSecretName" (include "executor.ca" .) "controlNetwork" (dict "namespace" .Release.Namespace "selector" (dict "app.kubernetes.io/name" $name) "port" 8443) "profiles" $profiles | toJson | quote }}

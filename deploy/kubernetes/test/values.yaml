@@ -1,0 +1,50 @@
+fullnameOverride: test-executor
+image:
+  repository: threavia-execution-test
+  tag: local
+  pullPolicy: Never
+profiles:
+  - tokenSecret: claude-executor-client
+    maxJobs: 2
+    maxMonitors: 4
+    spec:
+      name: claude
+      provider: claude
+      image: threavia-execution-test:local
+      workerBinary: /usr/local/bin/threavia-backend-claude
+      providerBinary: /usr/local/bin/fixture-claude
+      home: /home/agent
+      workingDirectory: /workspace
+      uid: 65532
+      gid: 65532
+      resources:
+        requests: {cpu: 50m, memory: 64Mi}
+        limits: {cpu: "1", memory: 256Mi}
+      mounts:
+        - {name: workspace, claim: workspaces, path: /workspace, role: workspace}
+        - {name: provider, claim: claude-native, path: /home/agent, role: provider}
+        - {name: scratch, claim: shared, path: /shared/scratch, subPath: scratch, role: scratch}
+        - {name: bundles, claim: shared, path: /shared/skills/bundles, subPath: skills/bundles, role: tools, readOnly: true}
+        - {name: skills, claim: shared, path: /shared/skills/jobs, subPath: skills/jobs, role: skills, readOnly: true}
+  - tokenSecret: codex-executor-client
+    maxJobs: 2
+    maxMonitors: 4
+    spec:
+      name: codex
+      provider: codex
+      image: threavia-execution-test:local
+      workerBinary: /usr/local/bin/threavia-backend-codex
+      providerBinary: /usr/local/bin/fixture-codex
+      home: /home/agent
+      workingDirectory: /workspace
+      uid: 65532
+      gid: 65532
+      resources:
+        requests: {cpu: 50m, memory: 64Mi}
+        limits: {cpu: "1", memory: 256Mi}
+      mounts:
+        - {name: workspace, claim: workspaces, path: /workspace, role: workspace}
+        - {name: provider, claim: codex-native, path: /home/agent, role: provider}
+        - {name: scratch, claim: shared, path: /shared/scratch, subPath: scratch, role: scratch}
+        - {name: bundles, claim: shared, path: /shared/skills/bundles, subPath: skills/bundles, role: tools, readOnly: true}
+        - {name: skills, claim: shared, path: /shared/skills/jobs, subPath: skills/jobs, role: skills, readOnly: true}

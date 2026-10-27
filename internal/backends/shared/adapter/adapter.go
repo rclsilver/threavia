@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -85,24 +86,34 @@ type waiter struct {
 
 // New builds the shared provider adapter.
 func New(cfg Config, providerRunner runner.Runner, store state.Store, logger *slog.Logger) *Adapter {
+	bundles := cfg.Provider.SkillCachePath
+	if cfg.Execution.Mode == "kubernetes" {
+		bundles = filepath.Join(bundles, "bundles")
+	}
 	// Said once at startup: without it, the only sign of a sandbox that cannot
 	// start is a monitor_start tool missing from every Job.
 	unsandboxed := false
-	if err := monitors.Probe(); err != nil {
-		unsandboxed = cfg.UnsandboxedMonitors
-		if unsandboxed {
-			logger.Warn("persistent monitors run without a sandbox", slog.String("error", err.Error()))
-		} else {
-			logger.Warn("persistent monitors are unavailable", slog.String("error", err.Error()))
+	if cfg.MonitorExecutor == nil {
+		if err := monitors.Probe(); err != nil {
+			unsandboxed = cfg.UnsandboxedMonitors
+			if unsandboxed {
+				logger.Warn("persistent monitors run without a sandbox", slog.String("error", err.Error()))
+			} else {
+				logger.Warn("persistent monitors are unavailable", slog.String("error", err.Error()))
+			}
 		}
+	}
+	manager := monitors.NewWithExecutor(cfg.StatePath+".monitors.json", cfg.MonitorExecutor)
+	if cfg.MonitorExecutor == nil {
+		manager = monitors.New(cfg.StatePath+".monitors.json", unsandboxed)
 	}
 	return &Adapter{
 		cfg:         cfg,
-		monitors:    monitors.New(cfg.StatePath+".monitors.json", unsandboxed),
+		monitors:    manager,
 		runner:      providerRunner,
 		store:       store,
 		logger:      logger,
-		skillCache:  skills.NewCache(cfg.Provider.SkillCachePath),
+		skillCache:  skills.NewCache(bundles),
 		localSkills: skills.Discover(cfg.Provider.LocalSkillRoots),
 		jobs:        make(map[string]*jobState),
 		waiters:     make(map[string]*waiter),

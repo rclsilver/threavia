@@ -298,7 +298,7 @@ jobs:
         run: |
           out="dist/threavia_${version}_${GOOS}_${GOARCH}"
           mkdir -p "${out}"
-          for cmd in threavia-core threavia-backend-claude threavia-backend-codex; do
+          for cmd in threavia-core threavia-backend-claude threavia-backend-codex threavia-executor; do
             go build -trimpath -ldflags "-s -w -X main.version=${version}" \
               -o "${out}/${cmd}" "./cmd/${cmd}"
           done
@@ -410,9 +410,23 @@ jobs:
       - name: "Set up Helm"
         uses: "azure/setup-helm@v5.0.1"
 
+      - name: "Build the Kubernetes executor image"
+        uses: "docker/build-push-action@v7.4.0"
+        with:
+          context: "."
+          file: "deploy/docker/executor.Dockerfile"
+          platforms: "${{ startsWith(github.ref, 'refs/tags/v') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}"
+          build-args: "VERSION=${{ env.version }}"
+          push: "${{ startsWith(github.ref, 'refs/tags/v') }}"
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/threavia-executor:${{ env.version }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/threavia-executor:latest
+          cache-from: "type=gha,scope=executor"
+          cache-to: "type=gha,scope=executor,mode=max"
+
       - name: "Package the Helm charts"
         run: |
-          for chart in threavia threavia-backend-claude threavia-backend-codex; do
+          for chart in threavia threavia-backend-claude threavia-backend-codex threavia-executor; do
             helm lint "deploy/helm/${chart}"
 
             # Helm reads every YAML number as a float, and a float big enough
@@ -443,7 +457,7 @@ jobs:
         run: |
           helm registry login "${REGISTRY}" \
             --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}"
-          for chart in threavia threavia-backend-claude threavia-backend-codex; do
+          for chart in threavia threavia-backend-claude threavia-backend-codex threavia-executor; do
             helm push "dist/${chart}-${version}.tgz" \
               "oci://${REGISTRY}/${{ github.repository_owner }}/charts"
           done
@@ -536,6 +550,8 @@ jobs:
           \`\`\`
           ghcr.io/${owner}/threavia-core:${version#v}
           ghcr.io/${owner}/threavia-backend-claude:${version#v}
+          ghcr.io/${owner}/threavia-backend-codex:${version#v}
+          ghcr.io/${owner}/threavia-executor:${version#v}
           \`\`\`
 
           ## Helm chart
@@ -543,6 +559,8 @@ jobs:
           \`\`\`
           helm install threavia oci://ghcr.io/${owner}/charts/threavia --version ${version#v}
           helm install laptop oci://ghcr.io/${owner}/charts/threavia-backend-claude --version ${version#v}
+          helm install codex oci://ghcr.io/${owner}/charts/threavia-backend-codex --version ${version#v}
+          helm install executor oci://ghcr.io/${owner}/charts/threavia-executor --version ${version#v}
           \`\`\`
 
           ## VS Code extension
