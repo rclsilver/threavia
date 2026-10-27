@@ -522,9 +522,16 @@ func (c *Claude) command(ctx context.Context, params StartParams, scratch, nativ
 	// permission tool asks it, but only if the provider calls it: in SUPERVISED
 	// its own reviewer settles a call first, and an allow rule would settle it
 	// in any mode. An ask rule is answered before either.
+	//
+	// A tool that asks the user itself is allowed instead. In SUPERVISED the
+	// reviewer would settle it first, and its refusal kept the user from ever
+	// being asked. The policy's deny and ask rules are still answered first.
 	for _, tool := range params.CoreTools {
-		if tool.RequiresValidation {
+		switch {
+		case tool.RequiresValidation:
 			native.Ask = append(native.Ask, "mcp__"+mcp.ServerName+"__"+tool.Name)
+		case tool.ValidatesItself:
+			native.Allow = append(native.Allow, "mcp__"+mcp.ServerName+"__"+tool.Name)
 		}
 	}
 	// A FILE_READ refusal in the policy still wins: deny is answered first.

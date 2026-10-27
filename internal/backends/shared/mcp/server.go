@@ -62,6 +62,11 @@ type CoreTool struct {
 	// It is asked of the user like a Write, where every other Core Tool is
 	// allowed on its own.
 	RequiresValidation bool
+	// ValidatesItself marks a tool that asks the user about its exact input
+	// itself, in every mode, before it acts. A reviewer in front of it decides
+	// nothing the user is not asked anyway, and its refusal is a question that
+	// never reaches them.
+	ValidatesItself bool
 }
 
 // LocalTool is implemented by a provider backend, never forwarded to Core.
