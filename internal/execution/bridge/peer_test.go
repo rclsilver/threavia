@@ -22,6 +22,7 @@ func TestBidirectionalCallsAndCancellation(t *testing.T) {
 	})
 	defer p.Close()
 	stopped := make(chan struct{})
+	entered := make(chan struct{})
 	var q *Peer
 	q = New(ctx, b, func(ctx context.Context, method string, input json.RawMessage) (any, error) {
 		switch method {
@@ -32,6 +33,14 @@ func TestBidirectionalCallsAndCancellation(t *testing.T) {
 			}
 			return v, nil
 		case "wait":
+			// A round trip back through p's writer proves that it finished
+			// transmitting the original request and acknowledged the write.
+			// Cancelling a partially written frame intentionally fences p.
+			var v string
+			if err := q.Call(ctx, "question", nil, &v); err != nil {
+				return nil, err
+			}
+			close(entered)
 			<-ctx.Done()
 			close(stopped)
 			return nil, ctx.Err()
@@ -44,16 +53,24 @@ func TestBidirectionalCallsAndCancellation(t *testing.T) {
 		t.Fatalf("callback failed: %v %q", err, result)
 	}
 	short, stop := context.WithCancel(ctx)
-	done := make(chan error, 1)
-	go func() { done <- p.Call(short, "wait", nil, nil) }()
 	stop()
-	if err := <-done; !errors.Is(err, context.Canceled) {
+	if err := p.Call(short, "wait", nil, nil); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 	// Ensure a cancellation received after dispatch reaches the remote handler.
-	c2, stop2 := context.WithTimeout(ctx, 50*time.Millisecond)
+	c2, stop2 := context.WithCancel(ctx)
 	defer stop2()
-	_ = p.Call(c2, "wait", nil, nil)
+	done := make(chan error, 1)
+	go func() { done <- p.Call(c2, "wait", nil, nil) }()
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal("remote request was not dispatched")
+	}
+	stop2()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
 	select {
 	case <-stopped:
 	case <-ctx.Done():
