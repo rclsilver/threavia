@@ -2,11 +2,13 @@ package runner_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -813,6 +815,55 @@ func TestAToolThatNeedsValidationIsAskedInEveryMode(t *testing.T) {
 			if !strings.Contains(settings, `"`+name+`"`) {
 				t.Errorf("%s: settings must deny %s: %s", mode, name, settings)
 			}
+		}
+	}
+}
+
+// TestAToolThatValidatesItselfBypassesTheReviewer pins that monitor_start, which
+// asks the user to approve its exact command, is not handed to the provider's
+// reviewer in SUPERVISED: the reviewer refused one with no explanation, and the
+// user was never asked. A refusal in the policy must still reach the provider.
+func TestAToolThatValidatesItselfBypassesTheReviewer(t *testing.T) {
+	t.Parallel()
+
+	const tool = "mcp__threavia__monitor_start"
+	for _, mode := range []backendv1.ExecutionMode{
+		backendv1.ExecutionMode_EXECUTION_MODE_INTERACTIVE,
+		backendv1.ExecutionMode_EXECUTION_MODE_SUPERVISED,
+		backendv1.ExecutionMode_EXECUTION_MODE_AUTONOMOUS,
+	} {
+		binary, argsFile := fakeClaude(t, `echo '{"type":"result","subtype":"success","is_error":false,"result":"ok"}'`)
+		if err := newRunner(t, binary).Run(context.Background(), runner.StartParams{
+			RunID: "run-1", JobID: "job-1", WorkingDirectory: t.TempDir(),
+			Policy: policy.Policy{Mode: mode, Rules: []policy.Rule{{
+				Effect:     backendv1.PermissionEffect_PERMISSION_EFFECT_DENY,
+				Capability: backendv1.PermissionCapability_PERMISSION_CAPABILITY_TOOL,
+				Match:      tool,
+			}}},
+			CoreTools: []mcp.CoreTool{{Name: "monitor_start", ValidatesItself: true}},
+		}, &recordingSink{}); err != nil {
+			t.Fatalf("%s: running the job: %v", mode, err)
+		}
+
+		args := readArgs(t, argsFile)
+		var settings struct {
+			Permissions struct{ Allow, Ask, Deny []string }
+		}
+		for i, arg := range args {
+			if arg == "--settings" && i+1 < len(args) {
+				if err := json.Unmarshal([]byte(args[i+1]), &settings); err != nil {
+					t.Fatalf("%s: settings %s: %v", mode, args[i+1], err)
+				}
+			}
+		}
+		if !slices.Contains(settings.Permissions.Allow, tool) {
+			t.Errorf("%s: settings must allow %s: %+v", mode, tool, settings.Permissions)
+		}
+		if slices.Contains(settings.Permissions.Ask, tool) {
+			t.Errorf("%s: settings must not ask about %s, it asks the user itself: %+v", mode, tool, settings.Permissions)
+		}
+		if !slices.Contains(settings.Permissions.Deny, tool) {
+			t.Errorf("%s: the policy refusal of %s was lost: %+v", mode, tool, settings.Permissions)
 		}
 	}
 }
