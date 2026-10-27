@@ -7,8 +7,10 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -829,11 +831,65 @@ func TestExecutionContextCancellationStillReportsTheOutcome(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(20 * time.Second):
+		// Cancellation may use the ten-second grace period before SIGKILL.
 		t.Fatal("context cancellation did not stop the provider")
 	}
 	events := sink.timeline()
 	if !contains(events, "job.cancelled") || contains(events, "job.failed") || contains(events, "job.completed") {
 		t.Fatalf("unexpected outcome: %v", events)
 	}
+}
+
+func TestCancelEscalatesChildrenThatIgnoreSIGTERM(t *testing.T) {
+	t.Parallel()
+	ready := filepath.Join(t.TempDir(), "ready")
+	binary, _ := fakeClaude(t, `
+trap '' TERM
+sleep 300 &
+echo "$!" > '`+ready+`'
+wait
+`)
+	sink := &recordingSink{}
+	claude := newRunner(t, binary)
+	done := make(chan error, 1)
+	go func() {
+		done <- claude.Run(context.Background(), runner.StartParams{RunID: "run-force", JobID: "job-force", WorkingDirectory: t.TempDir()}, sink)
+	}()
+	waitFor(t, "the SIGTERM-ignoring child to start", func() bool { raw, err := os.ReadFile(ready); return err == nil && len(raw) > 0 })
+	raw, err := os.ReadFile(ready)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil || pid <= 1 {
+		t.Fatal("invalid descendant PID")
+	}
+	if err := claude.Cancel("job-force"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("cancellation left the SIGTERM-ignoring process group alive")
+	}
+	events := sink.timeline()
+	if !contains(events, "job.cancelled") || contains(events, "job.failed") || contains(events, "job.completed") {
+		t.Fatalf("unexpected cancellation outcome: %v", events)
+	}
+	waitFor(t, "the cancelled descendant to stop", func() bool {
+		if syscall.Kill(pid, 0) == syscall.ESRCH {
+			return true
+		}
+		// A container PID 1 may retain a reparented zombie, which cannot do work.
+		if raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid)); err == nil {
+			if end := strings.LastIndex(string(raw), ") "); end >= 0 && strings.HasPrefix(string(raw)[end+2:], "Z ") {
+				return true
+			}
+		}
+		return false
+	})
 }

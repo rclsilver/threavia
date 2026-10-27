@@ -361,6 +361,8 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 		}
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "SPAWN_FAILED", err.Error(), nil)
 	}
+	finishCancellationWatch := boundCancellation(runCtx, cmd, stdout, stderr)
+	defer finishCancellationWatch()
 	if err := writeUserMessage(stdin, supervised(params.Policy, params.Prompt), params.Attachments...); err != nil {
 		c.logger.Error("cannot hand the message to the provider", slog.String("error", err.Error()))
 	}
@@ -392,6 +394,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	}
 	wg.Wait()
 	waitErr := cmd.Wait()
+	finishCancellationWatch()
 
 	// Reported before the terminal event, so a client that reacts to the end of
 	// a Job already has the change summary in hand.
@@ -664,4 +667,37 @@ func supervised(p policy.Policy, text string) string {
 	}
 	return "Standing instructions for this project, which apply to everything below:\n" +
 		statement + "\n\n" + text
+}
+
+// boundCancellation escalates the whole group after the grace period. Cmd's
+// WaitDelay kills only the direct process; a child that inherited stdout can
+// otherwise keep consume (and therefore Wait itself) blocked indefinitely.
+func boundCancellation(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Closer) func() {
+	finished := make(chan struct{})
+	var once sync.Once
+	finish := func() { once.Do(func() { close(finished) }) }
+	go func() {
+		select {
+		case <-finished:
+			return
+		case <-ctx.Done():
+		}
+		timer := time.NewTimer(stopGrace)
+		defer timer.Stop()
+		select {
+		case <-finished:
+			return
+		case <-timer.C:
+			select {
+			case <-finished:
+				return
+			default:
+			}
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			// Bound the readers too, even if an inherited descriptor escaped the group.
+			_ = stdout.Close()
+			_ = stderr.Close()
+		}
+	}()
+	return finish
 }

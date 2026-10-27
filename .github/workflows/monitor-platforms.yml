@@ -10,7 +10,7 @@ on:
       - "go.sum"
       - ".github/workflows/monitor-platforms.yml"
   push:
-    branches: ["feat/persistent-monitors-macos"]
+    branches: ["master", "feat/persistent-monitors-macos"]
   workflow_dispatch:
 
 permissions:
