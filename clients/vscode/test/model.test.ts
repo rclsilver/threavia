@@ -4,12 +4,15 @@ import type { Project, Repository, Session, UserInputRequest, ValidationRequest 
 import {
   orderProjects,
   orderSessions,
+  activityBadge,
+  activityDescription,
   pinnedDescription,
-  projectDescription,
   repositoryDescription,
   repositoryLines,
   sessionState,
   stateIcon,
+  unreadSessions,
+  waitingByProject,
   waitingBySession,
   waitingCount,
   waitingItems,
@@ -131,10 +134,35 @@ describe('projects', () => {
     expect(pinnedDescription(pinned, projects, '')).toBe('Web');
   });
 
-  it('points at a project holding unread sessions, and stays quiet otherwise', () => {
-    expect(projectDescription(project('p1', 'Infra', { unreadSessions: 2 }))).toBe('2 unread');
-    expect(projectDescription(project('p1', 'Infra'))).toBeUndefined();
-    expect(projectDescription(project('p1', 'Infra', { unreadSessions: 0 }))).toBeUndefined();
+  it('points at a project, or a core, holding what waits or what is unread, and stays quiet otherwise', () => {
+    expect(activityDescription(1, 2)).toBe('1 waiting · 2 unread');
+    expect(activityDescription(0, 2)).toBe('2 unread');
+    expect(activityDescription(3, 0)).toBe('3 waiting');
+    expect(activityDescription(0, 0)).toBeUndefined();
+    expect(unreadSessions([project('p1', 'Infra', { unreadSessions: 2 }), project('p2', 'Web'), project('p3', 'Ops', { unreadSessions: 1 })])).toBe(3);
+  });
+
+  it('counts what waits by the project it waits in', () => {
+    const counts = waitingByProject({
+      validations: [validation('v1', 's1', '2026-10-09T10:00:00Z', {})],
+      userInputs: [question('u1', 's2', '2026-10-09T09:00:00Z'), { ...question('u2', 's3', '2026-10-09T09:00:00Z'), scope: { ...scope('s3'), projectId: 'p2' } }],
+    });
+    expect(counts.get('p1')).toBe(2);
+    expect(counts.get('p2')).toBe(1);
+  });
+});
+
+describe('activity bar badge', () => {
+  it('stays off while nothing waits and nothing is unread, so a number there is always news', () => {
+    expect(activityBadge([{ name: 'home', waiting: 0, unread: 0 }])).toBeUndefined();
+    expect(activityBadge([])).toBeUndefined();
+  });
+
+  it('adds what waits to the unread sessions, and says which core holds them when there are several', () => {
+    expect(activityBadge([{ name: 'home', waiting: 1, unread: 2 }])).toEqual({ value: 3, tooltip: 'Threavia: 1 waiting · 2 unread' });
+    const badge = activityBadge([{ name: 'home', waiting: 1, unread: 0 }, { name: 'work', waiting: 0, unread: 2 }, { name: 'lab', waiting: 0, unread: 0 }]);
+    expect(badge?.value).toBe(3);
+    expect(badge?.tooltip.split('\n')).toEqual(['Threavia: 1 waiting · 2 unread', 'home: 1 waiting', 'work: 2 unread']);
   });
 });
 

@@ -25,6 +25,7 @@ import { openInBrowser, runOpenSession, setSessionOpener } from './sessions';
 import { closeSessionViews, sessionRestored } from './session-views';
 import { chooseNewSession } from './start/new';
 import { pickBackend, pickProject } from './start/pickers';
+import { ActivityBadge } from './tree/badge';
 import { BackendsView } from './tree/backends';
 import { UNTITLED, titleOf } from './tree/model';
 import { sessionsByTitle } from '../../shared/sessions';
@@ -133,6 +134,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     artifacts,
     backends,
     new WaitingStatus(cores),
+    new ActivityBadge(cores, sidebar, tree),
     new Notifier(cores, sessionTitle),
   );
 

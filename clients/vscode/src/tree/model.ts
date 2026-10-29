@@ -31,6 +31,15 @@ export function waitingCount(pending: Pending): number {
   return pending.validations.length + pending.userInputs.length;
 }
 
+/** What waits for the user, counted by Project. */
+export function waitingByProject(pending: Pending): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const request of [...pending.validations, ...pending.userInputs]) {
+    counts.set(request.scope.projectId, (counts.get(request.scope.projectId) ?? 0) + 1);
+  }
+  return counts;
+}
+
 export function sessionState(session: Session, waiting: Map<string, 'validation' | 'input'>): SessionActivity {
   const asked = waiting.get(session.id);
   if (asked) return asked;
@@ -78,10 +87,19 @@ export function stateIcon(state: SessionActivity, unread = false): IconSpec {
   }
 }
 
-/** How many of a Project's Sessions hold something unread, when any does. */
-export function projectDescription(project: Project): string | undefined {
-  const unread = project.unreadSessions ?? 0;
-  return unread > 0 ? `${unread} unread` : undefined;
+/**
+ * What waits and what is unread under a row — a Project, or a whole Core —
+ * when anything is: `1 waiting · 2 unread`. Quiet otherwise, like the rest of
+ * the list.
+ */
+export function activityDescription(waiting: number, unread: number): string | undefined {
+  const parts = [waiting > 0 && `${waiting} waiting`, unread > 0 && `${unread} unread`].filter(Boolean);
+  return parts.length ? parts.join(' · ') : undefined;
+}
+
+/** The unread Sessions of a Core, over its Projects. */
+export function unreadSessions(projects: readonly Project[]): number {
+  return projects.reduce((sum, project) => sum + (project.unreadSessions ?? 0), 0);
 }
 
 /**
@@ -218,6 +236,32 @@ export function waitingSummary(cores: readonly CoreWaiting[]): { count: number; 
   if (cores.length <= 1) return { count, tooltip: `${count} waiting for you in Threavia` };
   const lines = cores.filter((core) => core.count > 0).map((core) => `${core.name}: ${core.count}`);
   return { count, tooltip: [`${count} waiting for you in Threavia`, ...lines].join('\n') };
+}
+
+/** One Core's share of the activity bar's badge. */
+export interface CoreActivity {
+  name: string;
+  waiting: number;
+  unread: number;
+}
+
+/**
+ * The badge on the Threavia icon of the activity bar: what waits plus the
+ * Sessions holding something unread, over every Core, so it shows while the
+ * view is closed. None when there is nothing: a zero is not news.
+ */
+export function activityBadge(cores: readonly CoreActivity[]): { value: number; tooltip: string } | undefined {
+  const waiting = cores.reduce((sum, core) => sum + core.waiting, 0);
+  const unread = cores.reduce((sum, core) => sum + core.unread, 0);
+  if (waiting + unread === 0) return undefined;
+  const summary = activityDescription(waiting, unread)!;
+  const lines = cores.length > 1
+    ? cores.flatMap((core) => {
+      const description = activityDescription(core.waiting, core.unread);
+      return description ? [`${core.name}: ${description}`] : [];
+    })
+    : [];
+  return { value: waiting + unread, tooltip: [`Threavia: ${summary}`, ...lines].join('\n') };
 }
 
 /** A notification names its Core only when it could have come from another. */

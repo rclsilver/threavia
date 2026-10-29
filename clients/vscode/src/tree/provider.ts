@@ -7,6 +7,7 @@ import type { Core } from '../cores/core';
 import type { Cores } from '../cores/registry';
 import { isSessionOpen } from '../sessions';
 import {
+  activityDescription,
   ago,
   coreIcon,
   coreMessage,
@@ -14,13 +15,14 @@ import {
   isCurrentProject,
   orderSessions,
   pinnedDescription,
-  projectDescription,
   repositoryDescription,
   repositoryLines,
   sessionState,
   sidebarRoots,
   stateIcon,
   titleOf,
+  unreadSessions,
+  waitingByProject,
   waitingBySession,
   waitingCount,
   waitingItems,
@@ -53,6 +55,11 @@ type RepositoryEntry = { repo?: Repository; error?: string; at: number };
 /** What the sidebar keeps for one Core. */
 class CoreCache {
   projects: Project[] | undefined;
+  /**
+   * The unread Sessions over its Projects, as last read. Kept while the lists
+   * are read again, so the Core's row does not blink to nothing meanwhile.
+   */
+  unread = 0;
   pinned: Session[] | undefined;
   readonly monitors = new Map<string, Monitor[]>();
   readonly sessions = new Map<string, Session[]>();
@@ -290,8 +297,24 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
 
   private async loadProjects(core: Core): Promise<Project[]> {
     const cache = this.cache(core.id);
-    cache.projects ??= await core.client.projects();
+    if (!cache.projects) {
+      cache.projects = await core.client.projects();
+      const unread = unreadSessions(cache.projects);
+      // The Core's row is drawn before its Projects are read: it is drawn
+      // again when what they hold changed.
+      if (unread !== cache.unread && this.cores.several) this.changed.fire(cache.core);
+      cache.unread = unread;
+    }
     return cache.projects;
+  }
+
+  /**
+   * The unread Sessions of a Core, read with the lists the sidebar shows, so
+   * the activity bar's badge and the rows never disagree.
+   */
+  async unread(core: Core): Promise<number> {
+    await this.loadProjects(core);
+    return this.cache(core.id).unread;
   }
 
   private async loadPinned(core: Core): Promise<Session[]> {
@@ -365,7 +388,10 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     item.id = `core:${coreId}`;
     if (!core) return item;
     const icon = coreIcon(core.state);
-    item.description = core.host;
+    const activity = core.state === 'ready'
+      ? activityDescription(waitingCount(core.attention.current), this.cache(coreId).unread)
+      : undefined;
+    item.description = [activity, core.host].filter(Boolean).join(' · ');
     item.iconPath = themeIcon(icon);
     item.contextValue = `core.${core.state}${core.auth.signedIn ? '.signedIn' : ''}`;
     const account = core.auth.accountLabel;
@@ -400,7 +426,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     item.id = `${node.coreId}:project:${project.id}`;
     item.contextValue = 'project';
     item.iconPath = new vscode.ThemeIcon(current ? 'folder-active' : 'folder');
-    item.description = projectDescription(project);
+    const waiting = waitingByProject(this.cores.get(node.coreId)?.attention.current ?? { validations: [], userInputs: [] });
+    item.description = activityDescription(waiting.get(project.id) ?? 0, project.unreadSessions ?? 0);
     item.tooltip = project.description || project.name;
     return item;
   }
