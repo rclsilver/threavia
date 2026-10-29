@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -10,7 +11,8 @@ import (
 )
 
 const sessionColumns = `s.id, s.project_id, s.title, s.status, s.working_directory_id,
-	s.created_at, s.updated_at, s.archived_at, s.pinned_at, s.manager_session_id, s.model, s.effort`
+	s.created_at, s.updated_at, s.archived_at, s.pinned_at, s.manager_session_id, s.model, s.effort,
+	s.read_sequence`
 
 // CreateSession inserts a Session.
 func (s *Store) CreateSession(ctx context.Context, session *domain.Session) error {
@@ -55,7 +57,7 @@ func (s *Store) DeleteSession(ctx context.Context, ownerID domain.UserID, id dom
 // which is the one everything else in the Session is queued behind.
 func (s *Store) ListSessions(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID, includeArchived bool) ([]domain.Session, error) {
 	rows, err := s.q.Query(ctx, `
-		SELECT `+sessionColumns+`, `+activeJobStatus+`
+		SELECT `+sessionColumns+`, `+activeJobStatus+`, `+sessionUnread+`
 		FROM sessions s JOIN projects p ON p.id = s.project_id
 		WHERE s.project_id = $1 AND p.owner_id = $2 AND ($3 OR s.status = 'ACTIVE')
 		ORDER BY s.updated_at DESC`, projectID, ownerID, includeArchived)
@@ -77,7 +79,7 @@ func (s *Store) ToolSessions(ctx context.Context, ownerID domain.UserID, project
 		manager = managerID
 	}
 	rows, err := s.q.Query(ctx, `
-		SELECT `+sessionColumns+`, `+activeJobStatus+`
+		SELECT `+sessionColumns+`, `+activeJobStatus+`, `+sessionUnread+`
 		FROM sessions s JOIN projects p ON p.id = s.project_id
 		WHERE p.owner_id = $1
 		  AND ($2::uuid IS NULL OR s.project_id = $2)
@@ -95,7 +97,7 @@ func (s *Store) ToolSessions(ctx context.Context, ownerID domain.UserID, project
 // for the durable attention callback. It is not a paginated agent response.
 func (s *Store) ManagedSessions(ctx context.Context, ownerID domain.UserID, managerID domain.SessionID) ([]domain.Session, error) {
 	rows, err := s.q.Query(ctx, `
-		SELECT `+sessionColumns+`, `+activeJobStatus+`
+		SELECT `+sessionColumns+`, `+activeJobStatus+`, `+sessionUnread+`
 		FROM sessions s JOIN projects p ON p.id = s.project_id
 		WHERE p.owner_id = $1 AND s.manager_session_id = $2 AND s.status = 'ACTIVE'`, ownerID, managerID)
 	if err != nil {
@@ -109,7 +111,7 @@ func (s *Store) ManagedSessions(ctx context.Context, ownerID domain.UserID, mana
 // way on purpose, and it comes back pinned when it is restored.
 func (s *Store) PinnedSessions(ctx context.Context, ownerID domain.UserID) ([]domain.Session, error) {
 	rows, err := s.q.Query(ctx, `
-		SELECT `+sessionColumns+`, `+activeJobStatus+`
+		SELECT `+sessionColumns+`, `+activeJobStatus+`, `+sessionUnread+`
 		FROM sessions s JOIN projects p ON p.id = s.project_id
 		WHERE p.owner_id = $1 AND s.pinned_at IS NOT NULL AND s.status = 'ACTIVE'
 		ORDER BY s.pinned_at`, ownerID)
@@ -137,7 +139,48 @@ const activeJobStatus = `(SELECT j.status FROM jobs j JOIN runs r ON r.id = j.ru
 		   AND j.status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')
 		 ORDER BY j.created_at LIMIT 1)`
 
-// readSessionList reads Sessions listed with the status of their active Job.
+// unreadTypes are what a person comes back to a Session for: something the
+// agent said, or a Job that failed. Their own messages and the tools the agent
+// ran on the way are not.
+const unreadTypes = `('agent.message', 'job.failed')`
+
+// sessionUnread says whether one of the unreadTypes came after the last event
+// the person was shown.
+const sessionUnread = `EXISTS (SELECT 1 FROM events e
+		 WHERE e.session_id = s.id AND e.global_sequence > s.read_sequence
+		   AND e.type IN ` + unreadTypes + `)`
+
+// MarkSessionRead moves how far the person has read a Session up to sequence.
+// It never moves back, and never past the last event of the Session, so a
+// client cannot mark as read what has not happened yet. It returns the Session
+// and whether the move cleared something unread, which is the only change the
+// person's other clients have to hear about.
+func (s *Store) MarkSessionRead(ctx context.Context, ownerID domain.UserID, id domain.SessionID, sequence domain.Sequence) (domain.Session, bool, error) {
+	var cleared bool
+	session, err := scanSession(s.q.QueryRow(ctx, `
+		WITH target AS (
+			SELECT s.id, s.read_sequence AS before, least($3, coalesce(
+				(SELECT max(e.global_sequence) FROM events e WHERE e.session_id = s.id), 0)) AS sequence
+			FROM sessions s JOIN projects p ON p.id = s.project_id
+			WHERE s.id = $1 AND p.owner_id = $2
+			FOR UPDATE OF s)
+		UPDATE sessions s SET read_sequence = target.sequence
+		FROM target
+		WHERE s.id = target.id AND s.read_sequence < target.sequence
+		RETURNING `+sessionColumns+`, EXISTS (SELECT 1 FROM events e
+			WHERE e.session_id = s.id AND e.global_sequence > target.before
+			  AND e.global_sequence <= target.sequence AND e.type IN `+unreadTypes+`)`,
+		id, ownerID, sequence), &cleared)
+	if !errors.Is(err, ErrNotFound) {
+		return session, cleared, err
+	}
+	// Nothing moved: already read that far, or not this owner's Session.
+	session, err = s.GetSession(ctx, ownerID, id)
+	return session, false, err
+}
+
+// readSessionList reads Sessions listed with the status of their active Job
+// and whether they hold something unread.
 func readSessionList(rows pgx.Rows) ([]domain.Session, error) {
 	defer rows.Close()
 
@@ -146,8 +189,8 @@ func readSessionList(rows pgx.Rows) ([]domain.Session, error) {
 		var session domain.Session
 		err := rows.Scan(&session.ID, &session.ProjectID, &session.Title, &session.Status,
 			&session.WorkingDirectoryID, &session.CreatedAt, &session.UpdatedAt, &session.ArchivedAt, &session.PinnedAt,
-			&session.ManagerSessionID, &session.Model, &session.Effort,
-			&session.ActiveJobStatus)
+			&session.ManagerSessionID, &session.Model, &session.Effort, &session.ReadSequence,
+			&session.ActiveJobStatus, &session.Unread)
 		if err != nil {
 			return nil, classify(err, "read session")
 		}
@@ -195,10 +238,12 @@ func (s *Store) TouchSession(ctx context.Context, id domain.SessionID) error {
 	return classify(err, "touch session")
 }
 
-func scanSession(row scanner) (domain.Session, error) {
+// scanSession reads the sessionColumns, then any extra column the query added.
+func scanSession(row scanner, extra ...any) (domain.Session, error) {
 	var session domain.Session
-	err := row.Scan(&session.ID, &session.ProjectID, &session.Title, &session.Status,
-		&session.WorkingDirectoryID, &session.CreatedAt, &session.UpdatedAt, &session.ArchivedAt, &session.PinnedAt, &session.ManagerSessionID, &session.Model, &session.Effort)
+	err := row.Scan(append([]any{&session.ID, &session.ProjectID, &session.Title, &session.Status,
+		&session.WorkingDirectoryID, &session.CreatedAt, &session.UpdatedAt, &session.ArchivedAt, &session.PinnedAt, &session.ManagerSessionID, &session.Model, &session.Effort,
+		&session.ReadSequence}, extra...)...)
 	return session, classify(err, "read session")
 }
 

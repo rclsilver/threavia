@@ -42,7 +42,7 @@ beforeEach(() => {
   HTMLElement.prototype.hasPointerCapture = () => false;
   HTMLElement.prototype.setPointerCapture = vi.fn();
   HTMLElement.prototype.releasePointerCapture = vi.fn();
-  session = { id: 'session', projectId: 'project', title: 'Model test', status: 'ACTIVE', model: 'first', effort: 'high', createdAt: '2026-10-27T10:00:00Z', updatedAt: '2026-10-27T10:00:00Z' };
+  session = { id: 'session', projectId: 'project', title: 'Model test', status: 'ACTIVE', model: 'first', effort: 'high', createdAt: '2026-10-27T10:00:00Z', updatedAt: '2026-10-27T10:00:00Z', readSequence: 0 };
   mocks.get.mockReset().mockImplementation((path: string) => Promise.resolve(path === '/api/v1/sessions/session'
     ? { session, runs: [{ id: 'run', backendInstanceId: 'backend', createdAt: session.createdAt }], jobs: [], events: [], attention: {}, cursor: 0 } as unknown as Snapshot
     : { items: path === '/api/v1/backends' ? [backend] : [] }));

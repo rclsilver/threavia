@@ -1403,6 +1403,35 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Job" }
 
+  /api/v1/sessions/{sessionId}/read:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    post:
+      tags: [sessions]
+      summary: Record how far the person has read a Session
+      description: |
+        A client calls it while it shows the Session to the person, with the
+        sequence of the last event on screen. The mark never moves back, and
+        never past the last event of the Session. When it moves, a
+        `session.read` event `{readSequence}` tells every client of the person,
+        so what was read on one device stops standing out on the others.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sequence]
+              properties:
+                sequence: { type: integer, format: int64, minimum: 1 }
+      responses:
+        "204":
+          description: Recorded, or already read that far
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
   /api/v1/sessions/{sessionId}/archive:
     parameters:
       - $ref: "#/components/parameters/SessionID"
@@ -3008,10 +3037,16 @@ components:
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         archivedAt: { type: string, format: date-time }
+        unreadSessions:
+          type: integer
+          description: |
+            How many of its active Sessions hold something unread, so a client
+            can point at a Project it is not showing. Set on lists only, and
+            absent when there is none.
 
     Session:
       type: object
-      required: [id, projectId, title, status, createdAt, updatedAt]
+      required: [id, projectId, title, status, createdAt, updatedAt, readSequence]
       properties:
         id: { $ref: "#/components/schemas/UUID" }
         projectId: { $ref: "#/components/schemas/UUID" }
@@ -3044,6 +3079,17 @@ components:
             queued. Set on lists only, so a client can say which Session is
             working without opening each one; what waits for the user is read
             from the attention route.
+        readSequence:
+          type: integer
+          format: int64
+          description: |
+            The sequence of the last event a client showed the person. What the
+            agent said past it has not been read.
+        unread:
+          type: boolean
+          description: |
+            An agent message or a failed Job came after readSequence. Set on
+            lists only, like activeJobStatus; absent means read.
 
     Run:
       type: object
@@ -3164,6 +3210,9 @@ components:
               Refresh skills and audit.
               Skill events are project-scoped for a Project Skill or an
               activation, owner-scoped without a project id for a global Skill.
+            - `session.read`: `{ readSequence }`, the person was shown the
+              Session up to there on one of their clients. Refresh session and
+              project lists.
             - `session.deleted`: `{ sessionId, title, artifactsDeleted }`,
               project-scoped so it survives deletion of the session history.
               Older events may carry the session id in the envelope instead.

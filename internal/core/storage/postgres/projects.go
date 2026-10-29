@@ -34,10 +34,13 @@ func (s *Store) LockProject(ctx context.Context, ownerID domain.UserID, id domai
 	return scanProject(s.q.QueryRow(ctx, `SELECT `+projectColumns+` FROM projects WHERE id=$1 AND owner_id=$2 FOR UPDATE`, id, ownerID))
 }
 
-// ListProjects returns the Projects of a user, most recently updated first.
+// ListProjects returns the Projects of a user, most recently updated first,
+// each with how many of its active Sessions hold something unread.
 func (s *Store) ListProjects(ctx context.Context, ownerID domain.UserID, includeArchived bool) ([]domain.Project, error) {
 	rows, err := s.q.Query(ctx, `
-		SELECT `+projectColumns+`
+		SELECT `+projectColumns+`,
+			(SELECT count(*) FROM sessions s
+			 WHERE s.project_id = projects.id AND s.status = 'ACTIVE' AND `+sessionUnread+`)
 		FROM projects
 		WHERE owner_id = $1 AND ($2 OR status = 'ACTIVE')
 		ORDER BY updated_at DESC`, ownerID, includeArchived)
@@ -48,11 +51,13 @@ func (s *Store) ListProjects(ctx context.Context, ownerID domain.UserID, include
 
 	var out []domain.Project
 	for rows.Next() {
-		project, err := scanProject(rows)
+		var p domain.Project
+		err := rows.Scan(&p.ID, &p.OwnerID, &p.Name, &p.Description, &p.Instructions, &p.Status,
+			&p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt, &p.UnreadSessions)
 		if err != nil {
-			return nil, err
+			return nil, classify(err, "read project")
 		}
-		out = append(out, project)
+		out = append(out, p)
 	}
 	return out, classify(rows.Err(), "list projects")
 }

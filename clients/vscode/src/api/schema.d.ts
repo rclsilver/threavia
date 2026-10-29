@@ -2775,6 +2775,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{sessionId}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["SessionID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record how far the person has read a Session
+         * @description A client calls it while it shows the Session to the person, with the
+         *     sequence of the last event on screen. The mark never moves back, and
+         *     never past the last event of the Session. When it moves, a
+         *     `session.read` event `{readSequence}` tells every client of the person,
+         *     so what was read on one device stops standing out on the others.
+         *
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: components["parameters"]["SessionID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: int64 */
+                        sequence: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Recorded, or already read that far */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{sessionId}/archive": {
         parameters: {
             query?: never;
@@ -5447,6 +5502,11 @@ export interface components {
             updatedAt: string;
             /** Format: date-time */
             archivedAt?: string;
+            /** @description How many of its active Sessions hold something unread, so a client
+             *     can point at a Project it is not showing. Set on lists only, and
+             *     absent when there is none.
+             *      */
+            unreadSessions?: number;
         };
         Session: {
             id: components["schemas"]["UUID"];
@@ -5486,6 +5546,17 @@ export interface components {
              *     from the attention route.
              *      */
             activeJobStatus?: components["schemas"]["JobStatus"];
+            /**
+             * Format: int64
+             * @description The sequence of the last event a client showed the person. What the
+             *     agent said past it has not been read.
+             *
+             */
+            readSequence: number;
+            /** @description An agent message or a failed Job came after readSequence. Set on
+             *     lists only, like activeJobStatus; absent means read.
+             *      */
+            unread?: boolean;
         };
         /** @description The binding between a Session and one BackendInstance. An infrastructure detail a client shows only when the user needs to choose or debug a backend. */
         Run: {
@@ -5615,6 +5686,9 @@ export interface components {
              *       Refresh skills and audit.
              *       Skill events are project-scoped for a Project Skill or an
              *       activation, owner-scoped without a project id for a global Skill.
+             *     - `session.read`: `{ readSequence }`, the person was shown the
+             *       Session up to there on one of their clients. Refresh session and
+             *       project lists.
              *     - `session.deleted`: `{ sessionId, title, artifactsDeleted }`,
              *       project-scoped so it survives deletion of the session history.
              *       Older events may carry the session id in the envelope instead.

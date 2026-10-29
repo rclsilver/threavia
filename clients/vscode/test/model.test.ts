@@ -21,6 +21,7 @@ const session = (id: string, updatedAt: string, extra: Partial<Session> = {}): S
   status: 'ACTIVE',
   createdAt: updatedAt,
   updatedAt,
+  readSequence: 0,
   ...extra,
 });
 

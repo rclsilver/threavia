@@ -302,3 +302,9 @@ func mustJSON(value any) json.RawMessage {
 type SessionPinnedPayload struct {
 	Pinned bool `json:"pinned"`
 }
+
+// SessionReadPayload is the body of a session.read event: the person was shown
+// the Session up to this sequence, on one of their clients.
+type SessionReadPayload struct {
+	ReadSequence domain.Sequence `json:"readSequence"`
+}

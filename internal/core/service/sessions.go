@@ -511,6 +511,26 @@ func (s *Service) SetSessionPinned(ctx context.Context, identity auth.Identity, 
 	return session, nil
 }
 
+// MarkSessionRead records that the person was shown a Session up to sequence.
+// When that cleared something unread, every client of theirs follows, so what
+// was read on one device stops standing out on the others. A mark that cleared
+// nothing says nothing.
+func (s *Service) MarkSessionRead(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, sequence domain.Sequence) error {
+	if sequence <= 0 {
+		return fmt.Errorf("%w: sequence must be positive", ErrInvalid)
+	}
+	session, cleared, err := s.store.MarkSessionRead(ctx, identity.UserID, sessionID, sequence)
+	if err != nil {
+		return translate(err)
+	}
+	if cleared {
+		s.emit(ctx, identity.UserID, events.TypeSessionRead,
+			domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID},
+			SessionReadPayload{ReadSequence: session.ReadSequence})
+	}
+	return nil
+}
+
 // PinnedSessions lists the Sessions the person pinned, across Projects.
 func (s *Service) PinnedSessions(ctx context.Context, identity auth.Identity) ([]domain.Session, error) {
 	sessions, err := s.store.PinnedSessions(ctx, identity.UserID)

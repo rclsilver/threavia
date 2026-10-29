@@ -20,6 +20,9 @@ type Project struct {
 	CreatedAt    time.Time     `json:"createdAt"`
 	UpdatedAt    time.Time     `json:"updatedAt"`
 	ArchivedAt   *time.Time    `json:"archivedAt,omitempty"`
+	// UnreadSessions counts its active Sessions with something unread. Filled
+	// on lists only, so a client can point at a Project it is not showing.
+	UnreadSessions int `json:"unreadSessions,omitempty"`
 }
 
 // Session is the long-lived user-visible work context. It is provider and
@@ -46,10 +49,16 @@ type Session struct {
 	// PinnedAt is when the person pinned the Session, to reach it from any
 	// Project. Absent when it is not pinned.
 	PinnedAt *time.Time `json:"pinnedAt,omitempty"`
+	// ReadSequence is the global sequence of the last event a client showed
+	// the person. What the agent said past it has not been read.
+	ReadSequence Sequence `json:"readSequence"`
 	// ActiveJobStatus is the status of the oldest Job not yet finished, absent
 	// when nothing is running or queued. Filled on lists only, so a sidebar can
 	// say which Session is working without opening each one.
 	ActiveJobStatus *JobStatus `json:"activeJobStatus,omitempty"`
+	// Unread says an agent message or a failed Job came after ReadSequence.
+	// Filled on lists only, like ActiveJobStatus.
+	Unread bool `json:"unread,omitempty"`
 }
 
 // Run binds a Session to one BackendInstance and one provider native session.

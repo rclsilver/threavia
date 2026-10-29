@@ -21,6 +21,7 @@ func (h *handler) registerSessions(mux *http.ServeMux) {
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/repository", h.repository)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/handoff", h.previewHandoff)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/messages", h.postMessage)
+	h.handle(mux, "POST /api/v1/sessions/{sessionId}/read", h.markSessionRead)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/archive", h.archiveSession)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/restore", h.restoreSession)
 }
@@ -303,6 +304,21 @@ func (h *handler) repository(w http.ResponseWriter, r *http.Request, identity au
 }
 
 // pinnedSessions lists the Sessions the person pinned, from every Project.
+// markSessionRead records how far a client showed the Session to the person.
+func (h *handler) markSessionRead(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	body, ok := decode[struct {
+		Sequence domain.Sequence `json:"sequence"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	if err := h.svc.MarkSessionRead(r.Context(), identity, domain.SessionID(r.PathValue("sessionId")), body.Sequence); err != nil {
+		h.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *handler) pinnedSessions(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
 	sessions, err := h.svc.PinnedSessions(r.Context(), identity)
 	if err != nil {
