@@ -157,13 +157,18 @@ export class CoreClient {
 
   /** Opens a request with the client's headers, retrying once after a renewal. */
   async raw(path: string, init: RequestInit & { headers?: Record<string, string> } = {}): Promise<Response> {
-    const send = async () =>
-      this.fetcher(`${this.baseUrl}${path}`, { ...init, headers: await this.headers(init.headers) });
-    let response = await send();
-    if (response.status === 401 && this.options.onUnauthorized && (await this.options.onUnauthorized())) {
-      response = await send();
-    }
-    return response;
+    const send = async () => {
+      const headers = await this.headers(init.headers);
+      const response = await this.fetcher(`${this.baseUrl}${path}`, { ...init, headers });
+      return { response, sent: headers.get('Authorization') ?? undefined };
+    };
+    const first = await send();
+    if (first.response.status !== 401 || !this.options.onUnauthorized) return first.response;
+    // A request sent before the sign-in was read, or with one replaced since,
+    // says nothing of the one held now: that one is tried, not dropped.
+    const current = await this.options.authorization();
+    if ((current && current !== first.sent) || (await this.options.onUnauthorized())) return (await send()).response;
+    return first.response;
   }
 
   async request<T>(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<T> {

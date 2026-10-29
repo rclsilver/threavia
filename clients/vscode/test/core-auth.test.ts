@@ -12,7 +12,7 @@ vi.mock('vscode', () => ({
 }));
 
 import { CoreAuth } from '../src/auth/core';
-import type { CoreClient } from '../src/api/client';
+import { CoreClient } from '../src/api/client';
 
 let raw: string | undefined;
 const config = { mode: 'oidc' as const, issuer: 'https://sso.example', clientId: 'threavia' };
@@ -28,16 +28,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function create() {
-  const secrets = {
-    get: () => Promise.resolve(raw),
-    store: (_key: string, value: string) => { raw = value; return Promise.resolve(); },
-    delete: () => { raw = undefined; return Promise.resolve(); },
-    onDidChange: () => ({ dispose() {} }),
-  } as unknown as SecretStorage;
+const secrets = {
+  get: () => Promise.resolve(raw),
+  store: (_key: string, value: string) => { raw = value; return Promise.resolve(); },
+  delete: () => { raw = undefined; return Promise.resolve(); },
+  onDidChange: () => ({ dispose() {} }),
+} as unknown as SecretStorage;
+
+function unloaded(client: () => CoreClient = () => ({} as CoreClient)) {
   const auth = new CoreAuth(secrets, { id: 'core', name: () => 'Threavia', several: () => false },
-    () => ({} as CoreClient), { expect: () => Promise.resolve(''), cancel() {} });
+    client, { expect: () => Promise.resolve(''), cancel() {} });
   sessions.push(auth);
+  return auth;
+}
+
+async function create() {
+  const auth = unloaded();
   await auth.load(config);
   return auth;
 }
@@ -84,4 +90,28 @@ it('does not restore credentials if renewal completes after signing out', async 
   expect(await pending).toBe(false);
   expect(auth.signedIn).toBe(false);
   expect(raw).toBeUndefined();
+});
+
+it('keeps a basic sign-in when Core refuses a request sent before it was read', async () => {
+  raw = JSON.stringify({ type: 'basic', username: 'thomas', password: 'secret' });
+  const auth = unloaded();
+  const fetcher = vi.fn((_url: string, init: RequestInit) => {
+    if (new Headers(init.headers).get('Authorization')) return Promise.resolve(Response.json({ id: 'thomas' }));
+    // A conversation restored at start asks before the sign-in is read, and
+    // the sign-in is read while Core's refusal is on its way back.
+    return auth.load({ mode: 'basic' }).then(() => new Response('', { status: 401 }));
+  });
+  const client = new CoreClient({
+    baseUrl: () => 'https://core.example',
+    identity: { clientId: 'editor', clientName: () => 'Editor' },
+    authorization: () => auth.authorization(),
+    onUnauthorized: () => auth.recover(),
+    fetch: fetcher as unknown as typeof fetch,
+  });
+  // Core never saw that sign-in, so it cannot have refused it: it is sent
+  // instead of being forgotten, which would ask for it at the next start.
+  await expect(client.me()).resolves.toEqual({ id: 'thomas' });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(auth.signedIn).toBe(true);
+  expect(raw).toContain('thomas');
 });
