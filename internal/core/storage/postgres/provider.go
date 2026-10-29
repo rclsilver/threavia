@@ -33,9 +33,14 @@ func (s *Store) JobProviderActiveSeconds(ctx context.Context, id domain.JobID) (
 
 // ProviderRecoveryJobs includes unstarted work held behind a provider condition.
 // It excludes connection-loss waits: those may still be executing on a laptop.
+// It skips a queued Job whose Run already holds an active Job: that Job cannot
+// take the slot, and trying only trips jobs_run_single_active_key. The active
+// Job starts the next one when it ends.
 func (s *Store) ProviderRecoveryJobs(ctx context.Context, at time.Time) ([]domain.JobID, error) {
-	rows, err := s.q.Query(ctx, `SELECT id FROM jobs
-		WHERE status='QUEUED' OR (status='WAITING_BACKEND' AND backend_wait IS NOT NULL
+	rows, err := s.q.Query(ctx, `SELECT id FROM jobs j
+		WHERE (status='QUEUED' AND NOT EXISTS (SELECT 1 FROM jobs a WHERE a.run_id=j.run_id
+		 AND a.status IN ('RUNNING','WAITING_INPUT','WAITING_VALIDATION','WAITING_BACKEND','CANCELLING')))
+		 OR (status='WAITING_BACKEND' AND backend_wait IS NOT NULL
 		 AND (backend_wait->>'retryAt' IS NULL OR (backend_wait->>'retryAt')::timestamptz <= $1))
 		ORDER BY created_at`, at)
 	if err != nil {
