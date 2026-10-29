@@ -5,6 +5,7 @@ import { ApiError } from '../api/client';
 import type { Monitor, Project, Repository, Session } from '../api/types';
 import type { Core } from '../cores/core';
 import type { Cores } from '../cores/registry';
+import { isSessionOpen } from '../sessions';
 import {
   ago,
   coreIcon,
@@ -13,6 +14,7 @@ import {
   isCurrentProject,
   orderSessions,
   pinnedDescription,
+  projectDescription,
   repositoryDescription,
   repositoryLines,
   sessionState,
@@ -398,6 +400,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     item.id = `${node.coreId}:project:${project.id}`;
     item.contextValue = 'project';
     item.iconPath = new vscode.ThemeIcon(current ? 'folder-active' : 'folder');
+    item.description = projectDescription(project);
     item.tooltip = project.description || project.name;
     return item;
   }
@@ -411,7 +414,10 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     // A Session pinned also appears under its Project: the ids keep the two
     // rows apart.
     item.id = `${coreId}:${node.under}:${session.id}`;
-    item.iconPath = themeIcon(stateIcon(state));
+    // The one open in the window the person is in is being read: it does not
+    // stand out for the moment before Core hears it was.
+    const unread = Boolean(session.unread) && !(isSessionOpen({ coreId, sessionId: session.id }) && vscode.window.state.focused);
+    item.iconPath = themeIcon(stateIcon(state, unread));
     item.contextValue = session.pinnedAt ? 'session.pinned' : 'session';
 
     const elsewhere =
@@ -422,7 +428,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     const live = monitors.every(m => m.confirmed && Date.now() - Date.parse(m.lastSeenAt) < 30_000);
     const watching = monitors.length ? `${monitors.length} monitor${monitors.length > 1 ? 's' : ''}${live ? ' active' : ' unconfirmed'}` : undefined;
     if (watching && !session.activeJobStatus) item.iconPath = new vscode.ThemeIcon('radio-tower');
-    item.description = [watching, git, elsewhere].filter(Boolean).join(' · ') || undefined;
+    item.description = [unread && 'unread', watching, git, elsewhere].filter(Boolean).join(' · ') || undefined;
     item.command = {
       command: 'threavia.openSession',
       title: 'Open Session',
@@ -444,7 +450,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
 
   private sessionTooltip(coreId: string, session: Session): vscode.MarkdownString {
     const pending = this.cores.get(coreId)?.attention.current ?? { validations: [], userInputs: [] };
-    const state = stateIcon(sessionState(session, waitingBySession(pending)));
+    const state = stateIcon(sessionState(session, waitingBySession(pending)), session.unread);
     const markdown = new vscode.MarkdownString(undefined, true);
     markdown.appendMarkdown(`**${escape(titleOf(session))}**\n\n`);
     markdown.appendMarkdown(`$(${state.id.replace('~spin', '')}) ${state.label} · updated ${ago(session.updatedAt)}\n\n`);

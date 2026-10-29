@@ -98,6 +98,7 @@ export interface EventPayloads {
   'validation.resolved': { validationId: string; approved: boolean; note?: string; title?: string; actorJobId?: string };
   'user_input.resolved': { requestId: string; value: string; actorJobId?: string };
   'session.pinned': { pinned: boolean };
+  'session.read': { readSequence: number };
   'artifact.created': { artifactId: string; filename: string; mimeType: string; size: number; title?: string };
   'workspace.changed': {
     knownDirectoryId?: string;

@@ -1,5 +1,6 @@
 import { mediaType } from '../../../shared/media';
 import { learningSource, requestLearningCapture } from '../../../shared/learnings';
+import { readUpTo } from '../../../shared/sessions';
 import { artifactKind } from './format';
 import * as vscode from 'vscode';
 
@@ -21,6 +22,7 @@ import type { SessionRef } from '../cores/refs';
 import type { Cores } from '../cores/registry';
 import type { VirtualDocuments } from '../diff/documents';
 import { openFileDiff } from '../diff/open';
+import { isActive } from '../presence';
 import { markSessionOpen } from '../sessions';
 import { closeSessionViews, registerSessionPanel } from '../session-views';
 import { repositoryDescription, titleOf, waitingBySession } from '../tree/model';
@@ -351,7 +353,9 @@ class ConversationPanel {
       panel.onDidChangeViewState(() => {
         if (this.sessionId) markSessionOpen(this.ref(this.sessionId), panel.visible);
         this.watchRepository();
+        this.markRead();
       }),
+      vscode.window.onDidChangeWindowState(() => this.markRead()),
       bus.on('event', (event) => this.onEvent(event)),
       bus.on('effect', (effect) => {
         if (effect.kind === 'backends') void this.loadBackend();
@@ -460,6 +464,7 @@ class ConversationPanel {
       if (firstRead) this.onLoaded();
       if (this.ready) this.post({ type: 'events', events: this.events, reset: true });
       this.postView();
+      this.markRead();
       void this.loadBackend();
     } catch (error) {
       if (!this.loaded && this.ready) {
@@ -515,6 +520,24 @@ class ConversationPanel {
     this.snapshotAttention = applyToAttention(this.snapshotAttention, event);
     this.post({ type: 'events', events: [event] });
     this.postView();
+    this.markRead();
+  }
+
+  /**
+   * What the agent said stops standing out, here and on every other client,
+   * once it is in a panel the person is looking at. An editor in the
+   * background is not looking: the mark waits for it to come back.
+   */
+  private markRead() {
+    const sessionId = this.sessionId;
+    if (!sessionId || !this.session || !this.panel.visible || !isActive()) return;
+    const sequence = readUpTo(this.session.readSequence, this.events);
+    if (sequence === undefined) return;
+    // Moved at once, so the same events are not sent again while the call is
+    // on its way. A failed call is not retried: the next snapshot brings back
+    // the mark Core holds, and the Session is marked again if still shown.
+    this.session = { ...this.session, readSequence: sequence };
+    this.core.client.markSessionRead(sessionId, sequence).catch(() => undefined);
   }
 
   // ---------------------------------------------------------------- view

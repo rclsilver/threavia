@@ -286,6 +286,11 @@ export class CoreClient {
     return this.patch<Session>(`/api/v1/sessions/${sessionId}`, { pinned });
   }
 
+  /** Records that the person was shown the Session up to this event. */
+  markSessionRead(sessionId: string, sequence: number) {
+    return this.post<void>(`/api/v1/sessions/${sessionId}/read`, { sequence });
+  }
+
   archiveSession(sessionId: string) {
     return this.post<Session>(`/api/v1/sessions/${sessionId}/archive`);
   }

@@ -65,6 +65,10 @@ describe('what an event changes', () => {
     }
   });
 
+  it('refreshes the lists when a session was read on another client, so it stops standing out here', () => {
+    expect(kinds(effectsOf(event('session.read', { payload: { readSequence: 9 } }), at))).toContain('sessions');
+  });
+
   it('tells an ended Job as news only while it is fresh', () => {
     const done = event('job.completed', { payload: { summary: 'Tests pass' } });
     expect(effectsOf(done, at + 60_000)).toContainEqual({

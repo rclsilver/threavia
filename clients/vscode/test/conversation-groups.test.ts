@@ -22,6 +22,8 @@ vi.mock('vscode', () => ({
   window: {
     createWebviewPanel: host.create,
     registerWebviewPanelSerializer: () => ({ dispose() {} }),
+    state: { focused: true, active: true },
+    onDidChangeWindowState: () => ({ dispose() {} }),
     tabGroups: {
       get all() { return host.groups; },
       get activeTabGroup() { return host.groups.find((group) => group.isActive)!; },

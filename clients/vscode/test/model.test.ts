@@ -5,6 +5,7 @@ import {
   orderProjects,
   orderSessions,
   pinnedDescription,
+  projectDescription,
   repositoryDescription,
   repositoryLines,
   sessionState,
@@ -91,6 +92,15 @@ describe('session state', () => {
     expect(stateIcon('idle').color).toBeUndefined();
   });
 
+  it('lets an idle session the person has not read stand out, without hiding what is going on', () => {
+    expect(stateIcon('idle', true)).toMatchObject({ id: 'comment-unresolved', label: 'Unread' });
+    expect(stateIcon('idle', true).color).toBeDefined();
+    // Waiting and working say more than unread does; the row's description
+    // still says it.
+    expect(stateIcon('validation', true)).toEqual(stateIcon('validation'));
+    expect(stateIcon('running', true)).toEqual(stateIcon('running'));
+  });
+
   it('lists sessions alphabetically regardless of activity or date, leaving archives out', () => {
     const ordered = orderSessions(
       [
@@ -119,6 +129,12 @@ describe('projects', () => {
     expect(pinnedDescription(pinned, projects, 'Web')).toBeUndefined();
     expect(pinnedDescription(pinned, projects, 'Infra')).toBe('Web');
     expect(pinnedDescription(pinned, projects, '')).toBe('Web');
+  });
+
+  it('points at a project holding unread sessions, and stays quiet otherwise', () => {
+    expect(projectDescription(project('p1', 'Infra', { unreadSessions: 2 }))).toBe('2 unread');
+    expect(projectDescription(project('p1', 'Infra'))).toBeUndefined();
+    expect(projectDescription(project('p1', 'Infra', { unreadSessions: 0 }))).toBeUndefined();
   });
 });
 

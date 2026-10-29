@@ -112,6 +112,10 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
     case 'session.model_changed':
       return [{ kind: 'sessions' }, ...snapshot(sessionId)];
 
+    // Read on one client: the lists, Projects included, stop pointing at it.
+    case 'session.read':
+      return [{ kind: 'sessions' }];
+
     // A new Run means the Session moved to another backend, which also moves
     // where its repository is read.
     case 'run.created':

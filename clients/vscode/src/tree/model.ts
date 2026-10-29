@@ -56,9 +56,10 @@ export interface IconSpec {
 /**
  * The two states that wait are the loud ones, in the warning colour: they are
  * the only ones a person has to act on. Working spins; idle is a plain bubble,
- * which is most of the list.
+ * which is most of the list, unless the agent said something, or failed, while
+ * the person was not looking: then the bubble takes the accent colour.
  */
-export function stateIcon(state: SessionActivity): IconSpec {
+export function stateIcon(state: SessionActivity, unread = false): IconSpec {
   switch (state) {
     case 'validation':
       return { id: 'shield', color: 'list.warningForeground', label: 'Waiting for your approval' };
@@ -71,8 +72,16 @@ export function stateIcon(state: SessionActivity): IconSpec {
     case 'queued':
       return { id: 'clock', label: 'Queued' };
     case 'idle':
-      return { id: 'comment-discussion', label: 'Idle' };
+      return unread
+        ? { id: 'comment-unresolved', color: 'notificationsInfoIcon.foreground', label: 'Unread' }
+        : { id: 'comment-discussion', label: 'Idle' };
   }
+}
+
+/** How many of a Project's Sessions hold something unread, when any does. */
+export function projectDescription(project: Project): string | undefined {
+  const unread = project.unreadSessions ?? 0;
+  return unread > 0 ? `${unread} unread` : undefined;
 }
 
 /**

@@ -17,7 +17,10 @@ pinned global decisions are read by agents in all your projects on that Core.
   (approvals and questions, across every Project), your pinned sessions, and
   each Project's sessions, in alphabetical title order. Pinned sessions and
   session pickers use the same order. A session's row shows whether it
-  is working, queued, or waiting for you; hover or select it to see its branch,
+  is working, queued, waiting for you, or holds a reply or a failure you have
+  not read yet, and a Project counts its unread sessions. A session is read
+  once its conversation is shown in a focused window, here or in any other
+  client; hover or select it to see its branch,
   how far it is from its upstream and what is left to commit. Right-click a
   session to pin, rename, archive, refresh its repository from origin, or open
   it in the browser. Archiving closes its conversation, permissions, diffs and
