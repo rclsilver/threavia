@@ -3,6 +3,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   Outlet,
   redirect,
 } from '@tanstack/react-router';
@@ -13,23 +14,26 @@ import { lazy, Suspense } from 'react';
 
 import { AppShell } from '@/components/app-shell';
 import { DEMO } from '@/demo/mode';
-import { DraftView } from '@/routes/draft';
-import {
-  ArtifactsView,
-  AuditView,
-  InstructionsView,
-  MemoryView,
-  DirectoriesView,
-  PermissionsView,
-  SkillsView,
-} from '@/routes/project';
-import { SessionView } from '@/routes/session';
-import { ReviewView } from '@/routes/review';
-import { SettingsView } from '@/routes/settings';
 import { ACCOUNT_TABS } from '@/lib/account-tabs';
-import { SessionSettingsView, type SettingsTab } from '@/routes/session-settings';
-import { TasksView } from '@/routes/tasks';
-import { HomeView, WaitingView } from '@/routes/waiting';
+import type { SettingsTab } from '@/routes/session-settings';
+
+// Fetch only the page being opened. Account settings, review and project
+// administration should not delay a conversation on a phone.
+const DraftView = lazyRouteComponent(() => import('@/routes/draft'), 'DraftView');
+const SessionView = lazyRouteComponent(() => import('@/routes/session'), 'SessionView');
+const ReviewView = lazyRouteComponent(() => import('@/routes/review'), 'ReviewView');
+const SettingsView = lazyRouteComponent(() => import('@/routes/settings'), 'SettingsView');
+const SessionSettingsView = lazyRouteComponent(() => import('@/routes/session-settings'), 'SessionSettingsView');
+const TasksView = lazyRouteComponent(() => import('@/routes/tasks'), 'TasksView');
+const HomeView = lazyRouteComponent(() => import('@/routes/waiting'), 'HomeView');
+const WaitingView = lazyRouteComponent(() => import('@/routes/waiting'), 'WaitingView');
+const ArtifactsView = lazyRouteComponent(() => import('@/routes/project'), 'ArtifactsView');
+const AuditView = lazyRouteComponent(() => import('@/routes/project'), 'AuditView');
+const InstructionsView = lazyRouteComponent(() => import('@/routes/project'), 'InstructionsView');
+const MemoryView = lazyRouteComponent(() => import('@/routes/project'), 'MemoryView');
+const DirectoriesView = lazyRouteComponent(() => import('@/routes/project'), 'DirectoriesView');
+const PermissionsView = lazyRouteComponent(() => import('@/routes/project'), 'PermissionsView');
+const SkillsView = lazyRouteComponent(() => import('@/routes/project'), 'SkillsView');
 
 // The tour exists only in the demo, and is fetched only there.
 const DemoTour = lazy(() => import('@/demo/tour'));
@@ -49,8 +53,7 @@ const rootRoute = createRootRoute({
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
-  // Landing on what waits for a decision when something does, on the work
-  // still owed otherwise.
+  // Resume the last workspace; first visits use the attention/tasks dashboard.
   path: '/',
   component: HomeView,
 });
@@ -223,7 +226,12 @@ const routeTree = rootRoute.addChildren([
 
 // The demo is the whole client under /demo, so every link it follows stays in
 // the demo.
-export const router = createRouter({ routeTree, defaultPreload: 'intent', basepath: DEMO ? '/demo' : undefined });
+export const router = createRouter({
+  routeTree,
+  defaultPreload: 'intent',
+  defaultPendingComponent: () => <p role="status" className="text-muted p-6 text-sm">Opening page…</p>,
+  basepath: DEMO ? '/demo' : undefined,
+});
 
 declare module '@tanstack/react-router' {
   interface Register {

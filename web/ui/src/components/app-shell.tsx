@@ -46,7 +46,7 @@ import {
   useUpdateProject,
   useDeleteProject,
 } from '@/api/queries';
-import type { BackendInstance, Project, Session } from '@/api/types';
+import type { Project, Session } from '@/api/types';
 import { DEMO } from '@/demo/mode';
 import { SelectedProject } from '@/use-project';
 import { useStream } from '@/use-stream';
@@ -68,6 +68,7 @@ import { Input, Label } from '@/components/ui/input';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
 import { ACCOUNT_TABS, type AccountTab } from '@/lib/account-tabs';
 import { cn } from '@/lib/utils';
+import { lastNavigation, rememberProject } from '@/lib/navigation';
 
 /**
  * The frame every view sits in: which Project, its Sessions, and the backends
@@ -80,7 +81,7 @@ import { cn } from '@/lib/utils';
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { connected } = useStream();
   const projects = useProjects();
-  const backends = useBackends();
+  const me = useMe();
   const params = useParams({ strict: false });
 
   const [projectId, setProjectId] = useState<string | undefined>(params.projectId);
@@ -101,25 +102,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Nothing chosen and nothing in the route: the first Project. Never over
   // the route's, which can arrive in the same render as the list of Projects.
   useEffect(() => {
-    if (!projectId && !routeProject && projects.data?.length) setProjectId(projects.data[0].id);
-  }, [projectId, routeProject, projects.data]);
+    if (projectId || routeProject || !projects.data || !me.data) return;
+    const saved = lastNavigation(me.data.userId).projectId;
+    setProjectId(projects.data.find((project) => project.id === saved)?.id ?? projects.data[0]?.id);
+  }, [projectId, routeProject, projects.data, me.data]);
 
   const [showArchived, setShowArchived] = useState(false);
+  const wide = useMediaQuery('(min-width: 768px)');
+  const [drawer, setDrawer] = useState(false);
   // Archived Sessions are read from the same list, because asking for them
   // separately would mean a second shape of answer for the same question.
-  const sessions = useSessions(projectId, showArchived);
+  const sessions = useSessions(projectId, showArchived, wide || drawer);
   const shown = sessionsByTitle((sessions.data ?? []).filter((session) =>
     showArchived ? session.status === 'ARCHIVED' : session.status !== 'ARCHIVED',
   ));
   const [collapsed, setCollapsed] = useCollapsed();
 
-  // Where each Project was left, so coming back to one lands there. Only a
-  // Session listed under the selected Project is recorded against it.
+  // Remember confirmed snapshots, including archived Sessions and direct links.
+  // The route may have changed while its previous snapshot was still cached.
   useEffect(() => {
-    const session = params.sessionId;
-    if (!session || !projectId) return;
-    if (sessions.data?.some((candidate) => candidate.id === session)) rememberSession(projectId, session);
-  }, [params.sessionId, projectId, sessions.data]);
+    const session = snapshot.data?.session;
+    if (params.sessionId) {
+      if (session?.id === params.sessionId) rememberProject(me.data?.userId, session.projectId, session.id);
+    } else if (routeProject && projects.data?.some((project) => project.id === routeProject)) {
+      rememberProject(me.data?.userId, routeProject);
+    }
+  }, [params.sessionId, routeProject, snapshot.data?.session, me.data?.userId, projects.data]);
 
   // Choosing another Project goes to it. Staying on a Session of the one just
   // left, with the sidebar listing the other, showed two Projects at once. A
@@ -138,12 +146,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const switchProject = (id: string) => {
     if (id === projectId) return;
     setProjectId(id);
+    rememberProject(me.data?.userId, id);
     if (pathname === '/waiting') return;
     if (params.projectId) {
       void navigate({ to: '.', params: (previous) => ({ ...previous, projectId: id }) });
       return;
     }
-    const last = lastSession(id);
+    const last = lastNavigation(me.data?.userId).sessions[id];
     void (last
       ? navigate({ to: '/sessions/$sessionId', params: { sessionId: last } })
       : navigate({ to: '/sessions/new', search: { projectId: id } }));
@@ -162,8 +171,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // On a phone the sidebar is a drawer over the content, closed until asked
   // for: a column of navigation beside a conversation leaves neither readable
   // on a screen that narrow. It closes again on the way to wherever was picked.
-  const wide = useMediaQuery('(min-width: 768px)');
-  const [drawer, setDrawer] = useState(false);
   useEffect(() => {
     setDrawer(false);
   }, [pathname, wide]);
@@ -236,6 +243,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           'max-md:overflow-y-auto max-md:overscroll-contain',
         )}
       >
+        {(wide || drawer) && <>
         {/* The mark says whose window this is and goes nowhere: every
             destination is one of the entries below, and a logo that quietly
             lands on one of them makes that entry look like two places. */}
@@ -285,7 +293,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <>
             <WaitingLink count={waitingCount} active={pathname === '/waiting'} collapsed />
             {projectId && <ProjectNav projectId={projectId} collapsed />}
-            <UserMenu backends={backends.data ?? []} collapsed />
+            <UserMenu collapsed />
           </>
         ) : (
           <>
@@ -349,9 +357,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </section>
 
-            <UserMenu backends={backends.data ?? []} />
+            <UserMenu />
           </>
         )}
+        </>}
       </aside>
 
       <main className="flex min-h-0 flex-col overflow-hidden">
@@ -726,13 +735,12 @@ function useCollapsed(): [boolean, (collapsed: boolean) => void] {
  * settings, each a tab of their own page.
  */
 function UserMenu({
-  backends,
   collapsed = false,
 }: {
-  backends: BackendInstance[];
   collapsed?: boolean;
 }) {
   const me = useMe();
+  const backends = useBackends();
   const navigate = useNavigate();
 
   // Authenticated or not is not a detail to smooth over: in ModeNone nobody was
@@ -741,7 +749,7 @@ function UserMenu({
   // In mode none nobody signed in, but Core still names the one user it
   // attributes everything to; that name is what the person knows themselves by.
   const name = me.data?.name || me.data?.email || me.data?.userId || 'anonymous';
-  const live = backends.filter((backend) => backend.ownershipStatus !== 'REVOKED');
+  const live = (backends.data ?? []).filter((backend) => backend.ownershipStatus !== 'REVOKED');
   const unwell = live.filter((backend) => backend.operationalStatus !== 'READY');
   const status =
     live.length === 0
@@ -814,28 +822,6 @@ function UserMenu({
       </MenuContent>
     </Menu>
   );
-}
-
-const LAST_SESSIONS = 'threavia.lastSessions';
-
-function lastSessions(): Record<string, string> {
-  try {
-    return JSON.parse(localStorage.getItem(LAST_SESSIONS) ?? '{}') as Record<string, string>;
-  } catch {
-    return {};
-  }
-}
-
-function lastSession(projectId: string): string | undefined {
-  return lastSessions()[projectId];
-}
-
-function rememberSession(projectId: string, sessionId: string) {
-  try {
-    localStorage.setItem(LAST_SESSIONS, JSON.stringify({ ...lastSessions(), [projectId]: sessionId }));
-  } catch {
-    // Without storage a switch lands on a new Session, which is still a place.
-  }
 }
 
 /**

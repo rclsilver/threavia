@@ -54,6 +54,20 @@ the Core container image builds the client in its own stage.
 A binary built without the client says so on the page rather than serving a
 blank one.
 
+## Opening the client
+
+Opening `/` resumes the selected project and its last confirmed session on
+this browser. Only identifiers are stored in local storage, separately for
+each Core user and for the demo. Direct session, project, settings and
+notification links keep their destination. A first visit uses the waiting/tasks
+dashboard. A deleted or inaccessible session opens a new session in the same
+project; temporary network failures keep the saved session and offer retry.
+
+Page modules load on navigation. On mobile, a closed navigation drawer does
+not mount its lists or fetch their sessions, pinned sessions, tasks and monitor
+badges. Opening the drawer starts those reads; the shared attention query and
+event stream still keep urgent requests visible in the top bar.
+
 ## Layout
 
 ```text

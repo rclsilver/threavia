@@ -236,7 +236,7 @@ export function useBackendSkills(backendId: string | undefined) {
 
 // ------------------------------------------------------------------ sessions
 
-export function useSessions(projectId: string | undefined, includeArchived = false) {
+export function useSessions(projectId: string | undefined, includeArchived = false, enabled = true) {
   return useQuery({
     queryKey: keys.sessions(projectId ?? '', includeArchived),
     queryFn: () =>
@@ -245,7 +245,7 @@ export function useSessions(projectId: string | undefined, includeArchived = fal
           `/api/v1/projects/${projectId}/sessions?includeArchived=${includeArchived}`,
         )
         .then(items),
-    enabled: Boolean(projectId),
+    enabled: Boolean(projectId) && enabled,
   });
 }
 

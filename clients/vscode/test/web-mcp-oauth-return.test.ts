@@ -77,7 +77,9 @@ async function settings() {
   const { router } = await import('../../../web/ui/src/router'); router.update({ history });
   const mount = document.createElement('div'); document.body.append(mount); root = createRoot(mount);
   const render = () => { root!.render(h(StrictMode, null, h(QueryClientProvider, { client }, h(RouterProvider, { router })))); };
-  await settle(render); await settle();
+  // A page module is fetched on navigation. Wait for the real router rather
+  // than assuming the module and its OAuth effects mount within 200 ms.
+  await act(async () => { render(); await router.load(); }); await settle();
   return { client, remount: async () => {
     await act(() => { root!.unmount(); }); root = createRoot(mount); await settle(render); await settle();
   } };

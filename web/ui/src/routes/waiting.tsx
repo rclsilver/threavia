@@ -1,11 +1,16 @@
-import { useEffect, useState } from 'react';
-import { Link } from '@tanstack/react-router';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { Link, Navigate } from '@tanstack/react-router';
 import { ArrowRight, CheckCircle2 } from 'lucide-react';
 
-import { useAttention } from '@/api/queries';
+import { useAttention, useMe, useProjects, useSnapshot } from '@/api/queries';
+import { ApiError } from '@/api/client';
 import type { UserInputRequest, ValidationRequest } from '@/api/types';
 import { AttentionPanel } from '@/components/attention';
-import { TasksView } from '@/routes/tasks';
+import { ActionError } from '@/components/ui/action-error';
+import { Button } from '@/components/ui/button';
+import { forgetSession, lastNavigation } from '@/lib/navigation';
+
+const TasksView = lazy(() => import('@/routes/tasks').then((module) => ({ default: module.TasksView })));
 
 /**
  * Everything waiting for the person, across every project, answerable here.
@@ -40,15 +45,16 @@ export function WaitingView() {
       <header className="space-y-1">
         <h1 className="text-lg font-semibold">Waiting for you</h1>
         <p className="text-muted text-sm">
-          {total === 0
+          {attention.isPending ? 'Checking what needs a decision…' : attention.isError ? 'Pending requests could not be checked.' : total === 0
             ? 'Nothing needs a decision.'
             : `${total} ${total === 1 ? 'request' : 'requests'} across your projects, the longest wait first.`}
         </p>
       </header>
 
       {attention.isPending && <p className="text-muted text-sm">Loading…</p>}
+      {attention.isError && <div><ActionError error={attention.error} outcome="Pending requests did not load" /><Button onClick={() => void attention.refetch()}>Try again</Button></div>}
 
-      {total === 0 && !attention.isPending && (
+      {total === 0 && attention.isSuccess && (
         <div className="text-muted flex items-center gap-2 text-sm">
           <CheckCircle2 className="text-ok size-4" />
           The agents are not waiting on anything.
@@ -79,10 +85,36 @@ export function WaitingView() {
 }
 
 /**
- * The landing page: what waits for the person when something does, the work
- * still owed otherwise.
+ * Resume this account's workspace on a root visit. Explicit links never pass
+ * here; first visits retain the waiting/tasks dashboard.
  */
 export function HomeView() {
+  const me = useMe();
+  const projects = useProjects();
+  const saved = useMemo(() => lastNavigation(me.data?.userId), [me.data?.userId]);
+  if (me.isError || projects.isError) return <div className="p-6"><ActionError error={me.error ?? projects.error} outcome="Your last workspace did not open" /><Button onClick={() => { void me.refetch(); void projects.refetch(); }}>Try again</Button></div>;
+  if (!me.data || !projects.data) return <p role="status" className="text-muted p-6 text-sm">Opening your workspace…</p>;
+  if (saved.projectId && projects.data.some((project) => project.id === saved.projectId)) {
+    return saved.sessionId
+      ? <ResumeSession userId={me.data.userId} projectId={saved.projectId} sessionId={saved.sessionId} />
+      : <Navigate to="/sessions/new" search={{ projectId: saved.projectId }} replace />;
+  }
+  return <DashboardView />;
+}
+
+function ResumeSession({ userId, projectId, sessionId }: { userId: string; projectId: string; sessionId: string }) {
+  const snapshot = useSnapshot(sessionId);
+  const missing = snapshot.error instanceof ApiError && [403, 404].includes(snapshot.error.status);
+  useEffect(() => {
+    if (missing) forgetSession(userId, sessionId);
+  }, [missing, userId, sessionId]);
+  if (missing) return <Navigate to="/sessions/new" search={{ projectId }} replace />;
+  if (snapshot.isError) return <div className="p-6"><ActionError error={snapshot.error} outcome="Your last session did not open" /><Button onClick={() => void snapshot.refetch()}>Try again</Button></div>;
+  if (!snapshot.data) return <p role="status" className="text-muted p-6 text-sm">Opening your last session…</p>;
+  return <Navigate to="/sessions/$sessionId" params={{ sessionId }} replace />;
+}
+
+function DashboardView() {
   const attention = useAttention();
   // Decided once, from the first answer: answering the last request on this
   // page must leave the page and its receipt where they are, not swap to the
@@ -94,7 +126,7 @@ export function HomeView() {
     setLanding(waiting > 0 ? 'waiting' : 'tasks');
   }, [attention.data, landing]);
 
-  if (landing === 'tasks') return <TasksView />;
+  if (landing === 'tasks') return <Suspense fallback={<p role="status" className="text-muted p-6 text-sm">Loading tasks…</p>}><TasksView /></Suspense>;
   // While the first answer is on its way, the inbox frame says it is loading.
   return <WaitingView />;
 }
