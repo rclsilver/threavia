@@ -207,7 +207,7 @@ Rejected by the build and the brief: the ChatGPT clone (pill composer, gradient 
 A cool, near-colourless neutral system (hue 265, chroma under 0.01) with one saturated indigo and three state hues; both schemes are defined token for token. They follow the operating system unless the person picks one in Settings › Appearance; the choice is the `data-scheme` attribute on the document, set before the first paint.
 
 ### Primary
-- **Working Indigo** (`accent`, light `oklch(52% 0.19 275)`, dark `oklch(70% 0.15 275)`): the primary action (Approve on a non-dangerous request, Send, Answer), the focus ring, the selection tint, the caret, the active tab underline, links in agent prose and the "running" status. It is the only colour that means "act here".
+- **Working Indigo** (`accent`, light `oklch(52% 0.19 275)`, dark `oklch(70% 0.15 275)`): the primary action (Approve on a non-dangerous request, Send, Answer), the focus ring, the selection tint, the caret, the active tab underline, links in agent prose, the "running" status and the unread dot. It is the only colour that means "act here".
 - **Accent Ink** (`accent-text`): text and icons on an accent fill; near-white in light, near-black in dark because the dark accent is too light to carry white.
 - **Mark Violet** (`accent-2`): the far end of the logo gradient. It belongs to the mark and nothing else.
 
@@ -316,7 +316,7 @@ Restrained and exact; colour is earned by the action.
 - **Shadow Strategy:** none at rest; `shadow-sm` only for attention cards and the composer (see Elevation).
 
 ### Navigation
-- **Sidebar:** the mark and live badge, then **Waiting** first (inbox icon in `warn-text`, amber count badge, medium weight when something waits), pinned sessions, the project select, project nav, then sessions in alphabetical title order. Active, archived and pinned lists use the same case- and accent-insensitive order, with natural ordering of numbers. State icons remain visible without moving a session out of its alphabetical position. Items are 14px, 6px radius; hover and active take the raised-grey fill, active adds medium weight.
+- **Sidebar:** the mark and live badge, then **Waiting** first (inbox icon in `warn-text`, amber count badge, medium weight when something waits), pinned sessions, the project select, project nav, then sessions in alphabetical title order. Active, archived and pinned lists use the same case- and accent-insensitive order, with natural ordering of numbers. State icons remain visible without moving a session out of its alphabetical position. A session the agent answered, or whose Job failed, while no screen of the person's had it open turns medium weight with an accent dot until it is shown on a screen they use; the project select carries the same dot when another Project holds one, and its menu counts them per Project. Items are 14px, 6px radius; hover and active take the raised-grey fill, active adds medium weight.
 - **Rail:** folded, the sidebar keeps 32px icon squares; a waiting count becomes an amber dot ringed in surface.
 - **Phone:** a top bar with the menu, the mark, an amber "N waiting" link that goes straight to the inbox, and the live badge. The drawer slides in over a scrim and is `inert` while closed, so it takes neither keyboard focus nor screen reader attention.
 - **Tabs:** muted text, active text in ink with a 2px accent underline over a hairline.

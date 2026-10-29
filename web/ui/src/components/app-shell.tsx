@@ -346,9 +346,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       params.sessionId === session.id && 'bg-surface-2 font-medium',
                     )}
                   >
-                    <span className="min-w-0 flex-1 truncate">
+                    <span className={cn('min-w-0 flex-1 truncate', unread(session, params.sessionId) && 'font-medium')}>
                       {session.title || 'Untitled session'}
                     </span>
+                    {unread(session, params.sessionId) && <UnreadDot />}
                     <MonitorBadge session={session} /><SessionState state={sessionState(session, waiting)} />
                   </Link>
                 </li>
@@ -417,6 +418,24 @@ function SessionState({ state }: { state: SessionActivity }) {
     case 'idle':
       return null;
   }
+}
+
+/**
+ * Whether a Session holds something the person was not shown: what the agent
+ * said, or a failure, while no screen of theirs had it open. The one on screen
+ * is being read, so it never stands out, even for the moment before Core hears
+ * it was.
+ */
+function unread(session: Session, current?: string): boolean {
+  return Boolean(session.unread) && session.id !== current;
+}
+
+/**
+ * The mark of something unread. The title beside it turns medium weight too,
+ * so the state is never colour alone.
+ */
+function UnreadDot({ label = 'Unread' }: { label?: string }) {
+  return <span role="img" aria-label={label} title={label} className="bg-accent size-2 shrink-0 rounded-full" />;
 }
 
 /**
@@ -517,10 +536,11 @@ function PinnedSessions({
                   current === session.id && 'bg-surface-2 font-medium',
                 )}
               >
-                <span className="min-w-0 flex-1 truncate">{title}</span>
+                <span className={cn('min-w-0 flex-1 truncate', unread(session, current) && 'font-medium')}>{title}</span>
                 {elsewhere && (
                   <span className="text-muted max-w-24 shrink-0 truncate text-xs font-normal">{elsewhere}</span>
                 )}
+                {unread(session, current) && <UnreadDot />}
                 <MonitorBadge session={session} /><SessionState state={sessionState(session, waiting)} />
                 {/* Room for the unpin button, which sits over the row's end. */}
                 <span className="w-0 shrink-0 transition-[width] md:group-focus-within:w-5 md:group-hover:w-5" />
@@ -843,6 +863,9 @@ function ProjectSwitcher({
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<'rename' | 'delete' | undefined>();
   const project = projects.find((candidate) => candidate.id === current);
+  // The current Project's unread Sessions are in the list below it; the
+  // others' are only reached through this menu, so the menu says so.
+  const unreadElsewhere = projects.some((candidate) => candidate.id !== current && (candidate.unreadSessions ?? 0) > 0);
 
   return (
     <>
@@ -857,6 +880,7 @@ function ProjectSwitcher({
             <span className={cn('min-w-0 flex-1 truncate', project ? 'font-medium' : 'text-muted')}>
               {project?.name ?? 'No project'}
             </span>
+            {unreadElsewhere && <UnreadDot label="Unread in another project" />}
             <ChevronsUpDown className="text-muted size-4 shrink-0" />
           </button>
         </MenuTrigger>
@@ -865,7 +889,12 @@ function ProjectSwitcher({
           {projects.map((candidate) => (
             <MenuItem key={candidate.id} onSelect={() => onSwitch(candidate.id)}>
               <ProjectMark name={candidate.name} />
-              <span className="min-w-0 flex-1 truncate">{candidate.name}</span>
+              <span className={cn('min-w-0 flex-1 truncate', (candidate.unreadSessions ?? 0) > 0 && 'font-medium')}>{candidate.name}</span>
+              {(candidate.unreadSessions ?? 0) > 0 && (
+                <Badge tone="accent" className="figures" title={`${candidate.unreadSessions} unread session${candidate.unreadSessions === 1 ? '' : 's'}`}>
+                  {candidate.unreadSessions}
+                </Badge>
+              )}
               {candidate.id === current && <Check className="text-muted size-3.5 shrink-0" />}
             </MenuItem>
           ))}

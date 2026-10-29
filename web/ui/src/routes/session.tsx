@@ -10,6 +10,7 @@ import {
   usePostMessage,
   useRenameSession,
   useEarlierEvents,
+  useMarkSessionRead,
   usePinSession,
   usePinnedSessions,
   useSnapshot,
@@ -30,8 +31,10 @@ import { Timeline, type Pending } from '@/components/timeline';
 import { Button } from '@/components/ui/button';
 import { useStream } from '@/use-stream';
 import { useDraft } from '@/lib/draft';
+import { isActive } from '@/lib/presence';
 import { sendsMessage, useTouchKeyboard } from '@/lib/message-keyboard';
 import { cn, humanise } from '@/lib/utils';
+import { readUpTo } from '../../../../clients/shared/sessions';
 
 const FINISHED = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
 
@@ -84,6 +87,26 @@ export function SessionView() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [runningId, stop]);
+
+  // What the agent said stops standing out, here and on every other client,
+  // once it is on a screen the person is looking at. A tab left open on an
+  // empty desk is not looking: the mark waits for them to come back.
+  const readTo = snapshot.data && readUpTo(snapshot.data.session.readSequence, snapshot.data.events);
+  const markRead = useMarkSessionRead(sessionId).mutate;
+  useEffect(() => {
+    if (readTo === undefined) return;
+    const shown = () => {
+      if (isActive()) markRead(readTo);
+    };
+    shown();
+    const signs = ['pointerdown', 'keydown', 'wheel', 'touchstart', 'focus'] as const;
+    for (const name of signs) window.addEventListener(name, shown, { passive: true });
+    document.addEventListener('visibilitychange', shown);
+    return () => {
+      for (const name of signs) window.removeEventListener(name, shown);
+      document.removeEventListener('visibilitychange', shown);
+    };
+  }, [readTo, markRead]);
 
   if (snapshot.isPending) {
     return <p className="text-muted p-6 text-sm">Loading…</p>;

@@ -265,6 +265,13 @@ export class EventStream {
         void this.queries.invalidateQueries({ queryKey: keys.audit() });
         break;
       }
+
+      // Read on one client: it stops standing out on the others.
+      case 'session.read':
+        void this.queries.invalidateQueries({ queryKey: ['sessions'] });
+        void this.queries.invalidateQueries({ queryKey: ['projects'] });
+        break;
+
       case 'session.created':
       case 'session.renamed':
       case 'session.archived':
@@ -304,6 +311,11 @@ export class EventStream {
           void this.queries.invalidateQueries({ queryKey: keys.backends() });
         }
         void this.queries.invalidateQueries({ queryKey: ['sessions'] });
+        // What the agent said, or a failure, may now be unread in a Project
+        // the sidebar is not showing.
+        if (event.type === 'job.completed' || event.type === 'job.failed') {
+          void this.queries.invalidateQueries({ queryKey: ['projects'] });
+        }
         // Work that ended may have committed, pushed or left files behind.
         if (event.type !== 'job.created' && event.type !== 'job.started') {
           if (event.jobId) dropInterruptedAttention(this.queries, event.sessionId, event.jobId, event.timestamp);

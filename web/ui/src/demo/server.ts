@@ -438,7 +438,10 @@ const routes: [string, RegExp, Handler][] = [
     return list(state.audit.filter((entry) => !projectId || entry.projectId === projectId));
   }],
 
-  ['GET', /^\/api\/v1\/projects$/, () => list(state.projects)],
+  ['GET', /^\/api\/v1\/projects$/, () => list(state.projects.map((project) => ({
+    ...project,
+    unreadSessions: state.sessions.filter((session) => session.projectId === project.id && session.status === 'ACTIVE' && session.unread).length,
+  })))],
   ['POST', /^\/api\/v1\/projects$/, (_m, body) => {
     const name = text(body.name).trim();
     if (!name) throw new ApiError(400, 'invalid', 'Enter a project name.');
@@ -764,6 +767,15 @@ const routes: [string, RegExp, Handler][] = [
       return { run: runEntry, missingSkills: [] };
     }
     return session;
+  }],
+  ['POST', /^\/api\/v1\/sessions\/([^/]+)\/read$/, (m, body) => {
+    const session = sessionOf(m[1]);
+    session.readSequence = Math.max(Number(session.readSequence) || 0, Number(body.sequence) || 0);
+    if (session.unread) {
+      delete session.unread;
+      emitLifecycle('session.read', text(session.projectId), { readSequence: session.readSequence }, m[1]);
+    }
+    return undefined;
   }],
   ['POST', /^\/api\/v1\/sessions\/([^/]+)\/(archive|restore)$/, (m) => {
     const session = sessionOf(m[1]);

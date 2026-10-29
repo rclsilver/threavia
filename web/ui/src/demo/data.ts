@@ -169,6 +169,7 @@ const session = (
   status: 'ACTIVE',
   createdAt: at(createdMinutesAgo),
   updatedAt: at(updatedMinutesAgo),
+  readSequence: 0,
   ...extra,
 });
 
@@ -184,7 +185,9 @@ export const sessions = [
     status: 'ARCHIVED',
     archivedAt: at(60 * 24 * 11),
   }),
-  session(IDS.blog, IDS.website, 'Write the post about the homelab rebuild', 60 * 27, 60 * 26, { pinnedAt: at(60 * 25) }),
+  // Answered while nobody was looking: it stands out in the pinned list, and
+  // the project switcher points at its Project from the other one.
+  session(IDS.blog, IDS.website, 'Write the post about the homelab rebuild', 60 * 27, 60 * 26, { pinnedAt: at(60 * 25), unread: true }),
 ];
 
 export const directories = [

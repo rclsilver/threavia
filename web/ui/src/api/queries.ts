@@ -515,6 +515,29 @@ export function usePinSession() {
 }
 
 /**
+ * Marking a Session read up to the last event the person was shown.
+ *
+ * The snapshot moves at once, so the same events are not sent again while the
+ * call is on its way. The lists follow the session.read event Core sends every
+ * client. A failed call is not retried: the next snapshot brings back the mark
+ * Core holds, and the Session is marked again while it is still on screen.
+ */
+export function useMarkSessionRead(sessionId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (sequence: number) => api.post(`/api/v1/sessions/${sessionId}/read`, { sequence }),
+    onMutate: (sequence) => {
+      queries.setQueryData<Snapshot>(keys.snapshot(sessionId), (current) =>
+        current && {
+          ...current,
+          session: { ...current.session, readSequence: Math.max(current.session.readSequence, sequence) },
+        },
+      );
+    },
+  });
+}
+
+/**
  * Deleting a Session.
  *
  * Core refuses while a Job is still running, so the error is worth showing
