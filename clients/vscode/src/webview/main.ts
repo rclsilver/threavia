@@ -1222,6 +1222,11 @@ if (start) {
   append(list, [h('p', { class: 'empty' }, 'Loading…')]);
 }
 post({ type: 'ready' });
+// The Session is read only while the focus is in here: a conversation still
+// showing beside the editor or the terminal the person moved to is not.
+post({ type: 'focus', focused: document.hasFocus() });
+window.addEventListener('focus', () => post({ type: 'focus', focused: true }));
+window.addEventListener('blur', () => post({ type: 'focus', focused: false }));
 
 function updateSend() { send.disabled = starting || sendingMessage || savingModel || attaching > 0 || (!field.value.trim() && attachments.length === 0); }
 function renderAttachments() {

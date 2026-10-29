@@ -51,6 +51,22 @@ export function isSessionOpen(ref: SessionRef): boolean {
   return open.has(sessionKey(ref));
 }
 
+const inFront = new Set<string>();
+
+/**
+ * Which Sessions the person is in: the focus is in their conversation. One
+ * that is only showing, beside the editor or the terminal they work in, is not
+ * being read: what the agent says there still stands out until they come to it.
+ */
+export function markSessionInFront(ref: SessionRef, isInFront: boolean) {
+  if (isInFront) inFront.add(sessionKey(ref));
+  else inFront.delete(sessionKey(ref));
+}
+
+export function isSessionInFront(ref: SessionRef): boolean {
+  return inFront.has(sessionKey(ref));
+}
+
 export function openInBrowser(coreUrl: string, sessionId: string): Thenable<boolean> {
   return vscode.env.openExternal(vscode.Uri.parse(`${coreUrl}/sessions/${sessionId}`));
 }

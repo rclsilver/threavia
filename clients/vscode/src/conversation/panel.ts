@@ -23,7 +23,7 @@ import type { Cores } from '../cores/registry';
 import type { VirtualDocuments } from '../diff/documents';
 import { openFileDiff } from '../diff/open';
 import { isActive } from '../presence';
-import { markSessionOpen } from '../sessions';
+import { markSessionInFront, markSessionOpen } from '../sessions';
 import { closeSessionViews, registerSessionPanel } from '../session-views';
 import { repositoryDescription, titleOf, waitingBySession } from '../tree/model';
 import type { PathResolver } from '../workspace/resolve';
@@ -314,6 +314,8 @@ class ConversationPanel {
   private loadingEarlier = false;
   private ready = false;
   private loaded = false;
+  /** What the page last said of the keyboard focus. */
+  private focused = false;
   private reloadTimer: ReturnType<typeof setTimeout> | undefined;
   private activityTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly disposables: vscode.Disposable[] = [];
@@ -352,6 +354,9 @@ class ConversationPanel {
       webview.onDidReceiveMessage((message: WebviewMessage) => void this.receive(message)),
       panel.onDidChangeViewState(() => {
         if (this.sessionId) markSessionOpen(this.ref(this.sessionId), panel.visible);
+        // A hidden page is dropped, and cannot say it lost the focus.
+        if (!panel.visible) this.focused = false;
+        if (this.sessionId) markSessionInFront(this.ref(this.sessionId), this.inFront);
         this.watchRepository();
         this.markRead();
       }),
@@ -378,6 +383,7 @@ class ConversationPanel {
     );
     panel.onDidDispose(() => {
       if (this.sessionId) markSessionOpen(this.ref(this.sessionId), false);
+      if (this.sessionId) markSessionInFront(this.ref(this.sessionId), false);
       clearTimeout(this.reloadTimer);
       clearTimeout(this.activityTimer);
       this.repositoryWatch?.dispose();
@@ -396,6 +402,15 @@ class ConversationPanel {
 
   private ref(sessionId: string): SessionRef {
     return { coreId: this.core.id, sessionId };
+  }
+
+  /**
+   * Whether the person is in this conversation. Its panel stays the active
+   * editor while they work in the terminal or the sidebar: only the page knows
+   * whether the focus is still in it.
+   */
+  private get inFront(): boolean {
+    return this.panel.active && this.focused;
   }
 
   /** The Project it works in: chosen for a draft, read with the Session otherwise. */
@@ -525,12 +540,13 @@ class ConversationPanel {
 
   /**
    * What the agent said stops standing out, here and on every other client,
-   * once it is in a panel the person is looking at. An editor in the
-   * background is not looking: the mark waits for it to come back.
+   * once the person is in its conversation. One only showing beside the
+   * editor or the terminal they work in, or an editor in the background, is
+   * not looked at: the mark waits for them to come to it.
    */
   private markRead() {
     const sessionId = this.sessionId;
-    if (!sessionId || !this.session || !this.panel.visible || !isActive()) return;
+    if (!sessionId || !this.session || !this.inFront || !isActive()) return;
     const sequence = readUpTo(this.session.readSequence, this.events);
     if (sequence === undefined) return;
     // Moved at once, so the same events are not sent again while the call is
@@ -662,6 +678,12 @@ class ConversationPanel {
           this.post({ type: 'events', events: this.events, reset: true });
           this.postView();
         }
+        return;
+
+      case 'focus':
+        this.focused = message.focused;
+        if (this.sessionId) markSessionInFront(this.ref(this.sessionId), this.inFront);
+        this.markRead();
         return;
 
       case 'send':
@@ -848,6 +870,7 @@ class ConversationPanel {
     this.watchRepository();
     this.post({ type: 'started', sessionId });
     markSessionOpen(this.ref(sessionId), this.panel.visible);
+    markSessionInFront(this.ref(sessionId), this.inFront);
     this.onStarted(draft);
     void this.reload();
   }

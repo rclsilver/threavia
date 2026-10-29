@@ -21,9 +21,11 @@ pinned global decisions are read by agents in all your projects on that Core.
   not read yet. A Project, and a Core's row when several are connected, say
   how many requests wait and how many sessions are unread under them; the
   Threavia icon of the activity bar counts both, even while the view is
-  closed. A session is read once its conversation is shown in a focused
-  window, here or in any other client; hover or select it to see its branch,
-  how far it is from its upstream and what is left to commit. Right-click a
+  closed. A session is read once the focus is in its conversation, in a
+  focused window, here or in any other client; one only showing beside the
+  editor or the terminal you work in stays unread. Hover or select it to
+  see its branch, how far it is from its upstream and what is left to
+  commit. Right-click a
   session to pin, rename, archive, refresh its repository from origin, or open
   it in the browser. Archiving closes its conversation, permissions, diffs and
   artifact previews across editor groups, including when archived from another

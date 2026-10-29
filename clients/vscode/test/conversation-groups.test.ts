@@ -37,6 +37,7 @@ import type { Event } from '../src/api/types';
 import type { Core } from '../src/cores/core';
 import { ConversationPanels, type Services } from '../src/conversation/panel';
 import type { WebviewMessage } from '../src/conversation/protocol';
+import { isSessionInFront } from '../src/sessions';
 
 class Panel {
   active = true;
@@ -70,6 +71,12 @@ class Panel {
     this.active = true;
     for (const changed of this.changed) changed();
   });
+  // The editor tells a panel when it loses focus too, as another one takes it.
+  deactivate() {
+    if (!this.active) return;
+    this.active = false;
+    for (const changed of this.changed) changed();
+  }
   onDidDispose(listener: () => void) { this.closed.add(listener); return { dispose: () => this.closed.delete(listener) }; }
   onDidChangeViewState(listener: () => void) { this.changed.add(listener); return { dispose: () => this.changed.delete(listener) }; }
   dispose() {
@@ -82,7 +89,7 @@ class Panel {
 
 function activate(target: Group) {
   for (const group of host.groups) group.isActive = group === target;
-  for (const panel of host.panels) panel.active = false;
+  for (const panel of host.panels) panel.deactivate();
 }
 
 function group(tabs: Group['tabs'] = []): Group {
@@ -98,6 +105,8 @@ describe('conversation editor groups', () => {
   let openPath: ReturnType<typeof vi.fn>;
   let openArtifact: ReturnType<typeof vi.fn>;
   let history: Event[];
+  let bus: EventBus;
+  let markSessionRead: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     host.groups = [];
@@ -119,9 +128,14 @@ describe('conversation editor groups', () => {
     openPath = vi.fn().mockResolvedValue(true);
     openArtifact = vi.fn().mockResolvedValue(undefined);
     history = [];
+    bus = new EventBus();
+    markSessionRead = vi.fn().mockResolvedValue(undefined);
     const core = {
-      id: 'group-core', bus: new EventBus(),
-      client: { snapshot: vi.fn().mockResolvedValue({ session: { id: 's1', projectId: 'p1', status: 'ACTIVE' }, runs: [], jobs: [], events: history, attention: {}, cursor: 0 }) },
+      id: 'group-core', bus,
+      client: {
+        snapshot: vi.fn().mockResolvedValue({ session: { id: 's1', projectId: 'p1', status: 'ACTIVE', readSequence: 0 }, runs: [], jobs: [], events: history, attention: {}, cursor: 0 }),
+        markSessionRead,
+      },
       attention: { ready: true, current: { validations: [], userInputs: [] }, onChange: () => ({ dispose() {} }) },
       repositories: { watch: () => ({ dispose() {} }) }, artifacts: { open: openArtifact },
     } as unknown as Core;
@@ -196,6 +210,34 @@ describe('conversation editor groups', () => {
     panel.reveal();
     await vi.waitFor(() => expect(panel.group.locked).toBe(true));
     expect(host.command).not.toHaveBeenCalledWith('workbench.action.toggleEditorGroupLock');
+  });
+
+  it('reads a session only while the person is in its conversation, not beside it nor in the terminal below it', async () => {
+    await conversations.open({ coreId: 'group-core', sessionId: 's1' });
+    await conversations.open({ coreId: 'group-core', sessionId: 's2' });
+    const [beside, inFront] = host.panels;
+    await vi.waitFor(() => expect(host.panels.every((panel) => panel.title)).toBe(true));
+    const s1 = { coreId: 'group-core', sessionId: 's1' };
+    const reply = (sequence: number) => bus.emit('event', { id: `reply-${sequence}`, sequence, sessionId: 's1', type: 'agent.message', timestamp: '2026-10-14T12:00:00Z', payload: { text: 'Done' } });
+    inFront.receive({ type: 'focus', focused: true });
+    expect([beside.visible, beside.active, inFront.active]).toEqual([true, false, true]);
+    reply(2);
+    // Showing is not reading: on every client, the reply still waits for them.
+    expect(markSessionRead).not.toHaveBeenCalled();
+    expect(isSessionInFront(s1)).toBe(false);
+    beside.reveal();
+    beside.receive({ type: 'focus', focused: true });
+    expect(markSessionRead).toHaveBeenCalledExactlyOnceWith('s1', 2);
+    expect(isSessionInFront(s1)).toBe(true);
+    // Off to the terminal: the conversation is still the active editor, but
+    // nobody is in it any more.
+    beside.receive({ type: 'focus', focused: false });
+    reply(3);
+    expect(beside.active).toBe(true);
+    expect(markSessionRead).toHaveBeenCalledOnce();
+    expect(isSessionInFront(s1)).toBe(false);
+    beside.receive({ type: 'focus', focused: true });
+    expect(markSessionRead).toHaveBeenLastCalledWith('s1', 3);
   });
 
   it('copies the agent’s complete original Markdown, keeping whitespace, links, tables and fenced code', async () => {

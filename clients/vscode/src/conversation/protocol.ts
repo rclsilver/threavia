@@ -65,6 +65,8 @@ export type ArtifactRef = { artifactId: string; filename: string; mimeType: stri
 
 export type WebviewMessage =
   | { type: 'ready' }
+  /** Whether the keyboard focus is in the page, which is when the person is reading it. */
+  | { type: 'focus'; focused: boolean }
   | { type: 'send'; text: string; delivery: Delivery; artifactIds?: string[] }
   | { type: 'attach'; filename: string; mimeType: string; content: string }
   | { type: 'loadMedia'; artifactId: string }

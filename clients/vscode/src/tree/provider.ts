@@ -5,7 +5,8 @@ import { ApiError } from '../api/client';
 import type { Monitor, Project, Repository, Session } from '../api/types';
 import type { Core } from '../cores/core';
 import type { Cores } from '../cores/registry';
-import { isSessionOpen } from '../sessions';
+import { isActive } from '../presence';
+import { isSessionInFront } from '../sessions';
 import {
   activityDescription,
   ago,
@@ -441,9 +442,9 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     // A Session pinned also appears under its Project: the ids keep the two
     // rows apart.
     item.id = `${coreId}:${node.under}:${session.id}`;
-    // The one open in the window the person is in is being read: it does not
-    // stand out for the moment before Core hears it was.
-    const unread = Boolean(session.unread) && !(isSessionOpen({ coreId, sessionId: session.id }) && vscode.window.state.focused);
+    // The one in the editor the person is in is being read: it does not stand
+    // out for the moment before Core hears it was.
+    const unread = Boolean(session.unread) && !(isSessionInFront({ coreId, sessionId: session.id }) && isActive());
     item.iconPath = themeIcon(stateIcon(state, unread));
     item.contextValue = session.pinnedAt ? 'session.pinned' : 'session';
 
