@@ -16,6 +16,11 @@ func (s *Store) SetSessionModel(ctx context.Context, owner domain.UserID, id dom
 	return scanSession(s.q.QueryRow(ctx, `UPDATE sessions s SET model=$3, effort=$4, updated_at=now() FROM projects p WHERE s.project_id=p.id AND s.id=$1 AND p.owner_id=$2 RETURNING `+sessionColumns, id, owner, model, effort))
 }
 
+// SetSessionManager attaches the session to a manager, or detaches it with nil.
+func (s *Store) SetSessionManager(ctx context.Context, owner domain.UserID, id domain.SessionID, manager *domain.SessionID) (domain.Session, error) {
+	return scanSession(s.q.QueryRow(ctx, `UPDATE sessions s SET manager_session_id=$3, updated_at=now() FROM projects p WHERE s.project_id=p.id AND s.id=$1 AND p.owner_id=$2 RETURNING `+sessionColumns, id, owner, manager))
+}
+
 func (s *Store) SetJobModel(ctx context.Context, id domain.JobID, model, effort string) error {
 	_, err := s.q.Exec(ctx, `UPDATE jobs SET model=$2, effort=$3 WHERE id=$1`, id, model, effort)
 	return classify(err, "record job model")

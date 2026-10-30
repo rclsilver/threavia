@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -135,11 +136,15 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 	if name == tools.NameSessionCreate {
 		return s.createManagedSession(ctx, identity, jc, input)
 	}
+	if name == tools.NameBackendList {
+		return s.listToolBackends(ctx, identity, jc)
+	}
 	if name == tools.NameSessionList {
 		return s.listToolSessions(ctx, identity, jc, input)
 	}
 	switch name {
-	case tools.NameSessionRead, tools.NameSessionSend, tools.NameSessionAnswer, tools.NameSessionCancel, tools.NameSessionArchive, tools.NameSessionWait, tools.NameSessionResolveValidation:
+	case tools.NameSessionRead, tools.NameSessionSend, tools.NameSessionAnswer, tools.NameSessionCancel, tools.NameSessionArchive, tools.NameSessionWait, tools.NameSessionResolveValidation,
+		tools.NameSessionUpdate, tools.NameSessionDetach, tools.NameSessionAdopt:
 	default:
 		return nil, fmt.Errorf("%w: unknown core tool %q", ErrInvalid, name)
 	}
@@ -147,12 +152,19 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 	if err != nil {
 		return nil, err
 	}
+	if name == tools.NameSessionAdopt {
+		return s.adoptSession(ctx, identity, jc, session)
+	}
 	if name != tools.NameSessionRead && name != tools.NameSessionSend {
 		if _, err := s.managedSession(ctx, identity, jc, string(session.ID)); err != nil {
 			return nil, err
 		}
 	}
 	switch name {
+	case tools.NameSessionUpdate:
+		return s.updateManagedSession(ctx, identity, session, input)
+	case tools.NameSessionDetach:
+		return s.detachSession(ctx, identity, jc, session)
 	case tools.NameSessionResolveValidation:
 		return s.resolveManagedValidation(ctx, identity, jc, session, input)
 	case tools.NameSessionRead:
@@ -447,7 +459,18 @@ func (s *Service) createManagedSession(ctx context.Context, identity auth.Identi
 			directory = &id
 		}
 	}
-	if err := s.checkWorkingDirectory(ctx, identity, projectID, jc.BackendInstanceID, directory); err != nil {
+	for _, key := range []string{"backendInstanceId", "model", "effort"} {
+		if raw, present := input[key]; present {
+			if _, ok := raw.(string); !ok {
+				return nil, fmt.Errorf("%w: %s must be a string", ErrInvalid, key)
+			}
+		}
+	}
+	backendID := jc.BackendInstanceID
+	if value := strings.TrimSpace(text(input, "backendInstanceId")); value != "" {
+		backendID = domain.BackendInstanceID(value)
+	}
+	if err := s.checkWorkingDirectory(ctx, identity, projectID, backendID, directory); err != nil {
 		return nil, err
 	}
 	operation := "create"
@@ -455,7 +478,8 @@ func (s *Service) createManagedSession(ctx context.Context, identity auth.Identi
 		operation += ":" + string(projectID)
 	}
 	result, err := s.StartSession(ctx, identity, StartSessionInput{
-		ProjectID: projectID, BackendInstanceID: jc.BackendInstanceID,
+		ProjectID: projectID, BackendInstanceID: backendID,
+		Model: text(input, "model"), Effort: text(input, "effort"),
 		WorkingDirectoryID: directory, ManagerSessionID: &jc.SessionID,
 		ExecutionPolicy: &policy, Message: text(input, "message"), Title: text(input, "title"),
 		IdempotencyKey: delegationKey(jc.SessionID, operation, text(input, "idempotencyKey")),
@@ -467,6 +491,30 @@ func (s *Service) createManagedSession(ctx context.Context, identity auth.Identi
 		return nil, err
 	}
 	return sessionToolResult(map[string]any{"session": result.Session, "run": result.Run, "job": result.Job})
+}
+
+func (s *Service) listToolBackends(ctx context.Context, identity auth.Identity, jc jobScope) (map[string]any, error) {
+	instances, err := s.ListBackendInstances(ctx, identity)
+	if err != nil {
+		return nil, err
+	}
+	backends := make([]map[string]any, 0, len(instances))
+	for _, instance := range instances {
+		if instance.OwnershipStatus == domain.BackendRevoked || !instance.HasCapability(domain.CapabilityCode) {
+			continue
+		}
+		entry := map[string]any{
+			"id": instance.ID, "name": instance.Name, "backend": instance.Backend,
+			"isDefault": instance.IsDefault, "isCurrent": instance.ID == jc.BackendInstanceID,
+			"operationalStatus":      instance.OperationalStatus,
+			"supportsModelSelection": slices.Contains(instance.Features, domain.FeatureModelSelection),
+		}
+		if instance.ModelCatalog != nil {
+			entry["modelCatalog"] = instance.ModelCatalog
+		}
+		backends = append(backends, entry)
+	}
+	return sessionToolResult(map[string]any{"backends": backends})
 }
 
 func delegationKey(manager domain.SessionID, operation, key string) string {
