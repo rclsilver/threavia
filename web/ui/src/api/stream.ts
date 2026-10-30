@@ -1,4 +1,4 @@
-import type { QueryClient } from '@tanstack/react-query';
+import type { InvalidateQueryFilters, QueryClient } from '@tanstack/react-query';
 
 import { dropInterruptedAttention, dropResolvedAttention } from './attention-cache';
 import { announceJobEnded } from '@/lib/job-ended';
@@ -12,6 +12,9 @@ import { payloadOf, type Event, type Job, type Snapshot } from './types';
 const SILENCE_LIMIT = 45_000;
 /** Quiet for this long, a wake-up replaces the connection instead of trusting it. */
 const STALE_AFTER = 20_000;
+/** Invalidations are sent once events have been quiet this long, or after the maximum wait. */
+const INVALIDATE_QUIET = 150;
+const INVALIDATE_MAX_WAIT = 1_000;
 
 /**
  * A liveness signal. It carries no sequence and is never stored: it says the
@@ -219,6 +222,34 @@ export class EventStream {
     }
   }
 
+  private readonly pendingInvalidations = new Map<string, InvalidateQueryFilters>();
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private flushDeadline = 0;
+
+  /**
+   * Marks queries stale, once per burst.
+   *
+   * A reconnection replays history, and a client that has just loaded replays
+   * all of it: one invalidation per event cancels and restarts the same
+   * requests thousands of times, until the browser has no connection left.
+   * Invalidations of one key are merged and sent when events stop arriving, or
+   * at the latest after a second of them arriving.
+   */
+  private invalidate(filters: InvalidateQueryFilters) {
+    this.pendingInvalidations.set(JSON.stringify(filters.queryKey ?? null), filters);
+    const now = Date.now();
+    if (this.flushTimer === null) this.flushDeadline = now + INVALIDATE_MAX_WAIT;
+    else clearTimeout(this.flushTimer);
+    this.flushTimer = setTimeout(() => this.flush(), Math.max(0, Math.min(INVALIDATE_QUIET, this.flushDeadline - now)));
+  }
+
+  private flush() {
+    this.flushTimer = null;
+    const pending = [...this.pendingInvalidations.values()];
+    this.pendingInvalidations.clear();
+    for (const filters of pending) void this.queries.invalidateQueries(filters);
+  }
+
   /** Routes one event onto the cache. */
   deliver(event: Event) {
     // Only consuming global events advances the cursor. A Session snapshot
@@ -234,25 +265,25 @@ export class EventStream {
 
     switch (event.type) {
       case 'control_access.changed':
-        void this.queries.invalidateQueries({ queryKey: ['control-accesses'] });
-        void this.queries.invalidateQueries({ queryKey: ['audit'] });
+        void this.invalidate({ queryKey: ['control-accesses'] });
+        void this.invalidate({ queryKey: ['audit'] });
         break;
       case 'monitor.changed':
-        void this.queries.invalidateQueries({ queryKey: ['monitors'] });
+        void this.invalidate({ queryKey: ['monitors'] });
         break;
       case 'mcp.changed':
-        void this.queries.invalidateQueries({ queryKey: ['mcp'] });
+        void this.invalidate({ queryKey: ['mcp'] });
         break;
       case 'review.changed':
-        void this.queries.invalidateQueries({ queryKey: ['review', event.sessionId ?? ''] });
-        void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
+        void this.invalidate({ queryKey: ['review', event.sessionId ?? ''] });
+        void this.invalidate({ queryKey: keys.snapshot(event.sessionId ?? '') });
         break;
       case 'user.message':
         if (payloadOf(event, 'user.message')?.delivery === 'NOW' && event.jobId) {
           dropInterruptedAttention(this.queries, event.sessionId, event.jobId, event.timestamp);
-          void this.queries.invalidateQueries({ queryKey: keys.attention() });
-          void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
-          void this.queries.invalidateQueries({ queryKey: ['sessions'] });
+          void this.invalidate({ queryKey: keys.attention() });
+          void this.invalidate({ queryKey: keys.snapshot(event.sessionId ?? '') });
+          void this.invalidate({ queryKey: ['sessions'] });
         }
         break;
       // Pending attention is current state, not a count of unread events, and
@@ -260,15 +291,15 @@ export class EventStream {
       // have to follow, or a request answered elsewhere stays on screen here.
       case 'validation.requested':
       case 'user_input.requested':
-        void this.queries.invalidateQueries({ queryKey: keys.attention() });
+        void this.invalidate({ queryKey: keys.attention() });
         // Re-read rather than built from the event: what makes an item worth a
         // notification is decided by Core, and this payload does not carry it.
-        void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
+        void this.invalidate({ queryKey: keys.snapshot(event.sessionId ?? '') });
         break;
 
       case 'validation.resolved':
       case 'user_input.resolved':
-        void this.queries.invalidateQueries({ queryKey: keys.attention() });
+        void this.invalidate({ queryKey: keys.attention() });
         // A resolution names exactly what it resolved, so the card goes at
         // once rather than after a round trip.
         this.dropResolved(event);
@@ -276,17 +307,17 @@ export class EventStream {
 
       case 'session.deleted': {
         const id = event.sessionId || payloadOf(event, 'session.deleted')?.sessionId || '';
-        void this.queries.invalidateQueries({ queryKey: ['sessions'] });
-        void this.queries.invalidateQueries({ queryKey: keys.snapshot(id) });
-        void this.queries.invalidateQueries({ queryKey: keys.attention() });
-        void this.queries.invalidateQueries({ queryKey: keys.audit() });
+        void this.invalidate({ queryKey: ['sessions'] });
+        void this.invalidate({ queryKey: keys.snapshot(id) });
+        void this.invalidate({ queryKey: keys.attention() });
+        void this.invalidate({ queryKey: keys.audit() });
         break;
       }
 
       // Read on one client: it stops standing out on the others.
       case 'session.read':
-        void this.queries.invalidateQueries({ queryKey: ['sessions'] });
-        void this.queries.invalidateQueries({ queryKey: ['projects'] });
+        void this.invalidate({ queryKey: ['sessions'] });
+        void this.invalidate({ queryKey: ['projects'] });
         break;
 
       case 'session.created':
@@ -296,13 +327,13 @@ export class EventStream {
       case 'session.pinned':
       case 'session.model_changed':
         if (['session.created', 'session.archived', 'session.restored'].includes(event.type)) {
-          void this.queries.invalidateQueries({ queryKey: keys.audit() });
+          void this.invalidate({ queryKey: keys.audit() });
         }
-        void this.queries.invalidateQueries({ queryKey: ['sessions'] });
+        void this.invalidate({ queryKey: ['sessions'] });
         // The snapshot carries the title too, so a Session open on another
         // screen follows the rename rather than keeping the old one until a
         // reload.
-        void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
+        void this.invalidate({ queryKey: keys.snapshot(event.sessionId ?? '') });
         break;
 
       // A new Run means the Session moved to another backend, which the cached
@@ -311,9 +342,9 @@ export class EventStream {
       case 'run.resume_unavailable':
       case 'run.resume_available':
       case 'run.resume_failed':
-        void this.queries.invalidateQueries({ queryKey: keys.audit() });
-        void this.queries.invalidateQueries({ queryKey: keys.repository(event.sessionId ?? '') });
-        void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
+        void this.invalidate({ queryKey: keys.audit() });
+        void this.invalidate({ queryKey: keys.repository(event.sessionId ?? '') });
+        void this.invalidate({ queryKey: keys.snapshot(event.sessionId ?? '') });
         break;
 
       // The sidebar says which Session is working, from the list rather than
@@ -325,24 +356,24 @@ export class EventStream {
       case 'job.failed':
       case 'job.cancelled':
         if (event.type === 'job.waiting_backend') {
-          void this.queries.invalidateQueries({ queryKey: keys.backends() });
+          void this.invalidate({ queryKey: keys.backends() });
         }
-        void this.queries.invalidateQueries({ queryKey: ['sessions'] });
+        void this.invalidate({ queryKey: ['sessions'] });
         // What the agent said, or a failure, may now be unread in a Project
         // the sidebar is not showing.
         if (event.type === 'job.completed' || event.type === 'job.failed') {
-          void this.queries.invalidateQueries({ queryKey: ['projects'] });
+          void this.invalidate({ queryKey: ['projects'] });
         }
         // Work that ended may have committed, pushed or left files behind.
         if (event.type !== 'job.created' && event.type !== 'job.started') {
           if (event.jobId) dropInterruptedAttention(this.queries, event.sessionId, event.jobId, event.timestamp);
-          void this.queries.invalidateQueries({ queryKey: keys.attention() });
-          void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
-          void this.queries.invalidateQueries({ queryKey: keys.repository(event.sessionId ?? '') });
+          void this.invalidate({ queryKey: keys.attention() });
+          void this.invalidate({ queryKey: keys.snapshot(event.sessionId ?? '') });
+          void this.invalidate({ queryKey: keys.repository(event.sessionId ?? '') });
         }
         // A Job may be a Schedule's doing, which changes what it last did.
         if (event.type === 'job.created') {
-          void this.queries.invalidateQueries({ queryKey: keys.schedules(event.sessionId ?? '') });
+          void this.invalidate({ queryKey: keys.schedules(event.sessionId ?? '') });
         }
         // Told as it happens, not as it is replayed: a reconnection resends
         // what was missed, and work that ended an hour ago is not news.
@@ -362,43 +393,43 @@ export class EventStream {
       case 'schedule.updated':
       case 'schedule.deleted':
       case 'schedule.skipped':
-        void this.queries.invalidateQueries({ queryKey: keys.audit() });
-        void this.queries.invalidateQueries({ queryKey: keys.schedules(event.sessionId ?? '') });
+        void this.invalidate({ queryKey: keys.audit() });
+        void this.invalidate({ queryKey: keys.schedules(event.sessionId ?? '') });
         break;
 
       case 'backend.status_changed':
-        void this.queries.invalidateQueries({ queryKey: keys.audit() });
-        void this.queries.invalidateQueries({ queryKey: keys.backends() });
-        void this.queries.invalidateQueries({ queryKey: ['sessions'] });
-        void this.queries.invalidateQueries({ queryKey: ['snapshot'] });
-        void this.queries.invalidateQueries({ queryKey: keys.attention() });
+        void this.invalidate({ queryKey: keys.audit() });
+        void this.invalidate({ queryKey: keys.backends() });
+        void this.invalidate({ queryKey: ['sessions'] });
+        void this.invalidate({ queryKey: ['snapshot'] });
+        void this.invalidate({ queryKey: keys.attention() });
         break;
       case 'backend.registered':
       case 'backend.revoked':
-        void this.queries.invalidateQueries({ queryKey: keys.audit() });
-        void this.queries.invalidateQueries({ queryKey: keys.backends() });
+        void this.invalidate({ queryKey: keys.audit() });
+        void this.invalidate({ queryKey: keys.backends() });
         break;
       case 'backend.quotas_updated':
       case 'backend.models_updated':
       case 'backend.default_changed':
-        void this.queries.invalidateQueries({ queryKey: keys.backends() });
+        void this.invalidate({ queryKey: keys.backends() });
         break;
 
       case 'directory.changed':
-        void this.queries.invalidateQueries({ queryKey: ['directories'] });
-        void this.queries.invalidateQueries({ queryKey: ['bindings'] });
+        void this.invalidate({ queryKey: ['directories'] });
+        void this.invalidate({ queryKey: ['bindings'] });
         break;
       case 'project.created':
       case 'project.archived':
       case 'project.restored':
       case 'project.updated':
       case 'project.deleted':
-        void this.queries.invalidateQueries({ queryKey: keys.audit() });
-        void this.queries.invalidateQueries({ queryKey: ['projects'] });
-        void this.queries.invalidateQueries({ queryKey: ['project'] });
+        void this.invalidate({ queryKey: keys.audit() });
+        void this.invalidate({ queryKey: ['projects'] });
+        void this.invalidate({ queryKey: ['project'] });
         if (event.type === 'project.deleted') {
-          void this.queries.invalidateQueries({ queryKey: ['sessions'] });
-          void this.queries.invalidateQueries({ queryKey: keys.attention() });
+          void this.invalidate({ queryKey: ['sessions'] });
+          void this.invalidate({ queryKey: keys.attention() });
         }
         break;
 
@@ -407,45 +438,45 @@ export class EventStream {
       case 'task.created':
       case 'task.updated':
       case 'task.deleted':
-        void this.queries.invalidateQueries({ queryKey: ['tasks'] });
-        void this.queries.invalidateQueries({ queryKey: keys.audit() });
+        void this.invalidate({ queryKey: ['tasks'] });
+        void this.invalidate({ queryKey: keys.audit() });
         break;
 
       case 'skill.installed':
       case 'skill.removed': {
         const payload = payloadOf(event, 'skill.installed') ?? payloadOf(event, 'skill.removed');
-        void this.queries.invalidateQueries({ queryKey: event.projectId ? keys.skills(event.projectId) : ['skills'] });
-        void this.queries.invalidateQueries({ queryKey: payload?.skillId ? ['skill-files', payload.skillId] : ['skill-files'] });
-        void this.queries.invalidateQueries({ queryKey: keys.audit() });
+        void this.invalidate({ queryKey: event.projectId ? keys.skills(event.projectId) : ['skills'] });
+        void this.invalidate({ queryKey: payload?.skillId ? ['skill-files', payload.skillId] : ['skill-files'] });
+        void this.invalidate({ queryKey: keys.audit() });
         break;
       }
 
       // Made global, or turned on or off in a Project: it moves between lists.
       case 'skill.changed':
-        void this.queries.invalidateQueries({ queryKey: ['skills'] });
-        void this.queries.invalidateQueries({ queryKey: keys.audit() });
+        void this.invalidate({ queryKey: ['skills'] });
+        void this.invalidate({ queryKey: keys.audit() });
         break;
 
       // An agent published a file: the project's list has one more.
       case 'artifact.created':
       case 'artifact.deleted':
-        void this.queries.invalidateQueries({ queryKey: ['artifacts'] });
+        void this.invalidate({ queryKey: ['artifacts'] });
         break;
 
       case 'decision.created':
       case 'decision.superseded':
       case 'decision.updated':
       case 'decision.deleted':
-        void this.queries.invalidateQueries({ queryKey: ['decisions'] });
-        void this.queries.invalidateQueries({ queryKey: keys.audit() });
+        void this.invalidate({ queryKey: ['decisions'] });
+        void this.invalidate({ queryKey: keys.audit() });
         break;
 
       case 'working_directory.changed':
-        void this.queries.invalidateQueries({ queryKey: ['directories'] });
-        void this.queries.invalidateQueries({ queryKey: ['sessions'] });
-        void this.queries.invalidateQueries({ queryKey: keys.snapshot(event.sessionId ?? '') });
-        void this.queries.invalidateQueries({ queryKey: keys.repository(event.sessionId ?? '') });
-        void this.queries.invalidateQueries({ queryKey: ['audit'] });
+        void this.invalidate({ queryKey: ['directories'] });
+        void this.invalidate({ queryKey: ['sessions'] });
+        void this.invalidate({ queryKey: keys.snapshot(event.sessionId ?? '') });
+        void this.invalidate({ queryKey: keys.repository(event.sessionId ?? '') });
+        void this.invalidate({ queryKey: ['audit'] });
         break;
     }
   }
