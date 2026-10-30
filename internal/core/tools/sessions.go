@@ -17,14 +17,47 @@ func sessionSpecs() []Spec {
 		},
 		{
 			Name:        NameSessionCreate,
-			Description: "Create a new session you manage, in this project or another project owned by the user. It starts work immediately with the target project's instructions and inherits your backend and execution policy. In this project it inherits your working directory; in another project choose workingDirectoryId explicitly if needed. Give it a self-contained assignment and keep managing it with session_wait, read, send and answer until finished. Use session_list with scope all to find project identifiers, including projects without sessions.",
+			Description: "Create a new session you manage, in this project or another project owned by the user. It starts work immediately with the target project's instructions and inherits your execution policy, and your backend unless you choose another with backendInstanceId (see backend_list for backends and their models). In this project it inherits your working directory; in another project choose workingDirectoryId explicitly if needed. Give it a self-contained assignment and keep managing it with session_wait, read, send and answer until finished. Use session_list with scope all to find project identifiers, including projects without sessions.",
 			InputSchema: object(map[string]any{
 				"projectId":          str("Target project owned by the user; defaults to the current project."),
 				"workingDirectoryId": str("Known directory belonging to the target project or shared globally. Defaults to your directory in the same project, or none in another project. An empty string selects no directory."),
+				"backendInstanceId":  str("Backend instance that runs the session; defaults to yours. Choose from backend_list."),
+				"model":              str("Model id from that backend's catalog in backend_list; omit for its default. Requires a backend that supports model selection."),
+				"effort":             str("Reasoning effort from the chosen model's efforts in backend_list; omit for the model's default."),
 				"message":            str("The assignment, context, constraints and expected result."),
 				"title":              str("A short name for the delegated task."),
 				"idempotencyKey":     str("A stable unique key for retrying this delegation without duplicating work."),
 			}, "message"),
+		},
+		{
+			Name:        NameBackendList,
+			Description: "List the user's backends usable by session_create: id, name, provider, whether it is yours, operational status, and the models with their supported efforts and defaults.",
+			InputSchema: object(map[string]any{}),
+		},
+		{
+			Name:        NameSessionUpdate,
+			Description: "Change the backend, model or effort of a directly managed session, for its next jobs. Moving to another backend needs the session to have no running or queued job; pass model and effort too when the current ones do not exist on the destination. Choose values from backend_list.",
+			InputSchema: object(map[string]any{
+				"sessionId":         str("The directly managed session."),
+				"backendInstanceId": str("Destination backend instance; omit to keep the current one."),
+				"model":             str("Model id from the backend's catalog; empty string selects the backend default."),
+				"effort":            str("Reasoning effort supported by the model; empty string selects the default."),
+			}, "sessionId"),
+		},
+		{
+			Name:        NameSessionDetach,
+			Description: "Stop managing a directly managed session: it becomes an ordinary unmanaged session, its questions and permissions are handled by the person again, and its history and files are kept.",
+			InputSchema: object(map[string]any{
+				"sessionId": str("The directly managed session."),
+			}, "sessionId"),
+		},
+		{
+			Name:               NameSessionAdopt,
+			RequiresValidation: true,
+			Description:        "Start managing an existing session that nobody manages, for example one the person started manually, after the person validates. Afterwards you can session_wait, answer, update, cancel and archive it. Refuses sessions that are archived, managed by another conversation, or that manage you.",
+			InputSchema: object(map[string]any{
+				"sessionId": str("An unmanaged session owned by the user, from session_list."),
+			}, "sessionId"),
 		},
 		{
 			Name:        NameSessionList,

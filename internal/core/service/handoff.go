@@ -38,11 +38,13 @@ type HandoffDirectory struct {
 }
 
 func (s *Service) PreviewHandoff(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, instanceID domain.BackendInstanceID) (HandoffPreview, error) {
-	p, err := s.previewHandoff(ctx, s.store, identity, sessionID, instanceID)
+	p, err := s.previewHandoff(ctx, s.store, identity, sessionID, instanceID, nil, nil)
 	return p, translate(err)
 }
 
-func (s *Service) previewHandoff(ctx context.Context, store *postgres.Store, identity auth.Identity, sessionID domain.SessionID, instanceID domain.BackendInstanceID) (HandoffPreview, error) {
+// model and effort, when set, are the values the session will have after the
+// move, so the destination is judged against them rather than the old ones.
+func (s *Service) previewHandoff(ctx context.Context, store *postgres.Store, identity auth.Identity, sessionID domain.SessionID, instanceID domain.BackendInstanceID, model, effort *string) (HandoffPreview, error) {
 	p := HandoffPreview{Reasons: []string{}, Warnings: []string{}, MissingSkills: []string{}, WorkingDirectory: HandoffDirectory{Resolution: "backend_default"}}
 	session, err := store.GetSession(ctx, identity.UserID, sessionID)
 	if err != nil {
@@ -74,7 +76,14 @@ func (s *Service) previewHandoff(ctx context.Context, store *postgres.Store, ide
 	} else if backend.Capacity.ActiveRuns >= backend.Capacity.MaxConcurrentRuns {
 		p.Reasons = append(p.Reasons, "The backend is full.")
 	}
-	if _, _, err := backend.ResolveModel(session.Model, session.Effort); err != nil {
+	selected, reasoning := session.Model, session.Effort
+	if model != nil {
+		selected = *model
+	}
+	if effort != nil {
+		reasoning = *effort
+	}
+	if _, _, err := backend.ResolveModel(selected, reasoning); err != nil {
 		p.Reasons = append(p.Reasons, "Session model or effort is incompatible: "+err.Error())
 	}
 	pending, err := store.SessionHasPendingJobs(ctx, sessionID)
@@ -121,6 +130,12 @@ func (s *Service) previewHandoff(ctx context.Context, store *postgres.Store, ide
 // The expected Run guards a reviewed destination against a move from another
 // client. Empty is retained for older API clients; all state is still rechecked.
 func (s *Service) MoveSessionToBackend(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, instanceID domain.BackendInstanceID, expectedRunID domain.RunID) (Handoff, error) {
+	return s.moveSessionToBackend(ctx, identity, sessionID, instanceID, expectedRunID, nil, nil)
+}
+
+// moveSessionToBackend can change the session model and effort in the same
+// transaction, for a destination whose catalog differs from the source.
+func (s *Service) moveSessionToBackend(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, instanceID domain.BackendInstanceID, expectedRunID domain.RunID, model, effort *string) (Handoff, error) {
 	var result Handoff
 	b := &batch{ownerID: identity.UserID}
 	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
@@ -131,7 +146,7 @@ func (s *Service) MoveSessionToBackend(ctx context.Context, identity auth.Identi
 		if _, err := tx.LockBackendInstance(ctx, instanceID); err != nil {
 			return err
 		}
-		preview, err := s.previewHandoff(ctx, tx, identity, sessionID, instanceID)
+		preview, err := s.previewHandoff(ctx, tx, identity, sessionID, instanceID, model, effort)
 		if err != nil {
 			return err
 		}
@@ -153,7 +168,23 @@ func (s *Service) MoveSessionToBackend(ctx context.Context, identity auth.Identi
 		if err := s.recordLifecycleAudit(ctx, tx, identity, events.Type("session.backend_changed"), scope, string(instanceID), map[string]any{"from": current.BackendInstanceID, "to": instanceID, "missingSkills": result.MissingSkills}); err != nil {
 			return err
 		}
-		return s.appendAll(ctx, tx, b, record{events.TypeRunCreated, scope, RunCreatedPayload{BackendInstanceID: string(instanceID), FromBackendInstanceID: string(current.BackendInstanceID), BackendName: preview.Backend.Name}})
+		if err := s.appendAll(ctx, tx, b, record{events.TypeRunCreated, scope, RunCreatedPayload{BackendInstanceID: string(instanceID), FromBackendInstanceID: string(current.BackendInstanceID), BackendName: preview.Backend.Name}}); err != nil {
+			return err
+		}
+		selected, reasoning := session.Model, session.Effort
+		if model != nil {
+			selected = *model
+		}
+		if effort != nil {
+			reasoning = *effort
+		}
+		if selected == session.Model && reasoning == session.Effort {
+			return nil
+		}
+		if _, err := tx.SetSessionModel(ctx, identity.UserID, sessionID, selected, reasoning); err != nil {
+			return err
+		}
+		return s.appendAll(ctx, tx, b, record{events.TypeSessionModelChanged, domain.Scope{ProjectID: session.ProjectID, SessionID: sessionID}, ModelPayload{selected, reasoning}})
 	})
 	if err != nil {
 		return Handoff{}, translate(err)

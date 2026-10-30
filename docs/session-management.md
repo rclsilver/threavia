@@ -19,7 +19,11 @@ as `mcp__threavia__<name>` when a Job starts:
 
 | Tool | Purpose |
 | --- | --- |
-| `session_create` | Start a session with a self-contained `message` and optional `title`, `projectId`, `workingDirectoryId` and `idempotencyKey`. The default is the current project. Returns `session`, `run` and `job`. The created session is a direct delegate. |
+| `backend_list` | List usable backends with status and model catalogs (models, efforts, defaults). |
+| `session_update` | Change a managed session's `backendInstanceId`, `model` and/or `effort` for its next jobs. A backend move needs no running or queued job; pass `model`/`effort` when the current ones do not exist on the destination. |
+| `session_detach` | Stop managing a delegate: it becomes an ordinary unmanaged session. |
+| `session_adopt` | After human validation, start managing an unmanaged session (e.g. a manual one). Refused if archived, managed by another conversation, or if it would create a cycle. |
+| `session_create` | Start a session with a self-contained `message` and optional `title`, `projectId`, `workingDirectoryId`, `backendInstanceId` (default: the creator's), `model`, `effort` and `idempotencyKey`. The default is the current project. Returns `session`, `run` and `job`. The created session is a direct delegate. |
 | `session_list` | `scope: project` (default) lists the current project, or `projectId`; `all` lists sessions across the user's projects; `managed` lists this conversation's direct delegates across projects, optionally filtered by `projectId`. `includeArchived` includes archived sessions and projects. `limit` is 1–100 (default 50); pass `nextOffset` as `offset` for the next page. Results are ordered newest-created first, so activity does not shift existing sessions between pages. |
 | `session_read` | Read any owned session's `session`, up to 50 recent Jobs (unfinished first), pending `attention`, and recent `events`, including user and agent messages. `limit` is 1–100 (default 50); `before` pages backwards using `beforeSequence`. |
 | `session_send` | Send a message to any owned session. `QUEUE` creates a later Job, `NEXT` reaches the next step, `NOW` interrupts work and abandons pending questions and permissions. NEXT/NOW require backend support. Messages are attributed to the sending agent; they do not adopt the recipient as a delegate or change its policy. |
