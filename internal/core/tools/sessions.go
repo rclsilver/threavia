@@ -25,7 +25,7 @@ func sessionSpecs() []Spec {
 				"model":              str("Model id from that backend's catalog in backend_list; omit for its default. Requires a backend that supports model selection."),
 				"effort":             str("Reasoning effort from the chosen model's efforts in backend_list; omit for the model's default."),
 				"message":            str("The assignment, context, constraints and expected result."),
-				"title":  str("A short name for the delegated task."),
+				"title":              str("A short name for the delegated task."),
 				"idempotencyKey":     str("A stable unique key for retrying this delegation without duplicating work."),
 			}, "message"),
 		},
