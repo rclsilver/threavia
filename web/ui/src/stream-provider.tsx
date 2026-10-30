@@ -38,15 +38,30 @@ export function StreamProvider({ children, demo = false }: { children: ReactNode
       return () => { cancelled = true; stop(); };
     }
     followPresence();
+    // The first connection follows a load that just fetched everything, and
+    // refetching it all again doubles every page. Only a connection regained
+    // after a loss has anything to reconcile.
+    let everConnected = false;
+    let lost = false;
     const open = () => live.open((connected) => {
       setConnected(connected);
+      if (!connected) {
+        lost = everConnected;
+        return;
+      }
+      everConnected = true;
       // Reconcile state that may have changed while this client was offline.
-      if (connected) void queries.invalidateQueries();
+      if (lost) {
+        lost = false;
+        void queries.invalidateQueries({ type: 'active' });
+      }
     }, (signal) => {
       setActivity((current) => ({ ...current, [signal.sessionId]: signal }));
     });
+    // Focus, visibility and network events arrive together, and a healthy
+    // stream needs none of them: only a stale or dropped one is replaced.
     const wake = () => {
-      if (document.visibilityState === 'visible') open();
+      if (document.visibilityState === 'visible' && live.stale) open();
     };
     open();
     // Mobile browsers can suspend both fetch and its timeout in the background.

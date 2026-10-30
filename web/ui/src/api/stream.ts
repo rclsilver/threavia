@@ -10,6 +10,8 @@ import { payloadOf, type Event, type Job, type Snapshot } from './types';
 
 // Core sends a keepalive every 20 seconds, even when no Job is running.
 const SILENCE_LIMIT = 45_000;
+/** Quiet for this long, a wake-up replaces the connection instead of trusting it. */
+const STALE_AFTER = 20_000;
 
 /**
  * A liveness signal. It carries no sequence and is never stored: it says the
@@ -41,6 +43,8 @@ export interface Activity {
 export class EventStream {
   private abort: AbortController | null = null;
   private cursor = 0;
+  private lastHeard = 0;
+  private live = false;
   private readonly queries: QueryClient;
   private onActivity: ((signal: Activity) => void) | null = null;
 
@@ -78,6 +82,16 @@ export class EventStream {
   close() {
     this.abort?.abort();
     this.abort = null;
+    this.live = false;
+  }
+
+  /**
+   * Whether a wake-up has any reason to replace the connection: it is not
+   * open, or nothing (not even a keep-alive) has been heard for a while. A
+   * healthy stream is left alone, since every reopening costs a full refetch.
+   */
+  get stale() {
+    return !this.abort || !this.live || Date.now() - this.lastHeard > STALE_AFTER;
   }
 
   private async run(abort: AbortController, onStateChange: (connected: boolean) => void) {
@@ -93,6 +107,7 @@ export class EventStream {
       abort.signal.addEventListener('abort', stop, { once: true });
       let timer = setTimeout(stop, SILENCE_LIMIT);
       const heard = () => {
+        this.lastHeard = Date.now();
         clearTimeout(timer);
         timer = setTimeout(stop, SILENCE_LIMIT);
       };
@@ -116,6 +131,7 @@ export class EventStream {
         }
 
         heard();
+        this.live = true;
         onStateChange(true);
         backoff = 1000;
         await this.consume(response.body, connection.signal, heard);
@@ -129,6 +145,7 @@ export class EventStream {
       }
 
       if (abort.signal.aborted) return;
+      this.live = false;
       onStateChange(false);
       await sleep(backoff, abort.signal);
       backoff = Math.min(backoff * 2, 30_000);
