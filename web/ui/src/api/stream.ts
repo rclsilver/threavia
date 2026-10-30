@@ -15,6 +15,8 @@ const STALE_AFTER = 20_000;
 /** Invalidations are sent once events have been quiet this long, or after the maximum wait. */
 const INVALIDATE_QUIET = 150;
 const INVALIDATE_MAX_WAIT = 1_000;
+/** How much older than the connection an event has to be to count as replayed. */
+const REPLAY_SLACK = 5_000;
 
 /**
  * A liveness signal. It carries no sequence and is never stored: it says the
@@ -48,6 +50,8 @@ export class EventStream {
   private cursor = 0;
   private lastHeard = 0;
   private live = false;
+  private connectedAt: number | null = null;
+  private replaying = false;
   private readonly queries: QueryClient;
   private onActivity: ((signal: Activity) => void) | null = null;
 
@@ -135,6 +139,7 @@ export class EventStream {
 
         heard();
         this.live = true;
+        this.connectedAt = Date.now();
         onStateChange(true);
         backoff = 1000;
         await this.consume(response.body, connection.signal, heard);
@@ -227,15 +232,20 @@ export class EventStream {
   private flushDeadline = 0;
 
   /**
-   * Marks queries stale, once per burst.
+   * Marks queries stale; while history is replayed, once per burst.
    *
    * A reconnection replays history, and a client that has just loaded replays
    * all of it: one invalidation per event cancels and restarts the same
    * requests thousands of times, until the browser has no connection left.
    * Invalidations of one key are merged and sent when events stop arriving, or
-   * at the latest after a second of them arriving.
+   * at the latest after a second of them arriving. An event happening now
+   * marks its queries at once.
    */
   private invalidate(filters: InvalidateQueryFilters) {
+    if (!this.replaying) {
+      void this.queries.invalidateQueries(filters);
+      return;
+    }
     this.pendingInvalidations.set(JSON.stringify(filters.queryKey ?? null), filters);
     const now = Date.now();
     if (this.flushTimer === null) this.flushDeadline = now + INVALIDATE_MAX_WAIT;
@@ -255,7 +265,12 @@ export class EventStream {
     // Only consuming global events advances the cursor. A Session snapshot
     // says nothing about missed events belonging to other Sessions.
     this.cursor = Math.max(this.cursor, event.sequence);
+    // Older than the connection means replayed history. The slack keeps a
+    // clock running ahead from taking live events for it, which would only
+    // delay them by a moment.
+    this.replaying = this.connectedAt !== null && Date.parse(event.timestamp) < this.connectedAt - REPLAY_SLACK;
     this.apply(event);
+    this.replaying = false;
   }
 
   private apply(event: Event) {
