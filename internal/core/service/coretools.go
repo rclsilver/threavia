@@ -98,6 +98,8 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 	// Job. These values never come from tool input.
 	ctx = context.WithValue(domain.WithChannel(ctx, domain.Channel("agent")), managerJobKey{}, jc.JobID)
 	switch name {
+	case "skill_list", "skill_read", "skill_import", "skill_set_enabled", "skill_make_global", "skill_delete":
+		return s.skillTool(ctx, identity, jc, name, input, file)
 	case "monitor_register", "monitor_list", "monitor_stop":
 		return s.monitorTool(ctx, identity, jc, name, input)
 	case "mcp_server_list", "mcp_server_add", "mcp_server_update", "mcp_server_delete", "mcp_server_bind":

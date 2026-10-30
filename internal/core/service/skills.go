@@ -30,6 +30,12 @@ func (s *Service) SetSkillAcquirer(acquirer *skills.Acquirer) { s.skills = acqui
 // contains: the only thing that ever executes a Skill is an agent, on a backend,
 // under that backend's own permissions.
 func (s *Service) InstallSkill(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, source domain.SkillSource, name string, upload io.Reader) (domain.Skill, error) {
+	return s.installSkill(ctx, identity, projectID, source, name, upload, nil)
+}
+
+// expected is an agent's compare-and-swap precondition. Empty means create
+// only; nil preserves the existing HTTP install semantics.
+func (s *Service) installSkill(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, source domain.SkillSource, name string, upload io.Reader, expected *string) (domain.Skill, error) {
 	if s.skills == nil || s.objects == nil {
 		return domain.Skill{}, ErrStorageUnavailable
 	}
@@ -83,6 +89,30 @@ func (s *Service) InstallSkill(ctx context.Context, identity auth.Identity, proj
 	err = s.store.WithTx(ctx, func(tx *postgres.Store) error {
 		if err := lockSkills(ctx, tx, identity.UserID, projectID); err != nil {
 			return err
+		}
+		if expected != nil {
+			var installed []domain.Skill
+			var err error
+			if projectID == "" {
+				installed, err = tx.ListGlobalSkills(ctx, identity.UserID)
+			} else {
+				installed, err = tx.ListSkills(ctx, projectID)
+			}
+			if err != nil {
+				return err
+			}
+			found := false
+			for _, current := range installed {
+				if current.Name == name {
+					found = true
+					if *expected == "" || current.InstalledRevision != *expected {
+						return fmt.Errorf("%w: skill already exists or changed; list skills and explicitly supply its expectedRevision", ErrConflict)
+					}
+				}
+			}
+			if !found && *expected != "" {
+				return fmt.Errorf("%w: the skill to update no longer exists", ErrConflict)
+			}
 		}
 		var err error
 		replaced, err = tx.UpsertSkill(ctx, &skill)
@@ -258,6 +288,10 @@ func (s *Service) SkillFiles(ctx context.Context, identity auth.Identity, id dom
 // UninstallSkill removes a Skill. The bundle it referenced goes with it: nothing
 // else can point at it, because a Skill owns its own Artifact.
 func (s *Service) UninstallSkill(ctx context.Context, identity auth.Identity, id domain.SkillID) error {
+	return s.uninstallSkill(ctx, identity, id, nil, nil)
+}
+
+func (s *Service) uninstallSkill(ctx context.Context, identity auth.Identity, id domain.SkillID, expected *string, projectScope *domain.ProjectID) error {
 	skill, err := s.store.GetSkill(ctx, identity.UserID, id)
 	if err != nil {
 		return translate(err)
@@ -271,6 +305,12 @@ func (s *Service) UninstallSkill(ctx context.Context, identity auth.Identity, id
 		skill, err = tx.GetSkill(ctx, identity.UserID, id)
 		if err != nil {
 			return err
+		}
+		if projectScope != nil && skill.ProjectID != *projectScope {
+			return ErrConflict
+		}
+		if expected != nil && skill.InstalledRevision != *expected {
+			return fmt.Errorf("%w: the skill changed; list skills before deleting", ErrConflict)
 		}
 		if _, err = tx.DeleteSkill(ctx, identity.UserID, id); err != nil {
 			return err
