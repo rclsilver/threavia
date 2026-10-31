@@ -26,6 +26,7 @@ import type {
   Me,
   Project,
   Repository,
+  WorkspaceFiles,
   Schedule,
   Session,
   Skill,
@@ -332,6 +333,23 @@ export function useRepository(sessionId: string) {
   });
 }
 
+/**
+ * The files of the Session's working directory that match what was typed
+ * after @, listed by its backend. The previous answer stays on screen while
+ * the next one comes, so the list does not blink at each key.
+ */
+export function useWorkspaceFiles(sessionId: string, query: string, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.files(sessionId, query),
+    queryFn: () =>
+      api.get<WorkspaceFiles>(`/api/v1/sessions/${sessionId}/files?${new URLSearchParams({ query, limit: '30' })}`),
+    enabled,
+    staleTime: 15_000,
+    retry: false,
+    placeholderData: (previous) => previous,
+  });
+}
+
 /** Fetches the remote first, so ahead and behind are true as of now. */
 export function useFetchRepository(sessionId: string) {
   const queries = useQueryClient();
@@ -585,6 +603,22 @@ export function useCancelJob(sessionId: string) {
       api.post<Job>(`/api/v1/jobs/${jobId}/cancel`, { reason: 'cancelled from the web client' }),
     // CANCELLING has no event of its own, so the snapshot and the sidebar are
     // re-read to show it.
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: ['sessions'] });
+      return queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
+    },
+  });
+}
+
+/**
+ * Takes back a message that has not started, to rewrite it. One that started
+ * in the meantime keeps running: Core answers a conflict rather than stop it.
+ */
+export function useWithdrawJob(sessionId: string) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: string) =>
+      api.post<Job>(`/api/v1/jobs/${jobId}/cancel`, { reason: 'taken back to be rewritten', ifQueued: true }),
     onSuccess: () => {
       void queries.invalidateQueries({ queryKey: ['sessions'] });
       return queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });

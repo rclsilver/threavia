@@ -78,6 +78,17 @@ type RepositoryReader interface {
 	OnRepositoryStatusRequest(ctx context.Context, req *backendv1.RepositoryStatusRequest) *backendv1.RepositoryStatus
 }
 
+// WorkspaceFileLister is implemented by a Handler that can name the files of a
+// Session's working directory, so that a person can mention one in a message.
+// Optional: a backend without it answers that it cannot, and does not announce
+// the WORKSPACE_FILES feature.
+//
+// Called on a goroutine of its own: listing a large tree must not hold the
+// control stream.
+type WorkspaceFileLister interface {
+	OnWorkspaceFilesRequest(ctx context.Context, req *backendv1.WorkspaceFilesRequest) *backendv1.WorkspaceFiles
+}
+
 // BaseHandler implements Handler by rejecting every command. Embed it to
 // implement only the commands a backend actually supports.
 type BaseHandler struct{}

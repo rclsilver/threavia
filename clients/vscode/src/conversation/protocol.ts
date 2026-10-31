@@ -59,7 +59,15 @@ export type HostMessage =
   | { type: 'sent' }
   | { type: 'sendFailed'; text: string; error: string }
   | { type: 'archiveFinished' }
-  | { type: 'failed'; message: string };
+  | { type: 'failed'; message: string }
+  /**
+   * What the field offers after / and @: the provider that reads the Skills,
+   * the Skills a Job here would have, and whether its backend lists files.
+   */
+  | { type: 'composer'; provider?: string; skills: { name: string; description?: string }[]; files: boolean }
+  | { type: 'files'; query: string; paths: string[]; truncated: boolean; error?: string }
+  /** A queued message taken back: it goes back in the field, files included. */
+  | { type: 'withdrawn'; text: string; attachments: (ArtifactRef & { size: number })[] };
 
 export type ArtifactRef = { artifactId: string; filename: string; mimeType: string; title?: string };
 
@@ -71,12 +79,16 @@ export type WebviewMessage =
   | { type: 'attach'; filename: string; mimeType: string; content: string }
   | { type: 'loadMedia'; artifactId: string }
   | { type: 'stop'; jobId: string }
+  | { type: 'withdraw'; jobId: string }
+  | { type: 'files'; query: string }
   | { type: 'decide'; id: string; approved: boolean }
   | { type: 'answer'; id: string; value: string }
   | { type: 'loadEarlier' }
   | { type: 'copyResponse'; sequence: number }
   | { type: 'refreshRepository' }
   | { type: 'setModelSettings'; model: string; effort: string }
+  /** The model pill: the extension shows the choice in the editor's Quick Pick. */
+  | { type: 'pickModel' }
   | { type: 'archive' }
   | { type: 'captureLearnings' }
   | { type: 'resolvePaths'; paths: string[] }

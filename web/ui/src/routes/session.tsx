@@ -1,12 +1,14 @@
-import { PromptAttachments } from '@/components/prompt-attachments';
-import { usePromptAttachments } from '@/lib/prompt-attachments';
+import { AttachButton, AttachedFiles } from '@/components/prompt-attachments';
+import { usePromptAttachments, type AttachedFile } from '@/lib/prompt-attachments';
+import { useComposerSuggestions, useSessionSkills } from '@/components/composer-suggestions';
 import { Link, useParams } from '@tanstack/react-router';
 import { ArrowUp, ChevronDown, LoaderCircle, Pin, Settings2, Square } from 'lucide-react';
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 
 import {
   useBackends,
   useCancelJob,
+  useWithdrawJob,
   usePostMessage,
   useRenameSession,
   useEarlierEvents,
@@ -17,8 +19,8 @@ import {
   useSessionModel,
   type Delivery,
 } from '@/api/queries';
-import type { BackendInstance, Session } from '@/api/types';
-import { ComposerModelSelects } from '@/components/composer-model-selects';
+import { payloadOf, type BackendInstance, type Event, type Session } from '@/api/types';
+import { ComposerModelPill } from '@/components/composer-model-pill';
 import { AttentionPanel } from '@/components/attention';
 import { BackendInfo } from '@/components/backend-info';
 import { ActionError } from '@/components/ui/action-error';
@@ -35,6 +37,7 @@ import { isActive } from '@/lib/presence';
 import { sendsMessage, useTouchKeyboard } from '@/lib/message-keyboard';
 import { cn, humanise } from '@/lib/utils';
 import { readUpTo } from '../../../../clients/shared/sessions';
+import { composerCommands, promptHistory, recall } from '../../../../clients/shared/composer';
 
 const FINISHED = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
 
@@ -43,6 +46,8 @@ export function SessionView() {
   const { activity } = useStream();
   const snapshot = useSnapshot(sessionId);
   const cancel = useCancelJob(sessionId);
+  const withdraw = useWithdrawJob(sessionId);
+  const composer = useRef<ComposerHandle>(null);
   const earlier = useEarlierEvents(sessionId);
   const backends = useBackends();
   const message = useRef<HTMLTextAreaElement>(null);
@@ -138,6 +143,22 @@ export function SessionView() {
     if (!FINISHED.has(job.status)) pending[job.id] = job.status;
   }
 
+  // What the person wrote, for the up arrow, and the messages they can still
+  // take back: those whose Job has not started.
+  const mine = (event: Event) => {
+    const user = payloadOf(event, 'user.message');
+    return user && !user.actorId && !user.actorJobId && !user.scheduleId && !user.monitorId ? user : undefined;
+  };
+  const history = promptHistory(data.events.map((event) => ({ text: mine(event)?.text ?? '', mine: Boolean(mine(event)) })));
+  const edit = (jobId: string) => {
+    const written = data.events.map(mine).find((user, index) => user && data.events[index].jobId === jobId);
+    if (!written || withdraw.isPending) return;
+    withdraw.mutate(jobId, {
+      onSuccess: () => composer.current?.restore(written.text, (written.attachments ?? []).map((file) => ({ id: file.artifactId, filename: file.filename, mimeType: file.mimeType, size: file.size }))),
+    });
+  };
+  const lastQueued = [...data.events].reverse().find((event) => event.jobId && pending[event.jobId] === 'QUEUED' && mine(event))?.jobId;
+
   return (
     // Not a control itself: every control inside keeps its own click, and the
     // field is reachable from the keyboard as it always was.
@@ -215,6 +236,7 @@ export function SessionView() {
           <p className="text-warn-text col-span-2 pl-1.5 text-xs md:hidden" role="status">{active.backendWait.message}{active.backendWait.retryAt && ` Next attempt no earlier than ${new Date(active.backendWait.retryAt).toLocaleString()}.`}</p>
         )}
         <ActionError error={cancel.error} className="col-span-2 pl-1.5 text-xs" />
+        <ActionError error={withdraw.error} outcome="Not taken back" recovery="It started meanwhile: stop it instead, or send a correction." className="col-span-2 pl-1.5 text-xs" />
       </header>
 
       <ReviewNotice sessionId={sessionId} />
@@ -224,6 +246,7 @@ export function SessionView() {
         events={data.events}
         pending={pending}
         onStop={(jobId) => cancel.mutate(jobId)}
+        onEdit={edit}
         earlier={earlier}
       />
 
@@ -248,6 +271,9 @@ export function SessionView() {
         deliveries={deliveries}
         onStop={() => active && cancel.mutate(active.id)}
         field={message}
+        handle={composer}
+        history={history}
+        onEditLastQueued={lastQueued ? () => edit(lastQueued) : undefined}
       />
     </div>
   );
@@ -408,6 +434,11 @@ function DeliveryChoice({
   );
 }
 
+/** What the page asks of the field: take back a queued message to rewrite. */
+export interface ComposerHandle {
+  restore: (text: string, files: AttachedFile[]) => void;
+}
+
 function Composer({
   sessionId,
   projectId,
@@ -417,6 +448,9 @@ function Composer({
   deliveries,
   onStop,
   field,
+  handle,
+  history,
+  onEditLastQueued,
 }: {
   sessionId: string;
   active?: { id: string; status: string };
@@ -428,12 +462,61 @@ function Composer({
   onStop: () => void;
   /** The field, so a click elsewhere on the page can hand it the focus. */
   field: React.RefObject<HTMLTextAreaElement | null>;
+  handle: React.RefObject<ComposerHandle | null>;
+  /** What the person wrote here, newest first, for the up arrow. */
+  history: string[];
+  /** Alt+Up: take back the last message still queued, when there is one. */
+  onEditLastQueued?: () => void;
 }) {
   const touchKeyboard = useTouchKeyboard();
   const send = usePostMessage(sessionId);
   const modelSettings = useSessionModel(sessionId);
   const attachments = usePromptAttachments(projectId, send.isPending);
   const [message, setMessage] = useDraft(sessionId);
+
+  // A queued message taken back lands here, before whatever was being written.
+  useImperativeHandle(handle, () => ({
+    restore: (text, files) => {
+      setMessage(message.trim() ? `${text}\n\n${message}` : text);
+      attachments.restore(files);
+      window.requestAnimationFrame(() => {
+        field.current?.focus();
+        field.current?.setSelectionRange(text.length, text.length);
+      });
+    },
+  }));
+
+  // The up arrow in an empty field brings back what was sent before.
+  const [recalled, setRecalled] = useState(-1);
+  const write = (text: string) => {
+    setRecalled(-1);
+    setMessage(text);
+  };
+
+  const filesOffered = Boolean(backend?.features?.includes('WORKSPACE_FILES'));
+  const skills = useSessionSkills(projectId, backend?.id);
+  const catalog = backend?.features?.includes('MODEL_SELECTION') ? backend.modelCatalog : undefined;
+  const commands = composerCommands({
+    provider: backend?.backend,
+    skills,
+    models: catalog?.models,
+    current: { model: session.model || catalog?.defaultModel, effort: session.effort },
+    deliveries,
+    running: Boolean(active && active.status !== 'CANCELLING'),
+  });
+  const suggestions = useComposerSuggestions({
+    field,
+    message,
+    setMessage: write,
+    commands,
+    files: filesOffered ? { sessionId } : undefined,
+    onCommand: (command) => {
+      if (command.kind === 'model') modelSettings.mutate({ model: command.model, effort: command.effort });
+      else if (command.kind === 'effort') modelSettings.mutate({ model: session.model ?? '', effort: command.effort });
+      else if (command.kind === 'delivery') setDelivery(command.delivery);
+      else if (command.kind === 'stop') onStop();
+    },
+  });
 
   // The field grows with what is written. Where the browser can size it to its
   // content (field-sizing, on the textarea's class), it does, and nothing here
@@ -461,7 +544,7 @@ function Composer({
   const submit = () => {
     const text = message.trim();
     if (send.isPending || modelSettings.isPending || attachments.busy || (!text && attachments.files.length === 0)) return;
-    setMessage('');
+    write('');
     send.mutate(
       { message: text, delivery: attachments.files.length ? 'QUEUE' : chosen, artifactIds: attachments.files.map((file) => file.id) },
       {
@@ -488,10 +571,16 @@ function Composer({
           submit();
         }}
       >
-        {/* One panel holds the message and its model choices; running work
-            adds delivery choices and Stop below them. */}
-        <div className="bg-surface border-border focus-within:border-muted/60 rounded-xl border shadow-xs transition-colors">
-          <PromptAttachments attachments={attachments} disabled={send.isPending} />
+        {/* One panel holds the message, its files and one line of controls. */}
+        <div
+          {...attachments.drop}
+          className={cn(
+            'bg-surface border-border focus-within:border-muted/60 relative rounded-xl border shadow-xs transition-colors',
+            attachments.dragging && 'border-accent border-dashed',
+          )}
+        >
+          {suggestions.list}
+          <AttachedFiles attachments={attachments} disabled={send.isPending} className="px-2.5 pt-2" />
           <div className="flex items-end gap-2 py-1.5 pr-1.5 pl-3.5">
             <textarea
               onPaste={attachments.paste}
@@ -499,8 +588,33 @@ function Composer({
               rows={1}
               enterKeyHint={touchKeyboard ? 'enter' : 'send'}
               value={message}
-              onChange={(event) => setMessage(event.target.value)}
+              {...suggestions.fieldProps}
+              onChange={(event) => {
+                write(event.target.value);
+                suggestions.track();
+              }}
+              onSelect={suggestions.track}
               onKeyDown={(event) => {
+                if (suggestions.onKeyDown(event)) return;
+                if (event.altKey && event.key === 'ArrowUp' && onEditLastQueued) {
+                  event.preventDefault();
+                  onEditLastQueued();
+                  return;
+                }
+                const element = event.currentTarget;
+                const direction = event.key === 'ArrowUp' ? 'older' : event.key === 'ArrowDown' ? 'newer' : undefined;
+                // Only from the first or the last line, so the arrows still move
+                // through a message of several lines.
+                const atEdge = direction === 'older' ? !element.value.slice(0, element.selectionStart).includes('\n') : !element.value.slice(element.selectionEnd).includes('\n');
+                if (direction && atEdge && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) {
+                  const next = recall(history, recalled, direction, message);
+                  if (next) {
+                    event.preventDefault();
+                    setMessage(next.text);
+                    setRecalled(next.position);
+                    return;
+                  }
+                }
                 if (sendsMessage(event, touchKeyboard)) {
                   event.preventDefault();
                   submit();
@@ -523,39 +637,38 @@ function Composer({
               {send.isPending ? <LoaderCircle className="animate-spin" /> : <ArrowUp />}
             </Button>
           </div>
-          <div className="border-border flex flex-wrap items-center gap-2 border-t px-1.5 py-1.5">
-            <ComposerModelSelects session={session} backend={backend} disabled={modelSettings.isPending || send.isPending} onChange={(settings) => modelSettings.mutate(settings)} />
-            {(modelSettings.isPending || (active && active.status !== 'QUEUED')) && <span className="text-muted text-xs" role="status">{modelSettings.isPending ? 'Saving…' : 'Applies to new jobs'}</span>}
+          {/* One line of controls under the field: files, the model of the
+              next job, and — while work runs — where a message goes and Stop. */}
+          <div className="border-border flex items-center gap-1 border-t px-1 py-1 sm:gap-1.5 sm:px-1.5">
+            <AttachButton attachments={attachments} disabled={send.isPending} />
+            <ComposerModelPill session={session} backend={backend} disabled={modelSettings.isPending || send.isPending} saving={modelSettings.isPending} onChange={(settings) => modelSettings.mutate(settings)} />
+            {active && active.status !== 'CANCELLING' && deliveries.length > 0 && (
+              <DeliveryChoice value={chosen} offered={deliveries} onChange={setDelivery} />
+            )}
+            <span className="ml-auto" />
+            {active && (active.status === 'CANCELLING' ? (
+              <span className="text-muted px-2 text-xs whitespace-nowrap">Stopping…</span>
+            ) : (
+              <>
+                {/* The header already says it on a phone. */}
+                <span className="text-muted hidden text-xs whitespace-nowrap first-letter:uppercase sm:inline">
+                  {humanise(active.status)}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="size-11 shrink-0 gap-1.5 px-0 text-xs whitespace-nowrap sm:size-auto sm:px-2 [&_svg]:size-3"
+                  title="Stop what is running now (Esc)"
+                  aria-label="Stop"
+                  onClick={onStop}
+                >
+                  <Square className="fill-current" />
+                  <span className="hidden sm:inline">Stop</span>
+                </Button>
+              </>
+            ))}
           </div>
-          {active && (
-            <div className="border-border flex items-center gap-2 border-t px-1.5 py-1.5">
-              {active.status !== 'CANCELLING' && deliveries.length > 0 && (
-                <DeliveryChoice value={chosen} offered={deliveries} onChange={setDelivery} />
-              )}
-              <span className="ml-auto" />
-              {active.status === 'CANCELLING' ? (
-                <span className="text-muted px-2 text-xs whitespace-nowrap">Stopping…</span>
-              ) : (
-                <>
-                  {/* The header already says it on a phone. */}
-                  <span className="text-muted hidden text-xs whitespace-nowrap first-letter:uppercase sm:inline">
-                    {humanise(active.status)}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="min-h-11 gap-1.5 px-2.5 text-xs whitespace-nowrap sm:min-h-0 [&_svg]:size-3"
-                    title="Stop what is running now (Esc)"
-                    onClick={onStop}
-                  >
-                    <Square className="fill-current" />
-                    Stop
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
         </div>
       </form>
       <ActionError error={modelSettings.error} outcome="Model settings not saved" recovery="Choose the model or effort again to retry." className="mt-2" />
@@ -567,7 +680,7 @@ function Composer({
         className="mt-2"
       />
       <p className="text-muted/70 mt-2 hidden text-center text-xs sm:block">
-        {touchKeyboard ? 'Enter for a newline · Tap the arrow to send' : 'Enter sends · Shift+Enter for a newline'}{active && ' · Esc stops'}
+        {touchKeyboard ? 'Enter for a newline · Tap the arrow to send' : `Enter sends · Shift+Enter for a newline · / commands${filesOffered ? ' · @ files' : ''} · ↑ last message`}{active && ' · Esc stops'}
       </p>
     </div>
   );

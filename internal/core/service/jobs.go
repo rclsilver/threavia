@@ -493,6 +493,40 @@ func (s *Service) CancelJob(ctx context.Context, identity auth.Identity, jobID d
 	return updated, nil
 }
 
+// WithdrawQueuedJob cancels a Job only while it has not started: what a person
+// does to take a queued message back and rewrite it. A Job that started in the
+// meantime is left running and the answer is a conflict, since stopping work
+// is not what was asked. Unlike DeleteQueuedJob, the timeline says the message
+// was cancelled, so it does not read as one still waiting for an answer.
+func (s *Service) WithdrawQueuedJob(ctx context.Context, identity auth.Identity, jobID domain.JobID, reason string) (domain.Job, error) {
+	started := fmt.Errorf("%w: this message already started; stop it instead", ErrConflict)
+	job, err := s.store.GetJob(ctx, identity.UserID, jobID)
+	if err != nil {
+		return domain.Job{}, translate(err)
+	}
+	if job.Status == domain.JobCancelled {
+		return job, nil // Withdrawn already: a retry is safe.
+	}
+	if job.Status != domain.JobQueued {
+		return domain.Job{}, started
+	}
+	jc, err := s.store.LoadJobContext(ctx, jobID)
+	if err != nil {
+		return domain.Job{}, translate(err)
+	}
+	updated, err := s.store.TransitionJob(ctx, jobID, domain.JobQueued, domain.JobCancelled, nil)
+	if errors.Is(err, postgres.ErrNotFound) {
+		// Dispatched between the read and the write.
+		return domain.Job{}, started
+	}
+	if err != nil {
+		return domain.Job{}, translate(err)
+	}
+	scope := domain.Scope{ProjectID: jc.ProjectID, SessionID: jc.SessionID, RunID: jc.Run.ID, JobID: jobID}
+	s.emit(ctx, identity.UserID, events.TypeJobCancelled, scope, JobEndedPayload{Reason: reason, Model: job.Model, Effort: job.Effort})
+	return updated, nil
+}
+
 // DeleteQueuedJob removes a Job that has not started yet.
 func (s *Service) DeleteQueuedJob(ctx context.Context, identity auth.Identity, jobID domain.JobID) error {
 	return translate(s.store.DeleteQueuedJob(ctx, identity.UserID, jobID))

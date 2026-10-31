@@ -58,14 +58,16 @@ async function mount() {
   await act(async () => { root.render(h(QueryClientProvider, { client: queries }, h(SessionView))); await new Promise(resolve => setTimeout(resolve, 50)); });
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
 }
-async function choose(label: string, text: string) {
-  const trigger = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
-  await act(() => { trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
-  const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(element => element.textContent === text);
+/** Opens the model pill — a sheet here, where the window is a phone's width — and takes one line. */
+async function choose(text: string) {
+  const trigger = document.querySelector<HTMLButtonElement>('[data-tour="session-model"]')!;
+  await act(async () => { trigger.click(); await Promise.resolve(); });
+  const option = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+    .find(element => (element.querySelector('span')?.textContent ?? element.textContent) === text);
   expect(option).toBeDefined();
   await act(async () => { option!.click(); await Promise.resolve(); });
 }
-it('saves inline choices, resets effort for the new model, and waits before sending', async () => {
+it('saves the choices made in the pill, resets effort for the new model, and waits before sending', async () => {
   let complete!: (value: Session) => void;
   mocks.patch.mockImplementation(() => new Promise<Session>(resolve => { complete = resolve; }));
   await mount();
@@ -77,22 +79,22 @@ it('saves inline choices, resets effort for the new model, and waits before send
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'Next task');
     field.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  await choose('Model', 'Second');
+  await choose('Second');
   expect(mocks.patch).toHaveBeenLastCalledWith('/api/v1/sessions/session', { model: 'second', effort: '' });
   expect(document.querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.disabled).toBe(true);
   await act(() => { field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
   expect(field.value).toBe('Next task'); expect(mocks.post).not.toHaveBeenCalled();
   await act(async () => { session = { ...session, model: 'second', effort: '' }; complete(session); await new Promise(resolve => setTimeout(resolve, 50)); });
-  expect(document.querySelector('[aria-label="Model"]')?.textContent).toContain('Second');
+  expect(document.querySelector('[data-tour="session-model"]')?.textContent).toContain('Second');
   expect(document.querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.disabled).toBe(false);
   mocks.patch.mockImplementation((_path: string, values: { model: string; effort: string }) => { session = { ...session, ...values }; return Promise.resolve(session); });
-  await choose('Reasoning effort', 'low');
+  await choose('low');
   expect(mocks.patch).toHaveBeenLastCalledWith('/api/v1/sessions/session', { model: 'second', effort: 'low' });
 });
 it('reports a refused save and retains the confirmed model', async () => {
   mocks.patch.mockRejectedValue(new Error('Offline'));
   await mount();
-  await choose('Model', 'Second');
+  await choose('Second');
   expect(document.body.textContent).toContain('Model settings not saved');
-  expect(document.querySelector('[aria-label="Model"]')?.textContent).toContain('First');
+  expect(document.querySelector('[data-tour="session-model"]')?.textContent).toContain('First');
 });

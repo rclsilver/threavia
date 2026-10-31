@@ -67,6 +67,7 @@ type Config struct {
 	FeatureHumanReview        bool
 	FeatureExternalMCP        bool
 	FeaturePersistentMonitors bool
+	FeatureWorkspaceFiles     bool
 	ModelCatalog              *backendv1.ModelCatalog
 	MaxConcurrentRuns         int32
 
@@ -181,5 +182,6 @@ func (c Config) featureFlags() *backendv1.FeatureFlags {
 		HumanReview:        c.FeatureHumanReview,
 		ExternalMcp:        c.FeatureExternalMCP,
 		PersistentMonitors: c.FeaturePersistentMonitors,
+		WorkspaceFiles:     c.FeatureWorkspaceFiles,
 	}
 }

@@ -1251,6 +1251,42 @@ paths:
         "503":
           $ref: "#/components/responses/Error"
 
+  /api/v1/sessions/{sessionId}/files:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    get:
+      tags: [sessions]
+      summary: The files of the Session's working directory that match a query
+      description: |
+        Listed by the backend of the Session's current Run, in the working
+        directory bound there, so that a person can name a file in a message.
+        Only names are read, best match first; in a git repository what git
+        ignores is left out. Core keeps none of it. A backend without the
+        WORKSPACE_FILES feature or a directory not yet located there answers
+        409; a backend that is offline or too slow answers 503.
+      parameters:
+        - name: query
+          in: query
+          schema: { type: string }
+          description: What was typed after @. Empty lists the top of the tree.
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: The matching files and directories
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceFiles" }
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+
   /api/v1/sessions/{sessionId}/messages:
     parameters:
       - $ref: "#/components/parameters/SessionID"
@@ -1635,6 +1671,10 @@ paths:
       description: |
         The Job moves to CANCELLING and reaches CANCELLED only once the backend
         confirms it actually stopped.
+
+        With ifQueued, only a Job that has not started is cancelled, at once:
+        how a person takes back a queued message to rewrite it. A Job that
+        started in the meantime keeps running and the answer is 409.
       requestBody:
         required: true
         content:
@@ -1643,6 +1683,10 @@ paths:
               type: object
               properties:
                 reason: { type: string }
+                ifQueued:
+                  type: boolean
+                  default: false
+                  description: Cancel only a Job that has not started; one that has answers 409.
       responses:
         "200":
           description: The Job, now cancelling
@@ -3386,6 +3430,21 @@ components:
           type: boolean
           description: Set when the diff was cut to stay a reasonable answer.
 
+    WorkspaceFiles:
+      type: object
+      required: [directory, paths, truncated]
+      properties:
+        directory:
+          type: string
+          description: The working directory, as the backend resolved it.
+        paths:
+          type: array
+          items: { type: string }
+          description: Relative to the directory, with forward slashes; a directory ends with a slash.
+        truncated:
+          type: boolean
+          description: More paths matched than were returned.
+
     Repository:
       type: object
       required: [directory, tracked, ahead, behind, upstreamGone, staged, unstaged, untracked, conflicted, checkedAt]
@@ -3761,10 +3820,11 @@ components:
             The optional CODE features announced on the last connection (spec
             sections 3.5 and 7): whether a message can reach a Job while it
             runs, after interrupting it or at its next step, prompt attachments,
-            and per-session model selection.
+            per-session model selection, and listing the files of a working
+            directory for @ mentions.
           items:
             type: string
-            enum: [JOB_INPUT_NOW, JOB_INPUT_NEXT, PROMPT_ATTACHMENTS, MODEL_SELECTION, HUMAN_REVIEW, EXTERNAL_MCP, PERSISTENT_MONITORS]
+            enum: [JOB_INPUT_NOW, JOB_INPUT_NEXT, PROMPT_ATTACHMENTS, MODEL_SELECTION, HUMAN_REVIEW, EXTERNAL_MCP, PERSISTENT_MONITORS, WORKSPACE_FILES]
         capacity: { $ref: "#/components/schemas/Capacity" }
         conditions:
           type: array

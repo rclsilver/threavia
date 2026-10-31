@@ -86,9 +86,27 @@ pinned global decisions are read by agents in all your projects on that Core.
   - **Write.** Enter sends, Shift+Enter is a newline. While a job runs, choose
     Queue, Next step or Interrupt (as far as the backend allows), and Stop it
     with the button or Escape. What you were writing is kept until sent.
-  - **Model and effort.** Select both below the message field; choices are
-    saved for this session across devices and apply to new jobs. Running work
-    keeps its settings, and the Done line shows the model and effort it used.
+  - **Commands and files.** Type `/` at the start of a message for the
+    session's Skills, written in the form its provider reads
+    (`/threavia-skills:name` for Claude, `$name` for Codex), and for commands:
+    `/model`, `/effort`, `/next`, `/now`, `/stop`. Type `@` to name a file or
+    directory of the working directory, listed by the backend (it needs a
+    backend with the `WORKSPACE_FILES` feature). The arrows move through the
+    list, Enter or Tab takes a line, Escape closes it without stopping
+    anything.
+  - **Bring back and rewrite.** In an empty field, ↑ brings back what you sent
+    before in this session, ↓ goes forward again. **Edit** on a message still
+    queued takes it back into the field with its files, before what you were
+    writing; Alt+↑ does it for the last one. A message that started in the
+    meantime keeps running, and you are told so.
+  - **One line of controls.** Under the message field: the paperclip to attach
+    files, the model pill, and while a job runs, Queue / Next step / Interrupt
+    and Stop. The pill says the model and effort of the next job (`Default ·
+    …` when the backend chooses); click it to change them in a Quick Pick, or
+    type `/model` or `/effort`. Choices are saved for this session across
+    devices; running work keeps its settings, and the Done line shows the
+    model and effort it used. In a narrow panel the labels get shorter and
+    Stop becomes an icon.
   - **Copy Markdown.** Copy an agent response with its original headings,
     lists, links and fenced code blocks, ready to paste into another application.
   - **Pin, unpin, open in the browser** from the tab's title bar.
@@ -106,7 +124,7 @@ pinned global decisions are read by agents in all your projects on that Core.
     workspace has it on either side of the change, the changed regions
     otherwise, and the raw diff when no comparison is possible (a binary file,
     a diff cut short).
-  - **Media in prompts.** Paste an image or use **Attach files** in a new or
+  - **Media in prompts.** Paste or drop an image, or use **Attach files**, in a new or
     existing conversation. Remove a file before sending if needed. Up to eight
     files, totalling 3 MiB, go with a queued message; a file-only prompt works
     too. An unsuccessful send keeps the text and attachments for retry.

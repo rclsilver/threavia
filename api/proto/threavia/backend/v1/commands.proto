@@ -344,3 +344,18 @@ message RepositoryStatusRequest {
   string directory = 2;
   bool fetch = 3;
 }
+
+// Asks the backend for the files of a Session's working directory whose path
+// matches a query, so that a person can name one in a message. Answered with a
+// WorkspaceFiles carrying the same request id. Nothing is read but names: what
+// git ignores is left out, and so is the content of every file.
+message WorkspaceFilesRequest {
+  string request_id = 1;
+  // The physical path, as bound for this backend. Empty for a Session with no
+  // working directory: the backend reads the one it runs such work in.
+  string directory = 2;
+  // What the person typed after @. Empty asks for the first files.
+  string query = 3;
+  // At most this many paths; the backend bounds it on its own as well.
+  uint32 limit = 4;
+}

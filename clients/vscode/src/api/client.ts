@@ -20,6 +20,8 @@ import type {
   Me,
   Project,
   Repository,
+  WorkspaceFiles,
+  BackendSkill,
   Run,
   Session,
   Skill,
@@ -441,6 +443,24 @@ export class CoreClient {
 
   cancelJob(jobId: string) {
     return this.post<Job>(`/api/v1/jobs/${jobId}/cancel`, { reason: 'cancelled from VS Code' });
+  }
+
+  /**
+   * Cancels a Job only while it has not started: a queued message taken back
+   * to be rewritten. One that started answers a conflict and keeps running.
+   */
+  withdrawJob(jobId: string) {
+    return this.post<Job>(`/api/v1/jobs/${jobId}/cancel`, { reason: 'taken back to be rewritten', ifQueued: true });
+  }
+
+  /** The files of the Session's working directory whose path matches `query`. */
+  workspaceFiles(sessionId: string, query: string, limit = 30) {
+    return this.get<WorkspaceFiles>(`/api/v1/sessions/${sessionId}/files?${new URLSearchParams({ query, limit: String(limit) })}`);
+  }
+
+  /** The Skills that exist only on one backend. */
+  backendSkills(backendId: string) {
+    return this.get<List<BackendSkill>>(`/api/v1/backends/${backendId}/skills`).then(items);
   }
 
   // ------------------------------------------------------- project memory

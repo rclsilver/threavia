@@ -42,6 +42,9 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 	}
 
 	var features []domain.Feature
+	if hello.GetFeatures().GetWorkspaceFiles() {
+		features = append(features, domain.FeatureWorkspaceFiles)
+	}
 	if hello.GetFeatures().GetPersistentMonitors() {
 		features = append(features, domain.FeaturePersistentMonitors)
 	}

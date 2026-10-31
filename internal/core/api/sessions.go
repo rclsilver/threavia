@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
@@ -19,6 +20,7 @@ func (h *handler) registerSessions(mux *http.ServeMux) {
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/events", h.sessionHistory)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/diff", h.workspaceDiff)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/repository", h.repository)
+	h.handle(mux, "GET /api/v1/sessions/{sessionId}/files", h.workspaceFiles)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/handoff", h.previewHandoff)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/messages", h.postMessage)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/read", h.markSessionRead)
@@ -301,6 +303,27 @@ func (h *handler) repository(w http.ResponseWriter, r *http.Request, identity au
 		return
 	}
 	writeJSON(w, http.StatusOK, repo)
+}
+
+// workspaceFiles serves the files of a Session's working directory that match
+// what a person typed after @, listed by its backend just now.
+func (h *handler) workspaceFiles(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	query := r.URL.Query()
+	limit := 0
+	if raw := query.Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 {
+			h.fail(w, fmt.Errorf("%w: limit must be a positive integer", service.ErrInvalid))
+			return
+		}
+		limit = parsed
+	}
+	files, err := h.svc.FilesOf(r.Context(), identity, domain.SessionID(r.PathValue("sessionId")), query.Get("query"), limit)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, files)
 }
 
 // pinnedSessions lists the Sessions the person pinned, from every Project.

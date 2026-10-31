@@ -38,6 +38,7 @@ provider-specific RPCs, and no provider assumption in any message.
 | `SkillFetchRequest` | `CoreToolResponse` |
 | `WorkspaceDiff` | `SkillBundle` |
 | `RepositoryStatus` | `UpdateJobPolicy` |
+| `WorkspaceFiles` | `WorkspaceFilesRequest` |
 | | `WorkspaceDiffRequest` |
 | | `RepositoryStatusRequest` |
 
@@ -373,8 +374,16 @@ looks, and keeps nothing it hears back:
   it fetches the remote first, never prompting for a credential; only the
   remote-tracking branches change, and a fetch that fails is said in
   `fetch_error` while the rest is the state as last known.
+- `WorkspaceFilesRequest` asks for the files of a Session's working directory
+  whose path matches what a person typed after `@`, at most `limit` of them;
+  the backend answers `WorkspaceFiles`, best match first, with directories
+  ending in `/`. Only names are read: in a git repository, what git knows of,
+  tracked or not, minus what it ignores; elsewhere a bounded walk that skips
+  build output such as `node_modules`. A backend that answers it advertises
+  `FeatureFlags.workspace_files`; Core refuses the request for one that does
+  not, rather than wait for an answer that will not come.
 
-Both answers carry the request's `request_id`. They are optional: a backend
+Every answer carries the request's `request_id`. They are optional: a backend
 that does not implement them answers with an `UNSUPPORTED` error.
 
 ## Compatibility

@@ -119,6 +119,7 @@ func Default() Config {
 	clientCfg.FeatureJobInputNext = true
 	clientCfg.FeaturePromptAttachments = true
 	clientCfg.FeatureHumanReview = true
+	clientCfg.FeatureWorkspaceFiles = true
 	clientCfg.FeatureExternalMCP = true
 	clientCfg.FeaturePersistentMonitors = monitors.Probe() == nil
 

@@ -108,6 +108,7 @@ message BackendToCore {
     ReviewWorkspace review_workspace = 14;
     McpResponse mcp_response = 15;
     MonitorReport monitor_report = 16;
+    WorkspaceFiles workspace_files = 17;
   }
 }
 
@@ -133,6 +134,7 @@ message CoreToBackend {
     ReviewWorkspaceRequest review_workspace_request = 16;
     McpRequest mcp_request = 17;
     MonitorControl monitor_control = 18;
+    WorkspaceFilesRequest workspace_files_request = 19;
   }
 }
 
@@ -234,4 +236,18 @@ message RepositoryStatus {
   string fetch_error = 15;
   // Set instead of the rest when the directory cannot be read at all.
   Error error = 16;
+}
+
+// The files of a working directory whose path matches a query, in answer to a
+// WorkspaceFilesRequest.
+message WorkspaceFiles {
+  string request_id = 1;
+  // The directory read, as this backend resolved it.
+  string directory = 2;
+  // Relative to the directory, with forward slashes, best match first.
+  repeated string paths = 3;
+  // Set when more paths matched than were sent.
+  bool truncated = 4;
+  // Set instead of the paths when the directory cannot be read at all.
+  Error error = 5;
 }

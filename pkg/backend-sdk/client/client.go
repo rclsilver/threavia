@@ -348,6 +348,10 @@ func (c *Client) dispatch(ctx context.Context, msg *backendv1.CoreToBackend) {
 		go c.answerRepositoryStatus(ctx, body.RepositoryStatusRequest)
 		return
 
+	case *backendv1.CoreToBackend_WorkspaceFilesRequest:
+		go c.answerWorkspaceFiles(ctx, body.WorkspaceFilesRequest)
+		return
+
 	case *backendv1.CoreToBackend_StartJob:
 		err = c.handler.OnStartJob(ctx, body.StartJob)
 	case *backendv1.CoreToBackend_CancelJob:
@@ -690,5 +694,25 @@ func waitForReady(ctx context.Context, conn *grpc.ClientConn, timeout time.Durat
 				return fmt.Errorf("cannot reach core at %s: %w", conn.Target(), waitCtx.Err())
 			}
 		}
+	}
+}
+
+// answerWorkspaceFiles lists the files of a working directory that match a
+// query and sends them back under the same request id.
+func (c *Client) answerWorkspaceFiles(ctx context.Context, req *backendv1.WorkspaceFilesRequest) {
+	var answer *backendv1.WorkspaceFiles
+	if lister, ok := c.handler.(WorkspaceFileLister); ok {
+		answer = lister.OnWorkspaceFilesRequest(ctx, req)
+	}
+	if answer == nil {
+		answer = &backendv1.WorkspaceFiles{Error: &backendv1.Error{
+			Code: "UNSUPPORTED", Message: "this backend cannot list the files of a working directory",
+		}}
+	}
+	answer.RequestId = req.GetRequestId()
+	if err := c.enqueue(ctx, &backendv1.BackendToCore{
+		Message: &backendv1.BackendToCore_WorkspaceFiles{WorkspaceFiles: answer},
+	}); err != nil {
+		c.logger.Warn("cannot answer a workspace files request", slog.String("error", err.Error()))
 	}
 }

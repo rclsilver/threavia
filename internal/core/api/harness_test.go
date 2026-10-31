@@ -168,6 +168,7 @@ type fakeBackend struct {
 	validations  chan *backendv1.ValidationResolution
 	inputs       chan *backendv1.UserInputResolution
 	reconciles   chan *backendv1.ReconcileInstruction
+	files        chan *backendv1.WorkspaceFilesRequest
 	acceptStarts bool
 	// Optional barrier before the SDK sends its initial reconciliation report.
 	reconcileGate <-chan struct{}
@@ -258,6 +259,7 @@ func (c *core) connectBackendWithReconcileGate(credential string, gate <-chan st
 		validations:   make(chan *backendv1.ValidationResolution, 8),
 		inputs:        make(chan *backendv1.UserInputResolution, 8),
 		reconciles:    make(chan *backendv1.ReconcileInstruction, 8),
+		files:         make(chan *backendv1.WorkspaceFilesRequest, 8),
 		reconcileGate: gate,
 	}
 
@@ -267,6 +269,7 @@ func (c *core) connectBackendWithReconcileGate(credential string, gate <-chan st
 	cfg.InstanceName = "test-backend"
 	cfg.BackendName = "fake"
 	cfg.FeaturePromptAttachments = true
+	cfg.FeatureWorkspaceFiles = true
 	if len(catalogs) > 0 {
 		cfg.FeatureModelSelection = true
 		cfg.ModelCatalog = catalogs[0]
@@ -498,4 +501,11 @@ func (c *core) readyTasks(projectID string) []task {
 	}
 	c.mustDo(http.MethodGet, "/api/v1/projects/"+projectID+"/tasks/ready", nil, &ready, http.StatusOK)
 	return ready.Items
+}
+
+// OnWorkspaceFilesRequest names two files whatever is asked, and records what
+// was asked.
+func (b *fakeBackend) OnWorkspaceFilesRequest(_ context.Context, req *backendv1.WorkspaceFilesRequest) *backendv1.WorkspaceFiles {
+	b.files <- req
+	return &backendv1.WorkspaceFiles{Directory: req.GetDirectory(), Paths: []string{"manifests/init.pp", "manifests/"}, Truncated: true}
 }

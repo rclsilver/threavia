@@ -163,6 +163,20 @@ func (a *Adapter) OnRepositoryStatusRequest(ctx context.Context, req *backendv1.
 	return status
 }
 
+// OnWorkspaceFilesRequest implements client.WorkspaceFileLister: the files of
+// a Session's working directory a person can name in a message.
+func (a *Adapter) OnWorkspaceFilesRequest(ctx context.Context, req *backendv1.WorkspaceFilesRequest) *backendv1.WorkspaceFiles {
+	directory := req.GetDirectory()
+	if directory == "" {
+		directory = a.cfg.Provider.DefaultWorkingDirectory
+	}
+	paths, truncated, err := workspace.FilesOf(ctx, directory, req.GetQuery(), int(req.GetLimit()))
+	if err != nil {
+		return &backendv1.WorkspaceFiles{Directory: directory, Error: &backendv1.Error{Code: "UNAVAILABLE", Message: err.Error()}}
+	}
+	return &backendv1.WorkspaceFiles{Directory: directory, Paths: paths, Truncated: truncated}
+}
+
 // fileState maps a detected state onto the protocol enum.
 func fileState(state workspace.State) backendv1.FileState {
 	switch state {

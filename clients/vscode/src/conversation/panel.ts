@@ -1,6 +1,7 @@
 import { mediaType } from '../../../shared/media';
 import { learningSource, requestLearningCapture } from '../../../shared/learnings';
 import { readUpTo } from '../../../shared/sessions';
+import { modelPill } from '../../../shared/composer';
 import { artifactKind } from './format';
 import * as vscode from 'vscode';
 
@@ -432,10 +433,45 @@ class ConversationPanel {
     if (this.target.kind !== 'draft') return;
     this.target = { kind: 'draft', start };
     if (this.ready) this.post({ type: 'draft', start });
+    void this.loadComposer();
   }
 
   private post(message: HostMessage) {
     void this.panel.webview.postMessage(message);
+  }
+
+  private composerGeneration = 0;
+
+  /**
+   * What the field offers after / and @. Read again when the backend or the
+   * draft's choices change: the Skills a Job would have depend on both, and
+   * the form a Skill is named in on the provider.
+   */
+  private async loadComposer() {
+    const generation = ++this.composerGeneration;
+    const draft = this.target.kind === 'draft' ? this.target.start : undefined;
+    const projectId = draft?.projectId ?? this.session?.projectId;
+    const backendId = draft?.backendInstanceId ?? this.backend?.id;
+    const provider = draft?.backendType ?? this.backend?.backend;
+    if (!projectId) return;
+    const { client } = this.core;
+    // Without its Skills the field still works: each source may fail alone.
+    const settled = await Promise.allSettled([
+      Promise.resolve().then(() => client.skills(projectId)),
+      Promise.resolve().then(() => client.skills()),
+      Promise.resolve().then(() => (backendId ? client.backendSkills(backendId) : [])),
+    ]);
+    if (generation !== this.composerGeneration || !this.ready) return;
+    const [own, global, local] = settled.map((result) => (result.status === 'fulfilled' ? result.value : []));
+    const skills = [
+      ...own,
+      ...global.filter((skill) => !('disabledProjectIds' in skill) || !(skill.disabledProjectIds ?? []).includes(projectId)),
+      ...local.filter((skill) => !('available' in skill) || skill.available),
+    ].map((skill) => ({ name: skill.name, description: skill.description }));
+    // Files are named only in a Session whose backend can list them: a draft
+    // has no directory located yet.
+    const files = Boolean(!draft && this.sessionId && this.backend?.features?.includes('WORKSPACE_FILES'));
+    this.post({ type: 'composer', provider, skills, files });
   }
 
   // ------------------------------------------------------------- loading
@@ -496,6 +532,7 @@ class ConversationPanel {
       const backend = (await this.core.backends()).find((candidate) => candidate.id === run.backendInstanceId);
       if (generation !== this.backendGeneration) return;
       this.backend = backend;
+      void this.loadComposer();
       this.postView();
     } catch {
       // The header goes without the backend's name; the conversation works.
@@ -644,29 +681,46 @@ class ConversationPanel {
         }
         return;
       }
-      case 'setModelSettings': {
-        if (this.savingModel || !this.session) return;
-        if (!this.backend?.features?.includes('MODEL_SELECTION')) {
-          this.modelError = 'Model settings not saved: the backend no longer supports model selection. Reconnect it and try again.';
-          this.postView();
-          return;
-        }
+      case 'setModelSettings':
         if (typeof message.model !== 'string' || typeof message.effort !== 'string') return;
-        this.savingModel = true;
-        this.modelError = undefined;
-        this.postView();
-        try {
-          this.session = await client.setSessionModel(this.session.id, message.model, message.effort);
-        } catch (error) {
-          this.modelError = `Model settings not saved: ${reason(error)}. Choose the model or effort again to retry.`;
-        } finally {
-          this.savingModel = false;
-          this.postView();
-        }
+        return this.saveModel(message.model, message.effort);
+
+      case 'pickModel': {
+        if (this.savingModel || !this.session) return;
+        const catalog = this.backend?.modelCatalog;
+        const model = this.session.model || '';
+        const effort = this.session.effort || '';
+        const shown = modelPill(catalog, model, effort);
+        type Choice = vscode.QuickPickItem & { model?: string; effort?: string };
+        const separator = (label: string): Choice => ({ label, kind: vscode.QuickPickItemKind.Separator });
+        const mark = (on: boolean) => (on ? '$(check) ' : '');
+        const items: Choice[] = [
+          separator('Model'),
+          { label: `${mark(!model)}Backend default`, description: catalog?.defaultModel, model: '' },
+          ...(catalog?.models ?? []).map((option) => ({
+            label: `${mark(option.id === model)}${option.name}`,
+            description: option.efforts.length ? undefined : 'no effort',
+            model: option.id,
+          })),
+          ...(shown.efforts.length ? [
+            separator('Effort'),
+            { label: `${mark(!effort)}Default effort`, description: shown.effort && !effort ? shown.effort : undefined, effort: '' },
+            ...shown.efforts.map((value) => ({ label: `${mark(value === effort)}${value}`, effort: value })),
+          ] : []),
+        ];
+        const picked = await vscode.window.showQuickPick(items, {
+          title: 'Model and effort for the next job',
+          placeHolder: `Now: ${shown.name}${shown.effort ? ` · ${shown.effort}` : ''} — also /model and /effort in the message field`,
+        });
+        if (!picked) return;
+        // Another model starts from its own default effort.
+        if (picked.model !== undefined) return this.saveModel(picked.model, '');
+        if (picked.effort !== undefined) return this.saveModel(model, picked.effort);
         return;
       }
       case 'ready':
         this.ready = true;
+        void this.loadComposer();
         if (this.target.kind !== 'session') {
           this.post({ type: 'draft', start: this.target.start });
           return;
@@ -711,6 +765,37 @@ class ConversationPanel {
           void vscode.window.showErrorMessage(`Not stopped: ${reason(error)}`);
         }
         return;
+
+      case 'withdraw': {
+        const written = this.events.find((event) => event.jobId === message.jobId && payloadOf(event, 'user.message'));
+        const user = written && payloadOf(written, 'user.message');
+        if (!user) return;
+        try {
+          await client.withdrawJob(message.jobId);
+          this.post({
+            type: 'withdrawn',
+            text: user.text,
+            attachments: (user.attachments ?? []).map((file) => ({ artifactId: file.artifactId, filename: file.filename, mimeType: file.mimeType, size: file.size })),
+          });
+          await this.reload();
+        } catch (error) {
+          void vscode.window.showErrorMessage(`Not taken back: ${reason(error)}. It may have started meanwhile: stop it instead, or send a correction.`);
+          await this.reload();
+        }
+        return;
+      }
+
+      case 'files': {
+        const sessionId = this.sessionId;
+        if (!sessionId) return;
+        try {
+          const found = await client.workspaceFiles(sessionId, message.query);
+          this.post({ type: 'files', query: message.query, paths: found.paths, truncated: found.truncated });
+        } catch (error) {
+          this.post({ type: 'files', query: message.query, paths: [], truncated: false, error: reason(error) });
+        }
+        return;
+      }
 
       case 'decide': {
         const request = this.requests().validations.find((candidate) => candidate.id === message.id);
@@ -808,6 +893,27 @@ class ConversationPanel {
     }
   }
 
+
+  /** Saves the model and effort of the Session's next jobs. */
+  private async saveModel(model: string, effort: string) {
+    if (this.savingModel || !this.session) return;
+    if (!this.backend?.features?.includes('MODEL_SELECTION')) {
+      this.modelError = 'Model settings not saved: the backend no longer supports model selection. Reconnect it and try again.';
+      this.postView();
+      return;
+    }
+    this.savingModel = true;
+    this.modelError = undefined;
+    this.postView();
+    try {
+      this.session = await this.core.client.setSessionModel(this.session.id, model, effort);
+    } catch (error) {
+      this.modelError = `Model settings not saved: ${reason(error)}. Choose the model or effort again to retry.`;
+    } finally {
+      this.savingModel = false;
+      this.postView();
+    }
+  }
   private async send(text: string, delivery: Delivery, artifactIds?: string[]) {
     if (this.savingModel) {
       this.post({ type: 'sendFailed', text, error: 'Model settings are still saving. Send your message again when saving finishes.' });

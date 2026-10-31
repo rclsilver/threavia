@@ -420,6 +420,33 @@ func TestCancellingAQueuedJobIsImmediate(t *testing.T) {
 	expectNothing(t, "a cancel command for a job that never started", backend.cancels)
 }
 
+// TestWithdrawingAQueuedMessageNeverStopsWork pins ifQueued: a queued message is
+// taken back at once, and one that started keeps running.
+func TestWithdrawingAQueuedMessageNeverStopsWork(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	session := c.startSession(projectID, c.backendID, dirID, "premier")
+	start := receive(t, "the first job", backend.starts)
+
+	var queued struct {
+		ID string `json:"id"`
+	}
+	c.mustDo(http.MethodPost, "/api/v1/sessions/"+session+"/messages", map[string]any{"message": "deuxieme"}, &queued, http.StatusCreated)
+
+	withdraw := map[string]any{"reason": "rewritten", "ifQueued": true}
+	c.mustDo(http.MethodPost, "/api/v1/jobs/"+queued.ID+"/cancel", withdraw, nil, http.StatusOK)
+	if got := c.jobStatus(session, queued.ID); got != "CANCELLED" {
+		t.Fatalf("withdrawn job status = %s, want CANCELLED", got)
+	}
+	// Asking twice is safe.
+	c.mustDo(http.MethodPost, "/api/v1/jobs/"+queued.ID+"/cancel", withdraw, nil, http.StatusOK)
+
+	c.mustDo(http.MethodPost, "/api/v1/jobs/"+start.GetJobId()+"/cancel", withdraw, nil, http.StatusConflict)
+	if got := c.jobStatus(session, start.GetJobId()); got != "RUNNING" {
+		t.Fatalf("a running job asked to be withdrawn: status = %s, want RUNNING", got)
+	}
+	expectNothing(t, "a cancel command for a withdrawn message", backend.cancels)
+}
+
 // TestWorkWaitsForAnOfflineBackend pins that enqueueing never depends on backend
 // availability: the Job waits and is dispatched when the backend comes back.
 func TestWorkWaitsForAnOfflineBackend(t *testing.T) {
@@ -596,4 +623,28 @@ func TestAJobThatEndsWhileWaitingStillEnds(t *testing.T) {
 	if next.GetJobId() != second.ID {
 		t.Fatalf("next job = %s, want the queued one %s", next.GetJobId(), second.ID)
 	}
+}
+
+// TestFilesAreListedByTheBackendOfTheSession pins the @ suggestions: Core asks
+// the backend holding the Session, in its bound directory, and keeps nothing.
+func TestFilesAreListedByTheBackendOfTheSession(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	session := c.startSession(projectID, c.backendID, dirID, "premier")
+	receive(t, "the first job", backend.starts)
+
+	var files struct {
+		Directory string   `json:"directory"`
+		Paths     []string `json:"paths"`
+		Truncated bool     `json:"truncated"`
+	}
+	c.mustDo(http.MethodGet, "/api/v1/sessions/"+session+"/files?query=init&limit=5", nil, &files, http.StatusOK)
+	asked := receive(t, "the file listing request", backend.files)
+	if asked.GetDirectory() != "/home/thomas/git/puppet" || asked.GetQuery() != "init" || asked.GetLimit() != 5 {
+		t.Fatalf("asked the backend for %+v", asked)
+	}
+	if files.Directory != "/home/thomas/git/puppet" || len(files.Paths) != 2 || files.Paths[0] != "manifests/init.pp" || !files.Truncated {
+		t.Fatalf("files = %+v", files)
+	}
+
+	c.mustDo(http.MethodGet, "/api/v1/sessions/"+session+"/files?limit=zero", nil, nil, http.StatusBadRequest)
 }

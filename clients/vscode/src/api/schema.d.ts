@@ -2485,6 +2485,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{sessionId}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["SessionID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The files of the Session's working directory that match a query
+         * @description Listed by the backend of the Session's current Run, in the working
+         *     directory bound there, so that a person can name a file in a message.
+         *     Only names are read, best match first; in a git repository what git
+         *     ignores is left out. Core keeps none of it. A backend without the
+         *     WORKSPACE_FILES feature or a directory not yet located there answers
+         *     409; a backend that is offline or too slow answers 503.
+         *
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description What was typed after @. Empty lists the top of the tree. */
+                    query?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    sessionId: components["parameters"]["SessionID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The matching files and directories */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WorkspaceFiles"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
+                503: components["responses"]["Error"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{sessionId}/messages": {
         parameters: {
             query?: never;
@@ -5848,6 +5905,14 @@ export interface components {
             /** @description Set when the diff was cut to stay a reasonable answer. */
             truncated: boolean;
         };
+        WorkspaceFiles: {
+            /** @description The working directory, as the backend resolved it. */
+            directory: string;
+            /** @description Relative to the directory, with forward slashes; a directory ends with a slash. */
+            paths: string[];
+            /** @description More paths matched than were returned. */
+            truncated: boolean;
+        };
         Repository: {
             /** @description The directory read, as the backend resolved it. */
             directory: string;
@@ -6142,9 +6207,10 @@ export interface components {
             /** @description The optional CODE features announced on the last connection (spec
              *     sections 3.5 and 7): whether a message can reach a Job while it
              *     runs, after interrupting it or at its next step, prompt attachments,
-             *     and per-session model selection.
+             *     per-session model selection, and listing the files of a working
+             *     directory for @ mentions.
              *      */
-            features?: ("JOB_INPUT_NOW" | "JOB_INPUT_NEXT" | "PROMPT_ATTACHMENTS" | "MODEL_SELECTION" | "HUMAN_REVIEW" | "EXTERNAL_MCP" | "PERSISTENT_MONITORS")[];
+            features?: ("JOB_INPUT_NOW" | "JOB_INPUT_NEXT" | "PROMPT_ATTACHMENTS" | "MODEL_SELECTION" | "HUMAN_REVIEW" | "EXTERNAL_MCP" | "PERSISTENT_MONITORS" | "WORKSPACE_FILES")[];
             capacity: components["schemas"]["Capacity"];
             conditions?: components["schemas"]["Condition"][];
             protocolVersion: number;

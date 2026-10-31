@@ -97,7 +97,7 @@ const STEPS: Step[] = [
     path: SESSION(IDS.certManager),
     target: '[data-tour="session-model"]',
     title: 'A model for each session',
-    body: 'Choose a model and reasoning effort directly below the message field. Each choice is saved across devices for new jobs; the Done line keeps the model and effort used by finished work.',
+    body: 'The pill below the message field shows the model and reasoning effort of the next job; click it to change them, or type /model or /effort. Each choice is saved across devices; the Done line keeps the model and effort used by finished work.',
   },
   {
     path: SESSION(IDS.ingress),

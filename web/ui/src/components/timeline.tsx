@@ -17,6 +17,7 @@ import {
   Layers,
   ShieldCheck,
   ShieldX,
+  Pencil,
   Square,
   type LucideIcon,
 } from 'lucide-react';
@@ -337,11 +338,14 @@ export function Timeline({
   events,
   pending,
   onStop,
+  onEdit,
   earlier,
 }: {
   events: Event[];
   pending: Pending;
   onStop: (jobId: string) => void;
+  /** Takes back a queued message to rewrite it; absent where that cannot be done. */
+  onEdit?: (jobId: string) => void;
   /** History before the window the snapshot opened with, read on demand. */
   earlier?: { more: boolean; loading: boolean; load: () => void };
 }) {
@@ -684,6 +688,7 @@ export function Timeline({
                         startedAt={row.startedAt}
                         pending={pending}
                         onStop={onStop}
+                        onEdit={onEdit}
                       />
                     )}
                   </div>
@@ -702,11 +707,13 @@ function Entry({
   startedAt,
   pending,
   onStop,
+  onEdit,
 }: {
   event: Event;
   startedAt?: string;
   pending: Pending;
   onStop: (jobId: string) => void;
+  onEdit?: (jobId: string) => void;
 }) {
   // What the person said, marked by a rule rather than sent to the other side
   // of the page. A column that reads top to bottom keeps every line starting at
@@ -745,7 +752,14 @@ function Entry({
           <p className="text-muted mt-2 whitespace-pre-wrap">{user.text}</p>
         </details> : <p className="text-sm whitespace-pre-wrap">{user.text}</p>}
         {user.attachments?.map((attachment) => <ArtifactCard key={attachment.artifactId} {...attachment} />)}
-        {jobId && status && <Stop status={status} onStop={() => onStop(jobId)} />}
+        {jobId && status && (
+          <Stop
+            status={status}
+            onStop={() => onStop(jobId)}
+            // Only what the person wrote is theirs to rewrite.
+            onEdit={onEdit && status === 'QUEUED' && !user.actorId && !user.actorJobId && !user.scheduleId && !user.monitorId ? () => onEdit(jobId) : undefined}
+          />
+        )}
       </div>
     );
   }
@@ -920,7 +934,7 @@ function DaySeparator({ label }: { label: string }) {
  * status beside it is what makes the button honest, because stopping a message
  * that has not started yet is not the same act as interrupting one.
  */
-function Stop({ status, onStop }: { status: JobStatus; onStop: () => void }) {
+function Stop({ status, onStop, onEdit }: { status: JobStatus; onStop: () => void; onEdit?: () => void }) {
   // Core moves a Job to CANCELLED only once the backend confirms the stop, so
   // the wait is real and worth showing rather than hiding the control.
   if (status === 'CANCELLING') {
@@ -930,6 +944,20 @@ function Stop({ status, onStop }: { status: JobStatus; onStop: () => void }) {
   return (
     <div className="text-muted flex items-center gap-1.5 text-xs">
       <span className="first-letter:uppercase">{humanise(status)}</span>
+      {/* A queued message can still be rewritten: it goes back to the field,
+          files included, and leaves the queue. */}
+      {onEdit && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="min-h-11 gap-1.5 px-2 text-xs sm:h-6 sm:min-h-0 sm:px-1.5 [&_svg]:size-3"
+          title="Take this message back to rewrite it (Alt+↑ for the last one)"
+          onClick={onEdit}
+        >
+          <Pencil />
+          Edit
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="sm"

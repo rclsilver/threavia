@@ -382,6 +382,10 @@ func (s *Server) handle(ctx context.Context, instanceID domain.BackendInstanceID
 		s.sink.RepositoryStatus(ctx, instanceID, body.RepositoryStatus)
 		return nil
 
+	case *backendv1.BackendToCore_WorkspaceFiles:
+		s.sink.WorkspaceFiles(ctx, instanceID, body.WorkspaceFiles)
+		return nil
+
 	default:
 		logger.Warn("unknown control message ignored")
 		return nil

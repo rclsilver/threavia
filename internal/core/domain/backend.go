@@ -158,6 +158,9 @@ const (
 	FeatureHumanReview        Feature = "HUMAN_REVIEW"
 	FeatureExternalMCP        Feature = "EXTERNAL_MCP"
 	FeaturePersistentMonitors Feature = "PERSISTENT_MONITORS"
+	// FeatureWorkspaceFiles: the backend can name the files of a working
+	// directory, for a person to mention one in a message.
+	FeatureWorkspaceFiles Feature = "WORKSPACE_FILES"
 	// FeatureJobInputNow: a message can interrupt the running Job and reorient
 	// it at once.
 	FeatureJobInputNow Feature = "JOB_INPUT_NOW"

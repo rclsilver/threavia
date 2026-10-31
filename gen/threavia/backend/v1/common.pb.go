@@ -652,8 +652,10 @@ type FeatureFlags struct {
 	HumanReview        bool `protobuf:"varint,5,opt,name=human_review,json=humanReview,proto3" json:"human_review,omitempty"`
 	ExternalMcp        bool `protobuf:"varint,6,opt,name=external_mcp,json=externalMcp,proto3" json:"external_mcp,omitempty"`
 	PersistentMonitors bool `protobuf:"varint,7,opt,name=persistent_monitors,json=persistentMonitors,proto3" json:"persistent_monitors,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Answers WorkspaceFilesRequest: the files a person can name in a message.
+	WorkspaceFiles bool `protobuf:"varint,8,opt,name=workspace_files,json=workspaceFiles,proto3" json:"workspace_files,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *FeatureFlags) Reset() {
@@ -731,6 +733,13 @@ func (x *FeatureFlags) GetExternalMcp() bool {
 func (x *FeatureFlags) GetPersistentMonitors() bool {
 	if x != nil {
 		return x.PersistentMonitors
+	}
+	return false
+}
+
+func (x *FeatureFlags) GetWorkspaceFiles() bool {
+	if x != nil {
+		return x.WorkspaceFiles
 	}
 	return false
 }
@@ -938,7 +947,7 @@ const file_threavia_backend_v1_common_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\tR\aversion\";\n" +
 	"\vBackendInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"\xa7\x02\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"\xd0\x02\n" +
 	"\fFeatureFlags\x12\"\n" +
 	"\rjob_input_now\x18\x01 \x01(\bR\vjobInputNow\x12$\n" +
 	"\x0ejob_input_next\x18\x02 \x01(\bR\fjobInputNext\x12-\n" +
@@ -946,7 +955,8 @@ const file_threavia_backend_v1_common_proto_rawDesc = "" +
 	"\x0fmodel_selection\x18\x04 \x01(\bR\x0emodelSelection\x12!\n" +
 	"\fhuman_review\x18\x05 \x01(\bR\vhumanReview\x12!\n" +
 	"\fexternal_mcp\x18\x06 \x01(\bR\vexternalMcp\x12/\n" +
-	"\x13persistent_monitors\x18\a \x01(\bR\x12persistentMonitors\"r\n" +
+	"\x13persistent_monitors\x18\a \x01(\bR\x12persistentMonitors\x12'\n" +
+	"\x0fworkspace_files\x18\b \x01(\bR\x0eworkspaceFiles\"r\n" +
 	"\vModelOption\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +

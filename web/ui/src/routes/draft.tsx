@@ -1,8 +1,8 @@
-import { PromptAttachments } from '@/components/prompt-attachments';
+import { AttachButton, AttachedFiles } from '@/components/prompt-attachments';
 import { usePromptAttachments } from '@/lib/prompt-attachments';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { useBackends, useCreateDirectory, useDirectories, useStartSession } from '@/api/queries';
 import { ActionError } from '@/components/ui/action-error';
@@ -13,7 +13,9 @@ import { Input, Label, Textarea } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useDraft } from '@/lib/draft';
 import { sendsMessage, useTouchKeyboard } from '@/lib/message-keyboard';
-import { humanise } from '@/lib/utils';
+import { cn, humanise } from '@/lib/utils';
+import { useComposerSuggestions, useSessionSkills } from '@/components/composer-suggestions';
+import { composerCommands } from '../../../../clients/shared/composer';
 
 const NONE = '__none__';
 
@@ -41,6 +43,20 @@ export function DraftView() {
 
   const usable = (backends.data ?? []).filter((backend) => backend.ownershipStatus !== 'REVOKED');
   const chosenBackend = (usable.some((backend) => backend.id === backendId) && backendId) || usable.find((backend) => backend.isDefault)?.id || usable[0]?.id || '';
+
+  // The first message can name a Skill with /, in the form the chosen
+  // backend's provider reads. Files wait for the Session: no directory is
+  // located before its first Job.
+  const field = useRef<HTMLTextAreaElement>(null);
+  const backend = usable.find((candidate) => candidate.id === chosenBackend);
+  const skills = useSessionSkills(projectId, backend?.id);
+  const suggestions = useComposerSuggestions({
+    field,
+    message,
+    setMessage,
+    commands: composerCommands({ provider: backend?.backend, skills }),
+    onCommand: () => {},
+  });
 
   const submit = () => {
     const text = message.trim();
@@ -140,16 +156,24 @@ export function DraftView() {
           </button>
         )}
 
-        <div className="space-y-1.5">
+        <div {...attachments.drop} className={cn('relative space-y-1.5 rounded-md', attachments.dragging && 'outline-accent outline-2 outline-dashed outline-offset-4')}>
+          {suggestions.list}
           <Label htmlFor="draft-message">First message</Label>
           <Textarea
+            ref={field}
             onPaste={attachments.paste}
             id="draft-message"
             rows={5}
             enterKeyHint={touchKeyboard ? 'enter' : 'send'}
             value={message}
-            onChange={(event) => setMessage(event.target.value)}
+            {...suggestions.fieldProps}
+            onChange={(event) => {
+              setMessage(event.target.value);
+              suggestions.track();
+            }}
+            onSelect={suggestions.track}
             onKeyDown={(event) => {
+              if (suggestions.onKeyDown(event)) return;
               if (sendsMessage(event, touchKeyboard)) {
                 event.preventDefault();
                 submit();
@@ -159,7 +183,10 @@ export function DraftView() {
           />
         </div>
 
-        <PromptAttachments attachments={attachments} disabled={start.isPending} />
+        <div className="flex items-start gap-2">
+          <AttachButton attachments={attachments} disabled={start.isPending} />
+          <AttachedFiles attachments={attachments} disabled={start.isPending} className="min-w-0 flex-1 pt-1" />
+        </div>
 
         <ActionError error={start.error} outcome="Not started" recovery="Your message is still in the field; send it again." />
 

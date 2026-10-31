@@ -102,6 +102,13 @@ function recordSessionLifecycle(session: Json, action: string, detail: Json) {
 }
 
 const notFound = (what = 'that') => new ApiError(404, 'not_found', `${what} is not in the demo`);
+/** The working directory @ names in the demo: a homelab repository. */
+const DEMO_FILES = [
+  'README.md', 'Makefile', 'flake.nix',
+  'clusters/', 'clusters/home/', 'clusters/home/ingress-nginx.yaml', 'clusters/home/cert-manager.yaml', 'clusters/home/kustomization.yaml',
+  'apps/', 'apps/immich/', 'apps/immich/values.yaml', 'apps/home-assistant/', 'apps/home-assistant/values.yaml',
+  'docs/', 'docs/runbooks/', 'docs/runbooks/ingress-certificates.md', 'scripts/', 'scripts/rotate-certificates.sh',
+];
 const unavailable = (what: string) => new ApiError(503, 'demo', `${what} is not available in the demo: nothing here reaches a server.`);
 
 function list(items: unknown[]) {
@@ -180,7 +187,19 @@ function attentionFor(sessionId?: string) {
 /** Recomputes what a session says it is doing, from its jobs. */
 function settle(sessionId: string) {
   const session = sessionOf(sessionId);
-  const active = timelineOf(sessionId).jobs.find((job) => !['COMPLETED', 'FAILED', 'CANCELLED'].includes(String(job.status)));
+  const jobs = timelineOf(sessionId).jobs;
+  const live = (job: Json) => !['COMPLETED', 'FAILED', 'CANCELLED'].includes(String(job.status));
+  // A message queued behind work that ended is answered now, as Core would
+  // start its Job.
+  const next = jobs.find((job) => job.status === 'QUEUED');
+  if (next && !jobs.some((job) => live(job) && job.status !== 'QUEUED')) {
+    next.status = 'COMPLETED';
+    Object.assign(next, { startedAt: nowIso(), endedAt: nowIso(), updatedAt: nowIso() });
+    const settings = modelSettings(sessionId);
+    pushEvent(sessionId, 'job.started', settings, String(next.id));
+    reply(sessionId, String(next.id), settings);
+  }
+  const active = jobs.find(live);
   if (active) session.activeJobStatus = active.status;
   else delete session.activeJobStatus;
 }
@@ -256,6 +275,16 @@ function answer(sessionId: string, text: string, delivery?: string, artifactIds?
   }
   const jobId = newId();
   const settings = modelSettings(sessionId);
+  // Behind work still going, a message waits its turn, and can be stopped or
+  // taken back to be rewritten until then.
+  if (running && !afterJobId) {
+    const job: Json = { ...settings, id: jobId, runId: timeline.runs.at(-1)?.id, status: 'QUEUED', originChannel: 'web', createdAt: nowIso(), updatedAt: nowIso() };
+    timeline.jobs.push(job);
+    pushEvent(sessionId, 'job.created', { runId: job.runId }, jobId);
+    pushEvent(sessionId, 'user.message', { text, attachments }, jobId);
+    settle(sessionId);
+    return job;
+  }
   const job: Json = { ...settings, id: jobId, runId: timeline.runs.at(-1)?.id, status: 'COMPLETED', originChannel: 'web', createdAt: nowIso(), updatedAt: nowIso(), startedAt: nowIso(), endedAt: nowIso() };
   timeline.jobs.push(job);
   pushEvent(sessionId, 'job.created', { runId: job.runId }, jobId);
@@ -270,6 +299,13 @@ function answer(sessionId: string, text: string, delivery?: string, artifactIds?
     settle(sessionId);
     return job;
   }
+  reply(sessionId, jobId, settings);
+  settle(sessionId);
+  return job;
+}
+
+/** What the demo's agent says to every message, and the end of its Job. */
+function reply(sessionId: string, jobId: string, settings: Json) {
   pushEvent(
     sessionId,
     'agent.message',
@@ -279,8 +315,6 @@ function answer(sessionId: string, text: string, delivery?: string, artifactIds?
     jobId,
   );
   pushEvent(sessionId, 'job.completed', { ...settings, summary: 'Answered (the demo agent).', usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 } }, jobId);
-  settle(sessionId);
-  return job;
 }
 
 const learningQuestions = new Map<string, { sessionId: string; jobId: string; content: string; editing: boolean }>();
@@ -804,6 +838,16 @@ const routes: [string, RegExp, Handler][] = [
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/events$/, () => list([])],
   ['POST', /^\/api\/v1\/sessions\/([^/]+)\/messages$/, (m, body) => answer(m[1], text(body.message), body.delivery as string | undefined, body.artifactIds as string[] | undefined, body.afterJobId as string | undefined)],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/diff$/, (_m, _b, query) => ({ path: query.get('path'), diff: data.ingressDiff, binary: false, truncated: false })],
+  ['GET', /^\/api\/v1\/sessions\/([^/]+)\/files$/, (_m, _b, query) => {
+    // A fixed tree, matched the way a backend does: the name before the path.
+    const wanted = (query.get('query') ?? '').toLowerCase();
+    const base = (path: string) => path.replace(/\/$/, '').split('/').pop() ?? '';
+    const paths = DEMO_FILES
+      .filter((path) => !wanted || path.toLowerCase().includes(wanted))
+      .sort((a, b) => Number(!base(a).toLowerCase().startsWith(wanted)) - Number(!base(b).toLowerCase().startsWith(wanted)) || a.length - b.length || a.localeCompare(b));
+    const limit = Number(query.get('limit') ?? 50);
+    return { directory: '/home/alex/homelab', paths: paths.slice(0, limit), truncated: paths.length > limit };
+  }],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/repository$/, (m, _b, query) => {
     const repo = data.repositories[m[1]];
     if (!repo) throw notFound('This session');
@@ -846,10 +890,12 @@ const routes: [string, RegExp, Handler][] = [
     return answer(String(schedule.sessionId), String(schedule.message));
   }],
 
-  ['POST', /^\/api\/v1\/jobs\/([^/]+)\/cancel$/, (m) => {
+  ['POST', /^\/api\/v1\/jobs\/([^/]+)\/cancel$/, (m, body) => {
     for (const [sessionId, timeline] of Object.entries(state.timelines)) {
       const job = timeline.jobs.find((entry) => entry.id === m[1]);
       if (!job) continue;
+      if (body.ifQueued && job.status === 'CANCELLED') return job;
+      if (body.ifQueued && job.status !== 'QUEUED') throw new ApiError(409, 'conflict', 'This message already started; stop it instead');
       job.status = 'CANCELLED';
       job.endedAt = nowIso();
       for (const list of [state.validations, state.userInputs]) {

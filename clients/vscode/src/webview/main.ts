@@ -28,6 +28,8 @@ import { append, button, h, icon } from './dom';
 import { Follower } from './follow';
 import { renderMarkdown } from './markdown';
 import { createModelSettings } from './model-settings';
+import { createSuggestions } from './suggestions';
+import { composerCommands, promptHistory, recall } from '../../../shared/composer';
 
 /**
  * The conversation, drawn in a webview.
@@ -78,6 +80,10 @@ let savingModel = false;
 let attaching = 0;
 let reservedBytes = 0;
 let attachments = saved.attachments ?? [];
+/** What the field offers after / and @, as the extension read it. */
+let composerSources: { provider?: string; skills: { name: string; description?: string }[]; files: boolean } = { skills: [], files: false };
+/** Which sent message the up arrow brought back; -1 while the field is the person's own. */
+let recalled = -1;
 const media = new Map<string, { source?: string; error?: string }>();
 const mediaAsked = new Set<string>();
 let fullWidth = saved.fullWidth === true;
@@ -140,23 +146,66 @@ const receipts = h('div', { class: 'receipts', role: 'status', 'aria-live': 'pol
 const field = h('textarea', { rows: 1, 'aria-label': 'Message', class: 'field' });
 field.value = saved.draft ?? '';
 const send = button(icon('send'), () => submit(), { class: 'send icon-button', title: 'Send (Enter)', 'aria-label': 'Send' });
+// One line of controls under the field: files, the model of the next job,
+// and — while work runs — where a message goes and Stop.
+const toolbarRunning = h('span', { class: 'toolbar-running' });
 const toolbar = h('div', { class: 'toolbar' });
 const attachmentList = h('div', { class: 'attachment-list' });
 const filePicker = h('input', { type: 'file', multiple: true, hidden: true });
 filePicker.addEventListener('change', () => { void addFiles(Array.from(filePicker.files ?? [])); filePicker.value = ''; });
-const attachButton = button([icon('attach'), 'Attach files'], () => filePicker.click(), { class: 'ghost small' });
+const attachButton = button(icon('attach'), () => filePicker.click(), {
+  class: 'icon-button attach',
+  title: 'Attach files — or paste them, or drop them on the message. Files go as a new queued message.',
+  'aria-label': 'Attach files',
+});
 const sendError = h('p', { class: 'error', role: 'alert', hidden: true });
 const hint = h('p', { class: 'hint' });
-const modelSettings = createModelSettings((model, effort) => {
+// The pill asks the extension for the editor's Quick Pick: the choice is
+// made there, and saved by the extension, which says so in the view.
+const modelSettings = createModelSettings(() => {
   if (savingModel || sendingMessage) return;
-  savingModel = true;
-  post({ type: 'setModelSettings', model, effort });
-  renderComposer();
+  post({ type: 'pickModel' });
 });
+const suggestions = createSuggestions(field, {
+  commands: () => {
+    const settings = view?.modelSettings;
+    const catalog = settings?.supported ? settings.catalog : undefined;
+    return composerCommands({
+      provider: composerSources.provider ?? view?.backendType ?? start?.backendType,
+      skills: composerSources.skills,
+      models: view ? catalog?.models : undefined,
+      current: { model: settings?.model || catalog?.defaultModel, effort: settings?.effort },
+      deliveries: view?.deliveries,
+      running: Boolean(view?.active && view.active.status !== 'CANCELLING'),
+    });
+  },
+  files: () => composerSources.files,
+  requestFiles: (query) => post({ type: 'files', query }),
+  onCommand: (command) => {
+    if (command.kind === 'model' || command.kind === 'effort') {
+      if (savingModel || sendingMessage) return;
+      savingModel = true;
+      post({ type: 'setModelSettings', model: command.kind === 'model' ? command.model : view?.modelSettings.model ?? '', effort: command.effort });
+      renderComposer();
+    } else if (command.kind === 'delivery') {
+      delivery = command.delivery;
+      persist();
+      renderComposer();
+    } else if (command.kind === 'stop') stop();
+  },
+  onChange: () => {
+    recalled = -1;
+    autosize();
+    updateSend();
+    persist();
+  },
+});
+toolbar.append(attachButton, modelSettings.element, toolbarRunning);
 const composer = h(
   'form',
   { class: 'composer' },
-  h('div', { class: 'panel' }, attachmentList, filePicker, attachButton, h('div', { class: 'field-row' }, field, send), modelSettings.element, toolbar),
+  h('div', { class: 'panel' }, suggestions.element, attachmentList, filePicker, h('div', { class: 'field-row' }, field, send), toolbar),
+  modelSettings.error,
   sendError,
   hint,
 );
@@ -241,6 +290,28 @@ window.addEventListener('message', (message: MessageEvent<HostMessage>) => {
         if (element.dataset.mediaId === data.artifactId) fillMedia(element, data.artifactId);
       }
       break;
+    case 'composer':
+      composerSources = data;
+      renderComposer();
+      suggestions.update();
+      break;
+    case 'files':
+      suggestions.receiveFiles(data);
+      break;
+    case 'withdrawn': {
+      // Back in the field, before whatever was being written.
+      const current = field.value;
+      field.value = current.trim() ? `${data.text}\n\n${current}` : data.text;
+      attachments = [...attachments, ...data.attachments.filter((file) => !attachments.some((kept) => kept.artifactId === file.artifactId))].slice(0, 8);
+      recalled = -1;
+      renderAttachments();
+      autosize();
+      updateSend();
+      persist();
+      field.focus();
+      field.setSelectionRange(data.text.length, data.text.length);
+      break;
+    }
     case 'sent':
       starting = false;
       sendingMessage = false;
@@ -589,7 +660,7 @@ function eventEntry(event: Event, startedAt?: string): HTMLElement {
         ? h('details', {}, h('summary', {}, 'Capture learnings from this resolution'), h('p', { class: 'message-text' }, user.text))
         : h('p', { class: 'message-text' }, user.text),
       ...(user.attachments ?? []).map(artifactCard),
-      event.jobId && status && stopControl(event.jobId, status),
+      event.jobId && status && stopControl(event.jobId, status, isMine(event)),
     );
   }
 
@@ -654,13 +725,19 @@ function responseActions(sequence: number): HTMLElement {
  * the status that makes it honest: dropping a message not started yet is not
  * the same act as interrupting one.
  */
-function stopControl(jobId: string, status: string): HTMLElement {
+function stopControl(jobId: string, status: string, mine = false): HTMLElement {
   if (status === 'CANCELLING') return h('p', { class: 'stop muted small' }, 'Stopping…');
   const label = humanise(status);
   return h(
     'p',
     { class: 'stop' },
     h('span', { class: 'muted small' }, label.charAt(0).toUpperCase() + label.slice(1)),
+    // A queued message can still be rewritten: it goes back to the field,
+    // files included, and leaves the queue.
+    mine && status === 'QUEUED' && button([icon('edit'), 'Edit'], () => post({ type: 'withdraw', jobId }), {
+      class: 'ghost small',
+      title: 'Take this message back to rewrite it (Alt+↑ for the last one)',
+    }),
     button([icon('debug-stop'), 'Stop'], () => post({ type: 'stop', jobId }), {
       class: 'ghost small',
       title: status === 'QUEUED' ? 'Drop this message before it runs' : 'Stop what this message started',
@@ -1077,10 +1154,12 @@ const PLACEHOLDERS: Record<Delivery | 'IDLE', string> = {
   NOW: 'Interrupt it and say what to do instead…',
 };
 
-const DELIVERY_LABELS: Record<Delivery, { label: string; title: string }> = {
-  QUEUE: { label: 'Queue', title: 'Start a new job once this one is done' },
-  NEXT: { label: 'Next step', title: 'Let the running job read it after what it is doing now' },
-  NOW: { label: 'Interrupt', title: 'Stop what it is doing and redirect it with this message' },
+// Short labels fit a narrow panel beside Stop; the full ones say more where
+// there is room.
+const DELIVERY_LABELS: Record<Delivery, { label: string; short: string; title: string }> = {
+  QUEUE: { label: 'Queue', short: 'Queue', title: 'Start a new job once this one is done' },
+  NEXT: { label: 'Next step', short: 'Next', title: 'Let the running job read it after what it is doing now' },
+  NOW: { label: 'Interrupt', short: 'Now', title: 'Stop what it is doing and redirect it with this message' },
 };
 
 /** The delivery in force: one the running work can take, or a queued message. */
@@ -1090,16 +1169,14 @@ function chosen(): Delivery {
 
 function renderComposer() {
   const active = view?.active;
-  modelSettings.update(view?.modelSettings && { ...view.modelSettings, saving: savingModel }, savingModel || sendingMessage, Boolean(active && active.status !== 'QUEUED'));
+  modelSettings.update(view?.modelSettings && { ...view.modelSettings, saving: savingModel }, savingModel || sendingMessage);
   updateSend();
   field.placeholder = !view && start ? 'First message…' : PLACEHOLDERS[active ? chosen() : 'IDLE'];
-  hint.textContent = `Enter sends · Shift+Enter for a newline${active ? ' · Esc stops' : ''}`;
+  hint.textContent = `Enter sends · Shift+Enter for a newline · / commands${composerSources.files ? ' · @ files' : ''}${view ? ' · ↑ last message' : ''}${active ? ' · Esc stops' : ''}`;
   if (!active) {
-    toolbar.hidden = true;
-    toolbar.replaceChildren();
+    toolbarRunning.replaceChildren();
     return;
   }
-  toolbar.hidden = false;
   const items: HTMLElement[] = [];
   if (active.status !== 'CANCELLING' && view && view.deliveries.length > 0) {
     const options: Delivery[] = ['QUEUE', ...view.deliveries];
@@ -1107,7 +1184,7 @@ function renderComposer() {
     for (const option of options) {
       const selected = chosen() === option;
       group.append(
-        button(DELIVERY_LABELS[option].label, () => {
+        button([h('span', { class: 'wide-only' }, DELIVERY_LABELS[option].label), h('span', { class: 'narrow-only' }, DELIVERY_LABELS[option].short)], () => {
           delivery = option;
           persist();
           renderComposer();
@@ -1130,7 +1207,7 @@ function renderComposer() {
       delivery = next;
       persist();
       renderComposer();
-      toolbar.querySelector<HTMLButtonElement>('.delivery.selected')?.focus();
+      toolbarRunning.querySelector<HTMLButtonElement>('.delivery.selected')?.focus();
     });
     items.push(group);
   }
@@ -1140,13 +1217,48 @@ function renderComposer() {
   } else {
     const label = humanise(active.status);
     items.push(
-      h('span', { class: 'muted small' }, label.charAt(0).toUpperCase() + label.slice(1)),
-      button([icon('debug-stop'), 'Stop'], () => stop(), { class: 'ghost small', title: 'Stop what is running now (Esc)' }),
+      h('span', { class: 'muted small wide-only' }, label.charAt(0).toUpperCase() + label.slice(1)),
+      button([icon('debug-stop'), h('span', { class: 'wide-only' }, 'Stop')], () => stop(), { class: 'ghost small', title: 'Stop what is running now (Esc)', 'aria-label': 'Stop' }),
     );
   }
-  toolbar.replaceChildren(...items);
+  toolbarRunning.replaceChildren(...items);
 }
 
+
+/** What the person wrote in this Session, newest first, for the up arrow. */
+function history(): string[] {
+  return promptHistory(events.map((event) => ({ text: payloadOf(event, 'user.message')?.text ?? '', mine: isMine(event) })));
+}
+
+/** A message the person typed, rather than one a schedule, a monitor or an agent sent. */
+function isMine(event: Event): boolean {
+  return Boolean(payloadOf(event, 'user.message')) && messageAuthor(event) === 'You';
+}
+
+/** The last message of the person's still waiting for its turn. */
+function lastQueued(): string | undefined {
+  return [...events].reverse().find((event) => event.jobId && view?.pending[event.jobId] === 'QUEUED' && isMine(event))?.jobId;
+}
+
+// Files dropped on the message panel are attached, as pasted ones are. Text
+// dragged in is left to the field.
+const panel = composer.querySelector<HTMLElement>('.panel')!;
+const carriesFiles = (event: DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files');
+panel.addEventListener('dragover', (event) => {
+  if (!carriesFiles(event)) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+  panel.classList.add('dragging');
+});
+panel.addEventListener('dragleave', (event) => {
+  if (!panel.contains(event.relatedTarget as Node | null)) panel.classList.remove('dragging');
+});
+panel.addEventListener('drop', (event) => {
+  panel.classList.remove('dragging');
+  if (!carriesFiles(event)) return;
+  event.preventDefault();
+  void addFiles(Array.from(event.dataTransfer?.files ?? []));
+});
 function stop() {
   const active = view?.active;
   if (active && active.status !== 'CANCELLING') post({ type: 'stop', jobId: active.id });
@@ -1174,11 +1286,40 @@ function autosize() {
 }
 
 field.addEventListener('input', () => {
+  recalled = -1;
   autosize();
   updateSend();
   persist();
 });
 field.addEventListener('keydown', (event) => {
+  if (suggestions.onKeyDown(event)) return;
+  // Alt+Up takes back the last message still queued, to rewrite it.
+  if (event.altKey && event.key === 'ArrowUp') {
+    const queued = lastQueued();
+    if (queued) {
+      event.preventDefault();
+      post({ type: 'withdraw', jobId: queued });
+    }
+    return;
+  }
+  // The arrows bring back what was sent, from the first or the last line
+  // only, so they still move through a message of several lines.
+  const direction = event.key === 'ArrowUp' ? 'older' : event.key === 'ArrowDown' ? 'newer' : undefined;
+  if (direction && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) {
+    const atEdge = direction === 'older'
+      ? !field.value.slice(0, field.selectionStart).includes('\n')
+      : !field.value.slice(field.selectionEnd).includes('\n');
+    const next = atEdge ? recall(history(), recalled, direction, field.value) : undefined;
+    if (next) {
+      event.preventDefault();
+      field.value = next.text;
+      recalled = next.position;
+      autosize();
+      updateSend();
+      persist();
+      return;
+    }
+  }
   // Enter sends, as in every chat; Shift+Enter is a newline. An Enter that
   // closes an input method is composing text, not sending it.
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
@@ -1235,7 +1376,7 @@ function renderAttachments() {
     h('span', {}, file.filename + ' · ' + bytes(file.size)),
     button(icon('close'), () => { attachments = attachments.filter((item) => item.artifactId !== file.artifactId); renderAttachments(); }, {class:'icon-button', disabled: sendingMessage, 'aria-label': 'Remove ' + file.filename}))),
     ...(attaching ? [h('p', {}, 'Attaching…')] : []),
-    ...(attachments.length ? [h('p', { class: 'muted small' }, 'Files will be sent as a new queued message.')] : []));
+    );
   attachButton.disabled = sendingMessage || attaching > 0;
   updateSend(); persist();
 }

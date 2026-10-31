@@ -2266,6 +2266,82 @@ func (x *RepositoryStatusRequest) GetFetch() bool {
 	return false
 }
 
+// Asks the backend for the files of a Session's working directory whose path
+// matches a query, so that a person can name one in a message. Answered with a
+// WorkspaceFiles carrying the same request id. Nothing is read but names: what
+// git ignores is left out, and so is the content of every file.
+type WorkspaceFilesRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// The physical path, as bound for this backend. Empty for a Session with no
+	// working directory: the backend reads the one it runs such work in.
+	Directory string `protobuf:"bytes,2,opt,name=directory,proto3" json:"directory,omitempty"`
+	// What the person typed after @. Empty asks for the first files.
+	Query string `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
+	// At most this many paths; the backend bounds it on its own as well.
+	Limit         uint32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkspaceFilesRequest) Reset() {
+	*x = WorkspaceFilesRequest{}
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkspaceFilesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkspaceFilesRequest) ProtoMessage() {}
+
+func (x *WorkspaceFilesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_threavia_backend_v1_commands_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkspaceFilesRequest.ProtoReflect.Descriptor instead.
+func (*WorkspaceFilesRequest) Descriptor() ([]byte, []int) {
+	return file_threavia_backend_v1_commands_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *WorkspaceFilesRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *WorkspaceFilesRequest) GetDirectory() string {
+	if x != nil {
+		return x.Directory
+	}
+	return ""
+}
+
+func (x *WorkspaceFilesRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *WorkspaceFilesRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 var File_threavia_backend_v1_commands_proto protoreflect.FileDescriptor
 
 const file_threavia_backend_v1_commands_proto_rawDesc = "" +
@@ -2451,7 +2527,13 @@ const file_threavia_backend_v1_commands_proto_rawDesc = "" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1c\n" +
 	"\tdirectory\x18\x02 \x01(\tR\tdirectory\x12\x14\n" +
-	"\x05fetch\x18\x03 \x01(\bR\x05fetch*\xa9\x01\n" +
+	"\x05fetch\x18\x03 \x01(\bR\x05fetch\"\x80\x01\n" +
+	"\x15WorkspaceFilesRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1c\n" +
+	"\tdirectory\x18\x02 \x01(\tR\tdirectory\x12\x14\n" +
+	"\x05query\x18\x03 \x01(\tR\x05query\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\rR\x05limit*\xa9\x01\n" +
 	"\rExecutionMode\x12\x1e\n" +
 	"\x1aEXECUTION_MODE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aEXECUTION_MODE_INTERACTIVE\x10\x01\x12\x1a\n" +
@@ -2491,7 +2573,7 @@ func file_threavia_backend_v1_commands_proto_rawDescGZIP() []byte {
 }
 
 var file_threavia_backend_v1_commands_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_threavia_backend_v1_commands_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_threavia_backend_v1_commands_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_threavia_backend_v1_commands_proto_goTypes = []any{
 	(ExecutionMode)(0),              // 0: threavia.backend.v1.ExecutionMode
 	(PermissionEffect)(0),           // 1: threavia.backend.v1.PermissionEffect
@@ -2521,33 +2603,34 @@ var file_threavia_backend_v1_commands_proto_goTypes = []any{
 	(*WorkspaceDiffRequest)(nil),    // 25: threavia.backend.v1.WorkspaceDiffRequest
 	(*SkillBundle)(nil),             // 26: threavia.backend.v1.SkillBundle
 	(*RepositoryStatusRequest)(nil), // 27: threavia.backend.v1.RepositoryStatusRequest
-	(*timestamppb.Timestamp)(nil),   // 28: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),         // 29: google.protobuf.Struct
-	(*Error)(nil),                   // 30: threavia.backend.v1.Error
+	(*WorkspaceFilesRequest)(nil),   // 28: threavia.backend.v1.WorkspaceFilesRequest
+	(*timestamppb.Timestamp)(nil),   // 29: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),         // 30: google.protobuf.Struct
+	(*Error)(nil),                   // 31: threavia.backend.v1.Error
 }
 var file_threavia_backend_v1_commands_proto_depIdxs = []int32{
-	28, // 0: threavia.backend.v1.Welcome.server_time:type_name -> google.protobuf.Timestamp
+	29, // 0: threavia.backend.v1.Welcome.server_time:type_name -> google.protobuf.Timestamp
 	1,  // 1: threavia.backend.v1.PermissionRule.effect:type_name -> threavia.backend.v1.PermissionEffect
 	2,  // 2: threavia.backend.v1.PermissionRule.capability:type_name -> threavia.backend.v1.PermissionCapability
 	0,  // 3: threavia.backend.v1.ExecutionPolicy.mode:type_name -> threavia.backend.v1.ExecutionMode
 	6,  // 4: threavia.backend.v1.ExecutionPolicy.rules:type_name -> threavia.backend.v1.PermissionRule
-	29, // 5: threavia.backend.v1.CoreToolSpec.input_schema:type_name -> google.protobuf.Struct
+	30, // 5: threavia.backend.v1.CoreToolSpec.input_schema:type_name -> google.protobuf.Struct
 	8,  // 6: threavia.backend.v1.ProjectContext.decisions:type_name -> threavia.backend.v1.ContextDecision
 	9,  // 7: threavia.backend.v1.ProjectContext.tasks:type_name -> threavia.backend.v1.ContextTask
 	11, // 8: threavia.backend.v1.ProjectContext.tools:type_name -> threavia.backend.v1.CoreToolSpec
 	10, // 9: threavia.backend.v1.ProjectContext.skills:type_name -> threavia.backend.v1.ProjectSkill
-	29, // 10: threavia.backend.v1.ProjectContext.mcp_servers:type_name -> google.protobuf.Struct
-	29, // 11: threavia.backend.v1.McpRequest.input:type_name -> google.protobuf.Struct
+	30, // 10: threavia.backend.v1.ProjectContext.mcp_servers:type_name -> google.protobuf.Struct
+	30, // 11: threavia.backend.v1.McpRequest.input:type_name -> google.protobuf.Struct
 	12, // 12: threavia.backend.v1.StartJob.project_context:type_name -> threavia.backend.v1.ProjectContext
 	7,  // 13: threavia.backend.v1.StartJob.execution_policy:type_name -> threavia.backend.v1.ExecutionPolicy
 	15, // 14: threavia.backend.v1.StartJob.attachments:type_name -> threavia.backend.v1.PromptAttachment
 	7,  // 15: threavia.backend.v1.UpdateJobPolicy.execution_policy:type_name -> threavia.backend.v1.ExecutionPolicy
-	28, // 16: threavia.backend.v1.ValidationResolution.resolved_at:type_name -> google.protobuf.Timestamp
-	28, // 17: threavia.backend.v1.UserInputResolution.resolved_at:type_name -> google.protobuf.Timestamp
+	29, // 16: threavia.backend.v1.ValidationResolution.resolved_at:type_name -> google.protobuf.Timestamp
+	29, // 17: threavia.backend.v1.UserInputResolution.resolved_at:type_name -> google.protobuf.Timestamp
 	3,  // 18: threavia.backend.v1.ReconcileInstruction.action:type_name -> threavia.backend.v1.ReconcileAction
-	29, // 19: threavia.backend.v1.CoreToolResponse.result:type_name -> google.protobuf.Struct
-	30, // 20: threavia.backend.v1.CoreToolResponse.error:type_name -> threavia.backend.v1.Error
-	30, // 21: threavia.backend.v1.SkillBundle.error:type_name -> threavia.backend.v1.Error
+	30, // 19: threavia.backend.v1.CoreToolResponse.result:type_name -> google.protobuf.Struct
+	31, // 20: threavia.backend.v1.CoreToolResponse.error:type_name -> threavia.backend.v1.Error
+	31, // 21: threavia.backend.v1.SkillBundle.error:type_name -> threavia.backend.v1.Error
 	22, // [22:22] is the sub-list for method output_type
 	22, // [22:22] is the sub-list for method input_type
 	22, // [22:22] is the sub-list for extension type_name
@@ -2567,7 +2650,7 @@ func file_threavia_backend_v1_commands_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_threavia_backend_v1_commands_proto_rawDesc), len(file_threavia_backend_v1_commands_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   24,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

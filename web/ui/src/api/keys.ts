@@ -8,6 +8,7 @@ export const keys = {
   pinned: () => ['sessions', 'pinned'] as const,
   snapshot: (sessionId: string) => ['snapshot', sessionId] as const,
   repository: (sessionId: string) => ['repository', sessionId] as const,
+  files: (sessionId: string, query: string) => ['files', sessionId, query] as const,
   policy: (sessionId: string) => ['policy', sessionId] as const,
   projectPolicy: (projectId: string) => ['project-policy', projectId] as const,
   attention: () => ['attention'] as const,

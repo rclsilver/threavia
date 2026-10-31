@@ -68,6 +68,7 @@ import { Input, Label } from '@/components/ui/input';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
 import { ACCOUNT_TABS, type AccountTab } from '@/lib/account-tabs';
 import { cn } from '@/lib/utils';
+import { useMediaQuery } from '@/lib/use-media-query';
 import { lastNavigation, rememberProject } from '@/lib/navigation';
 
 /**
@@ -700,19 +701,6 @@ function OpenTasks({ projectId, collapsed = false }: { projectId: string; collap
       <Badge tone={open > 0 ? 'accent' : 'neutral'}>{open}</Badge>
     </Link>
   );
-}
-
-/** Whether a media query matches, following the window as it is resized. */
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const media = window.matchMedia(query);
-    const onChange = () => setMatches(media.matches);
-    onChange();
-    media.addEventListener('change', onChange);
-    return () => media.removeEventListener('change', onChange);
-  }, [query]);
-  return matches;
 }
 
 const COLLAPSED_KEY = 'threavia.sidebar.collapsed';

@@ -103,6 +103,8 @@ message FeatureFlags {
   bool human_review = 5;
   bool external_mcp = 6;
   bool persistent_monitors = 7;
+  // Answers WorkspaceFilesRequest: the files a person can name in a message.
+  bool workspace_files = 8;
 }
 
 // Provider models and the effort values each accepts, discovered by the backend.
