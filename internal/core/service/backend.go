@@ -1,7 +1,9 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -209,6 +211,12 @@ func conditionsFromProto(reported []*backendv1.Condition) []domain.Condition {
 	return out
 }
 
+// quotaRefreshEvery is how old a stored observation may grow while a backend
+// keeps reporting the same quotas. Each backend reports every minute, and each
+// event makes every connected client read the backend list again: an unchanged
+// report is not news.
+const quotaRefreshEvery = 15 * time.Minute
+
 // QuotaReport stores provider data; Core never queries a provider or sees its credentials.
 func (s *Service) QuotaReport(ctx context.Context, instanceID domain.BackendInstanceID, report *backendv1.QuotaReport) {
 	snapshot, err := quotas.FromStruct(report.GetSnapshot())
@@ -218,6 +226,10 @@ func (s *Service) QuotaReport(ctx context.Context, instanceID domain.BackendInst
 	}
 	b := &batch{}
 	_, err = s.withBackendReport(ctx, instanceID, func(tx *postgres.Store, backend domain.BackendInstance) error {
+		if backend.Quotas != nil && sameQuotas(*backend.Quotas, snapshot) &&
+			snapshot.ObservedAt.Sub(backend.Quotas.ObservedAt) < quotaRefreshEvery {
+			return nil
+		}
 		if err := tx.UpdateBackendQuotas(ctx, instanceID, snapshot); err != nil {
 			return err
 		}
@@ -970,4 +982,16 @@ func capacityFromProto(capacity *backendv1.Capacity) domain.Capacity {
 		MaxConcurrentRuns: int(capacity.GetMaxConcurrentRuns()),
 		ActiveRuns:        int(capacity.GetActiveRuns()),
 	}
+}
+
+// sameQuotas reports whether two observations say the same thing, whenever
+// they were made.
+func sameQuotas(a, b quotas.Status) bool {
+	a.ObservedAt, b.ObservedAt = time.Time{}, time.Time{}
+	left, err := json.Marshal(a)
+	if err != nil {
+		return false
+	}
+	right, err := json.Marshal(b)
+	return err == nil && bytes.Equal(left, right)
 }

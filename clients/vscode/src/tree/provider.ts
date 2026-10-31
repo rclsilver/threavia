@@ -88,7 +88,24 @@ class CoreCache {
     this.sessions.clear();
     this.monitors.clear();
   }
+
+  /**
+   * Forgets the monitors of the Projects watching something, which is all a
+   * timer has to refresh: whether a running watch was seen lately moves
+   * without an event, while starting or ending one is announced.
+   */
+  forgetActiveMonitors(): boolean {
+    let forgot = false;
+    for (const [projectId, monitors] of this.monitors) {
+      if (!monitors.some(monitorActive)) continue;
+      this.monitors.delete(projectId);
+      forgot = true;
+    }
+    return forgot;
+  }
 }
+
+const monitorActive = (monitor: Monitor) => ['STARTING', 'RUNNING', 'STOPPING'].includes(monitor.state);
 
 /**
  * The sidebar: for each Core, what waits, what is pinned, and each Project's
@@ -111,7 +128,12 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(private readonly cores: Cores) {
-    const monitorTimer = setInterval(() => { if (!this.visible) return; for (const cache of this.caches.values()) cache.forgetLists(); this.redraw(); }, 15_000);
+    const monitorTimer = setInterval(() => {
+      if (!this.visible) return;
+      let forgot = false;
+      for (const cache of this.caches.values()) forgot = cache.forgetActiveMonitors() || forgot;
+      if (forgot) this.redraw();
+    }, 15_000);
     this.disposables.push({ dispose: () => clearInterval(monitorTimer) });
     this.disposables.push(
       cores.onAttention(() => this.redraw()),
@@ -452,7 +474,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
       node.under === 'pinned' ? pinnedDescription(session, cache.projects ?? [], core?.projectSetting ?? '') : undefined;
     const entry = cache.repositories.get(session.id);
     const git = entry?.repo ? repositoryDescription(entry.repo) : undefined;
-    const monitors = cache.monitors.get(session.projectId)?.filter(m => m.sessionId === session.id && ['STARTING', 'RUNNING', 'STOPPING'].includes(m.state)) ?? [];
+    const monitors = cache.monitors.get(session.projectId)?.filter(m => m.sessionId === session.id && monitorActive(m)) ?? [];
     const live = monitors.every(m => m.confirmed && Date.now() - Date.parse(m.lastSeenAt) < 30_000);
     const watching = monitors.length ? `${monitors.length} monitor${monitors.length > 1 ? 's' : ''}${live ? ' active' : ' unconfirmed'}` : undefined;
     if (watching && !session.activeJobStatus) item.iconPath = new vscode.ThemeIcon('radio-tower');
