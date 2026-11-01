@@ -112,7 +112,11 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 		return s.publishArtifact(ctx, identity, jc, input, file)
 
 	case tools.NameProjectHistorySearch:
-		hits, err := s.SearchHistory(ctx, identity, jc.ProjectID, text(input, "query"), 0)
+		projectID, err := sessionToolProject(input, jc.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		hits, err := s.SearchHistory(ctx, identity, projectID, text(input, "query"), 0)
 		if err != nil {
 			return nil, err
 		}
@@ -127,7 +131,11 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 		return map[string]any{"results": found}, nil
 
 	case tools.NameDecisionCreate:
-		projectID, err := memoryProject(jc.ProjectID, text(input, "scope"))
+		target, err := sessionToolProject(input, jc.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		projectID, err := memoryProject(target, text(input, "scope"))
 		if err != nil {
 			return nil, err
 		}
@@ -171,7 +179,11 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 		return map[string]any{"decisionId": string(decision.ID), "status": decision.Status.String(), "scope": "global"}, nil
 
 	case tools.NameMemorySearch:
-		projectID, err := memoryProject(jc.ProjectID, text(input, "scope"))
+		target, err := sessionToolProject(input, jc.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		projectID, err := memoryProject(target, text(input, "scope"))
 		if err != nil {
 			return nil, err
 		}
@@ -193,11 +205,15 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 		return map[string]any{"decisions": found}, nil
 
 	case tools.NameTaskCreate:
+		projectID, err := sessionToolProject(input, jc.ProjectID)
+		if err != nil {
+			return nil, err
+		}
 		var dependsOn []domain.TaskID
 		for _, raw := range stringList(input, "dependsOn") {
 			dependsOn = append(dependsOn, domain.TaskID(raw))
 		}
-		task, err := s.CreateTask(ctx, identity, jc.ProjectID,
+		task, err := s.CreateTask(ctx, identity, projectID,
 			text(input, "title"), text(input, "description"), dependsOn)
 		if err != nil {
 			return nil, err
@@ -209,21 +225,33 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 		return map[string]any{"taskId": string(task.ID), "status": task.Status.String()}, nil
 
 	case tools.NameTaskReady:
-		ready, err := s.ReadyTasks(ctx, identity, jc.ProjectID, 0)
+		projectID, err := sessionToolProject(input, jc.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		ready, err := s.ReadyTasks(ctx, identity, projectID, 0)
 		if err != nil {
 			return nil, err
 		}
 		return map[string]any{"tasks": summariseTasks(ready)}, nil
 
 	case tools.NameTaskSearch:
-		found, err := s.SearchTasks(ctx, identity, jc.ProjectID, text(input, "query"), 0)
+		projectID, err := sessionToolProject(input, jc.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		found, err := s.SearchTasks(ctx, identity, projectID, text(input, "query"), 0)
 		if err != nil {
 			return nil, err
 		}
 		return map[string]any{"tasks": summariseTasks(found)}, nil
 
 	case tools.NameTaskUpdate:
-		task, err := s.updateScopedTask(ctx, identity, jc, text(input, "taskId"),
+		projectID, err := taskToolProject(input)
+		if err != nil {
+			return nil, err
+		}
+		task, err := s.updateScopedTask(ctx, identity, projectID, text(input, "taskId"),
 			text(input, "title"), text(input, "description"),
 			domain.TaskStatus(strings.ToUpper(text(input, "status"))))
 		if err != nil {
@@ -232,14 +260,18 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 		return map[string]any{"taskId": string(task.ID), "status": task.Status.String()}, nil
 
 	case tools.NameTaskComplete:
-		task, err := s.updateScopedTask(ctx, identity, jc, text(input, "taskId"), "", "", domain.TaskDone)
+		projectID, err := taskToolProject(input)
+		if err != nil {
+			return nil, err
+		}
+		task, err := s.updateScopedTask(ctx, identity, projectID, text(input, "taskId"), "", "", domain.TaskDone)
 		if err != nil {
 			return nil, err
 		}
 		if err := s.store.LinkJobToTask(ctx, jc.JobID, task.ID); err != nil {
 			s.logger.Warn("cannot link the job to the task it completed", slog.String("error", err.Error()))
 		}
-		ready, err := s.ReadyTasks(ctx, identity, jc.ProjectID, 0)
+		ready, err := s.ReadyTasks(ctx, identity, task.ProjectID, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -285,9 +317,9 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 	}
 }
 
-// updateScopedTask changes a Task after checking it belongs to the Job's
-// Project, so a tool call cannot reach across projects.
-func (s *Service) updateScopedTask(ctx context.Context, identity auth.Identity, jc jobScope, taskID, title, description string, status domain.TaskStatus) (domain.Task, error) {
+// updateScopedTask changes a Task of the user. When projectID is set the Task
+// must belong to it; empty accepts the Task wherever the user keeps it.
+func (s *Service) updateScopedTask(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, taskID, title, description string, status domain.TaskStatus) (domain.Task, error) {
 	if taskID == "" {
 		return domain.Task{}, fmt.Errorf("%w: a task identifier is required", ErrInvalid)
 	}
@@ -295,7 +327,7 @@ func (s *Service) updateScopedTask(ctx context.Context, identity auth.Identity, 
 	if err != nil {
 		return domain.Task{}, translate(err)
 	}
-	if current.ProjectID != jc.ProjectID {
+	if projectID != "" && current.ProjectID != projectID {
 		return domain.Task{}, fmt.Errorf("%w: task %s belongs to another project", ErrInvalid, taskID)
 	}
 	return s.UpdateTask(ctx, identity, current.ID, title, description, status)
@@ -348,4 +380,10 @@ type jobScope struct {
 	SessionID         domain.SessionID
 	JobID             domain.JobID
 	BackendInstanceID domain.BackendInstanceID
+}
+
+// taskToolProject reads an optional projectId. Without one, the task's own
+// project applies, so a task id from another project is enough.
+func taskToolProject(input map[string]any) (domain.ProjectID, error) {
+	return sessionToolProject(input, "")
 }

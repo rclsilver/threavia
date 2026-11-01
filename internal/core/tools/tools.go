@@ -110,7 +110,8 @@ func Specs() []Spec {
 				"Use it before assuming something is new: the work may have been done, " +
 				"discussed or rejected in an earlier session, possibly on another machine.",
 			InputSchema: object(map[string]any{
-				"query": str("What to look for, in natural language."),
+				"projectId": str("Another project owned by the user to act on instead of the current one; find identifiers with session_list scope all."),
+				"query":     str("What to look for, in natural language."),
 			}, "query"),
 		},
 		{
@@ -124,6 +125,7 @@ func Specs() []Spec {
 				"Use decision_make_global to share an existing project fact unchanged; the project copy becomes historical. " +
 				"Global decisions cannot be replaced by project decisions.",
 			InputSchema: object(map[string]any{
+				"projectId":  str("Another project owned by the user to act on instead of the current one; find identifiers with session_list scope all."),
 				"title":      str("A one-line statement of the decision."),
 				"content":    str("The reasoning, and what it rules out."),
 				"importance": map[string]any{"type": "string", "enum": []string{"IMPORTANT", "NORMAL"}},
@@ -143,8 +145,9 @@ func Specs() []Spec {
 			Description: "Find active facts and decisions in the current project's memory and your global Core memory. " +
 				"NORMAL facts are searched on demand; IMPORTANT ones also travel with each job. Use scope global to search only shared facts. Session history remains project-scoped through project_history_search.",
 			InputSchema: object(map[string]any{
-				"query": str("The fact or decision to look for."),
-				"scope": map[string]any{"type": "string", "enum": []string{"project", "global"}, "description": "Project (default) includes this project and global memory; global searches only shared facts."},
+				"projectId": str("Another project owned by the user to act on instead of the current one; find identifiers with session_list scope all."),
+				"query":     str("The fact or decision to look for."),
+				"scope":     map[string]any{"type": "string", "enum": []string{"project", "global"}, "description": "Project (default) includes this project and global memory; global searches only shared facts."},
 			}, "query"),
 		},
 		{
@@ -152,6 +155,7 @@ func Specs() []Spec {
 			Description: "File a task so that work identified now is not lost when this " +
 				"session ends. Use dependsOn to record that it waits on other tasks.",
 			InputSchema: object(map[string]any{
+				"projectId":   str("Another project owned by the user to act on instead of the current one; find identifiers with session_list scope all."),
 				"title":       str("What has to be done."),
 				"description": str("Any detail the next session would need."),
 				"dependsOn": map[string]any{
@@ -165,19 +169,23 @@ func Specs() []Spec {
 			Name: NameTaskReady,
 			Description: "List the tasks that can be started now: those whose dependencies " +
 				"are all done. Use it to choose what to work on next.",
-			InputSchema: object(map[string]any{}),
+			InputSchema: object(map[string]any{
+				"projectId": str("Another project owned by the user to act on instead of the current one; find identifiers with session_list scope all."),
+			}),
 		},
 		{
 			Name:        NameTaskSearch,
 			Description: "Find tasks by text, to check whether something is already filed.",
 			InputSchema: object(map[string]any{
-				"query": str("What to look for."),
+				"projectId": str("Another project owned by the user to act on instead of the current one; find identifiers with session_list scope all."),
+				"query":     str("What to look for."),
 			}, "query"),
 		},
 		{
 			Name:        NameTaskUpdate,
 			Description: "Change a task: its title, its description, or its status.",
 			InputSchema: object(map[string]any{
+				"projectId":   str("Another project owned by the user to act on instead of the current one; find identifiers with session_list scope all."),
 				"taskId":      str("Identifier of the task."),
 				"title":       str("A new title, if it should change."),
 				"description": str("A new description, if it should change."),
@@ -188,7 +196,8 @@ func Specs() []Spec {
 			Name:        NameTaskComplete,
 			Description: "Mark a task done, which unblocks whatever depends on it.",
 			InputSchema: object(map[string]any{
-				"taskId": str("Identifier of the task."),
+				"projectId": str("Another project owned by the user to act on instead of the current one; find identifiers with session_list scope all."),
+				"taskId":    str("Identifier of the task."),
 			}, "taskId"),
 		},
 		{
