@@ -3350,6 +3350,10 @@ export interface paths {
          * @description The Job moves to CANCELLING and reaches CANCELLED only once the backend
          *     confirms it actually stopped.
          *
+         *     With ifQueued, only a Job that has not started is cancelled, at once:
+         *     how a person takes back a queued message to rewrite it. A Job that
+         *     started in the meantime keeps running and the answer is 409.
+         *
          */
         post: {
             parameters: {
@@ -3364,6 +3368,11 @@ export interface paths {
                 content: {
                     "application/json": {
                         reason?: string;
+                        /**
+                         * @description Cancel only a Job that has not started; one that has answers 409.
+                         * @default false
+                         */
+                        ifQueued?: boolean;
                     };
                 };
             };
