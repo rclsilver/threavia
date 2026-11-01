@@ -136,9 +136,10 @@ func TestHistorySearchFindsEarlierWork(t *testing.T) {
 	}
 }
 
-// TestToolCallsCannotLeaveTheirProject pins the boundary: a tool call is scoped
-// by the Job that issued it, and nothing in the input can widen that.
-func TestToolCallsCannotLeaveTheirProject(t *testing.T) {
+// TestToolCallsStayWithinTheUsersProjects pins the boundary: a tool call may
+// act on another project of the same user when asked, a named project must
+// match what it is applied to, and nothing in the input widens it further.
+func TestToolCallsStayWithinTheUsersProjects(t *testing.T) {
 	c, backend, projectID, dirID := setup(t)
 	c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
 	start := receive(t, "the dispatched job", backend.starts)
@@ -153,12 +154,25 @@ func TestToolCallsCannotLeaveTheirProject(t *testing.T) {
 	c.mustDo("POST", "/api/v1/projects/"+other.ID+"/tasks",
 		map[string]any{"title": "secret du voisin"}, &foreign, 201)
 
-	// The agent of the first project cannot touch it, even knowing its id.
+	// A named project that does not hold the task is refused.
 	err := backend.callCoreToolExpectingFailure(t, ctx, start.GetRunId(), start.GetJobId(),
-		"task_complete", map[string]any{"taskId": foreign.ID})
+		"task_complete", map[string]any{"taskId": foreign.ID, "projectId": projectID})
 	if !strings.Contains(err.Error(), "another project") {
 		t.Fatalf("error = %v, want a refusal naming the project boundary", err)
 	}
+
+	// The agent can find and complete it in the other project of the same user.
+	found := backend.callCoreTool(t, ctx, start.GetRunId(), start.GetJobId(),
+		"task_search", map[string]any{"projectId": other.ID, "query": "voisin"})
+	if tasks, _ := found["tasks"].([]any); len(tasks) != 1 {
+		t.Fatalf("%d tasks found in the other project, want 1", len(tasks))
+	}
+	backend.callCoreTool(t, ctx, start.GetRunId(), start.GetJobId(),
+		"task_complete", map[string]any{"taskId": foreign.ID})
+
+	// An unknown project is refused.
+	backend.callCoreToolExpectingFailure(t, ctx, start.GetRunId(), start.GetJobId(),
+		"task_search", map[string]any{"projectId": "nope", "query": "voisin"})
 
 	// Nor can it invent a tool.
 	backend.callCoreToolExpectingFailure(t, ctx, start.GetRunId(), start.GetJobId(),
