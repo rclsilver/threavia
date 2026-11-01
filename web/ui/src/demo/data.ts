@@ -155,6 +155,14 @@ export const backends = [
   },
 ];
 
+/** Tomorrow at an hour, local time, as a snooze would say it. */
+const tomorrowAt = (hour: number) => {
+  const date = new Date(now);
+  date.setDate(date.getDate() + 1);
+  date.setHours(hour, 0, 0, 0);
+  return date.toISOString();
+};
+
 const session = (
   sessionId: string,
   projectId: string,
@@ -176,7 +184,8 @@ const session = (
 export const sessions = [
   session(IDS.providerRecovery, IDS.homelab, 'Review the deployment pipeline', 8, 2, { activeJobStatus: 'WAITING_BACKEND' }),
   session(IDS.certManager, IDS.homelab, 'Upgrade cert-manager to 1.16', 14, 1, { activeJobStatus: 'WAITING_VALIDATION', model: 'opus', effort: 'high' }),
-  session(IDS.ingress, IDS.homelab, 'Fix the flaky deploy of the ingress controller', 70, 22, { model: 'sonnet', effort: 'medium' }),
+  // Put away until tomorrow morning: the Snoozed section has one to show.
+  session(IDS.ingress, IDS.homelab, 'Fix the flaky deploy of the ingress controller', 70, 22, { model: 'sonnet', effort: 'medium', snoozed: true, snoozedUntil: tomorrowAt(9) }),
   session(IDS.ingressCheck, IDS.homelab, 'Check the ingress rollout', 24, 22, { managerSessionId: IDS.ingress }),
   session(IDS.backups, IDS.homelab, 'Check last night’s backups', 60 * 9, 30, { activeJobStatus: 'WAITING_INPUT' }),
   // Pinned, as someone going back and forth between two Projects would.

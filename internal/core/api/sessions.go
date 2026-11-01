@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
@@ -21,6 +22,8 @@ func (h *handler) registerSessions(mux *http.ServeMux) {
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/diff", h.workspaceDiff)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/repository", h.repository)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/files", h.workspaceFiles)
+	h.handle(mux, "PUT /api/v1/sessions/{sessionId}/snooze", h.snoozeSession)
+	h.handle(mux, "DELETE /api/v1/sessions/{sessionId}/snooze", h.unsnoozeSession)
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/handoff", h.previewHandoff)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/messages", h.postMessage)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/read", h.markSessionRead)
@@ -349,4 +352,32 @@ func (h *handler) pinnedSessions(w http.ResponseWriter, r *http.Request, identit
 		return
 	}
 	writeList(w, sessions)
+}
+
+// snoozeSession puts a Session out of the way until a time, or until the agent
+// says something new.
+func (h *handler) snoozeSession(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	body, ok := decode[struct {
+		Until       *time.Time `json:"until"`
+		UntilChange bool       `json:"untilChange"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	session, err := h.svc.SnoozeSession(r.Context(), identity, domain.SessionID(r.PathValue("sessionId")), body.Until, body.UntilChange)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, session)
+}
+
+// unsnoozeSession brings a snoozed Session back now.
+func (h *handler) unsnoozeSession(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	session, err := h.svc.UnsnoozeSession(r.Context(), identity, domain.SessionID(r.PathValue("sessionId")))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, session)
 }

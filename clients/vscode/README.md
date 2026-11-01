@@ -15,10 +15,17 @@ pinned global decisions are read by agents in all your projects on that Core.
 
 - **Sidebar.** The Threavia view in the activity bar lists what waits for you
   (approvals and questions, across every Project), your pinned sessions, and
-  each Project's sessions, in alphabetical title order. Pinned sessions and
-  session pickers use the same order. A session's row shows whether it
-  is working, queued, waiting for you, or holds a reply or a failure you have
-  not read yet. A Project, and a Core's row when several are connected, say
+  each Project's sessions in the web client's order: those waiting for you,
+  those working, those finished — or back from a snooze — since you last read
+  them, the rest by last activity, and snoozed ones last. Pinned sessions keep
+  alphabetical order. A session's row shows whether it is working, queued,
+  waiting for you, held by a backend that is offline or out of quota (a
+  warning), or holds a reply or a failure you have not read yet.
+  **Snooze…** in a session's context menu puts it out of the way for an hour,
+  until this evening, tomorrow morning, next week, or until the agent says
+  something new; it comes back unread, and opening it forgets the snooze. A
+  request waiting for you is never hidden by a snooze. A Project, and a Core's
+  row when several are connected, say
   how many requests wait and how many sessions are unread under them; the
   Threavia icon of the activity bar counts both, even while the view is
   closed. A session is read once the focus is in its conversation, in a

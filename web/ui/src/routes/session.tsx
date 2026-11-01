@@ -2,13 +2,14 @@ import { AttachButton, AttachedFiles } from '@/components/prompt-attachments';
 import { usePromptAttachments, type AttachedFile } from '@/lib/prompt-attachments';
 import { useComposerSuggestions, useSessionSkills } from '@/components/composer-suggestions';
 import { Link, useParams } from '@tanstack/react-router';
-import { ArrowUp, ChevronDown, LoaderCircle, Pin, Settings2, Square } from 'lucide-react';
+import { AlarmClock, ArrowUp, ChevronDown, LoaderCircle, Pin, Settings2, Square } from 'lucide-react';
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 
 import {
   useBackends,
   useCancelJob,
   useWithdrawJob,
+  useSnoozeSession,
   usePostMessage,
   useRenameSession,
   useEarlierEvents,
@@ -36,7 +37,8 @@ import { useDraft } from '@/lib/draft';
 import { isActive } from '@/lib/presence';
 import { sendsMessage, useTouchKeyboard } from '@/lib/message-keyboard';
 import { cn, humanise } from '@/lib/utils';
-import { readUpTo } from '../../../../clients/shared/sessions';
+import { isSnoozed, readUpTo, snoozeBack, wokeFromSnooze } from '../../../../clients/shared/sessions';
+import { SnoozeMenu } from '@/components/snooze-menu';
 import { composerCommands, promptHistory, recall } from '../../../../clients/shared/composer';
 
 const FINISHED = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
@@ -97,6 +99,15 @@ export function SessionView() {
   // once it is on a screen the person is looking at. A tab left open on an
   // empty desk is not looking: the mark waits for them to come back.
   const readTo = snapshot.data && readUpTo(snapshot.data.session.readSequence, snapshot.data.events);
+
+  // A Session that came back from a snooze is the person's again once open:
+  // the snooze is forgotten, on every device.
+  const snooze = useSnoozeSession();
+  const woke = snapshot.data && wokeFromSnooze(snapshot.data.session);
+  const forget = snooze.mutate;
+  useEffect(() => {
+    if (woke) forget({ sessionId });
+  }, [woke, sessionId, forget]);
   const markRead = useMarkSessionRead(sessionId).mutate;
   useEffect(() => {
     if (readTo === undefined) return;
@@ -130,9 +141,15 @@ export function SessionView() {
   const backend = backends.data?.find((candidate) => candidate.id === run?.backendInstanceId);
   const features = backend?.features ?? [];
   const receiving = active && !['QUEUED', 'CANCELLING', 'WAITING_BACKEND'].includes(active.status);
-  const deliveries = receiving
+  // A Job waiting for its backend has no agent running to read a message.
+  // Interrupting it still means "stop that, do this instead": Core cancels it
+  // and queues the message in its place. Next step has nothing to wait for,
+  // so it shows, greyed out, saying why.
+  const waitingBackend = active?.status === 'WAITING_BACKEND';
+  const deliveries: ('NEXT' | 'NOW')[] = receiving
     ? (['NEXT', 'NOW'] as const).filter((delivery) => features.includes(`JOB_INPUT_${delivery}`))
-    : [];
+    : waitingBackend ? ['NOW'] : [];
+  const held: ('NEXT' | 'NOW')[] = waitingBackend && features.includes('JOB_INPUT_NEXT') ? ['NEXT'] : [];
 
   // Every Job still going somewhere, so the timeline can offer a stop on the
   // message that started it. A Session has one active Job and may have several
@@ -222,6 +239,7 @@ export function SessionView() {
           <div className="flex items-center gap-1 md:col-start-2 md:row-span-2 md:row-start-1">
             <LearningCapture key={sessionId} snapshot={data} backend={backend} />
             <Button asChild size="lg" variant="ghost" className="h-11 md:h-9"><Link to="/sessions/$sessionId/review" params={{ sessionId }} data-tour="open-review">Review</Link></Button>
+            <SnoozeButton session={data.session} />
             <PinButton session={data.session} />
             {/* Everything about the Session that is not the conversation is a
                 page of its own, one step away. */}
@@ -269,6 +287,7 @@ export function SessionView() {
         backend={backend}
         active={active}
         deliveries={deliveries}
+        held={held}
         onStop={() => active && cancel.mutate(active.id)}
         field={message}
         handle={composer}
@@ -279,6 +298,27 @@ export function SessionView() {
   );
 }
 
+
+/**
+ * Puts the Session out of the way until later, or brings it back. The way to
+ * snooze on a phone, where the sidebar has no pointer to hover with.
+ */
+function SnoozeButton({ session }: { session: Session }) {
+  const snoozed = isSnoozed(session);
+  return (
+    <SnoozeMenu session={session}>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn('size-11 md:size-8', snoozed && 'text-accent')}
+        title={snoozed ? `Snoozed — back ${session.snoozedUntil ? snoozeBack(session) : 'at the next message'}` : 'Snooze'}
+        aria-label={snoozed ? 'Snoozed: change or wake up' : 'Snooze'}
+      >
+        <AlarmClock />
+      </Button>
+    </SnoozeMenu>
+  );
+}
 /**
  * Pins the Session to the sidebar, under what waits, to be one click away
  * from any Project. Read from the pinned list when it is there, so the button
@@ -403,33 +443,49 @@ const DELIVERY_LABELS: Record<Delivery, { label: string; short: string; title: s
 function DeliveryChoice({
   value,
   offered,
+  held = [],
+  replacing = false,
   onChange,
 }: {
   value: Delivery;
   offered: ('NEXT' | 'NOW')[];
+  /** Offered by the backend but not now, while its Job waits for it: greyed out. */
+  held?: ('NEXT' | 'NOW')[];
+  /** The Job waits for its backend: interrupting it replaces it. */
+  replacing?: boolean;
   onChange: (delivery: Delivery) => void;
 }) {
   const options: Delivery[] = ['QUEUE', ...(['NEXT', 'NOW'] as const).filter((d) => offered.includes(d))];
+  const titleOf = (option: Delivery) =>
+    held.includes(option as 'NEXT' | 'NOW')
+      ? 'Nothing runs while the job waits for its backend: there is no next step to wait for.'
+      : option === 'NOW' && replacing
+        ? 'Cancel the job waiting for its backend and send this instead'
+        : DELIVERY_LABELS[option].title;
   return (
     <div role="radiogroup" aria-label="How to send" className="border-border bg-surface-2 text-muted flex rounded-md border p-0.5 text-xs">
-      {options.map((option) => (
-        <button
-          key={option}
-          type="button"
-          role="radio"
-          aria-checked={value === option}
-          title={DELIVERY_LABELS[option].title}
-          onClick={() => onChange(option)}
-          className={cn(
-            'min-h-11 rounded px-2.5 whitespace-nowrap transition-colors sm:min-h-7',
-            value === option ? 'bg-surface text-text shadow-sm' : 'hover:text-text',
-            value === option && option === 'NOW' && 'text-warn-text',
-          )}
-        >
-          <span className="sm:hidden">{DELIVERY_LABELS[option].short}</span>
-          <span className="hidden sm:inline">{DELIVERY_LABELS[option].label}</span>
-        </button>
-      ))}
+      {options.map((option) => {
+        const off = held.includes(option as 'NEXT' | 'NOW');
+        return (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={value === option}
+            disabled={off}
+            title={titleOf(option)}
+            onClick={() => onChange(option)}
+            className={cn(
+              'min-h-11 rounded px-2.5 whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-7',
+              value === option ? 'bg-surface text-text shadow-sm' : 'enabled:hover:text-text',
+              value === option && option === 'NOW' && 'text-warn-text',
+            )}
+          >
+            <span className="sm:hidden">{DELIVERY_LABELS[option].short}</span>
+            <span className="hidden sm:inline">{DELIVERY_LABELS[option].label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -446,6 +502,7 @@ function Composer({
   backend,
   active,
   deliveries,
+  held = [],
   onStop,
   field,
   handle,
@@ -457,6 +514,8 @@ function Composer({
   projectId: string;
   session: Session;
   backend?: BackendInstance;
+  /** What it could take once its backend runs it, shown but unavailable. */
+  held?: ('NEXT' | 'NOW')[];
   /** What the running work can take besides a queued message. */
   deliveries: ('NEXT' | 'NOW')[];
   onStop: () => void;
@@ -642,8 +701,8 @@ function Composer({
           <div className="border-border flex items-center gap-1 border-t px-1 py-1 sm:gap-1.5 sm:px-1.5">
             <AttachButton attachments={attachments} disabled={send.isPending} />
             <ComposerModelPill session={session} backend={backend} disabled={modelSettings.isPending || send.isPending} saving={modelSettings.isPending} onChange={(settings) => modelSettings.mutate(settings)} />
-            {active && active.status !== 'CANCELLING' && deliveries.length > 0 && (
-              <DeliveryChoice value={chosen} offered={deliveries} onChange={setDelivery} />
+            {active && active.status !== 'CANCELLING' && (deliveries.length > 0 || held.length > 0) && (
+              <DeliveryChoice value={chosen} offered={[...deliveries, ...held]} held={held} replacing={active.status === 'WAITING_BACKEND'} onChange={setDelivery} />
             )}
             <span className="ml-auto" />
             {active && (active.status === 'CANCELLING' ? (

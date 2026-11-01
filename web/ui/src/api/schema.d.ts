@@ -2485,6 +2485,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{sessionId}/snooze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["SessionID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put the Session out of the way until a time, or until something changes
+         * @description Exactly one of until or untilChange. With until, the Session comes back
+         *     at that time, which must be in the future and within a year. With
+         *     untilChange, it comes back as soon as the agent says something new or
+         *     a Job fails. Either way it comes back unread, and stays marked until
+         *     the Session is opened and the snooze is deleted. A request waiting for
+         *     the person is never hidden: clients show it whatever the snooze. A
+         *     session.snoozed event `{snoozed, until?, untilChange?}` tells every
+         *     client of the person.
+         *
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: components["parameters"]["SessionID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: date-time */
+                        until?: string;
+                        /** @default false */
+                        untilChange?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description The Session, snoozed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Session"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+            };
+        };
+        post?: never;
+        /** Bring the Session back now, or forget a snooze that ended */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: components["parameters"]["SessionID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The Session, no longer snoozed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Session"];
+                    };
+                };
+                404: components["responses"]["Error"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{sessionId}/files": {
         parameters: {
             query?: never;
@@ -2603,6 +2688,10 @@ export interface paths {
                          *     Both join the running Job's timeline, need the backend to
                          *     announce the matching feature, and are refused with 409
                          *     rather than queued when nothing is running to receive them.
+                         *     A Job waiting for its backend (WAITING_BACKEND) has no agent
+                         *     to reach: NEXT is refused, and NOW cancels that Job at once
+                         *     and queues the message as the Job in its place, answering
+                         *     200 with that new QUEUED Job.
                          *     The Idempotency-Key only applies to QUEUE.
                          *
                          * @default QUEUE
@@ -5623,6 +5712,18 @@ export interface components {
              *     lists only, like activeJobStatus; absent means read.
              *      */
             unread?: boolean;
+            /**
+             * Format: date-time
+             * @description When a snoozed Session comes back. Kept after it came back, until the snooze is deleted.
+             */
+            snoozedUntil?: string;
+            /** @description The Session comes back when the agent says something new. Kept after it came back, until the snooze is deleted. */
+            snoozeUntilChange?: boolean;
+            /** @description The Session is out of the way right now. Once a snooze ends, this is
+             *     false while snoozedUntil or snoozeUntilChange stay set, and the
+             *     Session is listed unread until the snooze is deleted.
+             *      */
+            snoozed?: boolean;
         };
         /** @description The binding between a Session and one BackendInstance. An infrastructure detail a client shows only when the user needs to choose or debug a backend. */
         Run: {
@@ -5752,6 +5853,8 @@ export interface components {
              *       Refresh skills and audit.
              *       Skill events are project-scoped for a Project Skill or an
              *       activation, owner-scoped without a project id for a global Skill.
+             *     - `session.snoozed`: `{ snoozed, until?, untilChange? }`, the Session
+             *       was put out of the way, or brought back.
              *     - `session.read`: `{ readSequence }`, the person was shown the
              *       Session up to there on one of their clients. Refresh session and
              *       project lists.

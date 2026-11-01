@@ -12,15 +12,17 @@ type Type string
 // this log is the observable timeline and the realtime synchronization
 // mechanism, not an event-sourcing journal to replay.
 const (
-	TypeMonitorChanged      Type = "monitor.changed"
-	TypeMCPChanged          Type = "mcp.changed"
-	TypeReviewChanged       Type = "review.changed"
-	TypeSessionCreated      Type = "session.created"
-	TypeSessionRenamed      Type = "session.renamed"
-	TypeSessionArchived     Type = "session.archived"
-	TypeSessionRestored     Type = "session.restored"
-	TypeSessionDeleted      Type = "session.deleted"
-	TypeSessionPinned       Type = "session.pinned"
+	TypeMonitorChanged  Type = "monitor.changed"
+	TypeMCPChanged      Type = "mcp.changed"
+	TypeReviewChanged   Type = "review.changed"
+	TypeSessionCreated  Type = "session.created"
+	TypeSessionRenamed  Type = "session.renamed"
+	TypeSessionArchived Type = "session.archived"
+	TypeSessionRestored Type = "session.restored"
+	TypeSessionDeleted  Type = "session.deleted"
+	TypeSessionPinned   Type = "session.pinned"
+	// TypeSessionSnoozed says a Session was put out of the way, or brought back.
+	TypeSessionSnoozed      Type = "session.snoozed"
 	TypeSessionRead         Type = "session.read"
 	TypeSessionModelChanged Type = "session.model_changed"
 
@@ -106,6 +108,7 @@ var persistentTypes = map[Type]bool{
 	TypeSessionRestored:         true,
 	TypeSessionDeleted:          true,
 	TypeSessionPinned:           true,
+	TypeSessionSnoozed:          true,
 	TypeSessionRead:             true,
 	TypeSessionModelChanged:     true,
 	TypeRunCreated:              true,

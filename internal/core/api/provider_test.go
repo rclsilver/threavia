@@ -294,3 +294,29 @@ func TestProviderFailureMessagesArePersistedAsStructuredWaitingState(t *testing.
 		t.Fatal(string(encoded))
 	}
 }
+
+// TestInterruptingAWaitingJobReplacesIt pins Interrupt while a Job waits for
+// its backend: the waiting Job is cancelled without a process to stop, and the
+// message becomes the Job queued in its place. Next step stays refused.
+func TestInterruptingAWaitingJobReplacesIt(t *testing.T) {
+	c, backend, project, dir := setup(t)
+	session := c.startSession(project, c.backendID, dir, "Wait")
+	start := receive(t, "attempt", backend.starts)
+	providerStatus(c, "QUOTA_EXCEEDED", false)
+	emitProviderWait(t, c, backend, start, "QUOTA_EXCEEDED")
+
+	c.mustDo("POST", "/api/v1/sessions/"+session+"/messages", map[string]any{"message": "later", "delivery": "NEXT"}, nil, 409)
+
+	var replaced struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	c.mustDo("POST", "/api/v1/sessions/"+session+"/messages", map[string]any{"message": "do this instead", "delivery": "NOW"}, &replaced, 200)
+	if got := c.jobStatus(session, start.JobId); got != "CANCELLED" {
+		t.Fatalf("the waiting job is %s, want CANCELLED", got)
+	}
+	if replaced.ID == "" || replaced.ID == start.JobId || replaced.Status != "QUEUED" {
+		t.Fatalf("the message must be a job of its own: %+v", replaced)
+	}
+	expectNothing(t, "a cancel command for a job with no process", backend.cancels)
+}

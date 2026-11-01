@@ -40,7 +40,7 @@ describe('applyToJobs', () => {
     const waiting = applyToJobs([job('a', 'RUNNING')], { ...event(1, 'job.waiting_backend', 'a'), payload: backendWait });
     expect(waiting[0]).toMatchObject({ status: 'WAITING_BACKEND', backendWait });
     expect(activeJob(waiting)?.id).toBe('a');
-    expect(deliveriesFor(waiting[0], undefined)).toEqual([]);
+    expect(deliveriesFor(waiting[0], undefined)).toEqual(['NOW']);
     expect(applyToJobs(waiting, event(2, 'job.started', 'a'))[0]).toMatchObject({ status: 'RUNNING', backendWait: undefined });
   });
 

@@ -289,6 +289,16 @@ export class CoreClient {
     return this.patch<Session>(`/api/v1/sessions/${sessionId}`, { title });
   }
 
+  /** Puts a Session out of the way until a time, or until something changes. */
+  snoozeSession(sessionId: string, until?: Date) {
+    return this.request<Session>('PUT', `/api/v1/sessions/${sessionId}/snooze`, until ? { until: until.toISOString() } : { untilChange: true });
+  }
+
+  /** Brings a snoozed Session back, or forgets a snooze that ended. */
+  unsnoozeSession(sessionId: string) {
+    return this.request<Session>('DELETE', `/api/v1/sessions/${sessionId}/snooze`);
+  }
+
   pinSession(sessionId: string, pinned: boolean) {
     return this.patch<Session>(`/api/v1/sessions/${sessionId}`, { pinned });
   }

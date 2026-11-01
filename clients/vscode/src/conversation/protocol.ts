@@ -31,6 +31,8 @@ export interface SessionView {
   /** The Job Stop and Escape stop. */
   active?: Pick<Job, 'id' | 'status' | 'model' | 'effort' | 'backendWait'>;
   deliveries: ('NEXT' | 'NOW')[];
+  /** What a Job waiting for its backend could take later, shown unavailable. */
+  held?: ('NEXT' | 'NOW')[];
   validations: ValidationRequest[];
   questions: UserInputRequest[];
   /** Whether history goes further back than what was sent. */

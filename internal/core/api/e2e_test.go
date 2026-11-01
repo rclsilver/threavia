@@ -648,3 +648,63 @@ func TestFilesAreListedByTheBackendOfTheSession(t *testing.T) {
 
 	c.mustDo(http.MethodGet, "/api/v1/sessions/"+session+"/files?limit=zero", nil, nil, http.StatusBadRequest)
 }
+
+// TestSnoozeHidesASessionUntilSomethingNew pins Snooze: a Session put away
+// until something changes is listed as snoozed and read, comes back unread
+// when the agent says something, and forgets the snooze once opened.
+func TestSnoozeHidesASessionUntilSomethingNew(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	session := c.startSession(projectID, c.backendID, dirID, "Analyse ce projet")
+	start := receive(t, "the dispatched job", backend.starts)
+
+	type listed struct {
+		ID                string `json:"id"`
+		Snoozed           bool   `json:"snoozed"`
+		SnoozeUntilChange bool   `json:"snoozeUntilChange"`
+		SnoozedUntil      string `json:"snoozedUntil"`
+		Unread            bool   `json:"unread"`
+	}
+	list := func() listed {
+		var page struct {
+			Items []listed `json:"items"`
+		}
+		c.mustDo(http.MethodGet, "/api/v1/projects/"+projectID+"/sessions", nil, &page, http.StatusOK)
+		for _, entry := range page.Items {
+			if entry.ID == session {
+				return entry
+			}
+		}
+		t.Fatalf("session %s is not listed", session)
+		return listed{}
+	}
+
+	path := "/api/v1/sessions/" + session + "/snooze"
+	c.mustDo(http.MethodPut, path, map[string]any{}, nil, http.StatusBadRequest)
+	c.mustDo(http.MethodPut, path, map[string]any{"until": time.Now().Add(-time.Hour)}, nil, http.StatusBadRequest)
+	c.mustDo(http.MethodPut, path, map[string]any{"until": time.Now().Add(time.Hour), "untilChange": true}, nil, http.StatusBadRequest)
+
+	c.mustDo(http.MethodPut, path, map[string]any{"untilChange": true}, nil, http.StatusOK)
+	if got := list(); !got.Snoozed || !got.SnoozeUntilChange || got.Unread {
+		t.Fatalf("snoozed until a change: %+v", got)
+	}
+
+	ctx := context.Background()
+	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
+		return backend.events.AgentMessage(ctx, start.GetRunId(), start.GetJobId(), "Voilà.")
+	}))
+	waitUntil(t, "the agent message to wake the session", func() bool {
+		got := list()
+		return !got.Snoozed && got.Unread
+	})
+
+	c.mustDo(http.MethodDelete, path, nil, nil, http.StatusOK)
+	if got := list(); got.Snoozed || got.SnoozeUntilChange {
+		t.Fatalf("an opened session forgets its snooze: %+v", got)
+	}
+
+	// Until a time: put away now, not before.
+	c.mustDo(http.MethodPut, path, map[string]any{"until": time.Now().Add(time.Hour)}, nil, http.StatusOK)
+	if got := list(); !got.Snoozed || got.SnoozedUntil == "" {
+		t.Fatalf("snoozed for an hour: %+v", got)
+	}
+}

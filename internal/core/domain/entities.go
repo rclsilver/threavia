@@ -52,6 +52,13 @@ type Session struct {
 	// ReadSequence is the global sequence of the last event a client showed
 	// the person. What the agent said past it has not been read.
 	ReadSequence Sequence `json:"readSequence"`
+	// SnoozedUntil is when a snoozed Session comes back, and SnoozeUntilChange
+	// that it comes back when the agent says something new. Both stay set after
+	// it came back, until the person opens it.
+	SnoozedUntil      *time.Time `json:"snoozedUntil,omitempty"`
+	SnoozeUntilChange bool       `json:"snoozeUntilChange,omitempty"`
+	// Snoozed says the Session is out of the way right now.
+	Snoozed bool `json:"snoozed,omitempty"`
 	// ActiveJobStatus is the status of the oldest Job not yet finished, absent
 	// when nothing is running or queued. Filled on lists only, so a sidebar can
 	// say which Session is working without opening each one.

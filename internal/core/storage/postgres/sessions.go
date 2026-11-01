@@ -12,7 +12,7 @@ import (
 
 const sessionColumns = `s.id, s.project_id, s.title, s.status, s.working_directory_id,
 	s.created_at, s.updated_at, s.archived_at, s.pinned_at, s.manager_session_id, s.model, s.effort,
-	s.read_sequence`
+	s.read_sequence, s.snoozed_until, s.snooze_until_change, ` + snoozedNow
 
 // CreateSession inserts a Session.
 func (s *Store) CreateSession(ctx context.Context, session *domain.Session) error {
@@ -146,9 +146,42 @@ const unreadTypes = `('agent.message', 'job.failed')`
 
 // sessionUnread says whether one of the unreadTypes came after the last event
 // the person was shown.
-const sessionUnread = `EXISTS (SELECT 1 FROM events e
+const sessionUnread = `(EXISTS (SELECT 1 FROM events e
 		 WHERE e.session_id = s.id AND e.global_sequence > s.read_sequence
-		   AND e.type IN ` + unreadTypes + `)`
+		   AND e.type IN ` + unreadTypes + `) OR ` + sessionWoke + `)`
+
+// snoozedNow says whether a Session is still out of the way: its time has not
+// come, or it waits for something new and nothing new came.
+const snoozedNow = `(coalesce(s.snoozed_until > now(), false) OR (s.snooze_until_change AND NOT EXISTS (
+		 SELECT 1 FROM events e WHERE e.session_id = s.id
+		   AND e.global_sequence > coalesce(s.snoozed_sequence, 0) AND e.type IN ` + unreadTypes + `)))`
+
+// sessionWoke says that a snooze ended and the person has not opened the
+// Session since: it comes back as unread.
+const sessionWoke = `((s.snoozed_until IS NOT NULL OR s.snooze_until_change) AND NOT ` + snoozedNow + `)`
+
+// SnoozeSession puts a Session out of the way until a time, or until the agent
+// says something new, measured from the last event it holds now.
+func (s *Store) SnoozeSession(ctx context.Context, ownerID domain.UserID, id domain.SessionID, until *time.Time, untilChange bool) (domain.Session, error) {
+	return scanSession(s.q.QueryRow(ctx, `
+		UPDATE sessions s
+		SET snoozed_until = $3, snooze_until_change = $4,
+		    snoozed_sequence = coalesce((SELECT max(e.global_sequence) FROM events e WHERE e.session_id = s.id), 0)
+		FROM projects p
+		WHERE s.project_id = p.id AND s.id = $1 AND p.owner_id = $2
+		RETURNING `+sessionColumns, id, ownerID, until, untilChange))
+}
+
+// UnsnoozeSession brings a Session back, or forgets a snooze that ended once
+// the person opened it.
+func (s *Store) UnsnoozeSession(ctx context.Context, ownerID domain.UserID, id domain.SessionID) (domain.Session, error) {
+	return scanSession(s.q.QueryRow(ctx, `
+		UPDATE sessions s
+		SET snoozed_until = NULL, snooze_until_change = false, snoozed_sequence = NULL
+		FROM projects p
+		WHERE s.project_id = p.id AND s.id = $1 AND p.owner_id = $2
+		RETURNING `+sessionColumns, id, ownerID))
+}
 
 // MarkSessionRead moves how far the person has read a Session up to sequence.
 // It never moves back, and never past the last event of the Session, so a
@@ -190,6 +223,7 @@ func readSessionList(rows pgx.Rows) ([]domain.Session, error) {
 		err := rows.Scan(&session.ID, &session.ProjectID, &session.Title, &session.Status,
 			&session.WorkingDirectoryID, &session.CreatedAt, &session.UpdatedAt, &session.ArchivedAt, &session.PinnedAt,
 			&session.ManagerSessionID, &session.Model, &session.Effort, &session.ReadSequence,
+			&session.SnoozedUntil, &session.SnoozeUntilChange, &session.Snoozed,
 			&session.ActiveJobStatus, &session.Unread)
 		if err != nil {
 			return nil, classify(err, "read session")
@@ -243,7 +277,7 @@ func scanSession(row scanner, extra ...any) (domain.Session, error) {
 	var session domain.Session
 	err := row.Scan(append([]any{&session.ID, &session.ProjectID, &session.Title, &session.Status,
 		&session.WorkingDirectoryID, &session.CreatedAt, &session.UpdatedAt, &session.ArchivedAt, &session.PinnedAt, &session.ManagerSessionID, &session.Model, &session.Effort,
-		&session.ReadSequence}, extra...)...)
+		&session.ReadSequence, &session.SnoozedUntil, &session.SnoozeUntilChange, &session.Snoozed}, extra...)...)
 	return session, classify(err, "read session")
 }
 

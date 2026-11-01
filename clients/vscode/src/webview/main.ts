@@ -1178,8 +1178,15 @@ function renderComposer() {
     return;
   }
   const items: HTMLElement[] = [];
-  if (active.status !== 'CANCELLING' && view && view.deliveries.length > 0) {
-    const options: Delivery[] = ['QUEUE', ...view.deliveries];
+  const held = view?.held ?? [];
+  if (active.status !== 'CANCELLING' && view && (view.deliveries.length > 0 || held.length > 0)) {
+    const options: Delivery[] = ['QUEUE', ...(['NEXT', 'NOW'] as const).filter((option) => view?.deliveries.includes(option) || held.includes(option))];
+    // Waiting for its backend, no agent reads a message: Interrupt replaces
+    // the Job, and Next step shows greyed out, saying why.
+    const replacing = active.status === 'WAITING_BACKEND';
+    const titleOf = (option: Delivery) => held.includes(option as 'NEXT' | 'NOW')
+      ? 'Nothing runs while the job waits for its backend: there is no next step to wait for.'
+      : option === 'NOW' && replacing ? 'Cancel the job waiting for its backend and send this instead' : DELIVERY_LABELS[option].title;
     const group = h('div', { class: 'deliveries', role: 'radiogroup', 'aria-label': 'How to send' });
     for (const option of options) {
       const selected = chosen() === option;
@@ -1192,7 +1199,8 @@ function renderComposer() {
         }, {
           role: 'radio',
           'aria-checked': String(selected),
-          title: DELIVERY_LABELS[option].title,
+          title: titleOf(option),
+          disabled: held.includes(option as 'NEXT' | 'NOW'),
           class: `delivery${selected ? ' selected' : ''}${selected && option === 'NOW' ? ' tone-warn' : ''}`,
           tabindex: selected ? 0 : -1,
         }),
@@ -1203,7 +1211,9 @@ function renderComposer() {
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
       event.preventDefault();
       const step = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
-      const next = options[(options.indexOf(chosen()) + step + options.length) % options.length];
+      // The arrows go only to the choices that can be taken.
+      const open = options.filter((option) => !held.includes(option as 'NEXT' | 'NOW'));
+      const next = open[(open.indexOf(chosen()) + step + open.length) % open.length];
       delivery = next;
       persist();
       renderComposer();

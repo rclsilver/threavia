@@ -28,7 +28,7 @@ import { pickBackend, pickProject } from './start/pickers';
 import { ActivityBadge } from './tree/badge';
 import { BackendsView } from './tree/backends';
 import { UNTITLED, titleOf } from './tree/model';
-import { sessionsByTitle } from '../../shared/sessions';
+import { isSnoozed, sessionsByTitle, snoozeBack, snoozeChoices } from '../../shared/sessions';
 import { SidebarProvider, type Node, type RequestNode, type SessionNode } from './tree/provider';
 import { PathResolver } from './workspace/resolve';
 import { Reviews } from './review/view';
@@ -485,6 +485,39 @@ export function activate(context: vscode.ExtensionContext): Threavia {
 
   command('threavia.pinSession', (target: unknown) => pin(targetSession(target), true));
   command('threavia.unpinSession', (target: unknown) => pin(targetSession(target), false));
+
+  command('threavia.snoozeSession', async (target: unknown) => {
+    const ref = targetSession(target);
+    const core = cores.get(ref?.coreId);
+    if (!ref || !core) return;
+    try {
+      const session = (await core.client.snapshot(ref.sessionId, 1)).session;
+      const now = new Date();
+      type Choice = vscode.QuickPickItem & { wake?: true; until?: Date; change?: true };
+      const when = (until?: Date) => until
+        ? until.toDateString() === now.toDateString()
+          ? until.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+          : `${until.toLocaleDateString(undefined, { weekday: 'short' })} ${until.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
+        : 'at the next message';
+      const items: Choice[] = [
+        ...(isSnoozed(session) ? [
+          { label: '$(bell) Wake up now', description: `back ${snoozeBack(session, now)}`, wake: true } as Choice,
+          { label: 'Snooze until', kind: vscode.QuickPickItemKind.Separator } as Choice,
+        ] : []),
+        ...snoozeChoices(now).map((choice): Choice => ({ label: choice.label, description: when(choice.until), until: choice.until, change: choice.until ? undefined : true })),
+      ];
+      const picked = await vscode.window.showQuickPick(items, {
+        title: `Snooze: ${session.title || 'Untitled session'}`,
+        placeHolder: 'It comes back unread; a request waiting for you brings it back at once',
+      });
+      if (!picked) return;
+      if (picked.wake) await core.client.unsnoozeSession(ref.sessionId);
+      else await core.client.snoozeSession(ref.sessionId, picked.until);
+      sidebar.invalidateSessions(core.id);
+    } catch (error) {
+      failed(error, 'Not snoozed');
+    }
+  });
 
   const pin = async (ref: SessionRef | undefined, pinned: boolean) => {
     const core = cores.get(ref?.coreId);

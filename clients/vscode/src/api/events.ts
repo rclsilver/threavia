@@ -109,6 +109,7 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
     case 'session.archived':
     case 'session.restored':
     case 'session.pinned':
+    case 'session.snoozed':
     case 'session.model_changed':
       return [{ kind: 'sessions' }, ...snapshot(sessionId)];
 

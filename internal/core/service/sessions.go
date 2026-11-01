@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 	"unicode"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
@@ -412,6 +413,16 @@ func (s *Service) deliverToRunningJob(ctx context.Context, identity auth.Identit
 	if err != nil {
 		return domain.Job{}, translate(err)
 	}
+	// Waiting for its backend, the Job has no agent to interrupt. Interrupting
+	// it means what it means for a running one — stop that, do this instead —
+	// so the waiting Job is cancelled, at once since nothing runs, and the
+	// message becomes the Job queued in its place.
+	if job.Status == domain.JobWaitingBackend && delivery == DeliveryNow {
+		if _, err := s.CancelJob(ctx, identity, job.ID, "replaced by a new message while it waited for its backend"); err != nil {
+			return domain.Job{}, err
+		}
+		return s.queueMessage(ctx, identity, sessionID, message, "", "")
+	}
 	switch job.Status {
 	case domain.JobCancelling, domain.JobWaitingBackend:
 		return domain.Job{}, fmt.Errorf("%w: the running job cannot take a message while it is %s",
@@ -508,6 +519,52 @@ func (s *Service) SetSessionPinned(ctx context.Context, identity auth.Identity, 
 	s.emit(ctx, identity.UserID, events.TypeSessionPinned,
 		domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID},
 		SessionPinnedPayload{Pinned: pinned})
+	return session, nil
+}
+
+// maxSnooze bounds how far a Session can be put away: past it, archiving says
+// what is meant.
+const maxSnooze = 366 * 24 * time.Hour
+
+// SnoozeSession puts a Session out of the way until a time, or until the agent
+// says something new. It comes back then, marked unread, on every client of
+// the person; a request that waits for them brings it back sooner, since a
+// snooze never hides a decision.
+func (s *Service) SnoozeSession(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, until *time.Time, untilChange bool) (domain.Session, error) {
+	if (until == nil) == !untilChange {
+		return domain.Session{}, fmt.Errorf("%w: snooze until a time, or until something changes", ErrInvalid)
+	}
+	if until != nil {
+		now := s.now()
+		if !until.After(now) {
+			return domain.Session{}, fmt.Errorf("%w: the snooze must end in the future", ErrInvalid)
+		}
+		if until.Sub(now) > maxSnooze {
+			return domain.Session{}, fmt.Errorf("%w: a snooze lasts at most a year; archive the session instead", ErrInvalid)
+		}
+		utc := until.UTC()
+		until = &utc
+	}
+	session, err := s.store.SnoozeSession(ctx, identity.UserID, sessionID, until, untilChange)
+	if err != nil {
+		return domain.Session{}, translate(err)
+	}
+	s.emit(ctx, identity.UserID, events.TypeSessionSnoozed,
+		domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID},
+		SessionSnoozedPayload{Snoozed: true, Until: session.SnoozedUntil, UntilChange: session.SnoozeUntilChange})
+	return session, nil
+}
+
+// UnsnoozeSession brings a snoozed Session back now, or forgets a snooze that
+// ended once the person opened the Session.
+func (s *Service) UnsnoozeSession(ctx context.Context, identity auth.Identity, sessionID domain.SessionID) (domain.Session, error) {
+	session, err := s.store.UnsnoozeSession(ctx, identity.UserID, sessionID)
+	if err != nil {
+		return domain.Session{}, translate(err)
+	}
+	s.emit(ctx, identity.UserID, events.TypeSessionSnoozed,
+		domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID},
+		SessionSnoozedPayload{Snoozed: false})
 	return session, nil
 }
 

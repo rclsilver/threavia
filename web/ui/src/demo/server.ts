@@ -170,6 +170,8 @@ function pushEvent(sessionId: string, type: string, payload: Json, jobId?: strin
     payload,
   });
   session.updatedAt = nowIso();
+  // Something new wakes a Session snoozed until it changes.
+  if (session.snoozed && session.snoozeUntilChange && (type === 'agent.message' || type === 'job.failed')) session.snoozed = false;
   // The demo has no stream to say a Job ended, so it says it itself, once the
   // request that ended it has been answered.
   if (type === 'job.completed' || type === 'job.failed') {
@@ -800,6 +802,26 @@ const routes: [string, RegExp, Handler][] = [
       record('session.backend_changed', { projectId: session.projectId, sessionId: m[1], subjectId: body.backendInstanceId, detail: { from, to: body.backendInstanceId, missingSkills: [] } });
       return { run: runEntry, missingSkills: [] };
     }
+    return session;
+  }],
+  ['PUT', /^\/api\/v1\/sessions\/([^/]+)\/snooze$/, (m, body) => {
+    const session = sessionOf(m[1]);
+    const until = typeof body.until === 'string' ? Date.parse(body.until) : NaN;
+    if (Boolean(body.untilChange) === !Number.isNaN(until)) throw new ApiError(400, 'invalid', 'Snooze until a time, or until something changes');
+    if (!Number.isNaN(until) && until <= Date.now()) throw new ApiError(400, 'invalid', 'The snooze must end in the future');
+    if (Number.isNaN(until)) delete session.snoozedUntil;
+    else session.snoozedUntil = new Date(until).toISOString();
+    session.snoozeUntilChange = Boolean(body.untilChange) || undefined;
+    session.snoozed = true;
+    emitLifecycle('session.snoozed', text(session.projectId), { snoozed: true, until: session.snoozedUntil, untilChange: session.snoozeUntilChange }, m[1]);
+    return session;
+  }],
+  ['DELETE', /^\/api\/v1\/sessions\/([^/]+)\/snooze$/, (m) => {
+    const session = sessionOf(m[1]);
+    delete session.snoozedUntil;
+    delete session.snoozeUntilChange;
+    delete session.snoozed;
+    emitLifecycle('session.snoozed', text(session.projectId), { snoozed: false }, m[1]);
     return session;
   }],
   ['POST', /^\/api\/v1\/sessions\/([^/]+)\/read$/, (m, body) => {

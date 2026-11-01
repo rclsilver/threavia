@@ -1,10 +1,12 @@
 import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
 import {
+  AlarmClock,
   Archive,
   ArchiveRestore,
   BookText,
   Check,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   ChevronsUpDown,
   Clock,
@@ -22,15 +24,19 @@ import {
   Pin,
   PinOff,
   Plus,
+  Search,
   Pencil,
   Trash2,
+  TriangleAlert,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { sessionsByTitle } from '../../../../clients/shared/sessions';
+import type { CSSProperties } from 'react';
+import { matchesSearch, SESSION_SECTIONS, sessionSections, sessionsByTitle, snoozeBack, wokeFromSnooze } from '../../../../clients/shared/sessions';
+import { SnoozeMenu } from '@/components/snooze-menu';
 
 import {
   useAttention,
@@ -40,6 +46,7 @@ import {
   usePinSession,
   usePinnedSessions,
   useProjects,
+  useAllSessions,
   useSessions,
   useSnapshot,
   useTasks,
@@ -67,7 +74,7 @@ import {
 import { Input, Label } from '@/components/ui/input';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
 import { ACCOUNT_TABS, type AccountTab } from '@/lib/account-tabs';
-import { cn } from '@/lib/utils';
+import { ago, cn } from '@/lib/utils';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { lastNavigation, rememberProject } from '@/lib/navigation';
 
@@ -111,13 +118,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [showArchived, setShowArchived] = useState(false);
   const wide = useMediaQuery('(min-width: 768px)');
   const [drawer, setDrawer] = useState(false);
-  // Archived Sessions are read from the same list, because asking for them
-  // separately would mean a second shape of answer for the same question.
-  const sessions = useSessions(projectId, showArchived, wide || drawer);
-  const shown = sessionsByTitle((sessions.data ?? []).filter((session) =>
-    showArchived ? session.status === 'ARCHIVED' : session.status !== 'ARCHIVED',
-  ));
   const [collapsed, setCollapsed] = useCollapsed();
+  const [sidebarWidth, showSidebarWidth, keepSidebarWidth] = useSidebarWidth();
 
   // Remember confirmed snapshots, including archived Sessions and direct links.
   // The route may have changed while its previous snapshot was still cached.
@@ -194,8 +196,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         // The dynamic viewport height, so the composer of a phone is never
         // under its browser's toolbar.
         'grid h-dvh grid-cols-1 grid-rows-[auto_1fr] md:grid-rows-1',
-        folded ? 'md:grid-cols-[3rem_1fr]' : 'md:grid-cols-[17rem_1fr]',
+        folded ? 'md:grid-cols-[3rem_1fr]' : 'md:grid-cols-[var(--sidebar-width)_1fr]',
       )}
+      style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}
     >
       {/* What a phone keeps of the sidebar: the way into it, and whether the
           stream is up. */}
@@ -235,7 +238,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           'border-border bg-surface flex min-h-0 flex-col border-r',
           // A drawer below md, a column of the grid from md up.
           'fixed inset-y-0 left-0 z-40 w-[min(20rem,85vw)] shadow-xl transition-transform',
-          'md:static md:z-auto md:w-auto md:translate-x-0 md:shadow-none md:transition-none',
+          'md:relative md:z-auto md:w-auto md:translate-x-0 md:shadow-none md:transition-none',
           drawer ? 'translate-x-0' : '-translate-x-full',
           folded ? 'gap-2 p-2' : 'gap-4 p-4',
           // On a phone the drawer scrolls as one: a fixed top over a list
@@ -328,41 +331,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )}
             </div>
           </div>
-          {/* A stable place by title, even when a session starts work or waits. */}
-          <div className="-mx-1 space-y-4 px-1 md:min-h-0 md:flex-1 md:overflow-y-auto">
-            {shown.length === 0 && (
-              <p className="text-muted px-2 text-sm">
-                {showArchived ? 'Nothing archived.' : 'No sessions yet.'}
-              </p>
-            )}
-            <ul>
-              {shown.map((session) => (
-                <li key={session.id}>
-                  <Link
-                    to="/sessions/$sessionId"
-                    params={{ sessionId: session.id }}
-                    title={session.title || 'Untitled session'}
-                    className={cn(
-                      'hover:bg-surface-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm max-md:min-h-11',
-                      params.sessionId === session.id && 'bg-surface-2 font-medium',
-                    )}
-                  >
-                    <span className={cn('min-w-0 flex-1 truncate', unread(session, params.sessionId) && 'font-medium')}>
-                      {session.title || 'Untitled session'}
-                    </span>
-                    {unread(session, params.sessionId) && <UnreadDot />}
-                    <MonitorBadge session={session} /><SessionState state={sessionState(session, waiting)} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <SessionList projectId={projectId} projects={projects.data ?? []} current={params.sessionId} waiting={waiting} showArchived={showArchived} enabled={wide || drawer} />
         </section>
 
             <UserMenu />
           </>
         )}
         </>}
+        {wide && !folded && <SidebarResizer width={sidebarWidth} onResize={showSidebarWidth} onResized={keepSidebarWidth} />}
       </aside>
 
       <main className="flex min-h-0 flex-col overflow-hidden">
@@ -375,7 +351,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-type SessionActivity = 'validation' | 'input' | 'running' | 'stopping' | 'queued' | 'idle';
+type SessionActivity = 'validation' | 'input' | 'running' | 'blocked' | 'stopping' | 'queued' | 'idle';
 
 function sessionState(
   session: Session,
@@ -386,6 +362,9 @@ function sessionState(
   switch (session.activeJobStatus) {
     case undefined:
       return 'idle';
+    // Held by a backend that is offline or out of quota: nothing runs.
+    case 'WAITING_BACKEND':
+      return 'blocked';
     case 'QUEUED':
       return 'queued';
     case 'CANCELLING':
@@ -412,6 +391,8 @@ function SessionState({ state }: { state: SessionActivity }) {
       );
     case 'running':
       return <LoaderCircle className="text-accent size-3.5 shrink-0 animate-spin" aria-label="Working" />;
+    case 'blocked':
+      return <TriangleAlert className="text-warn-text size-4 shrink-0" aria-label="Waiting for its backend" />;
     case 'stopping':
       return <LoaderCircle className="text-muted size-3.5 shrink-0 animate-spin" aria-label="Stopping" />;
     case 'queued':
@@ -428,7 +409,198 @@ function SessionState({ state }: { state: SessionActivity }) {
  * it was.
  */
 function unread(session: Session, current?: string): boolean {
-  return Boolean(session.unread) && session.id !== current;
+  return (Boolean(session.unread) || wokeFromSnooze(session)) && session.id !== current;
+}
+
+const SCOPE_KEY = 'threavia.sessions.scope';
+
+/** This Project or all of them, remembered on this device. */
+function useSessionScope(): ['project' | 'all', (scope: 'project' | 'all') => void] {
+  const [scope, setScope] = useState<'project' | 'all'>(() => {
+    try {
+      return window.localStorage.getItem(SCOPE_KEY) === 'all' ? 'all' : 'project';
+    } catch {
+      return 'project';
+    }
+  });
+  const keep = (next: 'project' | 'all') => {
+    setScope(next);
+    try {
+      window.localStorage.setItem(SCOPE_KEY, next);
+    } catch {
+      // Kept for as long as the page stays open instead.
+    }
+  };
+  return [scope, keep];
+}
+
+/**
+ * The Sessions as an inbox: what waits for a decision first, then what works,
+ * then what finished since it was last read, then the rest by last activity.
+ * A search narrows every section; "All projects" lists every Project's
+ * Sessions, each row saying which Project it belongs to.
+ *
+ * Archived Sessions keep a plain list, newest first: nothing is owed to them.
+ */
+function SessionList({
+  projectId,
+  projects,
+  current,
+  waiting,
+  showArchived,
+  enabled,
+}: {
+  projectId?: string;
+  projects: Project[];
+  current?: string;
+  waiting: Map<string, 'validation' | 'input'>;
+  showArchived: boolean;
+  enabled: boolean;
+}) {
+  const [scope, setScope] = useSessionScope();
+  const [query, setQuery] = useState('');
+  const [showSnoozed, setShowSnoozed] = useState(false);
+  // A snooze whose time came moves its Session back without waiting for news.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const everywhere = scope === 'all' && !showArchived;
+  const own = useSessions(projectId, showArchived, enabled);
+  const all = useAllSessions(projects.map((project) => project.id), enabled && everywhere);
+  const listed = (everywhere ? all.data : own.data ?? []).filter((session) =>
+    showArchived ? session.status === 'ARCHIVED' : session.status !== 'ARCHIVED',
+  );
+  const nameOf = (id: string) => projects.find((project) => project.id === id)?.name;
+
+  const sections = showArchived
+    ? [{ key: 'recent' as const, sessions: listed.filter((session) => matchesSearch(session.title, query)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) }]
+    : sessionSections(listed, { waiting: (id) => waiting.has(id), current, query, now });
+  const total = sections.reduce((sum, section) => sum + section.sessions.length, 0);
+  const project = projects.find((candidate) => candidate.id === projectId);
+
+  return (
+    <>
+      <div className="space-y-1.5">
+        <div className="border-border bg-surface focus-within:border-muted/60 flex items-center gap-2 rounded-md border px-2">
+          <Search className="text-muted size-3.5 shrink-0" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && query) {
+                event.preventDefault();
+                event.stopPropagation();
+                setQuery('');
+              }
+            }}
+            placeholder={showArchived ? 'Search archived sessions' : 'Search sessions'}
+            aria-label="Search sessions"
+            className="placeholder:text-muted min-h-11 min-w-0 flex-1 bg-transparent text-base outline-none md:min-h-8 md:text-sm"
+          />
+        </div>
+        {!showArchived && projects.length > 1 && (
+          <div role="radiogroup" aria-label="Which sessions" className="border-border bg-surface-2 text-muted flex rounded-md border p-0.5 text-xs">
+            {(['project', 'all'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                role="radio"
+                aria-checked={scope === option}
+                onClick={() => setScope(option)}
+                className={cn(
+                  'min-h-11 min-w-0 flex-1 truncate rounded px-2 transition-colors md:min-h-7',
+                  scope === option ? 'bg-surface text-text shadow-sm' : 'hover:text-text',
+                )}
+              >
+                {option === 'all' ? 'All projects' : project?.name ?? 'This project'}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="-mx-1 space-y-3 px-1 md:min-h-0 md:flex-1 md:overflow-y-auto">
+        {total === 0 && (
+          <p className="text-muted px-2 text-sm">
+            {query ? 'No session matches.' : showArchived ? 'Nothing archived.' : 'No sessions yet.'}
+          </p>
+        )}
+        {sections.map((section) => {
+          if (section.sessions.length === 0) return null;
+          // Put away on purpose: folded, unless a search is looking in it.
+          const folded = section.key === 'snoozed' && !showSnoozed && !query;
+          return (
+            <section key={section.key} aria-label={showArchived ? 'Archived' : SESSION_SECTIONS[section.key]}>
+              {!showArchived && (section.key === 'snoozed' ? (
+                <button
+                  type="button"
+                  aria-expanded={!folded}
+                  onClick={() => setShowSnoozed(!showSnoozed)}
+                  className="text-muted hover:text-text flex w-full items-center gap-1 px-2 pb-1 text-left text-[0.6875rem] font-medium tracking-wide uppercase max-md:min-h-11"
+                >
+                  {folded ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
+                  {SESSION_SECTIONS.snoozed}
+                  <span className="figures ml-auto font-normal">{section.sessions.length}</span>
+                </button>
+              ) : (
+                <h3 className={cn('flex items-center px-2 pb-1 text-[0.6875rem] font-medium tracking-wide uppercase', section.key === 'needs' ? 'text-warn-text' : 'text-muted')}>
+                  {SESSION_SECTIONS[section.key]}
+                  <span className="figures ml-auto font-normal">{section.sessions.length}</span>
+                </h3>
+              ))}
+              {!folded && (
+                <ul>
+                  {section.sessions.map((session) => (
+                    <li key={session.id} className="group relative">
+                      <Link
+                        to="/sessions/$sessionId"
+                        params={{ sessionId: session.id }}
+                        title={session.title || 'Untitled session'}
+                        className={cn(
+                          'hover:bg-surface-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm max-md:min-h-11',
+                          current === session.id && 'bg-surface-2 font-medium',
+                          (section.key === 'recent' || section.key === 'snoozed') && !showArchived && current !== session.id && 'text-muted hover:text-text',
+                        )}
+                      >
+                        <span className={cn('min-w-0 flex-1 truncate', unread(session, current) && 'text-text font-medium')}>
+                          {session.title || 'Untitled session'}
+                        </span>
+                        {everywhere && session.projectId !== projectId && (
+                          <span className="border-border text-muted max-w-24 shrink-0 truncate rounded border px-1 text-[0.6875rem]">{nameOf(session.projectId)}</span>
+                        )}
+                        {unread(session, current) && <UnreadDot />}
+                        {section.key === 'recent' && <span className="text-muted shrink-0 text-xs">{ago(session.updatedAt).replace(' ago', '')}</span>}
+                        {section.key === 'snoozed' && <span className="text-muted shrink-0 text-xs">{snoozeBack(session)}</span>}
+                        <MonitorBadge session={session} /><SessionState state={sessionState(session, waiting)} />
+                      </Link>
+                      {/* Out of the link, beside it: a control inside a link is
+                          two targets in one. Shown when the row is pointed at
+                          or reached with the keyboard; a phone snoozes from
+                          the conversation's header. */}
+                      {!showArchived && (
+                        <SnoozeMenu session={session}>
+                          <button
+                            type="button"
+                            aria-label={`Snooze ${session.title || 'Untitled session'}`}
+                            title="Snooze"
+                            className="bg-surface-2 text-muted hover:text-text data-[state=open]:text-text absolute top-1/2 right-1 hidden size-6 -translate-y-1/2 place-items-center rounded opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 md:grid"
+                          >
+                            <AlarmClock className="size-3.5" />
+                          </button>
+                        </SnoozeMenu>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          );
+        })}
+      </div>
+    </>
+  );
 }
 
 /**
@@ -703,6 +875,97 @@ function OpenTasks({ projectId, collapsed = false }: { projectId: string; collap
   );
 }
 
+
+const WIDTH_KEY = 'threavia.sidebar.width';
+/** 17rem, the width the sidebar had before it could be resized. */
+const DEFAULT_WIDTH = 272;
+const MIN_WIDTH = 224;
+const MAX_WIDTH = 480;
+const clampWidth = (width: number) => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width)));
+
+/**
+ * How wide the sidebar is on a desktop, remembered between visits. Long titles
+ * and the Project of each Session in "All projects" want more room than the
+ * default leaves; a narrow window wants less.
+ */
+function useSidebarWidth(): [number, (width: number) => void, (width: number) => void] {
+  const [width, setWidth] = useState(() => {
+    try {
+      const saved = Number(window.localStorage.getItem(WIDTH_KEY));
+      return saved ? clampWidth(saved) : DEFAULT_WIDTH;
+    } catch {
+      return DEFAULT_WIDTH;
+    }
+  });
+  const show = (next: number) => setWidth(clampWidth(next));
+  // Written once the drag ends, not at every pixel of it.
+  const keep = (next: number) => {
+    setWidth(clampWidth(next));
+    try {
+      window.localStorage.setItem(WIDTH_KEY, String(clampWidth(next)));
+    } catch {
+      // The width lasts this visit instead.
+    }
+  };
+  return [width, show, keep];
+}
+
+/**
+ * The edge of the sidebar, dragged to resize it. The keyboard does the same
+ * with the arrows once it has the focus, and a double click puts the default
+ * width back.
+ */
+function SidebarResizer({ width, onResize, onResized }: { width: number; onResize: (width: number) => void; onResized: (width: number) => void }) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize the sidebar"
+      aria-valuemin={MIN_WIDTH}
+      aria-valuemax={MAX_WIDTH}
+      aria-valuenow={width}
+      tabIndex={0}
+      title="Drag to resize · double-click for the default width"
+      className="hover:bg-accent/40 focus-visible:bg-accent/60 active:bg-accent/60 absolute inset-y-0 -right-1 z-10 hidden w-2 cursor-col-resize outline-none transition-colors md:block"
+      onPointerDown={(event) => {
+        event.preventDefault();
+        const handle = event.currentTarget;
+        handle.setPointerCapture(event.pointerId);
+        // The sidebar starts at the left edge of the window: the pointer is
+        // the width. Text must not be selected while dragging across it.
+        document.body.style.userSelect = 'none';
+        let last = width;
+        const move = (moved: PointerEvent) => {
+          last = moved.clientX;
+          onResize(last);
+        };
+        const end = () => {
+          handle.removeEventListener('pointermove', move);
+          handle.removeEventListener('pointerup', end);
+          handle.removeEventListener('pointercancel', end);
+          document.body.style.userSelect = '';
+          onResized(last);
+        };
+        handle.addEventListener('pointermove', move);
+        handle.addEventListener('pointerup', end);
+        handle.addEventListener('pointercancel', end);
+      }}
+      onDoubleClick={() => onResized(DEFAULT_WIDTH)}
+      onKeyDown={(event) => {
+        const step = event.shiftKey ? 48 : 16;
+        const next =
+          event.key === 'ArrowLeft' ? width - step
+            : event.key === 'ArrowRight' ? width + step
+              : event.key === 'Home' ? MIN_WIDTH
+                : event.key === 'End' ? MAX_WIDTH
+                  : undefined;
+        if (next === undefined) return;
+        event.preventDefault();
+        onResized(next);
+      }}
+    />
+  );
+}
 const COLLAPSED_KEY = 'threavia.sidebar.collapsed';
 
 /**

@@ -81,7 +81,7 @@ describe('session state', () => {
     const at = '2026-10-09T00:00:00Z';
     expect(sessionState(session('s3', at, { activeJobStatus: 'QUEUED' }), waiting)).toBe('queued');
     expect(sessionState(session('s3', at, { activeJobStatus: 'RUNNING' }), waiting)).toBe('running');
-    expect(sessionState(session('s3', at, { activeJobStatus: 'WAITING_BACKEND' }), waiting)).toBe('running');
+    expect(sessionState(session('s3', at, { activeJobStatus: 'WAITING_BACKEND' }), waiting)).toBe('blocked');
     expect(sessionState(session('s3', at, { activeJobStatus: 'CANCELLING' }), waiting)).toBe('stopping');
     expect(sessionState(session('s3', at), waiting)).toBe('idle');
     expect(sessionState(session('s1', at, { activeJobStatus: 'RUNNING' }), waiting)).toBe('validation');
@@ -104,17 +104,18 @@ describe('session state', () => {
     expect(stateIcon('running', true)).toEqual(stateIcon('running'));
   });
 
-  it('lists sessions alphabetically regardless of activity or date, leaving archives out', () => {
+  it('lists sessions as the web sidebar does: what waits, what works, the rest by activity, snoozed last; archives out', () => {
     const ordered = orderSessions(
       [
         session('old', '2026-01-01T00:00:00Z', { activeJobStatus: 'RUNNING' }),
         session('new', '2026-10-09T00:00:00Z', { activeJobStatus: 'WAITING_INPUT' }),
         session('asks', '2025-01-01T00:00:00Z'),
+        session('later', '2026-10-10T00:00:00Z', { snoozed: true, snoozeUntilChange: true }),
         session('gone', '2026-10-09T00:00:00Z', { status: 'ARCHIVED' }),
-        session('bad', 'not a date'),
+        session('recent', '2026-10-08T00:00:00Z'),
       ],
     );
-    expect(ordered.map((s) => s.id)).toEqual(['asks', 'bad', 'new', 'old']);
+    expect(ordered.map((s) => s.id)).toEqual(['new', 'old', 'recent', 'asks', 'later']);
   });
 });
 

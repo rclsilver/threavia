@@ -1,6 +1,6 @@
 import { mediaType } from '../../../shared/media';
 import { learningSource, requestLearningCapture } from '../../../shared/learnings';
-import { readUpTo } from '../../../shared/sessions';
+import { readUpTo, wokeFromSnooze } from '../../../shared/sessions';
 import { modelPill } from '../../../shared/composer';
 import { artifactKind } from './format';
 import * as vscode from 'vscode';
@@ -51,6 +51,7 @@ import {
   applyToAttention,
   currentRun,
   deliveriesFor,
+  heldDeliveriesFor,
   hasEarlier,
   mergeEvents,
   pendingJobs,
@@ -495,6 +496,8 @@ class ConversationPanel {
       const wasPinned = this.pinned;
       if (!this.session || Date.parse(snapshot.session.updatedAt) >= Date.parse(this.session.updatedAt)) {
         this.session = snapshot.session;
+        // Back from a snooze and now open: the snooze is forgotten everywhere.
+        if (wokeFromSnooze(snapshot.session)) this.core.client.unsnoozeSession(snapshot.session.id).catch(() => undefined);
       }
       this.runs = snapshot.runs;
       // The snapshot's Jobs are the truth at its point; events after it,
@@ -629,6 +632,7 @@ class ConversationPanel {
       pending: pendingJobs(this.jobs),
       active: active && { id: active.id, status: active.status, model: active.model, effort: active.effort, backendWait: active.backendWait },
       deliveries: deliveriesFor(active, this.backend),
+      held: heldDeliveriesFor(active, this.backend),
       validations: requests.validations,
       questions: requests.userInputs,
       more: hasEarlier(this.events, this.exhausted),

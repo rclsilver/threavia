@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 
@@ -301,6 +302,15 @@ func mustJSON(value any) json.RawMessage {
 // pinned, or unpinned, to be reached from any Project.
 type SessionPinnedPayload struct {
 	Pinned bool `json:"pinned"`
+}
+
+// SessionSnoozedPayload is the body of a session.snoozed event: the Session
+// was put out of the way until a time or until something changes, or brought
+// back.
+type SessionSnoozedPayload struct {
+	Snoozed     bool       `json:"snoozed"`
+	Until       *time.Time `json:"until,omitempty"`
+	UntilChange bool       `json:"untilChange,omitempty"`
 }
 
 // SessionReadPayload is the body of a session.read event: the person was shown

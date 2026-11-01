@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { sessionsByTitle } from '../../../shared/sessions';
+import { isSnoozed, sessionsByTitle, snoozeBack, wokeFromSnooze } from '../../../shared/sessions';
 
 import { ApiError } from '../api/client';
 import type { Monitor, Project, Repository, Session } from '../api/types';
@@ -466,7 +466,9 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     item.id = `${coreId}:${node.under}:${session.id}`;
     // The one in the editor the person is in is being read: it does not stand
     // out for the moment before Core hears it was.
-    const unread = Boolean(session.unread) && !(isSessionInFront({ coreId, sessionId: session.id }) && isActive());
+    const unread = (Boolean(session.unread) || wokeFromSnooze(session)) && !(isSessionInFront({ coreId, sessionId: session.id }) && isActive());
+    // Put away on purpose: it says when it comes back.
+    const snoozed = isSnoozed(session) ? `snoozed · back ${snoozeBack(session)}` : undefined;
     item.iconPath = themeIcon(stateIcon(state, unread));
     item.contextValue = session.pinnedAt ? 'session.pinned' : 'session';
 
@@ -478,7 +480,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     const live = monitors.every(m => m.confirmed && Date.now() - Date.parse(m.lastSeenAt) < 30_000);
     const watching = monitors.length ? `${monitors.length} monitor${monitors.length > 1 ? 's' : ''}${live ? ' active' : ' unconfirmed'}` : undefined;
     if (watching && !session.activeJobStatus) item.iconPath = new vscode.ThemeIcon('radio-tower');
-    item.description = [unread && 'unread', watching, git, elsewhere].filter(Boolean).join(' · ') || undefined;
+    if (snoozed && state === 'idle') item.iconPath = new vscode.ThemeIcon('bell-slash', new vscode.ThemeColor('disabledForeground'));
+    item.description = [snoozed, unread && 'unread', watching, git, elsewhere].filter(Boolean).join(' · ') || undefined;
     item.command = {
       command: 'threavia.openSession',
       title: 'Open Session',

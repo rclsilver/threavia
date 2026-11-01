@@ -1152,3 +1152,7 @@ body.vscode-reduce-motion .codicon-modifier-spin {
   .composer .wide-only { display: none; }
   .composer .narrow-only { display: inline; }
 }
+
+/* A choice the running Job cannot take now: there, but not offered. */
+.delivery:disabled { opacity: 0.4; cursor: not-allowed; }
+.delivery:disabled:hover { color: var(--muted); }

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 
@@ -247,6 +247,24 @@ export function useSessions(projectId: string | undefined, includeArchived = fal
         )
         .then(items),
     enabled: Boolean(projectId) && enabled,
+  });
+}
+
+/**
+ * The active Sessions of every Project, read from each Project's own list so
+ * the cache, and every refresh of it, is the same one the sidebar uses.
+ */
+export function useAllSessions(projectIds: string[], enabled = true) {
+  return useQueries({
+    queries: projectIds.map((projectId) => ({
+      queryKey: keys.sessions(projectId, false),
+      queryFn: () => api.get<List<Session>>(`/api/v1/projects/${projectId}/sessions?includeArchived=false`).then(items),
+      enabled,
+    })),
+    combine: (results) => ({
+      data: results.flatMap((result) => result.data ?? []),
+      isPending: results.some((result) => result.isPending),
+    }),
   });
 }
 
@@ -507,6 +525,25 @@ export function usePinnedSessions() {
  * Pinning or unpinning a Session. The list moves at once: a pin is a shortcut,
  * and one that appears a round trip later reads as a click that missed.
  */
+
+/**
+ * Puts a Session out of the way until a time or until something changes, or
+ * brings it back. The lists follow from the session.snoozed event on every
+ * client; this one re-reads them at once.
+ */
+export function useSnoozeSession() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sessionId, until, untilChange }: { sessionId: string; until?: Date; untilChange?: boolean }) =>
+      until || untilChange
+        ? api.put<Session>(`/api/v1/sessions/${sessionId}/snooze`, until ? { until: until.toISOString() } : { untilChange: true })
+        : api.delete<Session>(`/api/v1/sessions/${sessionId}/snooze`),
+    onSettled: (_data, _error, { sessionId }) => {
+      void queries.invalidateQueries({ queryKey: ['sessions'] });
+      void queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
+    },
+  });
+}
 export function usePinSession() {
   const queries = useQueryClient();
   return useMutation({

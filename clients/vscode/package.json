@@ -237,6 +237,12 @@
         "icon": "$(pinned)"
       },
       {
+        "command": "threavia.snoozeSession",
+        "title": "Snooze…",
+        "category": "Threavia",
+        "icon": "$(bell-slash)"
+      },
+      {
         "command": "threavia.renameSession",
         "title": "Rename…",
         "category": "Threavia"
@@ -876,6 +882,11 @@
           "command": "threavia.pinSession",
           "when": "view == threavia.sidebar && viewItem == session",
           "group": "2_session@1"
+        },
+        {
+          "command": "threavia.snoozeSession",
+          "when": "view == threavia.sidebar && viewItem =~ /^session/",
+          "group": "2_session@3"
         },
         {
           "command": "threavia.unpinSession",

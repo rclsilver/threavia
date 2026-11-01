@@ -1,5 +1,5 @@
 import type { Project, Repository, Session, UserInputRequest, ValidationRequest } from '../api/types';
-import { sessionsByTitle } from '../../../shared/sessions';
+import { sessionSections } from '../../../shared/sessions';
 
 /**
  * What the sidebar shows, decided without an editor.
@@ -15,7 +15,7 @@ export interface Pending {
   userInputs: UserInputRequest[];
 }
 
-export type SessionActivity = 'validation' | 'input' | 'running' | 'stopping' | 'queued' | 'idle';
+export type SessionActivity = 'validation' | 'input' | 'running' | 'blocked' | 'stopping' | 'queued' | 'idle';
 
 /** What waits for the user, by Session. A permission outranks a question. */
 export function waitingBySession(pending: Pending): Map<string, 'validation' | 'input'> {
@@ -46,6 +46,9 @@ export function sessionState(session: Session, waiting: Map<string, 'validation'
   switch (session.activeJobStatus) {
     case undefined:
       return 'idle';
+    // Held by a backend that is offline or out of quota: nothing runs.
+    case 'WAITING_BACKEND':
+      return 'blocked';
     case 'QUEUED':
       return 'queued';
     case 'CANCELLING':
@@ -76,6 +79,8 @@ export function stateIcon(state: SessionActivity, unread = false): IconSpec {
       return { id: 'question', color: 'list.warningForeground', label: 'Waiting for your answer' };
     case 'running':
       return { id: 'loading~spin', label: 'Working' };
+    case 'blocked':
+      return { id: 'warning', color: 'list.warningForeground', label: 'Waiting for its backend' };
     case 'stopping':
       return { id: 'loading~spin', color: 'disabledForeground', label: 'Stopping' };
     case 'queued':
@@ -106,7 +111,7 @@ export function unreadSessions(projects: readonly Project[]): number {
  * The Sessions of a Project in alphabetical title order, archived ones left out.
  */
 export function orderSessions(sessions: Session[]): Session[] {
-  return sessionsByTitle(sessions.filter((session) => session.status !== 'ARCHIVED'));
+  return sessionSections(sessions.filter((session) => session.status !== 'ARCHIVED')).flatMap((section) => section.sessions);
 }
 
 /** Whether a Project is the one this workspace names, by id or by name. */

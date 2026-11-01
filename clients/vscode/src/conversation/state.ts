@@ -121,6 +121,9 @@ export function currentRun(runs: readonly Run[]): Run | undefined {
  * Session announced.
  */
 export function deliveriesFor(active: Job | undefined, backend: BackendInstance | undefined): ('NEXT' | 'NOW')[] {
+  // Waiting for its backend, a Job can still be interrupted: Core cancels it
+  // and queues the message in its place.
+  if (active?.status === 'WAITING_BACKEND') return ['NOW'];
   if (!active || ['QUEUED', 'CANCELLING', 'WAITING_BACKEND'].includes(active.status)) return [];
   const features: string[] = backend?.features ?? [];
   return (['NEXT', 'NOW'] as const).filter((delivery) => features.includes(`JOB_INPUT_${delivery}`));
@@ -153,4 +156,14 @@ export function sessionStatus(
 export function hasEarlier(events: readonly Event[], exhausted: boolean): boolean {
   const first = events[0];
   return !exhausted && Boolean(first) && first.type !== 'session.created';
+}
+
+/**
+ * What a Job waiting for its backend cannot take now but could later: Next
+ * step has no agent to wait for, so it is shown, greyed out, with why.
+ */
+export function heldDeliveriesFor(active: Job | undefined, backend: BackendInstance | undefined): ('NEXT' | 'NOW')[] {
+  if (active?.status !== 'WAITING_BACKEND') return [];
+  const features: string[] = backend?.features ?? [];
+  return features.includes('JOB_INPUT_NEXT') ? ['NEXT'] : [];
 }
