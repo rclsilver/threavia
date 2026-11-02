@@ -14,7 +14,8 @@ import (
 var ErrJobSlotTaken = errors.New("the run already has an active job")
 
 const jobColumns = `j.id, j.run_id, j.status, j.idempotency_key, j.error, j.origin_channel,
-	j.created_at, j.updated_at, j.started_at, j.ended_at, j.model, j.effort, j.backend_wait`
+	j.created_at, j.updated_at, j.started_at, j.ended_at, j.model, j.effort, j.backend_wait,
+	j.quiet, j.dismissed`
 
 // CreateJob inserts a Job. A Job is created QUEUED and is dispatched
 // separately, so that enqueueing never depends on backend availability.
@@ -32,16 +33,16 @@ func (s *Store) CreateJob(ctx context.Context, job *domain.Job) error {
 		return classify(err, "lock job project")
 	}
 	err := s.q.QueryRow(ctx, `
-		INSERT INTO jobs (id, run_id, status, idempotency_key, idempotency_owner_id, origin_channel)
+		INSERT INTO jobs (id, run_id, status, idempotency_key, idempotency_owner_id, origin_channel, quiet)
 		VALUES ($1, $2, $3, $4, (
 			SELECT p.owner_id
 			FROM runs r
 			JOIN sessions s ON s.id = r.session_id
 			JOIN projects p ON p.id = s.project_id
 			WHERE r.id = $2 AND $4::text IS NOT NULL
-		), $5)
+		), $5, $6)
 		RETURNING created_at, updated_at`,
-		job.ID, job.RunID, job.Status, job.IdempotencyKey, job.OriginChannel,
+		job.ID, job.RunID, job.Status, job.IdempotencyKey, job.OriginChannel, job.Quiet,
 	).Scan(&job.CreatedAt, &job.UpdatedAt)
 	return classify(err, "create job")
 }
@@ -168,6 +169,21 @@ func (s *Store) TransitionJob(ctx context.Context, id domain.JobID, from, to dom
 	return job, err
 }
 
+// DismissJob records that the agent of a quiet Job had nothing to report. Only
+// a quiet Job that has not ended can be dismissed; any other is ErrNotFound.
+func (s *Store) DismissJob(ctx context.Context, id domain.JobID) error {
+	tag, err := s.q.Exec(ctx, `
+		UPDATE jobs SET dismissed = true, updated_at = now()
+		WHERE id = $1 AND quiet AND status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')`, id)
+	if err != nil {
+		return classify(err, "dismiss job")
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // DeleteQueuedJob removes a Job that has not started. Only queued Jobs can be
 // deleted; a running one is cancelled instead.
 func (s *Store) DeleteQueuedJob(ctx context.Context, ownerID domain.UserID, id domain.JobID) error {
@@ -217,6 +233,7 @@ func (s *Store) LoadJobContext(ctx context.Context, id domain.JobID) (JobContext
 	err := s.q.QueryRow(ctx, `
 		SELECT j.id, j.run_id, j.status, j.idempotency_key, j.error, j.origin_channel,
 		       j.created_at, j.updated_at, j.started_at, j.ended_at, j.model, j.effort, j.backend_wait,
+		       j.quiet, j.dismissed,
 		       r.id, r.session_id, r.backend_instance_id, r.native_session_id,
 		       r.resume_status, r.resume_reason, r.created_at, r.updated_at,
 		       s.id, p.id, p.owner_id, p.name, p.description, p.instructions,
@@ -233,6 +250,7 @@ func (s *Store) LoadJobContext(ctx context.Context, id domain.JobID) (JobContext
 		&jc.Job.ID, &jc.Job.RunID, &jc.Job.Status, &jc.Job.IdempotencyKey, &jc.Job.Error,
 		&jc.Job.OriginChannel,
 		&jc.Job.CreatedAt, &jc.Job.UpdatedAt, &jc.Job.StartedAt, &jc.Job.EndedAt, &jc.Job.Model, &jc.Job.Effort, &jc.Job.BackendWait,
+		&jc.Job.Quiet, &jc.Job.Dismissed,
 		&jc.Run.ID, &jc.Run.SessionID, &jc.Run.BackendInstanceID, &jc.Run.NativeSessionID,
 		&jc.Run.ResumeStatus, &jc.Run.ResumeReason, &jc.Run.CreatedAt, &jc.Run.UpdatedAt,
 		&jc.SessionID, &jc.ProjectID, &jc.OwnerID, &jc.ProjectName, &jc.ProjectDesc,
@@ -304,7 +322,8 @@ func (s *Store) ActiveJobsForBackend(ctx context.Context, instanceID domain.Back
 func scanJob(row scanner) (domain.Job, error) {
 	var job domain.Job
 	err := row.Scan(&job.ID, &job.RunID, &job.Status, &job.IdempotencyKey, &job.Error, &job.OriginChannel,
-		&job.CreatedAt, &job.UpdatedAt, &job.StartedAt, &job.EndedAt, &job.Model, &job.Effort, &job.BackendWait)
+		&job.CreatedAt, &job.UpdatedAt, &job.StartedAt, &job.EndedAt, &job.Model, &job.Effort, &job.BackendWait,
+		&job.Quiet, &job.Dismissed)
 	return job, classify(err, "read job")
 }
 

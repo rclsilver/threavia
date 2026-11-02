@@ -34,6 +34,7 @@ type ScheduleInput struct {
 	Timezone *string `json:"timezone"`
 	Message  *string `json:"message"`
 	Enabled  *bool   `json:"enabled"`
+	Quiet    *bool   `json:"quiet"`
 }
 
 // CreateSchedule adds a Schedule to a Session.
@@ -138,7 +139,7 @@ func (s *Service) DeleteSchedule(ctx context.Context, identity auth.Identity, id
 // The state, audit and persistent session event commit together.
 func (s *Service) recordScheduleChange(ctx context.Context, tx *postgres.Store, b *batch, sc domain.Schedule, kind events.Type) error {
 	jobID := managerJobFrom(ctx)
-	payload := map[string]any{"scheduleId": sc.ID, "cron": sc.Cron, "timezone": sc.Timezone, "message": sc.Message, "enabled": sc.Enabled}
+	payload := map[string]any{"scheduleId": sc.ID, "cron": sc.Cron, "timezone": sc.Timezone, "message": sc.Message, "enabled": sc.Enabled, "quiet": sc.Quiet}
 	actor := string(sc.OwnerID)
 	if jobID != "" {
 		payload["actorJobId"] = jobID
@@ -163,7 +164,7 @@ func (s *Service) RunScheduleNow(ctx context.Context, identity auth.Identity, id
 		return domain.Job{}, translate(err)
 	}
 	job, err := s.queueMessage(domain.WithChannel(ctx, domain.ChannelSchedule), identity,
-		current.SessionID, current.Message, "", current.ID)
+		current.SessionID, current.Message, "", &current)
 	if err != nil {
 		return domain.Job{}, err
 	}
@@ -254,7 +255,7 @@ func (s *Service) fire(ctx context.Context, sc domain.Schedule, now time.Time) {
 
 	identity := auth.Identity{UserID: sc.OwnerID}
 	job, err := s.queueMessage(domain.WithChannel(ctx, domain.ChannelSchedule), identity,
-		sc.SessionID, sc.Message, "", sc.ID)
+		sc.SessionID, sc.Message, "", &sc)
 	if err != nil {
 		skip(domain.ScheduleFailed, err.Error())
 		return
@@ -292,6 +293,9 @@ func applyScheduleInput(sc *domain.Schedule, in ScheduleInput) error {
 	}
 	if in.Enabled != nil {
 		sc.Enabled = *in.Enabled
+	}
+	if in.Quiet != nil {
+		sc.Quiet = *in.Quiet
 	}
 	if sc.Message == "" {
 		return fmt.Errorf("%w: a schedule needs a message to send", ErrInvalid)

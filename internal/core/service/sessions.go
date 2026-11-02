@@ -239,7 +239,7 @@ func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessi
 	default:
 		return domain.Job{}, fmt.Errorf("%w: unknown delivery %q", ErrInvalid, delivery)
 	}
-	return s.queueMessage(ctx, identity, sessionID, message, idempotencyKey, "", attachments...)
+	return s.queueMessage(ctx, identity, sessionID, message, idempotencyKey, nil, attachments...)
 }
 
 type completedResultKey struct{}
@@ -255,8 +255,13 @@ func (s *Service) PostMessageFromResult(ctx context.Context, identity auth.Ident
 
 // queueMessage makes a message a Job of its own on the current Run. A
 // scheduled one carries the Schedule that sent it, so the timeline says it was
-// not typed by anyone.
-func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string, scheduleID domain.ScheduleID, attachments ...ArtifactPayload) (domain.Job, error) {
+// not typed by anyone, and a quiet Schedule makes a quiet Job its agent may
+// dismiss.
+func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string, from *domain.Schedule, attachments ...ArtifactPayload) (domain.Job, error) {
+	var scheduleID domain.ScheduleID
+	if from != nil {
+		scheduleID = from.ID
+	}
 	if idempotencyKey != "" {
 		// Keys are per user, so a Job found here is already the caller's. It
 		// is a replay only if it was made in the Session this request names: the
@@ -303,6 +308,7 @@ func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sess
 		Status:         domain.JobQueued,
 		IdempotencyKey: optionalString(idempotencyKey),
 		OriginChannel:  domain.ChannelFrom(ctx),
+		Quiet:          from != nil && from.Quiet,
 	}
 	scope := domain.Scope{ProjectID: session.ProjectID, SessionID: sessionID, RunID: run.ID, JobID: job.ID}
 	b := &batch{ownerID: identity.UserID}
@@ -352,8 +358,12 @@ func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sess
 		if err := tx.CreateJob(ctx, &job); err != nil {
 			return err
 		}
-		if err := tx.TouchSession(ctx, sessionID); err != nil {
-			return err
+		// A quiet run moves the Session up only once it ends with something
+		// to say, which is when the person has a reason to look at it.
+		if !job.Quiet {
+			if err := tx.TouchSession(ctx, sessionID); err != nil {
+				return err
+			}
 		}
 		return s.appendAll(ctx, tx, b,
 			record{events.TypeJobCreated, scope, JobCreatedPayload{RunID: string(run.ID)}},
@@ -421,7 +431,7 @@ func (s *Service) deliverToRunningJob(ctx context.Context, identity auth.Identit
 		if _, err := s.CancelJob(ctx, identity, job.ID, "replaced by a new message while it waited for its backend"); err != nil {
 			return domain.Job{}, err
 		}
-		return s.queueMessage(ctx, identity, sessionID, message, "", "")
+		return s.queueMessage(ctx, identity, sessionID, message, "", nil)
 	}
 	switch job.Status {
 	case domain.JobCancelling, domain.JobWaitingBackend:

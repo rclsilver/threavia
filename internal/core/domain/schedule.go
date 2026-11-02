@@ -34,6 +34,9 @@ type Schedule struct {
 	Timezone  string    `json:"timezone"`
 	Message   string    `json:"message"`
 	Enabled   bool      `json:"enabled"`
+	// Quiet lets the agent end a run with nothing to report without telling
+	// the person: no notification, nothing unread, the run folded away.
+	Quiet bool `json:"quiet"`
 	// NextRunAt is absent when the Schedule is paused or names no real date.
 	NextRunAt   *time.Time      `json:"nextRunAt,omitempty"`
 	LastRunAt   *time.Time      `json:"lastRunAt,omitempty"`

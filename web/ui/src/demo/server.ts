@@ -406,7 +406,7 @@ function record(action: string, rest: Json) {
 
 function recordScheduleChange(schedule: Json, action: string) {
   const sessionId = String(schedule.sessionId);
-  const detail = { scheduleId: schedule.id, cron: schedule.cron, timezone: schedule.timezone, message: schedule.message, enabled: schedule.enabled };
+  const detail = { scheduleId: schedule.id, cron: schedule.cron, timezone: schedule.timezone, message: schedule.message, enabled: schedule.enabled, quiet: schedule.quiet };
   pushEvent(sessionId, action, detail);
   record(action, { projectId: sessionOf(sessionId).projectId, sessionId, subjectId: schedule.id, detail });
 }
@@ -887,7 +887,7 @@ const routes: [string, RegExp, Handler][] = [
   }],
   ['GET', /^\/api\/v1\/sessions\/([^/]+)\/schedules$/, (m) => list(state.schedules.filter((entry) => entry.sessionId === m[1]))],
   ['POST', /^\/api\/v1\/sessions\/([^/]+)\/schedules$/, (m, body) => {
-    const schedule = { id: newId(), sessionId: m[1], cron: body.cron, timezone: body.timezone ?? 'Europe/Paris', message: body.message, enabled: body.enabled ?? true, upcoming: [], createdAt: nowIso(), updatedAt: nowIso() };
+    const schedule = { id: newId(), sessionId: m[1], cron: body.cron, timezone: body.timezone ?? 'Europe/Paris', message: body.message, enabled: body.enabled ?? true, quiet: body.quiet ?? false, upcoming: [], createdAt: nowIso(), updatedAt: nowIso() };
     state.schedules.push(schedule);
     recordScheduleChange(schedule, 'schedule.created');
     return schedule;

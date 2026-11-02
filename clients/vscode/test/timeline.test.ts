@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Event } from '../src/api/types';
 import {
   describe as describeEvent,
+  foldDismissed,
   foldFinished,
   messageAuthor,
   rowsOf,
@@ -113,6 +114,41 @@ describe('rowsOf', () => {
   it('leaves machinery out', () => {
     sequence = 0;
     expect(rowsOf([event('job.created'), event('run.created')], NOW)).toEqual([]);
+  });
+});
+
+describe('foldDismissed', () => {
+  /** A quiet schedule's run: the scheduled message, its work, its end. */
+  const quietRun = (jobId: string, dismissed: boolean): Event[] => [
+    event('user.message', { text: 'Check my on-call schedule', scheduleId: 'daily' }, { jobId }),
+    event('job.started', {}, { jobId }),
+    event('tool.started', { toolCallId: `${jobId}-a`, name: 'Bash', input: { command: 'jsm schedule' } }, { jobId }),
+    event('tool.completed', { toolCallId: `${jobId}-a`, name: 'Bash', output: { output: 'same' } }, { jobId }),
+    event('agent.message', { text: 'Nothing changed.' }, { jobId }),
+    event('job.completed', { summary: 'Nothing changed.', ...(dismissed && { dismissed: true }) }, { jobId }),
+  ];
+
+  it('folds a whole dismissed run into one line, and leaves the work around it alone', () => {
+    sequence = 0;
+    const rows = foldFinished(foldDismissed(rowsOf([...finishedJob('j1'), ...quietRun('q1', true)], NOW), new Set()), new Set());
+    expect(kinds(rows)).toEqual(['day', 'user.message', 'steps', 'agent.message', 'job.completed', 'quiet']);
+  });
+
+  it('shows a run that answered as any other', () => {
+    sequence = 0;
+    const all = rowsOf(quietRun('q1', false), NOW);
+    expect(foldDismissed(all, new Set())).toBe(all);
+  });
+
+  it('opens on demand onto the run, its steps folded as usual', () => {
+    sequence = 0;
+    const all = rowsOf(quietRun('q1', true), NOW);
+    const folded = foldDismissed(all, new Set());
+    const quiet = folded[1] as Extract<Row, { kind: 'quiet' }>;
+    expect(quiet).toMatchObject({ kind: 'quiet', key: all[1].key + 0.25, at: '2026-10-09T10:01:00', open: false });
+    const open = foldDismissed(all, new Set([quiet.key]));
+    expect(kinds(open)).toEqual(['day', 'quiet', 'user.message', 'tool:Bash', 'agent.message', 'job.completed']);
+    expect((open[1] as Extract<Row, { kind: 'quiet' }>).open).toBe(true);
   });
 });
 

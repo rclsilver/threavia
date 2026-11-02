@@ -106,7 +106,7 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 		return s.mcpTool(ctx, identity, jc, name, input)
 	case tools.NameReviewRepositoryRegister, tools.NameReviewRead, tools.NameReviewRequest, tools.NameReviewReply:
 		return s.reviewTool(ctx, identity, jc, name, input)
-	case tools.NameScheduleList, tools.NameScheduleCreate, tools.NameScheduleUpdate, tools.NameScheduleDelete:
+	case tools.NameScheduleList, tools.NameScheduleCreate, tools.NameScheduleUpdate, tools.NameScheduleDelete, tools.NameScheduleDismiss:
 		return s.scheduleTool(ctx, identity, jc, name, input)
 	case tools.NameArtifactPublish:
 		return s.publishArtifact(ctx, identity, jc, input, file)

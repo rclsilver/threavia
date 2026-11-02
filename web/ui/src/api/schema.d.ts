@@ -2772,7 +2772,8 @@ export interface paths {
          *     is skipped, and the Session says so in a schedule.skipped event, when
          *     the previous Job is still going, when the backend is offline, or when
          *     Core was not running at the time: it is never sent late, and runs do
-         *     not stack up.
+         *     not stack up. A quiet schedule lets the agent end a run that found
+         *     nothing to report without telling anyone.
          *
          */
         post: {
@@ -5876,7 +5877,7 @@ export interface components {
              *     - `schedule.skipped`: `{ scheduleId, outcome, reason, due }`, a
              *       scheduled message that was not sent
              *     - `schedule.created`, `schedule.updated`, `schedule.deleted`:
-             *       `{ scheduleId, cron, timezone, message, enabled, actorJobId? }`,
+             *       `{ scheduleId, cron, timezone, message, enabled, quiet, actorJobId? }`,
              *       session-scoped schedule changes. Refresh schedules and audit.
              *       actorJobId identifies the originating agent Job when present.
              *     - `agent.message`: `{ text }`
@@ -5891,7 +5892,10 @@ export interface components {
              *     - `tool.completed`: `{ toolCallId, name, output }`, the output a
              *       bounded excerpt marked with an ellipsis when it was cut
              *     - `tool.failed`: `{ toolCallId, name, error }`
-             *     - `job.completed`, `job.failed`: `{ summary | error, usage }`
+             *     - `job.completed`, `job.failed`: `{ summary | error, usage }`;
+             *       job.completed carries `dismissed: true` when the agent of a quiet
+             *       schedule run ended it with nothing to report: fold the run away
+             *       and announce nothing
              *     - `workspace.changed`: `{ knownDirectoryId, files, additions,
              *       deletions, directory?, baseTree?, headTree? }`, the last three
              *       present when the diff of a file can be asked for
@@ -5951,6 +5955,8 @@ export interface components {
             timezone?: string;
             message?: string;
             enabled?: boolean;
+            /** @description Lets the agent end a run with nothing to report through the schedule_dismiss Core Tool, without notifying the person. False on creation when omitted. */
+            quiet?: boolean;
         };
         /** @description Session-owned watch. Confirmed means its backend is connected and reported within 30 seconds; false never means confirmed running. */
         Monitor: {
@@ -5991,6 +5997,12 @@ export interface components {
             timezone: string;
             message: string;
             enabled: boolean;
+            /** @description Its runs may end silently. The Job a run makes offers its agent
+             *     the schedule_dismiss Core Tool; a Job dismissed with it ends with
+             *     job.completed carrying dismissed, sends no notification, leaves
+             *     the Session read and does not move it up the session list.
+             *      */
+            quiet: boolean;
             /**
              * Format: date-time
              * @description Absent while paused.

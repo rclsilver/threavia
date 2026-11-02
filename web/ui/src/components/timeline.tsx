@@ -5,6 +5,7 @@ import {
   ArrowDown,
   ArrowUpToLine,
   Ban,
+  BellOff,
   CalendarClock,
   CalendarX,
   CheckCircle2,
@@ -62,14 +63,16 @@ const RENDERED = new Set([
 ]);
 
 /**
- * One line of the timeline: a plain event, a tool call, a change of day, or the
- * folded steps of a finished Job.
+ * One line of the timeline: a plain event, a tool call, a change of day, the
+ * folded steps of a finished Job, or a whole scheduled run dismissed as having
+ * nothing to report.
  */
 type Row =
   | { kind: 'event'; key: number; event: Event; startedAt?: string }
   | { kind: 'tool'; key: number; call: ToolCall; jobId?: string }
   | { kind: 'day'; key: number; label: string }
-  | { kind: 'steps'; key: number; at: string; steps: Steps; open: boolean };
+  | { kind: 'steps'; key: number; at: string; steps: Steps; open: boolean }
+  | { kind: 'quiet'; key: number; at: string; open: boolean };
 
 /** What a fold holds, counted, so it can be judged without opening it. */
 interface Steps {
@@ -249,7 +252,7 @@ function foldFinished(rows: Row[], opened: ReadonlySet<number>): Row[] {
 
   const folds = (row: Row) => {
     const job = jobOf(row);
-    if (!job || !finished.has(job) || row.kind === 'day' || row.kind === 'steps') return false;
+    if (!job || !finished.has(job) || row.kind === 'day' || row.kind === 'steps' || row.kind === 'quiet') return false;
     if (row.kind === 'tool') return true;
     const type = row.event.type;
     // What the job changed in the files, and what it published, are part of
@@ -322,6 +325,43 @@ function foldFinished(rows: Row[], opened: ReadonlySet<number>): Row[] {
   return out;
 }
 
+/**
+ * Folds each run a quiet schedule dismissed into one line, opened or not.
+ *
+ * Its agent ended it with nothing to report, so none of it is news: what was
+ * asked, what was done and what was said stay one click away, behind a line
+ * saying when it ran. A run that answered is not one of these and reads as
+ * any other.
+ */
+function foldDismissed(rows: Row[], opened: ReadonlySet<number>): Row[] {
+  const dismissed = new Set<string>();
+  for (const row of rows) {
+    if (row.kind === 'event' && row.event.jobId && payloadOf(row.event, 'job.completed')?.dismissed) {
+      dismissed.add(row.event.jobId);
+    }
+  }
+  if (dismissed.size === 0) return rows;
+
+  const open = new Map<string, boolean>();
+  const out: Row[] = [];
+  for (const row of rows) {
+    const job = jobOf(row);
+    if (!job || !dismissed.has(job) || (row.kind !== 'event' && row.kind !== 'tool')) {
+      out.push(row);
+      continue;
+    }
+    if (!open.has(job)) {
+      // Keyed just after the run's first row, as a fold of steps is, so it
+      // sorts where the run began and keeps its measured size.
+      const key = row.key + 0.25;
+      open.set(job, opened.has(key));
+      out.push({ kind: 'quiet', key, at: row.kind === 'tool' ? row.call.at : row.event.timestamp, open: opened.has(key) });
+    }
+    if (open.get(job)) out.push(row);
+  }
+  return out;
+}
+
 /** Whether more of the timeline lies below what is on screen. */
 function below(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight > 8;
@@ -353,7 +393,7 @@ export function Timeline({
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [opened, setOpened] = useState<ReadonlySet<number>>(new Set());
   const all = useMemo(() => rowsOf(events), [events]);
-  const rows = useMemo(() => foldFinished(all, opened), [all, opened]);
+  const rows = useMemo(() => foldFinished(foldDismissed(all, opened), opened), [all, opened]);
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -676,6 +716,8 @@ export function Timeline({
                     <Gutter row={row} />
                     {row.kind === 'steps' ? (
                       <StepsEntry row={row} onToggle={() => toggleSteps(row.key)} />
+                    ) : row.kind === 'quiet' ? (
+                      <QuietEntry row={row} onToggle={() => toggleSteps(row.key)} />
                     ) : row.kind === 'tool' ? (
                       <ToolCallEntry
                         call={row.call}
@@ -855,14 +897,14 @@ function StickyPrompt({ event, onJump }: { event: Event; onJump: () => void }) {
 /** The time of a row, in the log's gutter, aligned with its first line. */
 function Gutter({ row }: { row: Exclude<Row, { kind: 'day' }> }) {
   if (row.kind === 'event' && row.event.type === 'agent.message') return <span />;
-  const at = row.kind === 'tool' ? row.call.at : row.kind === 'steps' ? row.at : row.event.timestamp;
+  const at = row.kind === 'tool' ? row.call.at : row.kind === 'steps' || row.kind === 'quiet' ? row.at : row.event.timestamp;
   const user = row.kind === 'event' && row.event.type === 'user.message';
   return (
     <time
       dateTime={at}
       className={cn(
         'text-muted text-right font-mono text-[0.6875rem] leading-5',
-        row.kind === 'tool' || row.kind === 'steps' ? 'pt-1' : user ? 'pt-2' : 'pt-px',
+        row.kind === 'tool' || row.kind === 'steps' || row.kind === 'quiet' ? 'pt-1' : user ? 'pt-2' : 'pt-px',
       )}
     >
       {clock(at)}
@@ -910,6 +952,25 @@ function StepsEntry({
           {failed} failed
         </span>
       )}
+    </button>
+  );
+}
+
+/**
+ * A scheduled run its agent dismissed: one muted line saying it ran and had
+ * nothing to report, which opens onto the run itself.
+ */
+function QuietEntry({ row, onToggle }: { row: Extract<Row, { kind: 'quiet' }>; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={row.open}
+      className="hover:bg-surface-2 text-muted hover:text-text flex w-full items-center gap-2 rounded-(--radius-card) px-2 py-1 text-left text-xs transition-colors"
+    >
+      {row.open ? <ChevronDown className="size-3.5 shrink-0" /> : <ChevronRight className="size-3.5 shrink-0" />}
+      <BellOff className="size-3.5 shrink-0" />
+      <span>Schedule · nothing to report</span>
     </button>
   );
 }

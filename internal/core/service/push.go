@@ -222,6 +222,9 @@ func (s *Service) notifyAttention(ctx context.Context, jc postgres.JobContext, e
 	case *backendv1.JobEvent_UserInputRequested:
 		title, body = "Question", payload.UserInputRequested.GetPrompt()
 	case *backendv1.JobEvent_JobCompleted:
+		if dismissedEnd(jc.Job, event) {
+			return // Nothing to report was the point of the run.
+		}
 		title, body = "Done", payload.JobCompleted.GetSummary()
 	case *backendv1.JobEvent_JobFailed:
 		title, body = "Failed", payload.JobFailed.GetError().GetMessage()

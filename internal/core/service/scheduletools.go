@@ -2,21 +2,32 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
+	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 	"github.com/rclsilver/threavia/internal/core/tools"
 )
 
 func (s *Service) scheduleTool(ctx context.Context, identity auth.Identity, jc jobScope, name tools.Name, input map[string]any) (map[string]any, error) {
 	for field := range input {
-		allowed := (name == tools.NameScheduleCreate || name == tools.NameScheduleUpdate) && (field == "cron" || field == "timezone" || field == "message" || field == "enabled") || (name == tools.NameScheduleUpdate || name == tools.NameScheduleDelete) && field == "scheduleId"
+		allowed := (name == tools.NameScheduleCreate || name == tools.NameScheduleUpdate) && (field == "cron" || field == "timezone" || field == "message" || field == "enabled" || field == "quiet") || (name == tools.NameScheduleUpdate || name == tools.NameScheduleDelete) && field == "scheduleId"
 		if !allowed {
 			return nil, fmt.Errorf("unsupported field %s; schedules are scoped to this session: %w", field, ErrInvalid)
 		}
 	}
 	ctx = context.WithValue(domain.WithChannel(ctx, domain.Channel("agent")), managerJobKey{}, jc.JobID)
+	if name == tools.NameScheduleDismiss {
+		if err := s.store.DismissJob(ctx, jc.JobID); errors.Is(err, postgres.ErrNotFound) {
+			return nil, fmt.Errorf("%w: only a run of a quiet schedule can be dismissed", ErrConflict)
+		} else if err != nil {
+			return nil, translate(err)
+		}
+		return map[string]any{"dismissed": true}, nil
+	}
 	if name == tools.NameScheduleList {
 		list, err := s.ListSchedules(ctx, identity, jc.SessionID)
 		if err != nil {
@@ -37,12 +48,14 @@ func (s *Service) scheduleTool(ctx context.Context, identity auth.Identity, jc j
 			*target = &text
 		}
 	}
-	if value, present := input["enabled"]; present {
-		flag, ok := value.(bool)
-		if !ok {
-			return nil, fmt.Errorf("enabled must be a boolean: %w", ErrInvalid)
+	for field, target := range map[string]**bool{"enabled": &in.Enabled, "quiet": &in.Quiet} {
+		if value, present := input[field]; present {
+			flag, ok := value.(bool)
+			if !ok {
+				return nil, fmt.Errorf("%s must be a boolean: %w", field, ErrInvalid)
+			}
+			*target = &flag
 		}
-		in.Enabled = &flag
 	}
 	if name == tools.NameScheduleCreate {
 		created, err := s.CreateSchedule(ctx, identity, jc.SessionID, in)
@@ -73,4 +86,11 @@ func (s *Service) scheduleTool(ctx context.Context, identity auth.Identity, jc j
 		return nil, err
 	}
 	return sessionToolResult(map[string]any{"scheduleId": updated.ID, "schedule": updated})
+}
+
+// dismissedEnd says whether an event is the successful end of a Job its agent
+// dismissed: the one ending that tells nobody. A failure still does.
+func dismissedEnd(job domain.Job, event *backendv1.JobEvent) bool {
+	_, completed := event.GetBody().(*backendv1.JobEvent_JobCompleted)
+	return completed && job.Dismissed
 }

@@ -324,7 +324,7 @@ Restrained and exact; colour is earned by the action.
 
 ### Session Log (signature)
 - **Gutter:** a right-aligned mono 11px `HH:MM` column in muted ink, nudged to align with each row's first line. Agent prose leaves its gutter cell empty.
-- **Rows:** the agent's markdown unmarked on the page; the person's message as a raised-grey row with a hairline and an 8px radius, headed "You" (or a clock icon and "Schedule"), with "interrupted the job" in `warn-text` when it cut in; tool calls as one-line rows (chevron, terminal icon, tool name in ink mono, the command truncated in muted mono, +/− counts in ok/danger), expanding into a bordered surface panel; other events as a 14px icon and a 13px muted line, with job cost in tabular mono.
+- **Rows:** the agent's markdown unmarked on the page; the person's message as a raised-grey row with a hairline and an 8px radius, headed "You" (or a clock icon and "Schedule"), with "interrupted the job" in `warn-text` when it cut in; tool calls as one-line rows (chevron, terminal icon, tool name in ink mono, the command truncated in muted mono, +/− counts in ok/danger), expanding into a bordered surface panel; a scheduled run dismissed as having nothing to report as one muted line (chevron, bell-off icon, "Schedule · nothing to report") that opens onto the whole run; other events as a 14px icon and a 13px muted line, with job cost in tabular mono.
 - **Days:** a centered muted date between two hairlines; the current day floats as a full-round pill at the top while scrolling.
 
 ### Approval Card (signature)

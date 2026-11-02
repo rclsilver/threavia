@@ -8,7 +8,7 @@ import (
 )
 
 const scheduleColumns = `sc.id, sc.session_id, sess.project_id, p.owner_id, sc.cron, sc.timezone,
-	sc.message, sc.enabled, sc.next_run_at, sc.last_run_at, sc.last_outcome, sc.last_job_id,
+	sc.message, sc.enabled, sc.quiet, sc.next_run_at, sc.last_run_at, sc.last_outcome, sc.last_job_id,
 	sc.created_at, sc.updated_at`
 
 const scheduleFrom = `FROM schedules sc
@@ -18,11 +18,11 @@ const scheduleFrom = `FROM schedules sc
 // CreateSchedule inserts a Schedule.
 func (s *Store) CreateSchedule(ctx context.Context, schedule *domain.Schedule) error {
 	err := s.q.QueryRow(ctx, `
-		INSERT INTO schedules (id, session_id, cron, timezone, message, enabled, next_run_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO schedules (id, session_id, cron, timezone, message, enabled, quiet, next_run_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING created_at, updated_at`,
 		schedule.ID, schedule.SessionID, schedule.Cron, schedule.Timezone, schedule.Message,
-		schedule.Enabled, schedule.NextRunAt,
+		schedule.Enabled, schedule.Quiet, schedule.NextRunAt,
 	).Scan(&schedule.CreatedAt, &schedule.UpdatedAt)
 	return classify(err, "create schedule")
 }
@@ -63,9 +63,9 @@ func (s *Store) LockSchedule(ctx context.Context, ownerID domain.UserID, id doma
 func (s *Store) UpdateSchedule(ctx context.Context, schedule *domain.Schedule) error {
 	err := s.q.QueryRow(ctx, `
 		UPDATE schedules SET cron = $2, timezone = $3, message = $4, enabled = $5,
-		       next_run_at = $6, updated_at = now()
+		       quiet = $7, next_run_at = $6, updated_at = now()
 		WHERE id = $1 RETURNING updated_at`,
-		schedule.ID, schedule.Cron, schedule.Timezone, schedule.Message, schedule.Enabled, schedule.NextRunAt).Scan(&schedule.UpdatedAt)
+		schedule.ID, schedule.Cron, schedule.Timezone, schedule.Message, schedule.Enabled, schedule.NextRunAt, schedule.Quiet).Scan(&schedule.UpdatedAt)
 	return classify(err, "update schedule")
 }
 
@@ -131,7 +131,7 @@ func (s *Store) RecordScheduleRun(ctx context.Context, id domain.ScheduleID, at 
 func scanSchedule(row scanner) (domain.Schedule, error) {
 	var schedule domain.Schedule
 	err := row.Scan(&schedule.ID, &schedule.SessionID, &schedule.ProjectID, &schedule.OwnerID,
-		&schedule.Cron, &schedule.Timezone, &schedule.Message, &schedule.Enabled,
+		&schedule.Cron, &schedule.Timezone, &schedule.Message, &schedule.Enabled, &schedule.Quiet,
 		&schedule.NextRunAt, &schedule.LastRunAt, &schedule.LastOutcome, &schedule.LastJobID,
 		&schedule.CreatedAt, &schedule.UpdatedAt)
 	return schedule, classify(err, "read schedule")

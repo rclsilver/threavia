@@ -393,8 +393,9 @@ export class EventStream {
         }
         // Told as it happens, not as it is replayed: a reconnection resends
         // what was missed, and work that ended an hour ago is not news.
+        // A quiet schedule's run that found nothing to report is not news at all.
         if ((event.type === 'job.completed' || event.type === 'job.failed') && event.sessionId &&
-          Date.now() - Date.parse(event.timestamp) < 2 * 60_000) {
+          Date.now() - Date.parse(event.timestamp) < 2 * 60_000 && !payloadOf(event, 'job.completed')?.dismissed) {
           const completed = payloadOf(event, 'job.completed');
           const failed = payloadOf(event, 'job.failed');
           announceJobEnded({

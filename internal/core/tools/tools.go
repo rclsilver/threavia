@@ -25,6 +25,7 @@ const (
 	NameScheduleCreate           Name = "schedule_create"
 	NameScheduleUpdate           Name = "schedule_update"
 	NameScheduleDelete           Name = "schedule_delete"
+	NameScheduleDismiss          Name = "schedule_dismiss"
 	NameTaskCreate               Name = "task_create"
 	NameTaskSearch               Name = "task_search"
 	NameTaskUpdate               Name = "task_update"

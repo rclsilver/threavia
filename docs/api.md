@@ -218,3 +218,13 @@ itself, and a provider that counts differently fills what it can.
 A Job's duration is not in the payload, because the timeline already holds both
 ends: `job.started` and the terminal event carry timestamps, and asking the
 server for the difference would be slower and no more true.
+
+## A run with nothing to report
+
+A Schedule created or changed with `quiet: true` lets its agent end a run that
+found nothing worth saying through the `schedule_dismiss` Core Tool. That run's
+`job.completed` carries `dismissed: true`. A client folds the whole run, from
+the scheduled message to the end, into one line that opens onto it, and
+announces nothing. Core sends no push for it, leaves the Session read and does
+not move it up the session list. A run of the same Schedule that answers,
+fails or asks something reads and notifies as any other.

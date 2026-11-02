@@ -148,6 +148,9 @@ type JobEndedPayload struct {
 	// Usage is absent when the backend reported none. A Job whose accounting is
 	// unknown must not read as a Job that cost nothing.
 	Usage *UsagePayload `json:"usage,omitempty"`
+	// Dismissed is set on job.completed when the agent of a quiet schedule run
+	// had nothing to report: clients fold the run away and announce nothing.
+	Dismissed bool `json:"dismissed,omitempty"`
 }
 
 // UsagePayload is what a Job consumed, as the backend reported it.

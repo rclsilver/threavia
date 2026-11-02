@@ -550,6 +550,7 @@ func (s *Service) JobEvent(ctx context.Context, instanceID domain.BackendInstanc
 	if ended, ok := payload.(JobEndedPayload); ok {
 		ended.Model = jc.Job.Model
 		ended.Effort = jc.Job.Effort
+		ended.Dismissed = dismissedEnd(jc.Job, event)
 		history, err := s.store.JobProviderHistory(ctx, jobID)
 		if err != nil {
 			return 0, err
@@ -610,6 +611,13 @@ func (s *Service) JobEvent(ctx context.Context, instanceID domain.BackendInstanc
 		}
 		switch event.GetBody().(type) {
 		case *backendv1.JobEvent_JobCompleted, *backendv1.JobEvent_JobFailed, *backendv1.JobEvent_JobCancelled:
+			// A quiet run left the Session where it was when it was queued.
+			// One that ends with something to say moves it up now.
+			if jc.Job.Quiet && !dismissedEnd(jc.Job, event) {
+				if err := tx.TouchSession(ctx, jc.SessionID); err != nil {
+					return err
+				}
+			}
 			return s.finishReviewCorrection(ctx, tx, b, jc)
 		}
 		return nil

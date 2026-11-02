@@ -1,4 +1,4 @@
-import { Pause, Play, Send, Trash2 } from 'lucide-react';
+import { Bell, BellOff, Pause, Play, Send, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import {
@@ -11,6 +11,7 @@ import {
 import type { Schedule } from '@/api/types';
 import { ActionError } from '@/components/ui/action-error';
 import { Button } from '@/components/ui/button';
+import { CheckboxField } from '@/components/ui/checkbox';
 import { ConfirmAction } from '@/components/ui/confirm';
 import { Input, Textarea } from '@/components/ui/input';
 
@@ -58,6 +59,7 @@ export function SchedulesPanel({ sessionId }: { sessionId: string }) {
   const create = useCreateSchedule(sessionId);
   const [cron, setCron] = useState('0 8 * * *');
   const [message, setMessage] = useState('');
+  const [quiet, setQuiet] = useState(false);
 
   return (
     <div className="space-y-3">
@@ -70,7 +72,7 @@ export function SchedulesPanel({ sessionId }: { sessionId: string }) {
         onSubmit={(event) => {
           event.preventDefault();
           create.mutate(
-            { cron, message, timezone: LOCAL_ZONE },
+            { cron, message, timezone: LOCAL_ZONE, quiet },
             { onSuccess: () => setMessage('') },
           );
         }}
@@ -91,6 +93,9 @@ export function SchedulesPanel({ sessionId }: { sessionId: string }) {
           rows={2}
           placeholder="The message to send, as you would type it"
         />
+        <CheckboxField checked={quiet} onCheckedChange={setQuiet}>
+          Quiet: the agent may end a run that finds nothing to report without telling you
+        </CheckboxField>
         <ActionError error={create.error} />
         <Button type="submit" variant="secondary" size="sm" disabled={create.isPending || !message.trim()}>
           Add a schedule
@@ -129,6 +134,16 @@ function ScheduleRow({ sessionId, schedule }: { sessionId: string; schedule: Sch
           >
             {schedule.enabled ? <Pause /> : <Play />}
           </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            title={schedule.quiet ? 'Make every run answer' : 'Make it quiet'}
+            aria-pressed={schedule.quiet}
+            disabled={update.isPending}
+            onClick={() => update.mutate({ id: schedule.id, quiet: !schedule.quiet })}
+          >
+            {schedule.quiet ? <BellOff /> : <Bell />}
+          </Button>
           <ConfirmAction
             question="Delete?"
             confirm="Delete"
@@ -146,6 +161,7 @@ function ScheduleRow({ sessionId, schedule }: { sessionId: string; schedule: Sch
         {schedule.enabled && schedule.upcoming.length > 0
           ? `Next ${schedule.upcoming.map((at) => spoken(at, schedule.timezone)).join(', then ')} (${schedule.timezone})`
           : 'Paused.'}
+        {schedule.quiet && ' Quiet: a run with nothing to report tells nobody.'}
       </p>
       {schedule.lastRunAt && schedule.lastOutcome && (
         <p className="text-muted text-xs">

@@ -12,9 +12,11 @@ import { riskOf } from '../conversation/risk';
 import {
   describe,
   fileOfTool,
+  foldDismissed,
   foldFinished,
   formatInput,
   messageAuthor,
+  QUIET_LABEL,
   rowsOf,
   stepsLabel,
   stickyPrompt,
@@ -490,6 +492,8 @@ function signature(row: Row): string {
       return `d${row.label}`;
     case 'steps':
       return JSON.stringify([row.steps, row.open]);
+    case 'quiet':
+      return `q${row.open}`;
     case 'tool':
       return JSON.stringify([row.call, expanded.has(row.call.id)]);
     case 'event': {
@@ -501,7 +505,7 @@ function signature(row: Row): string {
 }
 
 function renderTimeline() {
-  rows = foldFinished(rowsOf(events), opened);
+  rows = foldFinished(foldDismissed(rowsOf(events), opened), opened);
   const keep = new Set<string>();
   let previous: HTMLElement | null = null;
   for (const row of rows) {
@@ -539,9 +543,15 @@ function renderRow(row: Row): HTMLElement {
     return h('div', { class: 'row day', role: 'listitem' }, h('span', { class: 'day-label' }, row.label));
   }
   const body =
-    row.kind === 'steps' ? stepsEntry(row) : row.kind === 'tool' ? toolEntry(row) : eventEntry(row.event, row.startedAt);
+    row.kind === 'steps'
+      ? stepsEntry(row)
+      : row.kind === 'quiet'
+        ? quietEntry(row)
+        : row.kind === 'tool'
+          ? toolEntry(row)
+          : eventEntry(row.event, row.startedAt);
   const agent = row.kind === 'event' && row.event.type === 'agent.message';
-  const at = row.kind === 'tool' ? row.call.at : row.kind === 'steps' ? row.at : row.event.timestamp;
+  const at = row.kind === 'tool' ? row.call.at : row.kind === 'steps' || row.kind === 'quiet' ? row.at : row.event.timestamp;
   // The log's spine: every row's time in one column, so the Session reads
   // down a timeline the way an operations log does. Agent prose keeps the
   // column empty and runs beside it.
@@ -562,6 +572,19 @@ function stepsEntry(row: Extract<Row, { kind: 'steps' }>): HTMLElement {
       h('span', {}, stepsLabel(row)),
       row.steps.failed > 0 && h('span', { class: 'failed' }, icon('warning'), `${row.steps.failed} failed`),
     ],
+    () => {
+      follower.holdStill();
+      if (!opened.delete(row.key)) opened.add(row.key);
+      persist();
+      renderTimeline();
+    },
+    { class: 'steps-button', 'aria-expanded': String(row.open) },
+  );
+}
+
+function quietEntry(row: Extract<Row, { kind: 'quiet' }>): HTMLElement {
+  return button(
+    [icon(row.open ? 'chevron-down' : 'chevron-right'), icon('bell-slash'), h('span', {}, QUIET_LABEL)],
     () => {
       follower.holdStill();
       if (!opened.delete(row.key)) opened.add(row.key);

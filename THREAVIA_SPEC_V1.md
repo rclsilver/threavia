@@ -185,6 +185,20 @@ atomically with an audit entry and a session event (`schedule.created`,
 `schedule.updated`, `schedule.deleted`); an agent change identifies its
 originating Job via `actorJobId` and audit `jobId`/channel `agent`.
 
+A Schedule may be `quiet`: a recurring check that speaks only when it has
+something to say. Each run of a quiet Schedule, "run now" included, makes a
+quiet Job, frozen at creation. Only a quiet Job is offered the
+`schedule_dismiss` Core Tool; any other Job calling it is refused, since a
+person asked it for an answer. When its agent calls it, the Job is marked
+dismissed, and its successful end carries `dismissed: true` in
+`job.completed`. A dismissed run sends no notification, does not wake a
+delegated Session's manager, does not make the Session unread or wake it from
+a snooze, and does not move it up the session list: a quiet Job leaves the
+Session's update time alone when it is queued and moves it only when it ends
+without being dismissed. Clients fold the whole run into one line. Questions,
+validations and a failure during a quiet run are as relevant as anywhere else;
+only the successful end of a dismissed run is silent.
+
 ### 3.6 Event
 
 Events form the observable timeline and realtime synchronization mechanism.
@@ -345,6 +359,7 @@ Default principle:
 - if Android initiated work and is now background/inactive, completion/input/validation push can be relevant
 - Voice can use Android as a companion client for visual/complex decisions
 - work initiated and actively followed on Web/VS Code should not make an unrelated Android device ring
+- a quiet schedule run its agent dismissed (section 3.5) ends without a notification on any device
 
 Full user-facing client/device management is post-V1 (list/revoke registered Web/Android/VS Code/Voice clients).
 

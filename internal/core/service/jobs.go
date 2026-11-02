@@ -277,7 +277,7 @@ func (s *Service) projectContext(ctx context.Context, store *postgres.Store, jc 
 		ProjectName:         jc.ProjectName,
 		ProjectDescription:  jc.ProjectDesc,
 		ProjectInstructions: jc.ProjectInstructions,
-		Tools:               coreToolSpecs(),
+		Tools:               coreToolSpecs(jc.Job.Quiet),
 	}
 	if jc.WorkingDirectoryPath != nil {
 		pc.WorkingDirectoryPath = *jc.WorkingDirectoryPath
@@ -391,9 +391,13 @@ func (s *Service) projectContext(ctx context.Context, store *postgres.Store, jc 
 }
 
 // coreToolSpecs renders the Core Tools for the wire. A backend never hardcodes
-// their names: it learns them here, at Job start.
-func coreToolSpecs() []*backendv1.CoreToolSpec {
+// their names: it learns them here, at Job start. Only a quiet Job is offered
+// schedule_dismiss.
+func coreToolSpecs(quiet bool) []*backendv1.CoreToolSpec {
 	specs := tools.Specs()
+	if quiet {
+		specs = append(specs, tools.DismissSpec())
+	}
 	out := make([]*backendv1.CoreToolSpec, 0, len(specs))
 	for _, spec := range specs {
 		encoded := &backendv1.CoreToolSpec{

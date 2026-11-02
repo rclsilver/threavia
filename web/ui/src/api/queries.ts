@@ -1096,6 +1096,7 @@ export interface ScheduleInput {
   timezone?: string;
   message?: string;
   enabled?: boolean;
+  quiet?: boolean;
 }
 
 export function useSchedules(sessionId: string) {

@@ -144,17 +144,22 @@ const activeJobStatus = `(SELECT j.status FROM jobs j JOIN runs r ON r.id = j.ru
 // ran on the way are not.
 const unreadTypes = `('agent.message', 'job.failed')`
 
+// unreadEvent says whether the event e is one a person comes back for. Nothing
+// a dismissed run said is: it ended with nothing to report.
+const unreadEvent = `(e.type IN ` + unreadTypes + ` AND NOT EXISTS (SELECT 1 FROM jobs dj
+		 WHERE dj.id = e.job_id AND dj.dismissed AND dj.status = 'COMPLETED'))`
+
 // sessionUnread says whether one of the unreadTypes came after the last event
 // the person was shown.
 const sessionUnread = `(EXISTS (SELECT 1 FROM events e
 		 WHERE e.session_id = s.id AND e.global_sequence > s.read_sequence
-		   AND e.type IN ` + unreadTypes + `) OR ` + sessionWoke + `)`
+		   AND ` + unreadEvent + `) OR ` + sessionWoke + `)`
 
 // snoozedNow says whether a Session is still out of the way: its time has not
 // come, or it waits for something new and nothing new came.
 const snoozedNow = `(coalesce(s.snoozed_until > now(), false) OR (s.snooze_until_change AND NOT EXISTS (
 		 SELECT 1 FROM events e WHERE e.session_id = s.id
-		   AND e.global_sequence > coalesce(s.snoozed_sequence, 0) AND e.type IN ` + unreadTypes + `)))`
+		   AND e.global_sequence > coalesce(s.snoozed_sequence, 0) AND ` + unreadEvent + `)))`
 
 // sessionWoke says that a snooze ended and the person has not opened the
 // Session since: it comes back as unread.
@@ -202,7 +207,7 @@ func (s *Store) MarkSessionRead(ctx context.Context, ownerID domain.UserID, id d
 		WHERE s.id = target.id AND s.read_sequence < target.sequence
 		RETURNING `+sessionColumns+`, EXISTS (SELECT 1 FROM events e
 			WHERE e.session_id = s.id AND e.global_sequence > target.before
-			  AND e.global_sequence <= target.sequence AND e.type IN `+unreadTypes+`)`,
+			  AND e.global_sequence <= target.sequence AND `+unreadEvent+`)`,
 		id, ownerID, sequence), &cleared)
 	if !errors.Is(err, ErrNotFound) {
 		return session, cleared, err

@@ -81,9 +81,9 @@ export interface EventPayloads {
   'skill.changed': { skillId: string; name: string; action: 'made_global' | 'enabled' | 'disabled'; previousProjectId?: string; projectName?: string };
   'user.message': { text: string; attachments?: { artifactId: string; filename: string; mimeType: string; size: number }[]; delivery?: 'NOW' | 'NEXT'; monitorId?: string; scheduleId?: string; actorJobId?: string; actorId?: string };
   'schedule.skipped': { scheduleId: string; outcome: string; reason: string; due: string };
-  'schedule.created': { scheduleId: string; cron: string; timezone: string; message: string; enabled: boolean; actorJobId?: string };
-  'schedule.updated': { scheduleId: string; cron: string; timezone: string; message: string; enabled: boolean; actorJobId?: string };
-  'schedule.deleted': { scheduleId: string; cron: string; timezone: string; message: string; enabled: boolean; actorJobId?: string };
+  'schedule.created': { scheduleId: string; cron: string; timezone: string; message: string; enabled: boolean; quiet?: boolean; actorJobId?: string };
+  'schedule.updated': { scheduleId: string; cron: string; timezone: string; message: string; enabled: boolean; quiet?: boolean; actorJobId?: string };
+  'schedule.deleted': { scheduleId: string; cron: string; timezone: string; message: string; enabled: boolean; quiet?: boolean; actorJobId?: string };
   'agent.message': { text: string };
   'tool.started': { toolCallId: string; name: string; input?: Record<string, unknown> };
   // The backend keeps a bounded excerpt of the output and marks it with an
@@ -93,7 +93,9 @@ export interface EventPayloads {
   'job.started': { model?: string; effort?: string };
   'job.waiting_backend': { reason: string; message: string; retryAt?: string; usage?: Usage };
   'session.model_changed': { model: string; effort: string };
-  'job.completed': { summary?: string; usage?: Usage; model?: string; effort?: string };
+  // dismissed: a quiet schedule's run ended with nothing to report. It is
+  // folded away and announced nowhere.
+  'job.completed': { summary?: string; usage?: Usage; model?: string; effort?: string; dismissed?: boolean };
   'job.failed': { error?: string; usage?: Usage; model?: string; effort?: string };
   'validation.resolved': { validationId: string; approved: boolean; note?: string; title?: string; actorJobId?: string };
   'user_input.resolved': { requestId: string; value: string; actorJobId?: string };

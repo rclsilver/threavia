@@ -1,0 +1,6 @@
+ALTER TABLE jobs
+  DROP CONSTRAINT IF EXISTS jobs_dismissed_quiet,
+  DROP COLUMN IF EXISTS dismissed,
+  DROP COLUMN IF EXISTS quiet;
+
+ALTER TABLE schedules DROP COLUMN IF EXISTS quiet;

@@ -308,7 +308,8 @@ body.full-width { --reading: 100%; }
   padding-top: 1px;
 }
 .row.tool .gutter,
-.row.steps .gutter {
+.row.steps .gutter,
+.row.quiet .gutter {
   padding-top: 3px;
 }
 .row.user-message .gutter {

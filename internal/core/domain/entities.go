@@ -104,6 +104,11 @@ type Job struct {
 	UpdatedAt     time.Time    `json:"updatedAt"`
 	StartedAt     *time.Time   `json:"startedAt,omitempty"`
 	EndedAt       *time.Time   `json:"endedAt,omitempty"`
+	// Quiet marks a run of a quiet Schedule, which its agent may dismiss.
+	// Dismissed says it did: there was nothing to report, so the end of the
+	// Job notifies nobody.
+	Quiet     bool `json:"-"`
+	Dismissed bool `json:"-"`
 }
 
 // BackendWait describes a stopped provider attempt that Core can retry.

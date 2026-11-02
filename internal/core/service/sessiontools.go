@@ -37,6 +37,9 @@ func (s *Service) wakeSessionManager(ctx context.Context, jc postgres.JobContext
 		reason = "needs a permission relayed to the person"
 		keyPart = "validation:" + body.ValidationRequested.GetRequestId()
 	case *backendv1.JobEvent_JobCompleted, *backendv1.JobEvent_JobFailed, *backendv1.JobEvent_JobCancelled:
+		if dismissedEnd(jc.Job, event) {
+			return // Nothing to tell the person, so nothing to relay either.
+		}
 		reason = "has finished a job"
 	default:
 		return

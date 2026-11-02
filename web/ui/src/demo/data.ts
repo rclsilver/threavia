@@ -398,7 +398,7 @@ function backups(): SessionState {
   t.push('user.message', 60 * 9, { text: 'Every morning: check that last night’s backups ran, and tell me only if something is wrong.' }, j1);
   t.push('job.started', 60 * 9 - 0.1, {}, j1);
   t.tool(j1, 60 * 9 - 1, 'Bash', { command: 'restic -r /mnt/backup snapshots --latest 3' }, 'ID        Time                 Host   Paths\na91f2c3e  2026-10-07 02:00:12  nas    /srv\n0c7d1b44  2026-10-08 02:00:09  nas    /srv');
-  t.push('schedule.created', 60 * 9 - 1.5, { scheduleId: id('d0000008', 1), cron: '30 7 * * *', timezone: 'Europe/Paris', message: 'Check last night’s backups.', enabled: true, actorJobId: j1 }, j1);
+  t.push('schedule.created', 60 * 9 - 1.5, { scheduleId: id('d0000008', 1), cron: '30 7 * * *', timezone: 'Europe/Paris', message: 'Check last night’s backups.', enabled: true, quiet: true, actorJobId: j1 }, j1);
   t.push('agent.message', 60 * 9 - 2, { text: 'Last night’s snapshot is there and complete. I will check again tomorrow at 07:30.' }, j1);
   t.push('job.completed', 60 * 9 - 2, { summary: 'OK', usage: { costUsd: 0.04, inputTokens: 10, outputTokens: 30, cacheReadTokens: 40000, cacheWriteTokens: 500 } }, j1);
   t.job(j1, 'COMPLETED', 60 * 9, 60 * 9 - 2);
@@ -714,6 +714,7 @@ export const schedules = [
     timezone: 'Europe/Paris',
     message: 'Check last night’s backups.',
     enabled: true,
+    quiet: true,
     nextRunAt: nextDaily(7, 30, 1)[0],
     lastRunAt: at(31),
     lastOutcome: 'SENT',
@@ -729,6 +730,7 @@ export const schedules = [
     timezone: 'Europe/Paris',
     message: 'Summarise the week’s backup sizes and growth.',
     enabled: false,
+    quiet: false,
     lastRunAt: at(60 * 24 * 3),
     lastOutcome: 'SKIPPED_BUSY',
     upcoming: [],
@@ -759,7 +761,7 @@ export const auditEntries = [
   audit(41, 'skill.installed', 60 * 24, { projectId: IDS.homelab, subjectId: skills[0].id, channel: 'web', detail: { skillId: skills[0].id, name: skills[0].name, installedRevision: skills[0].installedRevision, replaced: false } }),
   audit(42, 'session.created', 70, { projectId: IDS.homelab, sessionId: IDS.ingress, subjectId: IDS.ingress, channel: 'web', detail: { title: 'Fix the flaky deploy of the ingress controller', backendInstanceId: IDS.laptop } }),
   audit(43, 'session.deleted', 60 * 24 * 2, { projectId: IDS.homelab, sessionId: id('d0000003', 90), subjectId: id('d0000003', 90), channel: 'web', detail: { sessionId: id('d0000003', 90), title: 'Inspect the old staging cluster', artifactsDeleted: false } }),
-  audit(30, 'schedule.created', 60 * 9 - 1.5, { actorId: 'agent', channel: 'agent', projectId: IDS.homelab, sessionId: IDS.backups, jobId: id('d0000006', 4), subjectId: id('d0000008', 1), detail: { scheduleId: id('d0000008', 1), cron: '30 7 * * *', timezone: 'Europe/Paris', message: 'Check last night’s backups.', enabled: true, actorJobId: id('d0000006', 4) } }),
+  audit(30, 'schedule.created', 60 * 9 - 1.5, { actorId: 'agent', channel: 'agent', projectId: IDS.homelab, sessionId: IDS.backups, jobId: id('d0000006', 4), subjectId: id('d0000008', 1), detail: { scheduleId: id('d0000008', 1), cron: '30 7 * * *', timezone: 'Europe/Paris', message: 'Check last night’s backups.', enabled: true, quiet: true, actorJobId: id('d0000006', 4) } }),
   audit(21, 'session.model_changed', 1, { projectId: IDS.homelab, sessionId: IDS.certManager, subjectId: IDS.certManager, channel: 'web', detail: { model: 'opus', effort: 'high' } }),
   audit(1, 'validation.resolved', 22.5, { projectId: IDS.homelab, sessionId: IDS.ingress, channel: 'mobile', detail: { approved: true, title: 'Bash: git push origin main', note: '' } }),
   audit(2, 'validation.resolved', 63.5, {

@@ -83,6 +83,12 @@ describe('what an event changes', () => {
     expect(failed).toContainEqual({ kind: 'jobEnded', sessionId: 's1', failed: true, text: 'boom' });
   });
 
+  it('announces nothing for a quiet run that found nothing to report, but still refreshes', () => {
+    const dismissed = effectsOf(event('job.completed', { payload: { summary: 'No change', dismissed: true } }), at);
+    expect(kinds(dismissed)).not.toContain('jobEnded');
+    expect(kinds(dismissed)).toContain('sessions');
+  });
+
   it('ignores what no view shows', () => {
     expect(effectsOf(event('agent.message'), at)).toEqual([]);
   });
