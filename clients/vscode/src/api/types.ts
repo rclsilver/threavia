@@ -10,6 +10,7 @@ type Schemas = components['schemas'];
 export type Artifact = Schemas['Artifact'];
 export type Project = Schemas['Project'];
 export type Session = Schemas['Session'];
+export type SessionMoveKnowledge = Schemas['SessionMoveKnowledge'];
 export type Job = Schemas['Job'];
 export type JobStatus = Schemas['JobStatus'];
 export type Event = Schemas['Event'];
@@ -102,7 +103,7 @@ export interface EventPayloads {
   'validation.resolved': { validationId: string; approved: boolean; note?: string; title?: string; actorJobId?: string };
   'user_input.resolved': { requestId: string; value: string; actorJobId?: string };
   'session.pinned': { pinned: boolean };
-  'session.project_moved': { fromProjectId: string; toProjectId: string; workingDirectoryCleared?: boolean };
+  'session.project_moved': { fromProjectId: string; toProjectId: string; workingDirectoryCleared?: boolean; knowledge?: SessionMoveKnowledge };
   'session.read': { readSequence: number };
   'artifact.created': { artifactId: string; filename: string; mimeType: string; size: number; title?: string };
   'workspace.changed': {

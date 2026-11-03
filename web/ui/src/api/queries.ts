@@ -29,6 +29,7 @@ import type {
   WorkspaceFiles,
   Schedule,
   Session,
+  SessionMoveKnowledge,
   Skill,
   SkillFile,
   SkillSource,
@@ -546,17 +547,23 @@ export function useSnoozeSession() {
     },
   });
 }
-/** Re-files a Session, with its history and files, under another Project. */
-export function useMoveSession() {
+
+/**
+ * Re-files a Session under another Project. The answer says which tasks and
+ * decisions stayed behind, linked to one that did not move; the lists follow
+ * from the session.project_moved event, and this one re-reads them at once.
+ */
+export function useMoveSessionToProject() {
   const queries = useQueryClient();
   return useMutation({
     mutationFn: ({ sessionId, projectId }: { sessionId: string; projectId: string }) =>
-      api.patch<Session>(`/api/v1/sessions/${sessionId}`, { projectId }),
+      api.post<{ session: Session; knowledge: SessionMoveKnowledge }>(`/api/v1/sessions/${sessionId}/move`, { projectId }),
     onSettled: (_data, _error, { sessionId }) => {
-      void queries.invalidateQueries({ queryKey: ['sessions'] });
-      void queries.invalidateQueries({ queryKey: ['projects'] });
+      for (const queryKey of [['sessions'], ['projects'], ['tasks'], ['decisions'], ['artifacts'], ['directories'], keys.attention()]) {
+        void queries.invalidateQueries({ queryKey });
+      }
       void queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
-      void queries.invalidateQueries({ queryKey: keys.attention() });
+      void queries.invalidateQueries({ queryKey: keys.repository(sessionId) });
     },
   });
 }

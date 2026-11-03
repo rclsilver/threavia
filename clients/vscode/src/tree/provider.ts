@@ -139,7 +139,15 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Tr
     for (const item of dragged) {
       if (item.coreId !== target.coreId || item.projectId === projectId) continue;
       try {
-        await core.client.moveSession(item.sessionId, projectId);
+        const { session, knowledge } = await core.client.moveSession(item.sessionId, projectId);
+        // A task or decision linked to work that did not move keeps its
+        // Project, which nothing else would tell.
+        const stayed = knowledge.leftTasks.length + knowledge.leftDecisions.length;
+        if (stayed > 0) {
+          void vscode.window.showInformationMessage(
+            `“${titleOf(session)}” moved; ${stayed} task${stayed === 1 ? '' : 's'} or decision${stayed === 1 ? '' : 's'} stayed in the old project, linked to work that did not move.`,
+          );
+        }
       } catch (error) {
         void vscode.window.showErrorMessage(`Session not moved: ${error instanceof Error ? error.message : String(error)}`);
       }

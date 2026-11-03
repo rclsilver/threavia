@@ -24,6 +24,7 @@ import type {
   BackendSkill,
   Run,
   Session,
+  SessionMoveKnowledge,
   Skill,
   SkillFile,
   SkillSource,
@@ -303,9 +304,12 @@ export class CoreClient {
     return this.patch<Session>(`/api/v1/sessions/${sessionId}`, { pinned });
   }
 
-  /** Re-files the Session, with its history and files, under another Project. */
+  /**
+   * Re-files the Session under another Project. The tasks and decisions its
+   * agents created follow it, except those linked to one that stays.
+   */
   moveSession(sessionId: string, projectId: string) {
-    return this.patch<Session>(`/api/v1/sessions/${sessionId}`, { projectId });
+    return this.post<{ session: Session; knowledge: SessionMoveKnowledge }>(`/api/v1/sessions/${sessionId}/move`, { projectId });
   }
 
   /** Records that the person was shown the Session up to this event. */

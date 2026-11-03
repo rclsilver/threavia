@@ -49,8 +49,8 @@ func sessionSpecs() []Spec {
 			RequiresValidation: true,
 			Description:        "Re-file a session under another of the person's projects, after the person validates, for example when it was started in the wrong one. Its history and files go with it; a working directory that belongs to the old project is detached, and the tasks and decisions its agents created follow it. Refused while the session has unfinished jobs or the destination is archived. Find project ids with session_list scope all.",
 			InputSchema: object(map[string]any{
-				"sessionId": str("A session owned by the user."),
-				"projectId": str("The destination project."),
+				"sessionId":     str("A session owned by the user."),
+				"projectId":     str("The destination project."),
 				"moveKnowledge": map[string]any{"type": "boolean", "description": "Default true: the tasks and decisions agents created from the session follow it, except those linked to ones that stay. The result lists what moved and what stayed."},
 			}, "sessionId", "projectId"),
 		},

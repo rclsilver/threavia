@@ -111,8 +111,22 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
     case 'session.pinned':
     case 'session.snoozed':
     case 'session.model_changed':
+      return [{ kind: 'sessions' }, ...snapshot(sessionId)];
+
+    // Re-filed under another Project: both Projects' lists change, with what
+    // followed it, and its directory may have been detached.
     case 'session.project_moved':
-      return [{ kind: 'sessions' }, { kind: 'attention' }, ...snapshot(sessionId)];
+      return [
+        { kind: 'sessions' },
+        { kind: 'projects' },
+        { kind: 'attention' },
+        { kind: 'tasks' },
+        { kind: 'decisions' },
+        { kind: 'artifacts' },
+        { kind: 'directories' },
+        ...snapshot(sessionId),
+        ...repository(sessionId),
+      ];
 
     // Read on one client: the lists, Projects included, stop pointing at it.
     case 'session.read':

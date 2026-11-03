@@ -9,6 +9,7 @@ type Schemas = components['schemas'];
 
 export type Project = Schemas['Project'];
 export type Session = Schemas['Session'];
+export type SessionMoveKnowledge = Schemas['SessionMoveKnowledge'];
 export type Run = Schemas['Run'];
 export type Job = Schemas['Job'];
 export type JobStatus = Schemas['JobStatus'];
@@ -93,6 +94,7 @@ export interface EventPayloads {
   'job.started': { model?: string; effort?: string };
   'job.waiting_backend': { reason: string; message: string; retryAt?: string; usage?: Usage };
   'session.model_changed': { model: string; effort: string };
+  'session.project_moved': { fromProjectId: string; toProjectId: string; workingDirectoryCleared?: boolean; knowledge?: SessionMoveKnowledge };
   // dismissed: a quiet schedule's run ended with nothing to report. It is
   // folded away and announced nowhere.
   'job.completed': { summary?: string; usage?: Usage; model?: string; effort?: string; dismissed?: boolean };

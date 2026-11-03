@@ -1085,11 +1085,6 @@ paths:
         persisted for the next Job; the running process retains its cwd. It
         emits `working_directory.changed`, and clients refresh the Session and
         repository state.
-        `projectId` re-files the Session, with its history and files, under
-        another active Project of the user. A working directory of the old
-        Project is detached; a global one is kept. It is refused (409) while a Job
-        is unfinished, and announced by `session.project_moved`,
-        `{fromProjectId, toProjectId, workingDirectoryCleared?}`.
         Model and effort are persisted per
         Session and apply at the next Job launch; running Jobs keep their values.
         An unsupported model or effort is refused. Model changes cannot be
@@ -1116,8 +1111,6 @@ paths:
                 backendInstanceId: { $ref: "#/components/schemas/UUID" }
                 expectedRunId: { $ref: "#/components/schemas/UUID" }
                 pinned: { type: boolean }
-                projectId: { $ref: "#/components/schemas/UUID" }
-                moveKnowledge: { type: boolean, description: 'With projectId. Default true: tasks and decisions agents created from the Session follow it, except those linked to ones that stay.' }
                 model: { type: string, maxLength: 200, description: 'Empty resets to the backend default; omitted leaves it unchanged.' }
                 effort: { type: string, maxLength: 32, description: 'Empty resets to the backend default; omitted leaves it unchanged.' }
       responses:
@@ -1524,6 +1517,54 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
         "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/sessions/{sessionId}/move:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    post:
+      tags: [sessions]
+      summary: Move a Session to another Project
+      description: |
+        Re-files the Session, with its history, questions, permissions and
+        files, under another active Project of the user. A working directory
+        of the old Project is detached; a global one is kept. It is refused
+        (409) while a Job of the Session is unfinished.
+
+        Unless `moveKnowledge` is false, the tasks and decisions agents created
+        from the Session's Jobs follow it, except those linked (dependency or
+        supersede) to one that stays: a link never joins two Projects. The
+        answer lists what moved and what stayed. Tasks and decisions a person
+        recorded belong to no Session and stay.
+
+        Announced by `session.project_moved`, `{fromProjectId, toProjectId,
+        workingDirectoryCleared?, knowledge}`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectId]
+              properties:
+                projectId: { $ref: "#/components/schemas/UUID" }
+                moveKnowledge: { type: boolean, default: true, description: 'Take along the tasks and decisions agents created from the Session.' }
+      responses:
+        "200":
+          description: The moved Session, and what followed it
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, knowledge]
+                properties:
+                  session: { $ref: "#/components/schemas/Session" }
+                  knowledge: { $ref: "#/components/schemas/SessionMoveKnowledge" }
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
 
   /api/v1/sessions/{sessionId}/archive:
@@ -3146,6 +3187,16 @@ components:
             can point at a Project it is not showing. Set on lists only, and
             absent when there is none.
 
+    SessionMoveKnowledge:
+      type: object
+      description: The tasks and decisions that followed a moved Session, and those linked to one that stayed.
+      required: [movedTasks, leftTasks, movedDecisions, leftDecisions]
+      properties:
+        movedTasks: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+        leftTasks: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+        movedDecisions: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+        leftDecisions: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+
     Session:
       type: object
       required: [id, projectId, title, status, createdAt, updatedAt, readSequence]
@@ -3327,6 +3378,10 @@ components:
               activation, owner-scoped without a project id for a global Skill.
             - `session.snoozed`: `{ snoozed, until?, untilChange? }`, the Session
               was put out of the way, or brought back.
+            - `session.project_moved`: `{ fromProjectId, toProjectId,
+              workingDirectoryCleared?, knowledge }`, the Session was re-filed
+              under another Project; knowledge is a SessionMoveKnowledge.
+              Refresh session, project, task, decision and artifact lists.
             - `session.read`: `{ readSequence }`, the person was shown the
               Session up to there on one of their clients. Refresh session and
               project lists.

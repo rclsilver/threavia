@@ -816,6 +816,21 @@ const routes: [string, RegExp, Handler][] = [
     emitLifecycle('session.snoozed', text(session.projectId), { snoozed: true, until: session.snoozedUntil, untilChange: session.snoozeUntilChange }, m[1]);
     return session;
   }],
+  // The demo records no task or decision as an agent's, so none follows.
+  ['POST', /^\/api\/v1\/sessions\/([^/]+)\/move$/, (m, body) => {
+    const session = sessionOf(m[1]);
+    const target = state.projects.find((project) => project.id === body.projectId);
+    if (!target) throw notFound('This project');
+    if (target.status !== 'ACTIVE') throw new ApiError(400, 'invalid', 'The destination project is archived');
+    const knowledge = { movedTasks: [], leftTasks: [], movedDecisions: [], leftDecisions: [] };
+    if (session.projectId !== target.id) {
+      const from = session.projectId;
+      session.projectId = target.id;
+      record('session.project_moved', { projectId: target.id, sessionId: m[1], subjectId: m[1], detail: { fromProjectId: from, toProjectId: target.id, knowledge } });
+      emitLifecycle('session.project_moved', text(target.id), { fromProjectId: from, toProjectId: target.id, knowledge }, m[1]);
+    }
+    return { session, knowledge };
+  }],
   ['DELETE', /^\/api\/v1\/sessions\/([^/]+)\/snooze$/, (m) => {
     const session = sessionOf(m[1]);
     delete session.snoozedUntil;

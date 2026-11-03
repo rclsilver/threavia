@@ -329,6 +329,17 @@ export class EventStream {
         break;
       }
 
+      // Re-filed under another Project: the lists of both Projects change, and
+      // with them what followed it — tasks, decisions, files — and its
+      // directory, which the move may have detached.
+      case 'session.project_moved':
+        for (const queryKey of [['sessions'], ['projects'], ['tasks'], ['decisions'], ['artifacts'], ['directories'], keys.attention(), keys.audit()]) {
+          void this.invalidate({ queryKey });
+        }
+        void this.invalidate({ queryKey: keys.snapshot(event.sessionId ?? '') });
+        void this.invalidate({ queryKey: keys.repository(event.sessionId ?? '') });
+        break;
+
       // Read on one client: it stops standing out on the others.
       case 'session.read':
         void this.invalidate({ queryKey: ['sessions'] });
@@ -342,11 +353,6 @@ export class EventStream {
       case 'session.pinned':
       case 'session.snoozed':
       case 'session.model_changed':
-      case 'session.project_moved':
-        if (event.type === 'session.project_moved') {
-          void this.invalidate({ queryKey: ['projects'] });
-          void this.invalidate({ queryKey: keys.attention() });
-        }
         if (['session.created', 'session.archived', 'session.restored'].includes(event.type)) {
           void this.invalidate({ queryKey: keys.audit() });
         }

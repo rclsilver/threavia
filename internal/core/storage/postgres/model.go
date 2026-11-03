@@ -21,8 +21,8 @@ func (s *Store) SetSessionManager(ctx context.Context, owner domain.UserID, id d
 	return scanSession(s.q.QueryRow(ctx, `UPDATE sessions s SET manager_session_id=$3, updated_at=now() FROM projects p WHERE s.project_id=p.id AND s.id=$1 AND p.owner_id=$2 RETURNING `+sessionColumns, id, owner, manager))
 }
 
-// MoveSessionToProject re-files a Session, with its timeline and files, under
-// another Project of the same owner. The working directory is replaced by dir:
+// MoveSessionToProject re-files a Session, with its timeline, requests and
+// files, under another Project of the same owner. The working directory is replaced by dir:
 // a directory of the old Project does not exist in the new one. Call inside
 // WithTx, with the Session locked.
 func (s *Store) MoveSessionToProject(ctx context.Context, owner domain.UserID, id domain.SessionID, project domain.ProjectID, dir *string) (domain.Session, error) {
@@ -34,8 +34,12 @@ func (s *Store) MoveSessionToProject(ctx context.Context, owner domain.UserID, i
 	if err != nil {
 		return session, err
 	}
-	if _, err := s.q.Exec(ctx, `UPDATE events SET project_id=$2 WHERE session_id=$1`, id, project); err != nil {
-		return session, classify(err, "move session events")
+	// Each of these carries the Project too, and deleting the old one would
+	// otherwise take the moved Session's history with it.
+	for _, table := range []string{"events", "validation_requests", "user_input_requests"} {
+		if _, err := s.q.Exec(ctx, `UPDATE `+table+` SET project_id=$2 WHERE session_id=$1`, id, project); err != nil {
+			return session, classify(err, "move session "+table)
+		}
 	}
 	_, err = s.q.Exec(ctx, `UPDATE artifacts SET project_id=$2 WHERE session_id=$1 AND project_id IS NOT NULL`, id, project)
 	return session, classify(err, "move session artifacts")

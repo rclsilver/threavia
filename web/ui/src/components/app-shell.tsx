@@ -43,7 +43,7 @@ import {
   useBackends,
   useCreateProject,
   useMe,
-  useMoveSession,
+  useMoveSessionToProject,
   usePinSession,
   usePinnedSessions,
   useProjects,
@@ -54,7 +54,7 @@ import {
   useUpdateProject,
   useDeleteProject,
 } from '@/api/queries';
-import type { Project, Session } from '@/api/types';
+import type { Project, Session, SessionMoveKnowledge } from '@/api/types';
 import { DEMO } from '@/demo/mode';
 import { SelectedProject } from '@/use-project';
 import { useStream } from '@/use-stream';
@@ -465,7 +465,7 @@ function SessionList({
   // shows the Projects as places to drop it.
   const [dragged, setDragged] = useState<Session | undefined>();
   const [over, setOver] = useState<string | undefined>();
-  const move = useMoveSession();
+  const move = useMoveSessionToProject();
   // A snooze whose time came moves its Session back without waiting for news.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -532,7 +532,11 @@ function SessionList({
           {projects.filter((candidate) => candidate.id !== dragged.projectId).map((candidate) => (
             <li
               key={candidate.id}
-              onDragOver={(event) => { event.preventDefault(); setOver(candidate.id); }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'move';
+                setOver(candidate.id);
+              }}
               onDragLeave={() => setOver((id) => (id === candidate.id ? undefined : id))}
               onDrop={(event) => {
                 event.preventDefault();
@@ -549,6 +553,7 @@ function SessionList({
         </ul>
       )}
       {move.error && <ActionError error={move.error} />}
+      {move.data && <MoveNotice moved={move.data} projects={projects} onDismiss={move.reset} />}
       <div className="-mx-1 space-y-3 px-1 md:min-h-0 md:flex-1 md:overflow-y-auto">
         {total === 0 && (
           <p className="text-muted px-2 text-sm">
@@ -590,7 +595,10 @@ function SessionList({
                         onDragStart={(event) => {
                           event.dataTransfer.setData('text/plain', session.title || 'Untitled session');
                           event.dataTransfer.effectAllowed = 'move';
-                          setDragged(session);
+                          move.reset();
+                          // After the drag has begun: changing the layout
+                          // during dragstart makes Chrome cancel the drag.
+                          window.setTimeout(() => setDragged(session), 0);
                         }}
                         onDragEnd={() => { setDragged(undefined); setOver(undefined); }}
                         className={cn(
@@ -635,6 +643,37 @@ function SessionList({
         })}
       </div>
     </>
+  );
+}
+
+/**
+ * Where a dropped Session went, and what stayed behind: a task or decision
+ * linked to work that did not move keeps its Project, and the person would
+ * not otherwise know.
+ */
+function MoveNotice({ moved, projects, onDismiss }: { moved: { session: Session; knowledge: SessionMoveKnowledge }; projects: Project[]; onDismiss: () => void }) {
+  const { session, knowledge } = moved;
+  const count = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+  const followed = [
+    knowledge.movedTasks.length > 0 && count(knowledge.movedTasks.length, 'task'),
+    knowledge.movedDecisions.length > 0 && count(knowledge.movedDecisions.length, 'decision'),
+  ].filter(Boolean);
+  const stayed = [
+    knowledge.leftTasks.length > 0 && count(knowledge.leftTasks.length, 'task'),
+    knowledge.leftDecisions.length > 0 && count(knowledge.leftDecisions.length, 'decision'),
+  ].filter(Boolean);
+  const name = projects.find((project) => project.id === session.projectId)?.name ?? 'the other project';
+  return (
+    <div role="status" className="border-border bg-surface-2 flex items-start gap-2 rounded-md border px-2 py-1.5 text-xs">
+      <p className="text-muted min-w-0 flex-1">
+        Moved “{session.title || 'Untitled session'}” to {name}
+        {followed.length > 0 && <>, with {followed.join(' and ')}</>}.
+        {stayed.length > 0 && <> {stayed.join(' and ')} stayed behind, linked to work that did not move.</>}
+      </p>
+      <button type="button" onClick={onDismiss} aria-label="Dismiss" className="text-muted hover:text-text shrink-0">
+        <X className="size-3.5" />
+      </button>
+    </div>
   );
 }
 

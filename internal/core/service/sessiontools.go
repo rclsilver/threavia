@@ -163,11 +163,11 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 		if err != nil {
 			return nil, err
 		}
-		moved, summary, err := s.MoveSessionToProject(ctx, identity, session.ID, domain.ProjectID(text(input, "projectId")), withKnowledge)
+		moved, err := s.MoveSessionToProject(ctx, identity, session.ID, domain.ProjectID(text(input, "projectId")), withKnowledge)
 		if err != nil {
 			return nil, err
 		}
-		return sessionToolResult(map[string]any{"session": moved, "knowledge": summary})
+		return sessionToolResult(map[string]any{"session": moved.Session, "knowledge": moved.Knowledge})
 	}
 	if name != tools.NameSessionRead && name != tools.NameSessionSend {
 		if _, err := s.managedSession(ctx, identity, jc, string(session.ID)); err != nil {

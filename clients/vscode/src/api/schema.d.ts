@@ -2252,11 +2252,6 @@ export interface paths {
          *     persisted for the next Job; the running process retains its cwd. It
          *     emits `working_directory.changed`, and clients refresh the Session and
          *     repository state.
-         *     `projectId` re-files the Session, with its history and files, under
-         *     another active Project of the user. A working directory of the old
-         *     Project is detached; a global one is kept. It is refused (409) while a Job
-         *     is unfinished, and announced by `session.project_moved`,
-         *     `{fromProjectId, toProjectId, workingDirectoryCleared?}`.
          *     Model and effort are persisted per
          *     Session and apply at the next Job launch; running Jobs keep their values.
          *     An unsupported model or effort is refused. Model changes cannot be
@@ -2299,9 +2294,6 @@ export interface paths {
                         backendInstanceId?: components["schemas"]["UUID"];
                         expectedRunId?: components["schemas"]["UUID"];
                         pinned?: boolean;
-                        projectId?: components["schemas"]["UUID"];
-                        /** @description With projectId. Default true: tasks and decisions agents created from the Session follow it, except those linked to ones that stay. */
-                        moveKnowledge?: boolean;
                         /** @description Empty resets to the backend default; omitted leaves it unchanged. */
                         model?: string;
                         /** @description Empty resets to the backend default; omitted leaves it unchanged. */
@@ -2977,6 +2969,79 @@ export interface paths {
                 };
                 400: components["responses"]["Error"];
                 404: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sessions/{sessionId}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["SessionID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a Session to another Project
+         * @description Re-files the Session, with its history, questions, permissions and
+         *     files, under another active Project of the user. A working directory
+         *     of the old Project is detached; a global one is kept. It is refused
+         *     (409) while a Job of the Session is unfinished.
+         *
+         *     Unless `moveKnowledge` is false, the tasks and decisions agents created
+         *     from the Session's Jobs follow it, except those linked (dependency or
+         *     supersede) to one that stays: a link never joins two Projects. The
+         *     answer lists what moved and what stayed. Tasks and decisions a person
+         *     recorded belong to no Session and stay.
+         *
+         *     Announced by `session.project_moved`, `{fromProjectId, toProjectId,
+         *     workingDirectoryCleared?, knowledge}`.
+         *
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: components["parameters"]["SessionID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        projectId: components["schemas"]["UUID"];
+                        /**
+                         * @description Take along the tasks and decisions agents created from the Session.
+                         * @default true
+                         */
+                        moveKnowledge?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description The moved Session, and what followed it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            session: components["schemas"]["Session"];
+                            knowledge: components["schemas"]["SessionMoveKnowledge"];
+                        };
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+                409: components["responses"]["Error"];
             };
         };
         delete?: never;
@@ -5672,6 +5737,13 @@ export interface components {
              *      */
             unreadSessions?: number;
         };
+        /** @description The tasks and decisions that followed a moved Session, and those linked to one that stayed. */
+        SessionMoveKnowledge: {
+            movedTasks: components["schemas"]["UUID"][];
+            leftTasks: components["schemas"]["UUID"][];
+            movedDecisions: components["schemas"]["UUID"][];
+            leftDecisions: components["schemas"]["UUID"][];
+        };
         Session: {
             id: components["schemas"]["UUID"];
             projectId: components["schemas"]["UUID"];
@@ -5864,6 +5936,10 @@ export interface components {
              *       activation, owner-scoped without a project id for a global Skill.
              *     - `session.snoozed`: `{ snoozed, until?, untilChange? }`, the Session
              *       was put out of the way, or brought back.
+             *     - `session.project_moved`: `{ fromProjectId, toProjectId,
+             *       workingDirectoryCleared?, knowledge }`, the Session was re-filed
+             *       under another Project; knowledge is a SessionMoveKnowledge.
+             *       Refresh session, project, task, decision and artifact lists.
              *     - `session.read`: `{ readSequence }`, the person was shown the
              *       Session up to there on one of their clients. Refresh session and
              *       project lists.

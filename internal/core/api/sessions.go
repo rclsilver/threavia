@@ -27,6 +27,7 @@ func (h *handler) registerSessions(mux *http.ServeMux) {
 	h.handle(mux, "GET /api/v1/sessions/{sessionId}/handoff", h.previewHandoff)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/messages", h.postMessage)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/read", h.markSessionRead)
+	h.handle(mux, "POST /api/v1/sessions/{sessionId}/move", h.moveSession)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/archive", h.archiveSession)
 	h.handle(mux, "POST /api/v1/sessions/{sessionId}/restore", h.restoreSession)
 }
@@ -112,11 +113,6 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 		// Pinned puts the Session one click away from any Project, or takes it
 		// back out.
 		Pinned *bool `json:"pinned"`
-		// ProjectID re-files the Session under another Project.
-		ProjectID *string `json:"projectId"`
-		// MoveKnowledge, true unless said otherwise, takes along the tasks and
-		// decisions agents created from the Session.
-		MoveKnowledge *bool `json:"moveKnowledge"`
 	}](w, r)
 	if !ok {
 		return
@@ -180,15 +176,6 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 			dirID = &value
 		}
 		session, err = h.svc.SetSessionWorkingDirectory(r.Context(), identity, sessionID, dirID)
-		if err != nil {
-			h.fail(w, err)
-			return
-		}
-		changed = true
-	}
-
-	if body.ProjectID != nil && *body.ProjectID != "" {
-		session, _, err = h.svc.MoveSessionToProject(r.Context(), identity, sessionID, domain.ProjectID(*body.ProjectID), body.MoveKnowledge == nil || *body.MoveKnowledge)
 		if err != nil {
 			h.fail(w, err)
 			return
@@ -394,4 +381,24 @@ func (h *handler) unsnoozeSession(w http.ResponseWriter, r *http.Request, identi
 		return
 	}
 	writeJSON(w, http.StatusOK, session)
+}
+
+// moveSession re-files a Session under another Project. The answer says which
+// tasks and decisions followed it, and which stayed behind.
+func (h *handler) moveSession(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	body, ok := decode[struct {
+		ProjectID domain.ProjectID `json:"projectId"`
+		// MoveKnowledge, true unless said otherwise, takes along the tasks and
+		// decisions agents created from the Session.
+		MoveKnowledge *bool `json:"moveKnowledge"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	moved, err := h.svc.MoveSessionToProject(r.Context(), identity, domain.SessionID(r.PathValue("sessionId")), body.ProjectID, body.MoveKnowledge == nil || *body.MoveKnowledge)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, moved)
 }

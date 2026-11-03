@@ -33,6 +33,7 @@ var controlOperations = []struct{ name, scope, pattern string }{
 	{"session_send", "manage", "POST /api/v1/sessions/{sessionId}/messages"},
 	{"session_archive", "manage", "POST /api/v1/sessions/{sessionId}/archive"},
 	{"session_restore", "manage", "POST /api/v1/sessions/{sessionId}/restore"},
+	{"session_move", "manage", "POST /api/v1/sessions/{sessionId}/move"},
 	{"session_delete", "manage", "DELETE /api/v1/sessions/{sessionId}"},
 	{"session_handoff_preview", "read", "GET /api/v1/sessions/{sessionId}/handoff"},
 	{"job_cancel", "manage", "POST /api/v1/jobs/{jobId}/cancel"},
