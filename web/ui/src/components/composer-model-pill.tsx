@@ -19,7 +19,7 @@ type Settings = { model: string; effort: string };
  * the same thing from the keyboard.
  */
 export function ComposerModelPill({ session, backend, disabled, saving, onChange }: {
-  session: Session;
+  session: Pick<Session, 'model' | 'effort'>;
   backend?: BackendInstance;
   disabled: boolean;
   saving: boolean;

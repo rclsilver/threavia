@@ -429,6 +429,8 @@ interface StartSession {
   projectId: string;
   backendInstanceId: string;
   workingDirectoryId: string | null;
+  model?: string;
+  effort?: string;
   message: string;
   nativeSessionId?: string | null;
   artifactIds?: string[];

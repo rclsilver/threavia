@@ -7,6 +7,7 @@ import { useRef, useState } from 'react';
 import { useBackends, useCreateDirectory, useDirectories, useStartSession } from '@/api/queries';
 import { ActionError } from '@/components/ui/action-error';
 import { BackendIcon, BackendInfo } from '@/components/backend-info';
+import { ComposerModelPill } from '@/components/composer-model-pill';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input, Label, Textarea } from '@/components/ui/input';
@@ -40,22 +41,38 @@ export function DraftView() {
   const [message, setMessage] = useDraft(`new.${projectId}`);
   const [adopting, setAdopting] = useState(false);
   const [nativeSessionId, setNativeSessionId] = useState('');
+  const [picked, setPicked] = useState({ backendId: '', model: '', effort: '' });
 
   const usable = (backends.data ?? []).filter((backend) => backend.ownershipStatus !== 'REVOKED');
   const chosenBackend = (usable.some((backend) => backend.id === backendId) && backendId) || usable.find((backend) => backend.isDefault)?.id || usable[0]?.id || '';
 
+  // A model belongs to the catalog of the backend it was picked on. Whatever
+  // changes the backend, a click or a default that moved, starts from that
+  // backend's own default.
+  const { model, effort } = picked.backendId === chosenBackend ? picked : { model: '', effort: '' };
+  const pick = (settings: { model: string; effort: string }) => setPicked({ backendId: chosenBackend, ...settings });
+
   // The first message can name a Skill with /, in the form the chosen
-  // backend's provider reads. Files wait for the Session: no directory is
-  // located before its first Job.
+  // backend's provider reads, and /model and /effort as in a Session. Files
+  // wait for the Session: no directory is located before its first Job.
   const field = useRef<HTMLTextAreaElement>(null);
   const backend = usable.find((candidate) => candidate.id === chosenBackend);
   const skills = useSessionSkills(projectId, backend?.id);
+  const catalog = backend?.features?.includes('MODEL_SELECTION') ? backend.modelCatalog : undefined;
   const suggestions = useComposerSuggestions({
     field,
     message,
     setMessage,
-    commands: composerCommands({ provider: backend?.backend, skills }),
-    onCommand: () => {},
+    commands: composerCommands({
+      provider: backend?.backend,
+      skills,
+      models: catalog?.models,
+      current: { model: model || catalog?.defaultModel, effort },
+    }),
+    onCommand: (command) => {
+      if (command.kind === 'model') pick({ model: command.model, effort: command.effort });
+      else if (command.kind === 'effort') pick({ model, effort: command.effort });
+    },
   });
 
   const submit = () => {
@@ -69,6 +86,8 @@ export function DraftView() {
         workingDirectoryId: directoryId === NONE ? null : directoryId,
         message: text,
         artifactIds: attachments.files.map((file) => file.id),
+        model,
+        effort,
         nativeSessionId: (adopting && nativeSessionId.trim()) || null,
       })
       .then((result) => {
@@ -185,6 +204,7 @@ export function DraftView() {
 
         <div className="flex items-start gap-2">
           <AttachButton attachments={attachments} disabled={start.isPending} />
+          <ComposerModelPill session={{ model, effort }} backend={backend} disabled={start.isPending} saving={false} onChange={pick} />
           <AttachedFiles attachments={attachments} disabled={start.isPending} className="min-w-0 flex-1 pt-1" />
         </div>
 
