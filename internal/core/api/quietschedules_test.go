@@ -20,6 +20,20 @@ import (
 func TestAQuietScheduleRunThatFoundNothingTellsNobody(t *testing.T) {
 	c, backend, projectID, dirID := setup(t)
 	ctx := context.Background()
+
+	// Nobody is watching, and a phone is subscribed from the start: a
+	// notification is sent in the background and reads the subscriptions when
+	// it goes, so the first Job's own Done must be counted, not raced.
+	pushes := newPushService(t)
+	c.svc.SetPushClient(pushes.server.Client())
+	c.mustDo(http.MethodPost, "/api/v1/me/push/subscriptions", map[string]any{
+		"endpoint": pushes.server.URL + "/push/phone",
+		"keys": map[string]string{
+			"p256dh": base64.RawURLEncoding.EncodeToString(pushes.browser.PublicKey().Bytes()),
+			"auth":   base64.RawURLEncoding.EncodeToString(pushes.auth),
+		},
+	}, nil, http.StatusCreated)
+
 	session := c.startSession(projectID, c.backendID, dirID, "watch my on-call schedule")
 	first := receive(t, "the first job", backend.starts)
 
@@ -41,17 +55,7 @@ func TestAQuietScheduleRunThatFoundNothingTellsNobody(t *testing.T) {
 	}
 	scheduleID := created["scheduleId"].(string)
 	completeDelegatedJob(t, c, backend, first)
-
-	// Nobody is watching, and a phone is subscribed.
-	pushes := newPushService(t)
-	c.svc.SetPushClient(pushes.server.Client())
-	c.mustDo(http.MethodPost, "/api/v1/me/push/subscriptions", map[string]any{
-		"endpoint": pushes.server.URL + "/push/phone",
-		"keys": map[string]string{
-			"p256dh": base64.RawURLEncoding.EncodeToString(pushes.browser.PublicKey().Bytes()),
-			"auth":   base64.RawURLEncoding.EncodeToString(pushes.auth),
-		},
-	}, nil, http.StatusCreated)
+	waitUntil(t, "the notification of the first job", func() bool { return len(pushes.messages()) >= 1 })
 
 	listed := func() (unread bool, updatedAt time.Time) {
 		t.Helper()
@@ -128,9 +132,9 @@ func TestAQuietScheduleRunThatFoundNothingTellsNobody(t *testing.T) {
 	if run(receive(t, "the run-now job", backend.starts), false) {
 		t.Fatal("a run that answered ended marked dismissed")
 	}
-	waitUntil(t, "the notification of the run that had something to say", func() bool { return len(pushes.messages()) >= 1 })
-	if got := pushes.messages(); len(got) != 1 || !strings.HasPrefix(got[0]["title"], "Done") {
-		t.Fatalf("notifications = %v, want only the Done of the run that answered", got)
+	waitUntil(t, "the notification of the run that had something to say", func() bool { return len(pushes.messages()) >= 2 })
+	if got := pushes.messages(); len(got) != 2 || !strings.HasPrefix(got[1]["title"], "Done") {
+		t.Fatalf("notifications = %v, want the first job's Done and only the Done of the run that answered", got)
 	}
 	if unread, updatedAt := listed(); !unread || !updatedAt.After(before) {
 		t.Fatalf("after an answered run: unread=%v updatedAt=%v (was %v), want unread and moved up", unread, updatedAt, before)
