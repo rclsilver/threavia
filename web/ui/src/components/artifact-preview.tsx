@@ -1,7 +1,7 @@
 import { ARTIFACT_TEXT_LIMIT } from '../../../../clients/shared/markdown-artifact';
 import { mediaType } from '../../../../clients/shared/media';
 import { useQuery } from '@tanstack/react-query';
-import { Download, Maximize2 } from 'lucide-react';
+import { Download, FoldHorizontal, Maximize2, UnfoldHorizontal } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { fetchBlob, saveBlob } from '@/api/client';
@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { iconOf, kindOf, type Kind } from '@/lib/artifact';
 import { bytes, cn } from '@/lib/utils';
+import { useWideLayout } from '@/use-layout';
 
 const contentPath = (artifactId: string) => `/api/v1/artifacts/${artifactId}/content`;
 
@@ -144,9 +145,27 @@ export function ArtifactViewer({
   onOpenChange: (open: boolean) => void;
 }) {
   const kind = kindOf(mimeType, filename);
+  // A document opens as wide as the layout the person chose; the button
+  // changes this opening only.
+  const [wideLayout] = useWideLayout();
+  const [fullWidth, setFullWidth] = useState<boolean>();
+  const full = kind === 'markdown' && (fullWidth ?? wideLayout);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[min(56rem,calc(100dvh-2rem))] w-[min(80rem,calc(100vw-2rem))] gap-3">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setFullWidth(undefined);
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent
+        className={cn(
+          'gap-3',
+          full
+            ? 'h-[calc(100dvh-2rem)] max-h-none w-[calc(100vw-2rem)]'
+            : 'h-[min(56rem,calc(100dvh-2rem))] w-[min(80rem,calc(100vw-2rem))]',
+        )}
+      >
         <div className="flex items-start gap-3 pr-8">
           <div className="min-w-0 flex-1">
             <DialogTitle className="truncate">{title || filename}</DialogTitle>
@@ -154,6 +173,18 @@ export function ArtifactViewer({
               {filename} · {bytes(size)}
             </DialogDescription>
           </div>
+          {kind === 'markdown' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="aria-pressed:bg-surface-2 aria-pressed:text-text max-sm:hidden"
+              aria-pressed={full}
+              onClick={() => setFullWidth(!full)}
+            >
+              {full ? <FoldHorizontal /> : <UnfoldHorizontal />}
+              Full width
+            </Button>
+          )}
           <DownloadButton artifactId={artifactId} filename={filename} />
         </div>
         <div className="min-h-0 flex-1">
