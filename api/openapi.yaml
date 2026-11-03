@@ -1117,6 +1117,7 @@ paths:
                 expectedRunId: { $ref: "#/components/schemas/UUID" }
                 pinned: { type: boolean }
                 projectId: { $ref: "#/components/schemas/UUID" }
+                moveKnowledge: { type: boolean, description: 'With projectId. Default true: tasks and decisions agents created from the Session follow it, except those linked to ones that stay.' }
                 model: { type: string, maxLength: 200, description: 'Empty resets to the backend default; omitted leaves it unchanged.' }
                 effort: { type: string, maxLength: 32, description: 'Empty resets to the backend default; omitted leaves it unchanged.' }
       responses:

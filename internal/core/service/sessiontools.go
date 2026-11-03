@@ -159,11 +159,15 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 		return s.adoptSession(ctx, identity, jc, session)
 	}
 	if name == tools.NameSessionMove {
-		moved, err := s.MoveSessionToProject(ctx, identity, session.ID, domain.ProjectID(text(input, "projectId")))
+		withKnowledge, err := boolInput(input, "moveKnowledge", true)
 		if err != nil {
 			return nil, err
 		}
-		return sessionToolResult(map[string]any{"session": moved})
+		moved, summary, err := s.MoveSessionToProject(ctx, identity, session.ID, domain.ProjectID(text(input, "projectId")), withKnowledge)
+		if err != nil {
+			return nil, err
+		}
+		return sessionToolResult(map[string]any{"session": moved, "knowledge": summary})
 	}
 	if name != tools.NameSessionRead && name != tools.NameSessionSend {
 		if _, err := s.managedSession(ctx, identity, jc, string(session.ID)); err != nil {

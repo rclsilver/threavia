@@ -2300,6 +2300,8 @@ export interface paths {
                         expectedRunId?: components["schemas"]["UUID"];
                         pinned?: boolean;
                         projectId?: components["schemas"]["UUID"];
+                        /** @description With projectId. Default true: tasks and decisions agents created from the Session follow it, except those linked to ones that stay. */
+                        moveKnowledge?: boolean;
                         /** @description Empty resets to the backend default; omitted leaves it unchanged. */
                         model?: string;
                         /** @description Empty resets to the backend default; omitted leaves it unchanged. */

@@ -114,6 +114,9 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 		Pinned *bool `json:"pinned"`
 		// ProjectID re-files the Session under another Project.
 		ProjectID *string `json:"projectId"`
+		// MoveKnowledge, true unless said otherwise, takes along the tasks and
+		// decisions agents created from the Session.
+		MoveKnowledge *bool `json:"moveKnowledge"`
 	}](w, r)
 	if !ok {
 		return
@@ -185,7 +188,7 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 	}
 
 	if body.ProjectID != nil && *body.ProjectID != "" {
-		session, err = h.svc.MoveSessionToProject(r.Context(), identity, sessionID, domain.ProjectID(*body.ProjectID))
+		session, _, err = h.svc.MoveSessionToProject(r.Context(), identity, sessionID, domain.ProjectID(*body.ProjectID), body.MoveKnowledge == nil || *body.MoveKnowledge)
 		if err != nil {
 			h.fail(w, err)
 			return

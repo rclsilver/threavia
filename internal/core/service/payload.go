@@ -267,6 +267,8 @@ type SessionProjectMovedPayload struct {
 	// WorkingDirectoryCleared says the Session lost its directory, because it
 	// belonged to the Project it left.
 	WorkingDirectoryCleared bool `json:"workingDirectoryCleared,omitempty"`
+	// Knowledge is the tasks and decisions that followed, and those that stayed.
+	Knowledge MoveSummary `json:"knowledge"`
 }
 
 // jsonUnmarshal is a thin wrapper keeping the encoding/json dependency in one
