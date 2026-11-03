@@ -112,6 +112,8 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 		// Pinned puts the Session one click away from any Project, or takes it
 		// back out.
 		Pinned *bool `json:"pinned"`
+		// ProjectID re-files the Session under another Project.
+		ProjectID *string `json:"projectId"`
 	}](w, r)
 	if !ok {
 		return
@@ -175,6 +177,15 @@ func (h *handler) patchSession(w http.ResponseWriter, r *http.Request, identity 
 			dirID = &value
 		}
 		session, err = h.svc.SetSessionWorkingDirectory(r.Context(), identity, sessionID, dirID)
+		if err != nil {
+			h.fail(w, err)
+			return
+		}
+		changed = true
+	}
+
+	if body.ProjectID != nil && *body.ProjectID != "" {
+		session, err = h.svc.MoveSessionToProject(r.Context(), identity, sessionID, domain.ProjectID(*body.ProjectID))
 		if err != nil {
 			h.fail(w, err)
 			return

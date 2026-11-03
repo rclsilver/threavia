@@ -147,7 +147,7 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 	}
 	switch name {
 	case tools.NameSessionRead, tools.NameSessionSend, tools.NameSessionAnswer, tools.NameSessionCancel, tools.NameSessionArchive, tools.NameSessionWait, tools.NameSessionResolveValidation,
-		tools.NameSessionUpdate, tools.NameSessionDetach, tools.NameSessionAdopt:
+		tools.NameSessionUpdate, tools.NameSessionDetach, tools.NameSessionAdopt, tools.NameSessionMove:
 	default:
 		return nil, fmt.Errorf("%w: unknown core tool %q", ErrInvalid, name)
 	}
@@ -157,6 +157,13 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 	}
 	if name == tools.NameSessionAdopt {
 		return s.adoptSession(ctx, identity, jc, session)
+	}
+	if name == tools.NameSessionMove {
+		moved, err := s.MoveSessionToProject(ctx, identity, session.ID, domain.ProjectID(text(input, "projectId")))
+		if err != nil {
+			return nil, err
+		}
+		return sessionToolResult(map[string]any{"session": moved})
 	}
 	if name != tools.NameSessionRead && name != tools.NameSessionSend {
 		if _, err := s.managedSession(ctx, identity, jc, string(session.ID)); err != nil {

@@ -45,6 +45,15 @@ func sessionSpecs() []Spec {
 			}, "sessionId"),
 		},
 		{
+			Name:               NameSessionMove,
+			RequiresValidation: true,
+			Description:        "Re-file a session under another of the person's projects, after the person validates, for example when it was started in the wrong one. Its history and files go with it; a working directory that belongs to the old project is detached. Refused while the session has unfinished jobs or the destination is archived. Find project ids with session_list scope all.",
+			InputSchema: object(map[string]any{
+				"sessionId": str("A session owned by the user."),
+				"projectId": str("The destination project."),
+			}, "sessionId", "projectId"),
+		},
+		{
 			Name:        NameSessionDetach,
 			Description: "Stop managing a directly managed session: it becomes an ordinary unmanaged session, its questions and permissions are handled by the person again, and its history and files are kept.",
 			InputSchema: object(map[string]any{

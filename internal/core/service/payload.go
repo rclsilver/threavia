@@ -260,6 +260,15 @@ type WorkingDirectoryChangedPayload struct {
 	KnownDirectoryID *string `json:"knownDirectoryId,omitempty"`
 }
 
+// SessionProjectMovedPayload is the body of a session.project_moved event.
+type SessionProjectMovedPayload struct {
+	FromProjectID domain.ProjectID `json:"fromProjectId"`
+	ToProjectID   domain.ProjectID `json:"toProjectId"`
+	// WorkingDirectoryCleared says the Session lost its directory, because it
+	// belonged to the Project it left.
+	WorkingDirectoryCleared bool `json:"workingDirectoryCleared,omitempty"`
+}
+
 // jsonUnmarshal is a thin wrapper keeping the encoding/json dependency in one
 // place.
 func jsonUnmarshal(data []byte, target any) error { return json.Unmarshal(data, target) }

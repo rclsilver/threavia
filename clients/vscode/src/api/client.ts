@@ -303,6 +303,11 @@ export class CoreClient {
     return this.patch<Session>(`/api/v1/sessions/${sessionId}`, { pinned });
   }
 
+  /** Re-files the Session, with its history and files, under another Project. */
+  moveSession(sessionId: string, projectId: string) {
+    return this.patch<Session>(`/api/v1/sessions/${sessionId}`, { projectId });
+  }
+
   /** Records that the person was shown the Session up to this event. */
   markSessionRead(sessionId: string, sequence: number) {
     return this.post<void>(`/api/v1/sessions/${sessionId}/read`, { sequence });

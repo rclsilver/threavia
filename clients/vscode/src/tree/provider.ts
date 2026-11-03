@@ -48,6 +48,8 @@ export type RequestNode = Extract<Node, { type: 'request' }>;
 export type ProjectNode = Extract<Node, { type: 'project' }>;
 export type CoreNode = Extract<Node, { type: 'core' }>;
 
+const SESSION_MIME = 'application/vnd.code.tree.threavia.sidebar';
+
 /** How long a repository read stays good: the web client's staleTime. */
 const REPOSITORY_FRESH_FOR = 30_000;
 
@@ -116,7 +118,36 @@ const monitorActive = (monitor: Monitor) => ['STARTING', 'RUNNING', 'STOPPING'].
  * Session is read when hovered or selected, and the selected visible row is
  * kept current. Only that row is polled, rather than every Session in a list.
  */
-export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Disposable {
+export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.TreeDragAndDropController<Node>, vscode.Disposable {
+  /** Sessions are dragged onto a Project to be re-filed under it. */
+  readonly dragMimeTypes = [SESSION_MIME];
+  readonly dropMimeTypes = [SESSION_MIME];
+
+  handleDrag(source: readonly Node[], data: vscode.DataTransfer) {
+    const sessions = source.filter((node): node is SessionNode => node.type === 'session');
+    if (sessions.length === 0) return;
+    data.set(SESSION_MIME, new vscode.DataTransferItem(sessions.map((node) => ({ coreId: node.coreId, sessionId: node.session.id, projectId: node.session.projectId }))));
+  }
+
+  async handleDrop(target: Node | undefined, data: vscode.DataTransfer) {
+    const dragged = data.get(SESSION_MIME)?.value as { coreId: string; sessionId: string; projectId: string }[] | undefined;
+    // Dropped on a Session, it means that Session's Project.
+    const projectId = target?.type === 'project' ? target.project.id : target?.type === 'session' ? target.session.projectId : undefined;
+    if (!dragged || !target || !projectId || !('coreId' in target)) return;
+    const core = this.cores.get(target.coreId);
+    if (!core) return;
+    for (const item of dragged) {
+      if (item.coreId !== target.coreId || item.projectId === projectId) continue;
+      try {
+        await core.client.moveSession(item.sessionId, projectId);
+      } catch (error) {
+        void vscode.window.showErrorMessage(`Session not moved: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    // The stream says so too; this is what makes the drop count when it is down.
+    this.invalidateSessions(target.coreId);
+  }
+
   private readonly changed = new vscode.EventEmitter<Node | undefined>();
   readonly onDidChangeTreeData = this.changed.event;
 

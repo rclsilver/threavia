@@ -546,6 +546,21 @@ export function useSnoozeSession() {
     },
   });
 }
+/** Re-files a Session, with its history and files, under another Project. */
+export function useMoveSession() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sessionId, projectId }: { sessionId: string; projectId: string }) =>
+      api.patch<Session>(`/api/v1/sessions/${sessionId}`, { projectId }),
+    onSettled: (_data, _error, { sessionId }) => {
+      void queries.invalidateQueries({ queryKey: ['sessions'] });
+      void queries.invalidateQueries({ queryKey: ['projects'] });
+      void queries.invalidateQueries({ queryKey: keys.snapshot(sessionId) });
+      void queries.invalidateQueries({ queryKey: keys.attention() });
+    },
+  });
+}
+
 export function usePinSession() {
   const queries = useQueryClient();
   return useMutation({

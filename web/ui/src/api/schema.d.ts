@@ -2252,6 +2252,11 @@ export interface paths {
          *     persisted for the next Job; the running process retains its cwd. It
          *     emits `working_directory.changed`, and clients refresh the Session and
          *     repository state.
+         *     `projectId` re-files the Session, with its history and files, under
+         *     another active Project of the user. A working directory of the old
+         *     Project is detached; a global one is kept. It is refused (409) while a Job
+         *     is unfinished, and announced by `session.project_moved`,
+         *     `{fromProjectId, toProjectId, workingDirectoryCleared?}`.
          *     Model and effort are persisted per
          *     Session and apply at the next Job launch; running Jobs keep their values.
          *     An unsupported model or effort is refused. Model changes cannot be
@@ -2294,6 +2299,7 @@ export interface paths {
                         backendInstanceId?: components["schemas"]["UUID"];
                         expectedRunId?: components["schemas"]["UUID"];
                         pinned?: boolean;
+                        projectId?: components["schemas"]["UUID"];
                         /** @description Empty resets to the backend default; omitted leaves it unchanged. */
                         model?: string;
                         /** @description Empty resets to the backend default; omitted leaves it unchanged. */

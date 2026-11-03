@@ -56,6 +56,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
   const sidebar = new SidebarProvider(cores);
   const tree = vscode.window.createTreeView('threavia.sidebar', {
     treeDataProvider: sidebar,
+    dragAndDropController: sidebar,
     showCollapseAll: true,
   });
   sidebar.setVisible(tree.visible);

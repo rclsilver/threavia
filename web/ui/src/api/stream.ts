@@ -342,6 +342,11 @@ export class EventStream {
       case 'session.pinned':
       case 'session.snoozed':
       case 'session.model_changed':
+      case 'session.project_moved':
+        if (event.type === 'session.project_moved') {
+          void this.invalidate({ queryKey: ['projects'] });
+          void this.invalidate({ queryKey: keys.attention() });
+        }
         if (['session.created', 'session.archived', 'session.restored'].includes(event.type)) {
           void this.invalidate({ queryKey: keys.audit() });
         }

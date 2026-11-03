@@ -60,7 +60,7 @@ describe('what an event changes', () => {
   });
 
   it('refreshes the lists on a pin, a rename or an archive', () => {
-    for (const type of ['session.pinned', 'session.renamed', 'session.archived']) {
+    for (const type of ['session.pinned', 'session.renamed', 'session.archived', 'session.project_moved']) {
       expect(kinds(effectsOf(event(type), at))).toContain('sessions');
     }
   });

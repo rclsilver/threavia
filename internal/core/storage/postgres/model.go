@@ -21,6 +21,26 @@ func (s *Store) SetSessionManager(ctx context.Context, owner domain.UserID, id d
 	return scanSession(s.q.QueryRow(ctx, `UPDATE sessions s SET manager_session_id=$3, updated_at=now() FROM projects p WHERE s.project_id=p.id AND s.id=$1 AND p.owner_id=$2 RETURNING `+sessionColumns, id, owner, manager))
 }
 
+// MoveSessionToProject re-files a Session, with its timeline and files, under
+// another Project of the same owner. The working directory is replaced by dir:
+// a directory of the old Project does not exist in the new one. Call inside
+// WithTx, with the Session locked.
+func (s *Store) MoveSessionToProject(ctx context.Context, owner domain.UserID, id domain.SessionID, project domain.ProjectID, dir *string) (domain.Session, error) {
+	session, err := scanSession(s.q.QueryRow(ctx, `
+		UPDATE sessions s SET project_id=$3, working_directory_id=$4, updated_at=now()
+		FROM projects p
+		WHERE s.project_id=p.id AND s.id=$1 AND p.owner_id=$2
+		RETURNING `+sessionColumns, id, owner, project, dir))
+	if err != nil {
+		return session, err
+	}
+	if _, err := s.q.Exec(ctx, `UPDATE events SET project_id=$2 WHERE session_id=$1`, id, project); err != nil {
+		return session, classify(err, "move session events")
+	}
+	_, err = s.q.Exec(ctx, `UPDATE artifacts SET project_id=$2 WHERE session_id=$1 AND project_id IS NOT NULL`, id, project)
+	return session, classify(err, "move session artifacts")
+}
+
 func (s *Store) SetJobModel(ctx context.Context, id domain.JobID, model, effort string) error {
 	_, err := s.q.Exec(ctx, `UPDATE jobs SET model=$2, effort=$3 WHERE id=$1`, id, model, effort)
 	return classify(err, "record job model")

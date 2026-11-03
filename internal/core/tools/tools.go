@@ -49,6 +49,7 @@ const (
 	NameSessionUpdate            Name = "session_update"
 	NameSessionDetach            Name = "session_detach"
 	NameSessionAdopt             Name = "session_adopt"
+	NameSessionMove              Name = "session_move"
 	NameSessionList              Name = "session_list"
 	NameSessionRead              Name = "session_read"
 	NameSessionSend              Name = "session_send"

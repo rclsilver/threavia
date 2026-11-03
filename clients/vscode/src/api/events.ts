@@ -111,7 +111,8 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
     case 'session.pinned':
     case 'session.snoozed':
     case 'session.model_changed':
-      return [{ kind: 'sessions' }, ...snapshot(sessionId)];
+    case 'session.project_moved':
+      return [{ kind: 'sessions' }, { kind: 'attention' }, ...snapshot(sessionId)];
 
     // Read on one client: the lists, Projects included, stop pointing at it.
     case 'session.read':

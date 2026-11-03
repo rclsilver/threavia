@@ -21,6 +21,8 @@ const (
 	TypeSessionRestored Type = "session.restored"
 	TypeSessionDeleted  Type = "session.deleted"
 	TypeSessionPinned   Type = "session.pinned"
+	// TypeSessionProjectMoved says a Session was re-filed under another Project.
+	TypeSessionProjectMoved Type = "session.project_moved"
 	// TypeSessionSnoozed says a Session was put out of the way, or brought back.
 	TypeSessionSnoozed      Type = "session.snoozed"
 	TypeSessionRead         Type = "session.read"
@@ -108,6 +110,7 @@ var persistentTypes = map[Type]bool{
 	TypeSessionRestored:         true,
 	TypeSessionDeleted:          true,
 	TypeSessionPinned:           true,
+	TypeSessionProjectMoved:     true,
 	TypeSessionSnoozed:          true,
 	TypeSessionRead:             true,
 	TypeSessionModelChanged:     true,

@@ -433,6 +433,7 @@ func TestScopeAndPermissionToolsRequireValidation(t *testing.T) {
 		"working_directory_set":      true,
 		"session_resolve_validation": true,
 		"session_adopt":              true,
+		"session_move":               true,
 	}
 	declared := start.GetProjectContext().GetTools()
 	if len(declared) <= len(want) {

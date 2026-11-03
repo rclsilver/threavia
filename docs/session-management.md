@@ -21,6 +21,7 @@ as `mcp__threavia__<name>` when a Job starts:
 | --- | --- |
 | `backend_list` | List usable backends with status and model catalogs (models, efforts, defaults). |
 | `session_update` | Change a managed session's `backendInstanceId`, `model` and/or `effort` for its next jobs. A backend move needs no running or queued job; pass `model`/`effort` when the current ones do not exist on the destination. |
+| `session_move` | After human validation, re-file any owned session under another active project (`sessionId`, `projectId`), with its history and files. A working directory of the old project is detached; a global one is kept. Refused while the session has unfinished jobs. Announced by `session.project_moved`. |
 | `session_detach` | Stop managing a delegate: it becomes an ordinary unmanaged session. |
 | `session_adopt` | After human validation, start managing an unmanaged session (e.g. a manual one). Refused if archived, managed by another conversation, or if it would create a cycle. |
 | `session_create` | Start a session with a self-contained `message` and optional `title`, `projectId`, `workingDirectoryId`, `backendInstanceId` (default: the creator's), `model`, `effort` and `idempotencyKey`. The default is the current project. Returns `session`, `run` and `job`. The created session is a direct delegate. |

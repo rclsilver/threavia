@@ -43,6 +43,7 @@ import {
   useBackends,
   useCreateProject,
   useMe,
+  useMoveSession,
   usePinSession,
   usePinnedSessions,
   useProjects,
@@ -460,6 +461,11 @@ function SessionList({
   const [scope, setScope] = useSessionScope();
   const [query, setQuery] = useState('');
   const [showSnoozed, setShowSnoozed] = useState(false);
+  // The Session being dragged, and the Project it is over: dragging a row
+  // shows the Projects as places to drop it.
+  const [dragged, setDragged] = useState<Session | undefined>();
+  const [over, setOver] = useState<string | undefined>();
+  const move = useMoveSession();
   // A snooze whose time came moves its Session back without waiting for news.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -521,6 +527,28 @@ function SessionList({
           </div>
         )}
       </div>
+      {dragged && (
+        <ul aria-label="Move to project" className="border-border bg-surface-2 space-y-0.5 rounded-md border p-1 text-sm">
+          {projects.filter((candidate) => candidate.id !== dragged.projectId).map((candidate) => (
+            <li
+              key={candidate.id}
+              onDragOver={(event) => { event.preventDefault(); setOver(candidate.id); }}
+              onDragLeave={() => setOver((id) => (id === candidate.id ? undefined : id))}
+              onDrop={(event) => {
+                event.preventDefault();
+                setOver(undefined);
+                setDragged(undefined);
+                move.mutate({ sessionId: dragged.id, projectId: candidate.id });
+              }}
+              className={cn('flex items-center gap-2 rounded px-2 py-1.5', over === candidate.id ? 'bg-accent/10 text-accent' : 'text-muted')}
+            >
+              <ProjectMark name={candidate.name} />
+              <span className="min-w-0 flex-1 truncate">{candidate.name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {move.error && <ActionError error={move.error} />}
       <div className="-mx-1 space-y-3 px-1 md:min-h-0 md:flex-1 md:overflow-y-auto">
         {total === 0 && (
           <p className="text-muted px-2 text-sm">
@@ -558,6 +586,13 @@ function SessionList({
                         to="/sessions/$sessionId"
                         params={{ sessionId: session.id }}
                         title={session.title || 'Untitled session'}
+                        draggable={!showArchived && projects.length > 1}
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData('text/plain', session.title || 'Untitled session');
+                          event.dataTransfer.effectAllowed = 'move';
+                          setDragged(session);
+                        }}
+                        onDragEnd={() => { setDragged(undefined); setOver(undefined); }}
                         className={cn(
                           'hover:bg-surface-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm max-md:min-h-11',
                           current === session.id && 'bg-surface-2 font-medium',
