@@ -846,7 +846,6 @@ body.full-width { --reading: 100%; }
   margin: 8px 0 0;
   font-size: 1em;
   font-weight: 600;
-  white-space: pre-wrap;
 }
 .context {
   display: flex;

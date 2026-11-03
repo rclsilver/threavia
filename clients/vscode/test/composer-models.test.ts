@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { HostMessage, SessionView, WebviewMessage } from '../src/conversation/protocol';
 import { createModelSettings } from '../src/webview/model-settings';
 
-vi.mock('../src/webview/markdown', () => ({ renderMarkdown: () => document.createElement('div') }));
+vi.mock('../src/webview/markdown', () => ({ renderMarkdown: () => document.createElement('div'), renderQuestion: () => '' }));
 const settings: SessionView['modelSettings'] = {
   model: 'first', effort: 'high', supported: true,
   catalog: { defaultModel: 'first', defaultEffort: 'medium', models: [

@@ -28,7 +28,7 @@ import { ago, headlineOf, toolLabel } from '../tree/model';
 import { parsePathRef } from '../workspace/paths';
 import { append, button, h, icon } from './dom';
 import { Follower } from './follow';
-import { renderMarkdown } from './markdown';
+import { renderMarkdown, renderQuestion } from './markdown';
 import { createModelSettings } from './model-settings';
 import { createSuggestions } from './suggestions';
 import { composerCommands, promptHistory, recall } from '../../../shared/composer';
@@ -1138,6 +1138,11 @@ function questionCard(request: UserInputRequest): HTMLElement {
     awaiting.set(request.id, { text: `Answered: ${value}`, approved: true });
     post({ type: 'answer', id: request.id, value });
   };
+  // A heading that holds paragraphs and lists, so not an h2. Rendered by
+  // markdown-it with raw HTML off, as the agent's messages are.
+  const prompt = h('div', { class: 'prose request-prompt', role: 'heading', 'aria-level': 2 });
+  prompt.innerHTML = renderQuestion(request.prompt);
+  enhanceCode(prompt);
   const input = h('input', { type: 'text', class: 'input', placeholder: 'Your answer', 'aria-label': 'Your answer' });
   const form = h(
     'form',
@@ -1159,7 +1164,7 @@ function questionCard(request: UserInputRequest): HTMLElement {
       h('span', { class: 'badge tone-accent' }, 'Question'),
       h('time', { class: 'muted push', datetime: request.createdAt }, ago(request.createdAt)),
     ),
-    h('h2', { class: 'request-prompt' }, request.prompt),
+    prompt,
     contextStrip(request.context),
     choices.length > 0 &&
       h('div', { class: 'choices' }, ...choices.map((choice) => button(choice, () => answer(choice), { class: 'secondary', 'data-answer': true }))),

@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useResolveUserInput, useResolveValidation } from '@/api/queries';
 import type { UserInputRequest, ValidationRequest } from '@/api/types';
 import { FileChangeView } from '@/components/file-change';
+import { Markdown } from '@/components/markdown';
 import { ActionError } from '@/components/ui/action-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -263,7 +264,10 @@ function UserInputCard({ request, showSession }: { request: UserInputRequest; sh
           {ago(request.createdAt)}
         </time>
       </div>
-      <h3 className="mt-2 text-sm leading-relaxed font-medium whitespace-pre-wrap">{request.prompt}</h3>
+      {/* A heading that holds paragraphs and lists, so not an h3. */}
+      <div role="heading" aria-level={3} className="mt-2 font-medium break-words">
+        <Markdown breaks images={false} className="text-sm">{request.prompt}</Markdown>
+      </div>
       <div className="mt-2">
         <ContextStrip context={request.context} showSession={showSession} />
       </div>

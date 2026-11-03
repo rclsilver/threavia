@@ -2,7 +2,7 @@
 import { expect, it, vi } from 'vitest';
 import type { WebviewMessage } from '../src/conversation/protocol';
 
-vi.mock('../src/webview/markdown', () => ({ renderMarkdown: () => document.createElement('div') }));
+vi.mock('../src/webview/markdown', () => ({ renderMarkdown: () => document.createElement('div'), renderQuestion: () => '' }));
 
 it('tells the extension where the keyboard focus is, since a conversation is read only while it is in there', async () => {
   const postMessage = vi.fn<(message: WebviewMessage) => void>();

@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { HostMessage, SessionView, WebviewMessage } from '../src/conversation/protocol';
 import { learningPrompt } from '../../shared/learnings';
 
-vi.mock('../src/webview/markdown', () => ({ renderMarkdown: () => document.createElement('div') }));
+vi.mock('../src/webview/markdown', () => ({ renderMarkdown: () => document.createElement('div'), renderQuestion: () => '' }));
 afterEach(() => { document.body.replaceChildren(); vi.unstubAllGlobals(); });
 
 it('offers capture for a completed result, preserves the composer and displays host errors', async () => {
