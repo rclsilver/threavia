@@ -39,6 +39,7 @@ import { sendsMessage, useTouchKeyboard } from '@/lib/message-keyboard';
 import { cn, humanise } from '@/lib/utils';
 import { isSnoozed, readUpTo, snoozeBack, wokeFromSnooze } from '../../../../clients/shared/sessions';
 import { SnoozeMenu } from '@/components/snooze-menu';
+import { ArchiveButton } from '@/components/session-actions';
 import { composerCommands, promptHistory, recall } from '../../../../clients/shared/composer';
 
 const FINISHED = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
@@ -200,6 +201,7 @@ export function SessionView() {
             ) : (
               <Badge className="shrink-0">Idle</Badge>
             )}
+            {data.session.status === 'ARCHIVED' && <Badge className="shrink-0">Archived</Badge>}
             {/* Which machine does the work: first-class, never a detail. */}
             {backend && (
               <BackendInfo backend={backend} compact />
@@ -241,6 +243,7 @@ export function SessionView() {
             <Button asChild size="lg" variant="ghost" className="h-11 md:h-9"><Link to="/sessions/$sessionId/review" params={{ sessionId }} data-tour="open-review">Review</Link></Button>
             <SnoozeButton session={data.session} />
             <PinButton session={data.session} />
+            <ArchiveButton session={data.session} />
             {/* Everything about the Session that is not the conversation is a
                 page of its own, one step away. */}
             <Button asChild variant="ghost" size="icon" title="Session settings" className="size-11 md:size-8">

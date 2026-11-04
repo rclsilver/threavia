@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
 import {
-  AlarmClock,
+  Ellipsis,
   Archive,
   ArchiveRestore,
   BookText,
@@ -36,7 +36,7 @@ import {
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { matchesSearch, SESSION_SECTIONS, sessionSections, sessionsByTitle, snoozeBack, wokeFromSnooze } from '../../../../clients/shared/sessions';
-import { SnoozeMenu } from '@/components/snooze-menu';
+import { SessionMenu } from '@/components/session-actions';
 
 import {
   useAttention,
@@ -620,20 +620,18 @@ function SessionList({
                       </Link>
                       {/* Out of the link, beside it: a control inside a link is
                           two targets in one. Shown when the row is pointed at
-                          or reached with the keyboard; a phone snoozes from
-                          the conversation's header. */}
-                      {!showArchived && (
-                        <SnoozeMenu session={session}>
-                          <button
-                            type="button"
-                            aria-label={`Snooze ${session.title || 'Untitled session'}`}
-                            title="Snooze"
-                            className="bg-surface-2 text-muted hover:text-text data-[state=open]:text-text absolute top-1/2 right-1 hidden size-6 -translate-y-1/2 place-items-center rounded opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 md:grid"
-                          >
-                            <AlarmClock className="size-3.5" />
-                          </button>
-                        </SnoozeMenu>
-                      )}
+                          or reached with the keyboard; a phone snoozes and
+                          archives from the conversation's header. */}
+                      <SessionMenu session={session} current={current}>
+                        <button
+                          type="button"
+                          aria-label={`Actions for ${session.title || 'Untitled session'}`}
+                          title="Snooze, archive or delete"
+                          className="bg-surface-2 text-muted hover:text-text data-[state=open]:text-text absolute top-1/2 right-1 hidden size-6 -translate-y-1/2 place-items-center rounded opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 md:grid"
+                        >
+                          <Ellipsis className="size-3.5" />
+                        </button>
+                      </SessionMenu>
                     </li>
                   ))}
                 </ul>

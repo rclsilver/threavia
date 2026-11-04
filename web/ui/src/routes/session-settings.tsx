@@ -6,7 +6,6 @@ import { useCallback, useState } from 'react';
 import {
   useArchiveSession,
   useBackends,
-  useDeleteSession,
   useMoveSession,
   useHandoffPreview,
   useSessionArtifacts,
@@ -15,7 +14,7 @@ import {
 import { SessionModelPanel } from '@/components/session-model-panel';
 import { PolicyPanel } from '@/components/policy-panel';
 import { SchedulesPanel } from '@/components/schedules-panel';
-import { ConfirmLine } from '@/components/record-list';
+import { DeleteSessionConfirm } from '@/components/session-actions';
 import { ActionError } from '@/components/ui/action-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -238,11 +237,9 @@ function ArchiveAndDelete({
   archived: boolean;
 }) {
   const archive = useArchiveSession();
-  const remove = useDeleteSession();
   const files = useSessionArtifacts(projectId, sessionId);
   const navigate = useNavigate();
   const [asking, setAsking] = useState(false);
-  const [artifacts, setArtifacts] = useState<'keep' | 'delete'>('keep');
   const made = files.data ?? [];
 
   return (
@@ -280,67 +277,16 @@ function ArchiveAndDelete({
           </Button>
         )}
         {asking && (
-          <div className="basis-full space-y-3">
-            {/* The files are the one thing that may outlive the session, so
-                what becomes of them is asked, named, before anything goes. */}
-            {made.length > 0 && (
-              <fieldset className="space-y-2">
-                <legend className="text-sm font-medium">
-                  Its {made.length === 1 ? 'file' : `${made.length} files`}:{' '}
-                  <span className="text-muted figures font-mono text-xs font-normal">
-                    {made.slice(0, 3).map((file) => file.filename).join(', ')}
-                    {made.length > 3 && ` and ${made.length - 3} more`}
-                  </span>
-                </legend>
-                <div role="radiogroup" aria-label="Its files" className="grid gap-2 sm:grid-cols-2">
-                  {(
-                    [
-                      { value: 'keep', label: 'Keep them', detail: 'They stay in the project’s artifacts.' },
-                      { value: 'delete', label: 'Delete them too', detail: 'They are gone for good, with the session.' },
-                    ] as const
-                  ).map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={artifacts === option.value}
-                      onClick={() => setArtifacts(option.value)}
-                      className={cn(
-                        'rounded-(--radius-card) border p-3 text-left',
-                        artifacts === option.value
-                          ? 'border-accent bg-accent/5 ring-accent/30 ring-1'
-                          : 'border-border hover:bg-surface-2',
-                      )}
-                    >
-                      <span className="block text-sm font-medium">{option.label}</span>
-                      <span className="text-muted block text-sm">{option.detail}</span>
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-            )}
-            <ConfirmLine
-              question={
-                made.length > 0 && artifacts === 'delete'
-                  ? `Delete this session and its ${made.length === 1 ? 'file' : `${made.length} files`} for good?`
-                  : 'Delete this session for good?'
-              }
-              confirm="Delete"
-              pending={remove.isPending}
+          <div className="basis-full">
+            <DeleteSessionConfirm
+              sessionId={sessionId}
+              projectId={projectId}
               onCancel={() => setAsking(false)}
-              onConfirm={() =>
-                remove.mutate(
-                  { sessionId, artifacts: made.length > 0 ? artifacts : 'keep' },
-                  {
-                    // Nothing is left to look at, so the view goes with it.
-                    onSuccess: () => void navigate({ to: '/' }),
-                  },
-                )
-              }
+              // Nothing is left to look at, so the view goes with it.
+              onDeleted={() => void navigate({ to: '/' })}
             />
           </div>
         )}
-        <ActionError error={remove.error} className="basis-full" />
       </li>
     </ul>
   );

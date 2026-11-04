@@ -1,5 +1,5 @@
 import * as Primitive from '@radix-ui/react-dropdown-menu';
-import { Check } from 'lucide-react';
+import { Check, ChevronRight } from 'lucide-react';
 import type { ComponentProps } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -68,5 +68,38 @@ export function MenuCheckboxItem({
       </span>
       {children}
     </Primitive.CheckboxItem>
+  );
+}
+
+/** A menu inside a menu, opened from one of its items. */
+export const MenuSub = Primitive.Sub;
+
+export function MenuSubTrigger({ className, children, ...props }: ComponentProps<typeof Primitive.SubTrigger>) {
+  return (
+    <Primitive.SubTrigger
+      className={cn(
+        'data-[highlighted]:bg-surface-2 data-[state=open]:bg-surface-2 flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm outline-none',
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <ChevronRight className="text-muted ml-auto size-3.5" />
+    </Primitive.SubTrigger>
+  );
+}
+
+export function MenuSubContent({ className, ...props }: ComponentProps<typeof Primitive.SubContent>) {
+  return (
+    <Primitive.Portal>
+      <Primitive.SubContent
+        sideOffset={4}
+        className={cn(
+          'bg-surface border-border z-50 max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto rounded-md border p-1 shadow-lg',
+          className,
+        )}
+        {...props}
+      />
+    </Primitive.Portal>
   );
 }
