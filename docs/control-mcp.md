@@ -46,6 +46,42 @@ VS Code's **Manage MCP Servers** offers a link to incoming MCP access settings.
 Access creation and secret display live in Web, like full outgoing MCP
 configuration, rather than opening a token-bearing editor document.
 
+## Connect ChatGPT or another OAuth client
+
+Clients that support MCP OAuth, such as ChatGPT connectors, need no token from
+Settings. Core is the OAuth 2.1 authorization server of its own `/mcp`:
+
+1. In ChatGPT, add a connector with the URL `https://threavia.example.com/mcp`
+   and OAuth authentication. Leave the client ID empty: ChatGPT registers itself.
+2. ChatGPT opens the consent page `/oauth/consent` in the Web client. Sign in as
+   usual, check that the return address is the client you are connecting, and
+   choose the rights. Only **read** is ticked by default, whatever the client
+   asked for; tick more only if needed.
+3. **Allow** returns to ChatGPT, which receives its tokens. **Deny** returns with
+   `access_denied` and creates nothing.
+
+The grant appears in **Settings → MCP access** under the client's name, marked
+*Connected with OAuth*. Revoking it ends the connection at once: access tokens
+and refresh tokens stop working. The name is chosen by the client when it
+registers, so the consent page also shows where it will send you back.
+
+The flow follows the MCP authorization specification: a 401 from `/mcp` points
+to `/.well-known/oauth-protected-resource/mcp` (RFC 9728), which names Core as
+authorization server (`/.well-known/oauth-authorization-server`, RFC 8414).
+Clients register at `/oauth/register` (RFC 7591, public clients only, HTTPS or
+loopback redirect URIs), use the authorization code with PKCE `S256` and an
+optional `resource` that must be this Core's `/mcp` (RFC 8707). Codes last 5
+minutes and work once; access tokens last 1 hour; refresh tokens rotate, work
+once and last 60 days from their issue. Only digests are stored.
+
+ChatGPT's servers must reach `/mcp`, `/.well-known/*` and `/oauth/*` over HTTPS
+from the Internet; the consent page only needs to reach the Web client from
+your browser. Set `THREAVIA_PUBLIC_URL` (Helm: `http.publicURL`) to the public
+address, or make the proxy send `X-Forwarded-Proto: https`.
+
+Settings tokens and the bootstrap token keep working as before. Migration
+**33** adds the OAuth tables; nothing changes for backends or VS Code.
+
 ## Bootstrap a disposable development Core
 
 The controller may provision these environment variables before starting Core:

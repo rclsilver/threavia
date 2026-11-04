@@ -415,7 +415,11 @@ For remote installations, configure **both endpoints**:
 Terminate TLS at your proxy/ingress or enable gRPC TLS directly on Core. Preserve
 long-lived SSE and gRPC streams. Set `THREAVIA_HTTP_ALLOWED_HOSTS` (Helm:
 `http.allowedHosts`) to the web/API hostname; add any internal registration host
-you actually use. A refused host returns HTTP 421.
+you actually use. A refused host returns HTTP 421. Set `THREAVIA_PUBLIC_URL`
+(Helm: `http.publicURL`) to the public address, such as
+`https://threavia.example.com`: OAuth for the MCP endpoint publishes it to
+clients such as ChatGPT. Without it Core derives the address from each request,
+which requires the proxy to send `X-Forwarded-Proto: https`.
 
 Core supports these authentication modes:
 

@@ -82,7 +82,8 @@ func (h *handler) registerControl(mux *http.ServeMux) {
 			}
 			a, err := h.svc.AuthenticateControl(r.Context(), strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
 			if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || err != nil {
-				w.Header().Set("WWW-Authenticate", `Bearer realm="threavia-control"`)
+				// Where an OAuth client finds how to sign in (RFC 9728).
+				w.Header().Set("WWW-Authenticate", `Bearer realm="threavia-control", resource_metadata="`+h.publicURL(r)+`/.well-known/oauth-protected-resource/mcp"`)
 				writeError(w, http.StatusUnauthorized, "unauthenticated", "a valid MCP control access token is required")
 				return
 			}

@@ -48,6 +48,10 @@ type Options struct {
 	// AllowedHosts lists the Host values Core answers, as host or host:port.
 	// Empty means any.
 	AllowedHosts []string
+	// PublicURL is the address clients reach Core at, without a trailing
+	// slash. Empty derives it from each request, which is right unless a
+	// proxy rewrites the Host header.
+	PublicURL string
 }
 
 type handler struct {
@@ -64,6 +68,8 @@ type handler struct {
 	routes    []string
 	logger    *slog.Logger
 	endpoints map[string]func(http.ResponseWriter, *http.Request, auth.Identity)
+	// publicBase is Options.PublicURL.
+	publicBase string
 }
 
 // NewRouter builds the Core HTTP handler.
@@ -75,6 +81,8 @@ func NewRouter(opts Options) http.Handler {
 		version: opts.Version,
 		spec:    newSpecDocument(opts.Version),
 		logger:  opts.Logger,
+
+		publicBase: strings.TrimSuffix(opts.PublicURL, "/"),
 	}
 
 	mux := http.NewServeMux()
@@ -97,6 +105,7 @@ func NewRouter(opts Options) http.Handler {
 	h.registerStream(mux)
 	h.registerSpec(mux)
 	h.registerControl(mux)
+	h.registerControlOAuth(mux)
 
 	// Anything else under the versioned prefix is a route that does not exist
 	// yet; answering 501 keeps a client from reading it as an empty result.

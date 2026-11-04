@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
@@ -81,6 +82,10 @@ func (s *Service) AuthenticateControl(ctx context.Context, token string) (domain
 		return domain.ControlAccess{}, auth.ErrUnauthenticated
 	}
 	a, e := s.store.ControlAccessByHash(ctx, controlHash(token))
+	if errors.Is(e, postgres.ErrNotFound) {
+		// Not a token made in Settings: an access token an OAuth grant issued.
+		a, e = s.store.ControlAccessByOAuthToken(ctx, controlHash(token))
+	}
 	if e != nil {
 		return a, auth.ErrUnauthenticated
 	}

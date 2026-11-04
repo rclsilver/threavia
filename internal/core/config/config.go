@@ -9,7 +9,9 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
@@ -83,6 +85,11 @@ type HTTPConfig struct {
 	// AllowedHosts lists the Host values Core answers, as host or host:port;
 	// any other gets 421. Empty means any. See LocalHosts for mode none.
 	AllowedHosts []string
+
+	// PublicURL is the address clients reach Core at, such as
+	// https://threavia.example.com. OAuth for the MCP endpoint publishes it as
+	// its issuer; empty derives it from each request.
+	PublicURL string
 }
 
 // LocalHosts is what AllowedHosts becomes in mode none when it is not set.
@@ -231,6 +238,7 @@ func Load() (Config, error) {
 	cfg.Control.BootstrapScopes = l.StringSlice("MCP_BOOTSTRAP_SCOPES", []string{"read"})
 
 	cfg.HTTP.AllowedHosts = l.StringSlice("HTTP_ALLOWED_HOSTS", cfg.HTTP.AllowedHosts)
+	cfg.HTTP.PublicURL = strings.TrimSuffix(l.String("PUBLIC_URL", ""), "/")
 	if len(cfg.HTTP.AllowedHosts) == 0 && cfg.Auth.Mode == auth.ModeNone {
 		cfg.HTTP.AllowedHosts = slices.Clone(LocalHosts)
 	}
@@ -259,6 +267,11 @@ func (c Config) Validate() error {
 	}
 	if !logging.ValidFormat(c.Log.Format) {
 		return fmt.Errorf("%sLOG_FORMAT: unknown format %q", EnvPrefix, c.Log.Format)
+	}
+	if c.HTTP.PublicURL != "" {
+		if u, err := url.Parse(c.HTTP.PublicURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
+			return fmt.Errorf("%sPUBLIC_URL: must be an http(s) URL such as https://threavia.example.com", EnvPrefix)
+		}
 	}
 	if c.HTTP.Addr == "" {
 		return fmt.Errorf("%sHTTP_ADDR: listen address is required", EnvPrefix)

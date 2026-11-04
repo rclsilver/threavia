@@ -46,6 +46,10 @@ http:
   # the other modes. Behind an ingress in mode none, list the ingress host here.
   # The probes are not affected.
   allowedHosts: []
+  # The address clients reach Core at, such as https://threavia.example.com.
+  # OAuth for the MCP endpoint (ChatGPT) publishes it as its issuer. Empty
+  # derives it from each request (X-Forwarded-Proto and Host).
+  publicURL: ""
 
 service:
   type: ClusterIP

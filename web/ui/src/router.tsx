@@ -34,6 +34,7 @@ const MemoryView = lazyRouteComponent(() => import('@/routes/project'), 'MemoryV
 const DirectoriesView = lazyRouteComponent(() => import('@/routes/project'), 'DirectoriesView');
 const PermissionsView = lazyRouteComponent(() => import('@/routes/project'), 'PermissionsView');
 const SkillsView = lazyRouteComponent(() => import('@/routes/project'), 'SkillsView');
+const OAuthConsentView = lazyRouteComponent(() => import('@/routes/oauth-consent'), 'OAuthConsentView');
 
 // The tour exists only in the demo, and is fetched only there.
 const DemoTour = lazy(() => import('@/demo/tour'));
@@ -202,7 +203,14 @@ const callbackRoute = createRoute({
   path: CALLBACK_PATH,
   component: () => <Navigate to={landingPath()} replace />,
 });
+/** Where Core's /oauth/authorize sends a person to approve an MCP client. */
+const oauthConsentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/oauth/consent',
+  component: OAuthConsentView,
+});
 const routeTree = rootRoute.addChildren([
+  oauthConsentRoute,
   indexRoute,
   callbackRoute,
   waitingRoute,

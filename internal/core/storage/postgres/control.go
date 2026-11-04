@@ -6,11 +6,11 @@ import (
 	"github.com/rclsilver/threavia/internal/core/domain"
 )
 
-const controlColumns = `id,owner_id,label,scopes,created_at,expires_at,revoked_at,bootstrap`
+const controlColumns = `id,owner_id,label,scopes,created_at,expires_at,revoked_at,bootstrap,COALESCE((SELECT c.name FROM control_oauth_clients c WHERE c.id=oauth_client_id),'')`
 
 func scanControl(row scanner) (domain.ControlAccess, error) {
 	var a domain.ControlAccess
-	err := row.Scan(&a.ID, &a.OwnerID, &a.Label, &a.Scopes, &a.CreatedAt, &a.ExpiresAt, &a.RevokedAt, &a.Bootstrap)
+	err := row.Scan(&a.ID, &a.OwnerID, &a.Label, &a.Scopes, &a.CreatedAt, &a.ExpiresAt, &a.RevokedAt, &a.Bootstrap, &a.OAuthClient)
 	return a, classify(err, "read MCP control access")
 }
 

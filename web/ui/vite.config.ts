@@ -36,6 +36,12 @@ export default defineConfig({
       '/healthz': proxied,
       '/readyz': proxied,
       '/version': proxied,
+      // OAuth for /mcp; /oauth/consent is the client's own page.
+      '/mcp': proxied,
+      '/.well-known': proxied,
+      '/oauth/authorize': proxied,
+      '/oauth/register': proxied,
+      '/oauth/token': proxied,
     },
   },
   build: {

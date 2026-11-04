@@ -1,6 +1,6 @@
 import { monitors } from './monitors';
 import { demoMCP } from './mcp';
-import { demoControl } from './control';
+import { demoControl, demoOAuth } from './control';
 import { ApiError } from '@/api/client';
 import { LEARNING_REQUEST, learningSource } from '../../../../clients/shared/learnings';
 import { announceJobEnded } from '@/lib/job-ended';
@@ -423,6 +423,8 @@ const routes: [string, RegExp, Handler][] = [
 
   ['GET', /^\/api\/v1\/me\/control-accesses$/, (_m, body) => demoControl('list', '', body)],
   ['POST', /^\/api\/v1\/me\/control-accesses$/, (_m, body) => { const result = demoControl('create', '', body); emitLifecycle('control_access.changed', '', { action: 'created' }); return result; }],
+  ['GET', /^\/api\/v1\/oauth\/clients\/([^/]+)$/, (m, body) => demoOAuth('client', m[1], body)],
+  ['POST', /^\/api\/v1\/oauth\/authorize$/, (_m, body) => { const result = demoOAuth('authorize', '', body); emitLifecycle('control_access.changed', '', { action: 'created' }); return result; }],
   ['DELETE', /^\/api\/v1\/control-accesses\/([^/]+)$/, (m, body) => { const result = demoControl('revoke', m[1], body); emitLifecycle('control_access.changed', '', { accessId: m[1], action: 'revoked' }); return result; }],
   ['GET', /^\/api\/v1\/me\/mcp$/, (m, body) => { const result = demoMCP('list', m[1] || '', body); return result; }],
   ['POST', /^\/api\/v1\/me\/mcp$/, (m, body) => { const result = demoMCP('create', m[1] || '', body); emitLifecycle('mcp.changed', '', {}); return result; }],

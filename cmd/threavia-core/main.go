@@ -182,6 +182,7 @@ func run() error {
 		Logger:        logger,
 		WebUI:         webUI,
 		AllowedHosts:  cfg.HTTP.AllowedHosts,
+		PublicURL:     cfg.HTTP.PublicURL,
 	})
 	var metricsServer *http.Server
 	if cfg.Metrics.Enabled {

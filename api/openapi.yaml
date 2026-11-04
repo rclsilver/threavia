@@ -151,6 +151,170 @@ paths:
       responses:
         '401': { $ref: '#/components/responses/Error' }
         '405': { description: Stateless MCP transport }
+  /.well-known/oauth-protected-resource:
+    get:
+      summary: Protected resource metadata of the MCP endpoint (RFC 9728)
+      security: []
+      responses:
+        '200':
+          description: Where an MCP client obtains a token for /mcp
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthProtectedResource' }
+  /.well-known/oauth-protected-resource/mcp:
+    get:
+      summary: Protected resource metadata, at the path RFC 9728 derives from /mcp
+      security: []
+      responses:
+        '200':
+          description: Where an MCP client obtains a token for /mcp
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthProtectedResource' }
+  /.well-known/oauth-authorization-server:
+    get:
+      summary: Authorization server metadata (RFC 8414)
+      description: Core is the OAuth 2.1 authorization server of its MCP endpoint. Public clients only, authorization code with PKCE S256, refresh token rotation.
+      security: []
+      responses:
+        '200':
+          description: Endpoints and capabilities
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /oauth/register:
+    options:
+      summary: CORS preflight for browser-based MCP clients
+      security: []
+      responses:
+        '204': { description: Allowed }
+    post:
+      summary: Dynamic client registration of a public client (RFC 7591)
+      description: Registration grants nothing; a person consents in the Web client before any token is issued.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [redirect_uris]
+              properties:
+                client_name: { type: string, maxLength: 120 }
+                redirect_uris: { type: array, minItems: 1, maxItems: 10, items: { type: string, format: uri } }
+                token_endpoint_auth_method: { type: string, enum: [none] }
+                grant_types: { type: array, items: { type: string, enum: [authorization_code, refresh_token] } }
+      responses:
+        '201':
+          description: The registered client
+          content:
+            application/json:
+              schema: { type: object, required: [client_id, redirect_uris], additionalProperties: true, properties: { client_id: { type: string }, redirect_uris: { type: array, items: { type: string } } } }
+        '400':
+          description: RFC 7591 error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+  /oauth/authorize:
+    get:
+      summary: Authorization endpoint
+      description: Checks the request, then redirects to the Web client's consent page (/oauth/consent), where the signed-in person chooses the scopes. An unknown client or unregistered redirect_uri is answered here, never redirected.
+      security: []
+      parameters:
+        - { name: response_type, in: query, required: true, schema: { type: string, enum: [code] } }
+        - { name: client_id, in: query, required: true, schema: { type: string } }
+        - { name: redirect_uri, in: query, required: true, schema: { type: string } }
+        - { name: code_challenge, in: query, required: true, schema: { type: string } }
+        - { name: code_challenge_method, in: query, required: true, schema: { type: string, enum: [S256] } }
+        - { name: state, in: query, schema: { type: string } }
+        - { name: scope, in: query, schema: { type: string } }
+        - { name: resource, in: query, schema: { type: string } }
+      responses:
+        '302': { description: 'To the consent page, or back to the client with an error' }
+        '400': { $ref: '#/components/responses/Error' }
+  /oauth/token:
+    options:
+      summary: CORS preflight for browser-based MCP clients
+      security: []
+      responses:
+        '204': { description: Allowed }
+    post:
+      summary: Token endpoint
+      description: Exchanges a code (with its PKCE verifier) or a refresh token. Refresh tokens rotate and work once. Revoking the access in Settings ends both.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type, client_id]
+              properties:
+                grant_type: { type: string, enum: [authorization_code, refresh_token] }
+                client_id: { type: string }
+                code: { type: string }
+                redirect_uri: { type: string }
+                code_verifier: { type: string }
+                refresh_token: { type: string }
+                resource: { type: string }
+      responses:
+        '200':
+          description: Tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, token_type, expires_in, refresh_token, scope]
+                properties:
+                  access_token: { type: string }
+                  token_type: { type: string, enum: [Bearer] }
+                  expires_in: { type: integer }
+                  refresh_token: { type: string }
+                  scope: { type: string }
+        '400':
+          description: RFC 6749 error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+  /api/v1/oauth/clients/{clientId}:
+    parameters:
+      - { name: clientId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: A registered OAuth client, as the consent page shows it
+      responses:
+        '200':
+          description: The client
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthClient' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/oauth/authorize:
+    post:
+      summary: Approve or refuse an OAuth client, as the signed-in person
+      description: Approval creates a single-use code for the scopes chosen here, whatever the client asked for. Either way, the answer says where to send the browser back.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientId, redirectUri, codeChallenge, codeChallengeMethod, scopes, approved]
+              properties:
+                clientId: { type: string }
+                redirectUri: { type: string }
+                state: { type: string }
+                codeChallenge: { type: string }
+                codeChallengeMethod: { type: string, enum: [S256] }
+                resource: { type: string }
+                scopes: { type: array, uniqueItems: true, items: { type: string, enum: [read, manage, answer, approve] } }
+                approved: { type: boolean }
+      responses:
+        '200':
+          description: Where to send the browser
+          content:
+            application/json:
+              schema: { type: object, required: [redirectTo], properties: { redirectTo: { type: string } } }
+        '400': { $ref: '#/components/responses/Error' }
   /api/v1/me/control-accesses:
     get:
       summary: List dedicated MCP control accesses without their secrets
@@ -2946,6 +3110,30 @@ components:
         expiresAt: { type: string, format: date-time }
         revokedAt: { type: string, format: date-time }
         bootstrap: { type: boolean }
+        oauthClient: { type: string, description: 'The OAuth client this grant was given to; absent for a token made in Settings.' }
+    OAuthClient:
+      type: object
+      required: [id, name, redirectUris, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, description: 'Chosen by the client when it registered itself; not verified.' }
+        redirectUris: { type: array, items: { type: string } }
+        createdAt: { type: string, format: date-time }
+    OAuthError:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        error_description: { type: string }
+    OAuthProtectedResource:
+      type: object
+      required: [resource, authorization_servers]
+      properties:
+        resource: { type: string }
+        resource_name: { type: string }
+        authorization_servers: { type: array, items: { type: string } }
+        scopes_supported: { type: array, items: { type: string } }
+        bearer_methods_supported: { type: array, items: { type: string } }
     MCPServer: {"type":"object","additionalProperties":false,"description":"Portable declaration. Env and headers contain backend environment variable names, never secret values. Tools are selected explicitly. writeTools is a separate human-granted exact-name list permitting selected writes without per-call approval; explicit policy denials still apply.","required":["name","transport","tools","readTools","resources","prompts","enabled","oauth"],"properties":{"revision":{"type":"integer","minimum":0,"description":"Optimistic concurrency revision; include the latest value when replacing a declaration"},"id":{"type":"string","readOnly":true},"name":{"type":"string","pattern":"^[a-z][a-z0-9_]{0,47}$"},"transport":{"type":"string","enum":["stdio","http"]},"command":{"type":"string"},"args":{"type":"array","items":{"type":"string"}},"url":{"type":"string"},"env":{"type":"object","additionalProperties":{"type":"string"}},"headers":{"type":"object","additionalProperties":{"type":"string"}},"oauth":{"type":"boolean"},"oauthClientId":{"type":"string"},"tools":{"type":"array","items":{"type":"string"}},"readTools":{"type":"array","items":{"type":"string"}},"writeTools":{"type":"array","uniqueItems":true,"items":{"type":"string"}},"resources":{"type":"boolean"},"prompts":{"type":"boolean"},"enabled":{"type":"boolean"},"projectIds":{"type":"array","items":{"type":"string"},"readOnly":true,"description":"Projects whose activations are removed when this declaration is deleted"}}}
     MCPBinding: {"type":"object","required":["serverId","enabled","required"],"properties":{"serverId":{"type":"string"},"enabled":{"type":"boolean"},"required":{"type":"boolean"}}}
     MCPRestriction: {"type":"object","required":["serverIds"],"properties":{"restricted":{"type":"boolean","readOnly":true},"serverIds":{"type":["array","null"],"items":{"type":"string"}}}}

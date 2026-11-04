@@ -75,6 +75,7 @@ func registered(t *testing.T) []string {
 	h.registerPush(mux)
 	h.registerStream(mux)
 	h.registerControl(mux)
+	h.registerControlOAuth(mux)
 
 	routes := h.Routes()
 	slices.Sort(routes)

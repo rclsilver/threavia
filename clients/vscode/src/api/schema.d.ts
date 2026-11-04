@@ -224,6 +224,430 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/.well-known/oauth-protected-resource": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Protected resource metadata of the MCP endpoint (RFC 9728) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Where an MCP client obtains a token for /mcp */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OAuthProtectedResource"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/oauth-protected-resource/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Protected resource metadata, at the path RFC 9728 derives from /mcp */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Where an MCP client obtains a token for /mcp */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OAuthProtectedResource"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/oauth-authorization-server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Authorization server metadata (RFC 8414)
+         * @description Core is the OAuth 2.1 authorization server of its MCP endpoint. Public clients only, authorization code with PKCE S256, refresh token rotation.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Endpoints and capabilities */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dynamic client registration of a public client (RFC 7591)
+         * @description Registration grants nothing; a person consents in the Web client before any token is issued.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        client_name?: string;
+                        redirect_uris: string[];
+                        /** @enum {string} */
+                        token_endpoint_auth_method?: "none";
+                        grant_types?: ("authorization_code" | "refresh_token")[];
+                    };
+                };
+            };
+            responses: {
+                /** @description The registered client */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            client_id: string;
+                            redirect_uris: string[];
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description RFC 7591 error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OAuthError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        /** CORS preflight for browser-based MCP clients */
+        options: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Allowed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Authorization endpoint
+         * @description Checks the request, then redirects to the Web client's consent page (/oauth/consent), where the signed-in person chooses the scopes. An unknown client or unregistered redirect_uri is answered here, never redirected.
+         */
+        get: {
+            parameters: {
+                query: {
+                    response_type: "code";
+                    client_id: string;
+                    redirect_uri: string;
+                    code_challenge: string;
+                    code_challenge_method: "S256";
+                    state?: string;
+                    scope?: string;
+                    resource?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description To the consent page, or back to the client with an error */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["Error"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Token endpoint
+         * @description Exchanges a code (with its PKCE verifier) or a refresh token. Refresh tokens rotate and work once. Revoking the access in Settings ends both.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/x-www-form-urlencoded": {
+                        /** @enum {string} */
+                        grant_type: "authorization_code" | "refresh_token";
+                        client_id: string;
+                        code?: string;
+                        redirect_uri?: string;
+                        code_verifier?: string;
+                        refresh_token?: string;
+                        resource?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Tokens */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            access_token: string;
+                            /** @enum {string} */
+                            token_type: "Bearer";
+                            expires_in: number;
+                            refresh_token: string;
+                            scope: string;
+                        };
+                    };
+                };
+                /** @description RFC 6749 error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OAuthError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        /** CORS preflight for browser-based MCP clients */
+        options: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Allowed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/oauth/clients/{clientId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientId: string;
+            };
+            cookie?: never;
+        };
+        /** A registered OAuth client, as the consent page shows it */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The client */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OAuthClient"];
+                    };
+                };
+                404: components["responses"]["Error"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/oauth/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or refuse an OAuth client, as the signed-in person
+         * @description Approval creates a single-use code for the scopes chosen here, whatever the client asked for. Either way, the answer says where to send the browser back.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        clientId: string;
+                        redirectUri: string;
+                        state?: string;
+                        codeChallenge: string;
+                        /** @enum {string} */
+                        codeChallengeMethod: "S256";
+                        resource?: string;
+                        scopes: ("read" | "manage" | "answer" | "approve")[];
+                        approved: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Where to send the browser */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            redirectTo: string;
+                        };
+                    };
+                };
+                400: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/control-accesses": {
         parameters: {
             query?: never;
@@ -5502,6 +5926,28 @@ export interface components {
             /** Format: date-time */
             revokedAt?: string;
             bootstrap: boolean;
+            /** @description The OAuth client this grant was given to; absent for a token made in Settings. */
+            oauthClient?: string;
+        };
+        OAuthClient: {
+            /** Format: uuid */
+            id: string;
+            /** @description Chosen by the client when it registered itself; not verified. */
+            name: string;
+            redirectUris: string[];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        OAuthError: {
+            error: string;
+            error_description?: string;
+        };
+        OAuthProtectedResource: {
+            resource: string;
+            resource_name?: string;
+            authorization_servers: string[];
+            scopes_supported?: string[];
+            bearer_methods_supported?: string[];
         };
         /** @description Portable declaration. Env and headers contain backend environment variable names, never secret values. Tools are selected explicitly. writeTools is a separate human-granted exact-name list permitting selected writes without per-call approval; explicit policy denials still apply. */
         MCPServer: {
