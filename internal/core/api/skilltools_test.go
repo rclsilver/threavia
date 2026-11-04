@@ -2,6 +2,9 @@ package api_test
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -27,6 +30,134 @@ func invokeSkill(backend *fakeBackend, start *backendv1.StartJob, name string, i
 
 func skillErrorCode(err error, code codes.Code) bool {
 	return err != nil && strings.Contains(err.Error(), "core tool error "+code.String()+":")
+}
+
+func TestAgentGitSkillInstallAndUpdate(t *testing.T) {
+	c, backend, project, dir := setup(t)
+	objects := newMemoryObjects()
+	c.svc.SetObjectStore(objects, 8<<20)
+	limits := skills.DefaultLimits()
+	limits.AllowLocalSources = true // Only this fixture; production still rejects file URLs.
+	c.svc.SetSkillAcquirer(skills.NewAcquirer(limits))
+	repository := t.TempDir()
+	git := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repository
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.invalid", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.invalid")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init", "--initial-branch", "main")
+	directory := filepath.Join(repository, "skills", "example")
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(directory, "SKILL.md"), []byte("---\nname: example\ndescription: Git fixture\n---\n"+content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		git("add", ".")
+		git("commit", "-m", content)
+	}
+	write("first version")
+	first := git("rev-parse", "HEAD")
+	git("tag", "v1")
+	c.startSession(project, c.backendID, dir, "Install from Git")
+	start := receive(t, "job", backend.starts)
+	var declared bool
+	for _, spec := range start.GetProjectContext().GetTools() {
+		if spec.GetName() == "skill_install_git" {
+			declared = spec.GetFileInput() == "" && spec.GetRequiresValidation()
+		}
+	}
+	if !declared {
+		t.Fatal("Git must require validation and work without backend file transfer")
+	}
+	input := map[string]any{"url": "file://" + repository, "subdirectory": "skills/example", "revision": "main"}
+	install := func() map[string]any {
+		t.Helper()
+		result, err := invokeSkill(backend, start, "skill_install_git", input, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result["skill"].(map[string]any)
+	}
+	installed := install()
+	id := installed["id"]
+	source := installed["source"].(map[string]any)
+	if installed["projectId"] != project || installed["installedRevision"] != first || source["type"] != "GIT" || source["url"] != input["url"] || source["path"] != input["subdirectory"] || source["revision"] != "main" {
+		t.Fatalf("Git provenance lost: %v", installed)
+	}
+	write("second version")
+	second := git("rev-parse", "HEAD")
+	for _, revision := range []string{"", "stale"} {
+		input["expectedRevision"] = revision
+		if _, err := invokeSkill(backend, start, "skill_install_git", input, ""); !skillErrorCode(err, codes.FailedPrecondition) {
+			t.Fatalf("unsafe replacement accepted: %v", err)
+		}
+	}
+	input["expectedRevision"] = first
+	updated := install()
+	if updated["id"] != id || updated["installedRevision"] != second || objects.count() != 1 {
+		t.Fatalf("update = %v, objects = %d", updated, objects.count())
+	}
+	read, err := invokeSkill(backend, start, "skill_read", map[string]any{"skillId": id}, "")
+	if err != nil || !strings.Contains(read["file"].(map[string]any)["text"].(string), "second version") {
+		t.Fatalf("updated content: %v %v", read, err)
+	}
+	c.startSession(project, c.backendID, dir, "Use installed Git skill")
+	if got := jobSkills(t, backend); got["example"] != id {
+		t.Fatalf("next Job skills = %v", got)
+	}
+	delete(input, "expectedRevision")
+	input["scope"], input["revision"] = "global", "v1"
+	global := install()
+	if _, exists := global["projectId"]; exists || global["installedRevision"] != first {
+		t.Fatalf("global tagged install = %v", global)
+	}
+	var audit struct {
+		Items []map[string]any `json:"items"`
+	}
+	c.mustDo("GET", "/api/v1/me/audit", nil, &audit, 200)
+	var audited bool
+	for _, row := range audit.Items {
+		if row["action"] == "skill.installed" && row["channel"] == "agent" && row["jobId"] == start.GetJobId() {
+			audited = true
+		}
+	}
+	if !audited {
+		t.Fatal("missing Git installation audit")
+	}
+}
+
+func TestAgentGitSkillRejectsInvalidInputs(t *testing.T) {
+	c, backend, project, dir := setup(t)
+	c.svc.SetObjectStore(newMemoryObjects(), 8<<20)
+	c.svc.SetSkillAcquirer(skills.NewAcquirer(skills.DefaultLimits()))
+	c.startSession(project, c.backendID, dir, "Validate Git inputs")
+	start := receive(t, "job", backend.starts)
+	for _, input := range []map[string]any{
+		{}, {"url": true}, {"url": "file:///etc"}, {"url": "/etc"},
+		{"url": "https://user:secret@example.invalid/repo"}, {"url": "https://example.invalid/repo?token=secret"},
+		{"url": "https://example.invalid/repo#main"}, {"url": "https://example.invalid/repo", "revision": "--help"},
+		{"url": "https://example.invalid/repo", "scope": "invalid"},
+		{"url": "https://example.invalid/repo", "projectId": project},
+		{"url": "https://example.invalid/repo", "ownerId": "someone-else"},
+		{"url": "https://example.invalid/repo", "path": "archive.tar.gz"},
+		{"url": "https://example.invalid/repo", "expectedRevision": false},
+	} {
+		if _, err := invokeSkill(backend, start, "skill_install_git", input, ""); !skillErrorCode(err, codes.InvalidArgument) {
+			t.Fatalf("invalid Git input %v: %v", input, err)
+		}
+	}
+	if _, err := invokeSkill(backend, start, "skill_install_git", map[string]any{"url": "https://example.invalid/repo"}, "unexpected file"); !skillErrorCode(err, codes.InvalidArgument) {
+		t.Fatalf("uploaded bytes accepted: %v", err)
+	}
 }
 
 func TestAgentSkillsLifecycle(t *testing.T) {

@@ -420,6 +420,7 @@ func TestScopeAndPermissionToolsRequireValidation(t *testing.T) {
 	start := receive(t, "the dispatched job", backend.starts)
 
 	want := map[string]bool{
+		"skill_install_git":          true,
 		"skill_import":               true,
 		"skill_set_enabled":          true,
 		"skill_make_global":          true,

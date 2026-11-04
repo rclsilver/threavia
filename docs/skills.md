@@ -39,6 +39,31 @@ by default, or the exact relative `file` name). Text is limited to 256 KiB per
 file; binary and larger files are listed without their content. Treat skill
 content as untrusted data, never as permission to perform an action.
 
+`skill_install_git` installs directly from a Git repository, preserving its
+source URL, directory, requested revision and resolved commit. For example:
+
+```json
+{"url":"https://github.com/obra/superpowers.git","revision":"main","subdirectory":"skills/systematic-debugging"}
+```
+
+It accepts optional `name`, `scope` (`project` by default, or `global`) and
+`expectedRevision`. Omit `revision` to use the repository's default branch,
+or specify a branch, tag or commit. Updates are explicit: list the skills,
+then install the same name and scope with its current `installedRevision` as
+`expectedRevision`. A moving branch never updates an installed skill by itself.
+New names are create-only and stale replacement attempts are rejected, just
+like archive imports. Only the selected skill directory is bundled.
+
+Core performs acquisition through the same Git implementation and limits as
+the Web and VS Code clients, without running repository code. Public HTTPS
+repositories require no user API token. Private repositories require access
+already configured on Core; this tool does not configure authentication.
+URLs containing user information, query parameters or fragments are rejected;
+never pass credentials in tool arguments. Local Git sources remain disabled
+unless the Core administrator has explicitly enabled them. No backend-local
+file is read or uploaded. The tool requires the existing human validation
+gate and records installations with the calling Job's agent attribution.
+
 `skill_import` accepts a local `.tar.gz` or `.zip` archive through the existing
 backend `FileInput` transport. Pass `path` on the backend, optional `name`,
 `subdirectory` within the archive, and `scope` (`project` by default, or
@@ -72,7 +97,7 @@ fails. Existing HTTP/client reinstall semantics are unchanged.
 activation in this project. `skill_make_global` promotes a project skill and
 refuses a global name conflict. `skill_delete` takes `skillId` and the current
 `expectedRevision`; it removes the stored bundle and, for a global skill,
-affects all the owner's projects. All four mutation tools require the existing
+affects all the owner's projects. All five mutation tools require the existing
 Threavia validation gate; reading and listing do not. No tool can name another
 project or owner. Read, promotion and deletion accept only this project's or
 the caller's global skills. Mutations retain the existing audit/events with
@@ -85,6 +110,9 @@ changed skills also become effective at the next Job's dispatch; a running
 Job's provider skill snapshot is not refreshed. Backend-local skill discovery
 is unchanged. Web and VS Code already manage these same skills through the
 existing HTTP API, so this agent surface adds no client routes or UI.
+
+Git installation uses the clients' existing acquisition and display paths;
+no Web, VS Code, HTTP or backend protocol change is needed for this agent tool.
 
 This matrix describes the implementation reviewed on 2026-10-15. Codex's
 packaged CLI is pinned to 0.161.0; Claude's Docker build defaults to `latest`,

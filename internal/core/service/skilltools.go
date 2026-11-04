@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
@@ -19,6 +20,7 @@ func (s *Service) skillTool(ctx context.Context, identity auth.Identity, jc jobS
 	fields := map[tools.Name]string{
 		"skill_list": "", "skill_read": "skillId file",
 		"skill_import":      "path filename name subdirectory scope expectedRevision",
+		"skill_install_git": "url revision name subdirectory scope expectedRevision",
 		"skill_set_enabled": "skillId enabled", "skill_make_global": "skillId",
 		"skill_delete": "skillId expectedRevision",
 	}
@@ -51,8 +53,19 @@ func (s *Service) skillTool(ctx context.Context, identity auth.Identity, jc jobS
 		}
 		return sessionToolResult(map[string]any{"project": project, "global": global, "applies": "next Job"})
 	}
-	if name == "skill_import" {
-		if text(input, "path") == "" || len(file) == 0 || len(file) > maxSkillImportBytes {
+	if name == "skill_import" || name == "skill_install_git" {
+		source := domain.SkillSource{Type: domain.SkillSourceUpload, URL: text(input, "filename"), Path: text(input, "subdirectory")}
+		if name == "skill_install_git" {
+			repository := text(input, "url")
+			parsed, err := url.Parse(repository)
+			if repository == "" || err != nil || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+				return nil, fmt.Errorf("%w: provide a Git URL without credentials, query or fragment", ErrInvalid)
+			}
+			if len(file) != 0 {
+				return nil, fmt.Errorf("%w: a Git installation does not accept an uploaded file", ErrInvalid)
+			}
+			source = domain.SkillSource{Type: domain.SkillSourceGit, URL: repository, Path: text(input, "subdirectory"), Revision: text(input, "revision")}
+		} else if text(input, "path") == "" || len(file) == 0 || len(file) > maxSkillImportBytes {
 			return nil, fmt.Errorf("%w: provide an archive from this backend, up to 3 MiB", ErrInvalid)
 		}
 		projectID, err := memoryProject(jc.ProjectID, text(input, "scope"))
@@ -60,9 +73,7 @@ func (s *Service) skillTool(ctx context.Context, identity auth.Identity, jc jobS
 			return nil, err
 		}
 		expected := text(input, "expectedRevision")
-		installed, err := s.installSkill(ctx, identity, projectID, domain.SkillSource{
-			Type: domain.SkillSourceUpload, URL: text(input, "filename"), Path: text(input, "subdirectory"),
-		}, text(input, "name"), bytes.NewReader(file), &expected)
+		installed, err := s.installSkill(ctx, identity, projectID, source, text(input, "name"), bytes.NewReader(file), &expected)
 		if err != nil {
 			return nil, err
 		}
