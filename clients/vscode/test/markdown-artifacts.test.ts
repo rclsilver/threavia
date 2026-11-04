@@ -13,6 +13,7 @@ describe('Markdown artifact identification in both clients', () => {
     ['text/markdown; charset=utf-8', 'report'], ['TEXT/X-MARKDOWN', 'report'],
     ['application/markdown', 'report'], ['text/plain', 'REPORT.MD'],
     ['application/octet-stream', 'report.markdown'], ['', 'report.mdown'], ['', 'report.mkd'],
+    ['text/html; charset=utf-8', 'advisory.md'],
   ])('opens %s / %s as Markdown', (mimeType, filename) => {
     expect(isMarkdown(mimeType, filename)).toBe(true);
     expect(artifactKind(mimeType, filename)).toBe('markdown');

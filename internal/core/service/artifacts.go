@@ -277,10 +277,7 @@ func (s *Service) publishArtifact(ctx context.Context, identity auth.Identity, j
 	if filename == "" {
 		filename = filepath.Base(text(input, "path"))
 	}
-	mimeType := mime.TypeByExtension(strings.ToLower(filepath.Ext(filename)))
-	if mimeType == "" {
-		mimeType = http.DetectContentType(file)
-	}
+	mimeType := publishedType(filename, file)
 
 	scope := domain.Scope{ProjectID: jc.ProjectID, SessionID: jc.SessionID, JobID: jc.JobID}
 	artifact, err := s.UploadArtifact(ctx, identity, jc.ProjectID, filename, mimeType, bytes.NewReader(file), scope)
@@ -301,4 +298,27 @@ func (s *Service) publishArtifact(ctx context.Context, identity auth.Identity, j
 		"size":       artifact.Size,
 		"published":  "It is in the conversation now, and kept with the project's artifacts.",
 	}, nil
+}
+
+// markdownTypes are the Markdown names Go's own table lacks. Without them a
+// minimal image, which has no mime.types, sniffs the content instead, and a
+// document that opens with an HTML comment or tag is stored as a web page.
+var markdownTypes = map[string]string{
+	".md":       "text/markdown; charset=utf-8",
+	".markdown": "text/markdown; charset=utf-8",
+	".mdown":    "text/markdown; charset=utf-8",
+	".mkd":      "text/markdown; charset=utf-8",
+}
+
+// publishedType says what a published file is: from its name first, then from
+// its bytes.
+func publishedType(filename string, file []byte) string {
+	extension := strings.ToLower(filepath.Ext(filename))
+	if mimeType, ok := markdownTypes[extension]; ok {
+		return mimeType
+	}
+	if mimeType := mime.TypeByExtension(extension); mimeType != "" {
+		return mimeType
+	}
+	return http.DetectContentType(file)
 }

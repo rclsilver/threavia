@@ -10,8 +10,10 @@ export function kindOf(mimeType: string, filename: string): Kind {
   if (type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(extension)) return 'image';
   if (type.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'].includes(extension)) return 'audio';
   if (type.startsWith('video/') || ['mp4', 'webm', 'mov'].includes(extension)) return 'video';
-  if (type.startsWith('text/html') || ['html', 'htm'].includes(extension)) return 'html';
+  // Before HTML: a type sniffed from a Markdown file that opens with a tag
+  // or a comment says HTML, and the name says what the file is.
   if (isMarkdown(mimeType, filename)) return 'markdown';
+  if (type.startsWith('text/html') || ['html', 'htm'].includes(extension)) return 'html';
   if (type.startsWith('text/') || /json|yaml|xml|csv/.test(type) || ['md', 'txt', 'csv', 'json', 'yaml', 'yml', 'log'].includes(extension)) {
     return 'text';
   }
