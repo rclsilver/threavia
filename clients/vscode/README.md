@@ -96,7 +96,8 @@ pinned global decisions are read by agents in all your projects on that Core.
   - **Commands and files.** Type `/` at the start of a message for the
     session's Skills, written in the form its provider reads
     (`/threavia-skills:name` for Claude, `$name` for Codex), and for commands:
-    `/model`, `/effort`, `/next`, `/now`, `/stop`. Type `@` to name a file or
+    `/model`, `/effort`, `/next`, `/now`, `/stop`, and `/rename <name>` to
+    rename the session without sending anything. Type `@` to name a file or
     directory of the working directory, listed by the backend (it needs a
     backend with the `WORKSPACE_FILES` feature). The arrows move through the
     list, Enter or Tab takes a line, Escape closes it without stopping

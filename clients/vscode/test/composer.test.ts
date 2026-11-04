@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { composerCommands, composerToken, matchCommands, modelPill, promptHistory, recall, replaceToken, skillMention } from '../../shared/composer';
+import { commandInsert, composerCommands, composerToken, matchCommands, modelPill, promptHistory, recall, renameRequest, replaceToken, skillMention } from '../../shared/composer';
 
 describe('composer suggestions', () => {
   it('offers commands only for the first word and files for any @ word', () => {
@@ -82,6 +82,24 @@ describe('composer suggestions', () => {
     expect(recall(history, two.position, 'newer', two.text)).toEqual({ position: 0, text: 'first' });
     expect(recall(history, 0, 'newer', 'first')).toEqual({ position: -1, text: '' });
     expect(recall(history, -1, 'newer', '')).toBeUndefined();
+  });
+
+  it('offers /rename only for an existing session, and writes it out for the name', () => {
+    expect(composerCommands({ skills: [] }).some((command) => command.kind === 'rename')).toBe(false);
+    const rename = composerCommands({ skills: [], renamable: true }).find((command) => command.kind === 'rename')!;
+    expect(rename.id).toBe('rename');
+    const token = composerToken('/ren', 4)!;
+    expect(replaceToken('/ren', token, commandInsert(rename))).toEqual({ text: '/rename ', caret: 8 });
+    expect(commandInsert(composerCommands({ skills: [], running: true })[0])).toBe('');
+  });
+
+  it('reads a /rename message as the new name, never as a message for the agent', () => {
+    expect(renameRequest('/rename  Puppet   audit \n')).toBe('Puppet audit');
+    expect(renameRequest('/rename')).toBe('');
+    expect(renameRequest('/rename   ')).toBe('');
+    expect(renameRequest('/renamed it')).toBeUndefined();
+    expect(renameRequest('please /rename this')).toBeUndefined();
+    expect(renameRequest('Look at the build')).toBeUndefined();
   });
 });
 

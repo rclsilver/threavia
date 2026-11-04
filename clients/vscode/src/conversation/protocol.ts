@@ -89,6 +89,8 @@ export type WebviewMessage =
   | { type: 'copyResponse'; sequence: number }
   | { type: 'refreshRepository' }
   | { type: 'setModelSettings'; model: string; effort: string }
+  /** `/rename <name>`: `text` is the command, given back if renaming fails. */
+  | { type: 'rename'; title: string; text: string }
   /** The model pill: the extension shows the choice in the editor's Quick Pick. */
   | { type: 'pickModel' }
   | { type: 'archive' }

@@ -31,7 +31,7 @@ import { Follower } from './follow';
 import { renderMarkdown, renderQuestion } from './markdown';
 import { createModelSettings } from './model-settings';
 import { createSuggestions } from './suggestions';
-import { composerCommands, promptHistory, recall } from '../../../shared/composer';
+import { composerCommands, promptHistory, recall, renameRequest } from '../../../shared/composer';
 
 /**
  * The conversation, drawn in a webview.
@@ -179,6 +179,7 @@ const suggestions = createSuggestions(field, {
       current: { model: settings?.model || catalog?.defaultModel, effort: settings?.effort },
       deliveries: view?.deliveries,
       running: Boolean(view?.active && view.active.status !== 'CANCELLING'),
+      renamable: Boolean(view),
     });
   },
   files: () => composerSources.files,
@@ -1305,6 +1306,19 @@ function stop() {
 function submit() {
   const text = field.value.trim();
   if ((!text && !attachments.length) || starting || sendingMessage || savingModel || attaching) return;
+  // `/rename <name>` renames the Session; nothing reaches the agent, and the
+  // files waiting to be sent stay where they are.
+  const title = view ? renameRequest(text) : undefined;
+  if (title !== undefined) {
+    if (!title) return;
+    post({ type: 'rename', title, text });
+    field.value = '';
+    sendError.hidden = true;
+    autosize();
+    updateSend();
+    persist();
+    return;
+  }
   starting = Boolean(start);
   sendingMessage = true;
   renderComposer();

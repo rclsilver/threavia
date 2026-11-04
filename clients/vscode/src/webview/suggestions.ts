@@ -1,4 +1,4 @@
-import { composerToken, matchCommands, replaceToken, type ComposerCommand, type ComposerToken } from '../../../shared/composer';
+import { commandInsert, composerToken, matchCommands, replaceToken, type ComposerCommand, type ComposerToken } from '../../../shared/composer';
 import { h, icon } from './dom';
 
 type Suggestion =
@@ -110,13 +110,13 @@ export function createSuggestions(field: HTMLTextAreaElement, sources: Suggestio
   }
 
   function take(item: Suggestion, at: ComposerToken) {
-    const replacement = item.kind === 'file' ? `@${item.path}` : item.command.kind === 'skill' ? item.command.insert : '';
+    const replacement = item.kind === 'file' ? `@${item.path}` : commandInsert(item.command);
     const next = replaceToken(field.value, at, replacement);
     field.value = next.text;
     field.focus();
     field.setSelectionRange(next.caret, next.caret);
     sources.onChange();
-    if (item.kind === 'command' && item.command.kind !== 'skill') sources.onCommand(item.command);
+    if (item.kind === 'command' && !replacement) sources.onCommand(item.command);
     update();
   }
 

@@ -72,7 +72,27 @@ export type ComposerCommand =
   | { kind: 'model'; id: string; label: string; detail?: string; model: string; effort: string }
   | { kind: 'effort'; id: string; label: string; detail?: string; effort: string }
   | { kind: 'delivery'; id: string; label: string; detail?: string; delivery: 'NEXT' | 'NOW' }
-  | { kind: 'stop'; id: string; label: string; detail?: string };
+  | { kind: 'stop'; id: string; label: string; detail?: string }
+  | { kind: 'rename'; id: string; label: string; detail?: string; insert: string };
+
+/**
+ * What a command writes into the field rather than acting at once: a Skill,
+ * or `/rename ` waiting for the name.
+ */
+export function commandInsert(command: ComposerCommand): string {
+  return command.kind === 'skill' || command.kind === 'rename' ? command.insert : '';
+}
+
+/**
+ * The name a message asks the Session to take, when it is `/rename <name>`:
+ * the command renames rather than reaching the agent. An empty string is a
+ * `/rename` still missing its name; undefined is any other message.
+ */
+export function renameRequest(text: string): string | undefined {
+  const match = /^\/rename(?:\s+([\s\S]*))?$/.exec(text.trim());
+  if (!match) return undefined;
+  return (match[1] ?? '').replace(/\s+/g, ' ').trim();
+}
 
 export interface CommandSources {
   provider?: string;
@@ -84,6 +104,8 @@ export interface CommandSources {
   deliveries?: ('NEXT' | 'NOW')[];
   /** Something is running that Stop would stop. */
   running?: boolean;
+  /** The Session exists, so it can be renamed. */
+  renamable?: boolean;
 }
 
 /**
@@ -118,6 +140,9 @@ export function composerCommands(sources: CommandSources): ComposerCommand[] {
   }
   if (sources.running) {
     commands.push({ kind: 'stop', id: 'stop', label: 'stop', detail: 'Stop what is running now' });
+  }
+  if (sources.renamable) {
+    commands.push({ kind: 'rename', id: 'rename', label: 'rename', detail: 'Rename this session: /rename <name>', insert: '/rename' });
   }
   return commands;
 }

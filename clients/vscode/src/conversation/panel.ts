@@ -685,6 +685,16 @@ class ConversationPanel {
         }
         return;
       }
+      case 'rename': {
+        const sessionId = this.sessionId;
+        if (!sessionId || typeof message.title !== 'string' || !message.title.trim()) return;
+        try {
+          await this.core.client.renameSession(sessionId, message.title.trim());
+        } catch (error) {
+          this.post({ type: 'sendFailed', text: message.text, error: reason(error) });
+        }
+        return;
+      }
       case 'setModelSettings':
         if (typeof message.model !== 'string' || typeof message.effort !== 'string') return;
         return this.saveModel(message.model, message.effort);

@@ -40,7 +40,7 @@ import { cn, humanise } from '@/lib/utils';
 import { isSnoozed, readUpTo, snoozeBack, wokeFromSnooze } from '../../../../clients/shared/sessions';
 import { SnoozeMenu } from '@/components/snooze-menu';
 import { ArchiveButton } from '@/components/session-actions';
-import { composerCommands, promptHistory, recall } from '../../../../clients/shared/composer';
+import { composerCommands, promptHistory, recall, renameRequest } from '../../../../clients/shared/composer';
 
 const FINISHED = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
 
@@ -532,6 +532,7 @@ function Composer({
 }) {
   const touchKeyboard = useTouchKeyboard();
   const send = usePostMessage(sessionId);
+  const rename = useRenameSession(sessionId);
   const modelSettings = useSessionModel(sessionId);
   const attachments = usePromptAttachments(projectId, send.isPending);
   const [message, setMessage] = useDraft(sessionId);
@@ -565,6 +566,7 @@ function Composer({
     current: { model: session.model || catalog?.defaultModel, effort: session.effort },
     deliveries,
     running: Boolean(active && active.status !== 'CANCELLING'),
+    renamable: true,
   });
   const suggestions = useComposerSuggestions({
     field,
@@ -606,6 +608,14 @@ function Composer({
   const submit = () => {
     const text = message.trim();
     if (send.isPending || modelSettings.isPending || attachments.busy || (!text && attachments.files.length === 0)) return;
+    // `/rename <name>` renames the Session; nothing reaches the agent.
+    const title = renameRequest(text);
+    if (title !== undefined) {
+      if (!title || rename.isPending) return;
+      write('');
+      rename.mutate(title, { onError: () => setMessage(text) });
+      return;
+    }
     write('');
     send.mutate(
       { message: text, delivery: attachments.files.length ? 'QUEUE' : chosen, artifactIds: attachments.files.map((file) => file.id) },
@@ -734,6 +744,7 @@ function Composer({
         </div>
       </form>
       <ActionError error={modelSettings.error} outcome="Model settings not saved" recovery="Choose the model or effort again to retry." className="mt-2" />
+      <ActionError error={rename.error} outcome="Not renamed" recovery="The command is still in the field; send it again." className="mt-2" />
       {/* The text is kept in the field when sending fails; this says why. */}
       <ActionError
         error={send.error}

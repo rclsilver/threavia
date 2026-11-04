@@ -5,6 +5,7 @@ import { File, Folder, LoaderCircle, Sparkles, Terminal } from 'lucide-react';
 import { useBackendSkills, useSkills, useWorkspaceFiles } from '@/api/queries';
 import { cn } from '@/lib/utils';
 import {
+  commandInsert,
   composerToken,
   matchCommands,
   replaceToken,
@@ -114,10 +115,11 @@ export function useComposerSuggestions({
       return;
     }
     const command = suggestion.command;
-    const next = replaceToken(message, at, command.kind === 'skill' ? command.insert : '');
+    const insert = commandInsert(command);
+    const next = replaceToken(message, at, insert);
     setMessage(next.text);
     placeCaret(next.caret);
-    if (command.kind !== 'skill') onCommand(command);
+    if (!insert) onCommand(command);
   };
 
   /** Where the caret is, read after every change, click and key. */
