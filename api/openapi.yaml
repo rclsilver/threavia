@@ -990,6 +990,7 @@ paths:
                   format: uuid
                 model: { type: string, maxLength: 200, description: 'Empty uses the backend default.' }
                 effort: { type: string, maxLength: 32, description: 'Provider effort value; empty uses the backend default.' }
+                title: { type: string, description: 'The Session name; empty derives one from the first message.' }
                 message: { type: string }
                 artifactIds:
                   type: array

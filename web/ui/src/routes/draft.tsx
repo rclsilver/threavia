@@ -39,6 +39,7 @@ export function DraftView() {
   const [backendId, setBackendId] = useState('');
   const [directoryId, setDirectoryId] = useState(NONE);
   const [message, setMessage] = useDraft(`new.${projectId}`);
+  const [title, setTitle] = useDraft(`new-title.${projectId}`);
   const [adopting, setAdopting] = useState(false);
   const [nativeSessionId, setNativeSessionId] = useState('');
   const [picked, setPicked] = useState({ backendId: '', model: '', effort: '' });
@@ -84,6 +85,7 @@ export function DraftView() {
         projectId,
         backendInstanceId: chosenBackend,
         workingDirectoryId: directoryId === NONE ? null : directoryId,
+        title: title.trim(),
         message: text,
         artifactIds: attachments.files.map((file) => file.id),
         model,
@@ -92,6 +94,7 @@ export function DraftView() {
       })
       .then((result) => {
         setMessage('');
+        setTitle('');
         attachments.clear();
         return navigate({ to: '/sessions/$sessionId', params: { sessionId: result.session.id } });
       });
@@ -105,6 +108,16 @@ export function DraftView() {
       </header>
 
       <div className="max-w-xl space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="draft-title">Name</Label>
+          <Input
+            id="draft-title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Taken from the first message if left empty"
+          />
+        </div>
+
         <div className="space-y-1.5">
           <Label htmlFor="draft-backend">Backend</Label>
           <Select value={chosenBackend} onValueChange={setBackendId}>

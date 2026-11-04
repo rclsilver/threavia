@@ -25,6 +25,13 @@ export async function chooseNewSession(core: Core, several: boolean, from?: Proj
     if (!backend) return undefined;
     const directory = await pickDirectory(client, project, title);
     if (directory === undefined) return undefined;
+    const name = await vscode.window.showInputBox({
+      title,
+      prompt: 'Name the session, or leave empty to name it after the first message.',
+      placeHolder: 'Session name (optional)',
+      ignoreFocusOut: true,
+    });
+    if (name === undefined) return undefined;
     return {
       coreId: core.id,
       coreName: several ? core.name : undefined,
@@ -37,6 +44,7 @@ export async function chooseNewSession(core: Core, several: boolean, from?: Proj
       backendQuotas: backend.quotas,
       workingDirectoryId: directory?.id ?? null,
       directoryName: directory?.name,
+      title: name.trim() || undefined,
     };
   } catch (error) {
     const reason = error instanceof ApiError || error instanceof Error ? error.message : String(error);

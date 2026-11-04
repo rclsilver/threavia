@@ -31,9 +31,10 @@ type StartSessionInput struct {
 	Effort             string
 	Message            string
 	ArtifactIDs        []domain.ArtifactID
+	// Title names the Session; empty derives one from the first message.
+	Title string
 	// Internal delegation metadata, never accepted from the HTTP start route.
 	ManagerSessionID *domain.SessionID
-	Title            string
 	ExecutionPolicy  *domain.ExecutionPolicy
 	// NativeSessionID adopts a provider session that already exists on the
 	// backend, typically one started in a terminal. Empty opens a fresh one.

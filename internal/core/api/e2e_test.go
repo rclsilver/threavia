@@ -124,6 +124,28 @@ func TestFirstSendCreatesEverythingAtomically(t *testing.T) {
 	}
 }
 
+// TestFirstSendKeepsAChosenName names the Session from the start instead of
+// after its first message.
+func TestFirstSendKeepsAChosenName(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+
+	var started startSessionResponse
+	c.mustDo(http.MethodPost, "/api/v1/sessions/start", map[string]any{
+		"projectId":          projectID,
+		"backendInstanceId":  c.backendID,
+		"workingDirectoryId": dirID,
+		"title":              "  Puppet audit  ",
+		"message":            "Analyse ce projet",
+	}, &started, http.StatusCreated)
+
+	if started.Session.Title != "Puppet audit" {
+		t.Errorf("title = %q, want the chosen name, trimmed", started.Session.Title)
+	}
+	if start := receive(t, "the dispatched job", backend.starts); start.GetPrompt() != "Analyse ce projet" {
+		t.Errorf("prompt = %q, want the first message only", start.GetPrompt())
+	}
+}
+
 // TestAgentOutputReachesTheTimeline covers acceptance criteria 6 and 7: backend
 // output becomes history, and a replayed event does not duplicate it.
 func TestAgentOutputReachesTheTimeline(t *testing.T) {

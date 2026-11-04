@@ -55,6 +55,7 @@ func (h *handler) startSession(w http.ResponseWriter, r *http.Request, identity 
 		Message            string              `json:"message"`
 		ArtifactIDs        []domain.ArtifactID `json:"artifactIds"`
 		NativeSessionID    *string             `json:"nativeSessionId"`
+		Title              string              `json:"title"`
 	}](w, r)
 	if !ok {
 		return
@@ -67,6 +68,7 @@ func (h *handler) startSession(w http.ResponseWriter, r *http.Request, identity 
 		Effort:            body.Effort,
 		Message:           body.Message,
 		ArtifactIDs:       body.ArtifactIDs,
+		Title:             body.Title,
 		IdempotencyKey:    r.Header.Get("Idempotency-Key"),
 	}
 	if body.NativeSessionID != nil {

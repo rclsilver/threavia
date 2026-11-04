@@ -432,6 +432,7 @@ interface StartSession {
   workingDirectoryId: string | null;
   model?: string;
   effort?: string;
+  title?: string;
   message: string;
   nativeSessionId?: string | null;
   artifactIds?: string[];

@@ -405,7 +405,7 @@ function renderHeader() {
 
 /** A draft's header: where the first message will go, chosen before it opened. */
 function renderDraftHeader(draft: DraftStart) {
-  title.textContent = 'New session';
+  title.textContent = draft.title || 'New session';
   renderMeta([
     ...(draft.coreName
       ? [h('span', { class: 'meta-item', title: 'The Core the session will be created on' }, icon('cloud'), draft.coreName)]

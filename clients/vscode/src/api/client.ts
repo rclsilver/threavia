@@ -443,7 +443,7 @@ export class CoreClient {
    * The first send: Session, Run, Job and message in one transaction. The key
    * makes a retry after a lost answer start nothing twice.
    */
-  startSession(input: { projectId: string; backendInstanceId: string; workingDirectoryId: string | null; message: string; artifactIds?: string[] }) {
+  startSession(input: { projectId: string; backendInstanceId: string; workingDirectoryId: string | null; title?: string; message: string; artifactIds?: string[] }) {
     return this.post<{ session: Session; run: Run; job: Job }>('/api/v1/sessions/start', input, idempotencyKey());
   }
 

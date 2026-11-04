@@ -39,6 +39,10 @@ describe('startBody', () => {
     expect(body.workingDirectoryId).toBeNull();
     expect(Object.keys(body).sort()).toEqual(['backendInstanceId', 'message', 'projectId', 'workingDirectoryId']);
   });
+
+  it('sends the name chosen up front', () => {
+    expect(startBody({ ...start, title: 'Puppet audit' }, 'Go').title).toBe('Puppet audit');
+  });
 });
 
 describe('a draft becoming a Session', () => {

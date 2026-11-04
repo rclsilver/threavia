@@ -24,6 +24,8 @@ export interface DraftStart {
   backendQuotas?: BackendQuotas;
   workingDirectoryId: string | null;
   directoryName?: string;
+  /** The name chosen up front; absent lets Core name it after the first message. */
+  title?: string;
 }
 
 /** The body of POST /api/v1/sessions/start, as the web client's draft sends it. */
@@ -31,6 +33,7 @@ export interface StartBody {
   projectId: string;
   backendInstanceId: string;
   workingDirectoryId: string | null;
+  title?: string;
   message: string;
 }
 
@@ -39,6 +42,7 @@ export function startBody(start: DraftStart, text: string): StartBody {
     projectId: start.projectId,
     backendInstanceId: start.backendInstanceId,
     workingDirectoryId: start.workingDirectoryId,
+    ...(start.title ? { title: start.title } : {}),
     message: text.trim(),
   };
 }

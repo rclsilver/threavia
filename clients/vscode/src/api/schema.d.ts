@@ -2078,6 +2078,8 @@ export interface paths {
                         model?: string;
                         /** @description Provider effort value; empty uses the backend default. */
                         effort?: string;
+                        /** @description The Session name; empty derives one from the first message. */
+                        title?: string;
                         message: string;
                         /** @description Files from this project attached to the prompt (3 MiB total). Requires QUEUE delivery. */
                         artifactIds?: components["schemas"]["UUID"][];

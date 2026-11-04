@@ -338,7 +338,7 @@ class ConversationPanel {
     this.target = target;
     const { webview } = panel;
     panel.iconPath = vscode.Uri.joinPath(services.extensionUri, 'media', 'threavia.svg');
-    if (!this.sessionId) panel.title = NEW_SESSION;
+    if (!this.sessionId) panel.title = (target.kind !== 'session' && target.start.title) || NEW_SESSION;
     const dist = vscode.Uri.joinPath(services.extensionUri, 'dist');
     webview.html = conversationPage({
       cspSource: webview.cspSource,
