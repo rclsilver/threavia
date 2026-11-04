@@ -58,8 +58,10 @@ export function skillMention(provider: string | undefined, name: string): string
     // Skills are its slash commands.
     case 'claude':
       return `/threavia-skills:${name}`;
-    // Codex attaches the Skills named with a dollar sign.
+    // Codex attaches the Skills named with a dollar sign. An Ollama backend
+    // runs Codex CLI too.
     case 'codex':
+    case 'ollama':
       return `$${name}`;
     default:
       return undefined;

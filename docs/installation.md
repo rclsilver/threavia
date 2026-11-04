@@ -182,6 +182,7 @@ the backend**:
 | --- | --- |
 | `threavia-backend-claude` | Install [Claude Code](https://code.claude.com/docs/en/setup), then run `claude auth login`, or provide `ANTHROPIC_API_KEY`. |
 | `threavia-backend-codex` | Install [Codex CLI](https://developers.openai.com/codex/cli), then run `codex login`, or provide `OPENAI_API_KEY`. See [Codex compatibility](codex.md). |
+| `threavia-backend-ollama` | Install [Codex CLI](https://developers.openai.com/codex/cli) and point `THREAVIA_BACKEND_OLLAMA_URL` at an [Ollama](https://ollama.com) 0.32.7 or later; no provider login. See [Ollama backend](ollama.md). |
 
 The provider login is separate from signing in to Threavia. Provider credentials
 stay on the backend; Core's registration token authenticates the backend to Core.
@@ -298,8 +299,9 @@ not require nested Bubblewrap or privileged workers. The same-process layout
 below remains available in the default `local` execution mode for existing
 installations; it does not provide the Kubernetes executor's isolation contract.
 
-Use the separate [Claude](../deploy/helm/threavia-backend-claude/README.md) or
-[Codex](../deploy/helm/threavia-backend-codex/README.md) chart. Each uses a
+Use the separate [Claude](../deploy/helm/threavia-backend-claude/README.md),
+[Codex](../deploy/helm/threavia-backend-codex/README.md) or
+[Ollama](../deploy/helm/threavia-backend-ollama/README.md) chart. Each uses a
 StatefulSet and persists the whole home, including backend and provider state.
 Provision a StorageClass or existing PVC, and keep persistence enabled.
 
@@ -337,7 +339,10 @@ helm upgrade --install threavia-codex oci://ghcr.io/rclsilver/charts/threavia-ba
 ```
 
 For Claude, use its chart name and a separate Secret with its own registration
-token and provider API key. See each chart's values for workspace mounts,
+token and provider API key. The Ollama chart needs no provider key: set
+`ollama.url` (and `ollama.contextLength` to the server's
+`OLLAMA_CONTEXT_LENGTH`) instead of `provider`, and it runs Jobs in its own pod
+only. See each chart's values for workspace mounts,
 resources and extra environment. An in-cluster plaintext Core service needs
 `core.tls.enabled: false` and its internal HTTP host in `http.allowedHosts`;
 remote connections should use the TLS configuration above.

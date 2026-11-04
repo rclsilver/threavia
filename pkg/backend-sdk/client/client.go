@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -65,6 +66,11 @@ type Client struct {
 
 	mu      sync.RWMutex
 	current *session
+
+	// catalogMu guards cfg.ModelCatalog, which UpdateModelCatalog replaces,
+	// and catalogChanged: Core has not been told about it yet.
+	catalogMu      sync.Mutex
+	catalogChanged bool
 }
 
 // New builds a Client. The store provides the durable local state that lets the
@@ -265,6 +271,11 @@ func (c *Client) runOnce(ctx context.Context) (err error) {
 
 // hello builds the mandatory first message of the stream.
 func (c *Client) hello() *backendv1.BackendToCore {
+	// The Hello carries the current catalog, so there is nothing left to tell.
+	c.catalogMu.Lock()
+	catalog := c.cfg.ModelCatalog
+	c.catalogChanged = false
+	c.catalogMu.Unlock()
 	return &backendv1.BackendToCore{
 		Message: &backendv1.BackendToCore_Hello{
 			Hello: &backendv1.Hello{
@@ -274,7 +285,7 @@ func (c *Client) hello() *backendv1.BackendToCore {
 				InstanceName: c.cfg.InstanceName,
 				Capabilities: c.cfg.Capabilities,
 				Features:     c.cfg.featureFlags(),
-				ModelCatalog: c.cfg.ModelCatalog,
+				ModelCatalog: catalog,
 				Capacity:     c.capacity(),
 			},
 		},
@@ -427,22 +438,53 @@ func (c *Client) SendEphemeral(ctx context.Context, event *backendv1.EphemeralJo
 	})
 }
 
+// UpdateModelCatalog replaces the models this backend offers. The next status
+// report carries them when they differ from what Core was last told, and every
+// Hello after it does.
+func (c *Client) UpdateModelCatalog(catalog *backendv1.ModelCatalog) {
+	if catalog == nil {
+		return
+	}
+	c.catalogMu.Lock()
+	defer c.catalogMu.Unlock()
+	if proto.Equal(c.cfg.ModelCatalog, catalog) {
+		return
+	}
+	c.cfg.ModelCatalog = proto.Clone(catalog).(*backendv1.ModelCatalog)
+	c.catalogChanged = true
+}
+
 // SendStatus reports the backend operational status, conditions and provider
 // authentication state. OFFLINE is never reportable: Core infers it.
 func (c *Client) SendStatus(ctx context.Context, status backendv1.BackendOperationalStatus, providerAuth backendv1.ProviderAuthState, conditions ...*backendv1.Condition) error {
 	if status == backendv1.BackendOperationalStatus_BACKEND_OPERATIONAL_STATUS_UNSPECIFIED {
 		return errors.New("an operational status is required")
 	}
-	return c.enqueue(ctx, &backendv1.BackendToCore{
-		Message: &backendv1.BackendToCore_StatusUpdate{
-			StatusUpdate: &backendv1.StatusUpdate{
-				Status:            status,
-				Conditions:        conditions,
-				Capacity:          c.capacity(),
-				ProviderAuthState: providerAuth,
-			},
-		},
+	update := &backendv1.StatusUpdate{
+		Status:            status,
+		Conditions:        conditions,
+		Capacity:          c.capacity(),
+		ProviderAuthState: providerAuth,
+	}
+	c.catalogMu.Lock()
+	changed := c.catalogChanged
+	if changed {
+		update.ModelCatalog = c.cfg.ModelCatalog
+	}
+	c.catalogMu.Unlock()
+	err := c.enqueue(ctx, &backendv1.BackendToCore{
+		Message: &backendv1.BackendToCore_StatusUpdate{StatusUpdate: update},
 	})
+	if changed && err == nil {
+		c.catalogMu.Lock()
+		// Unless it changed again meanwhile, in which case the next report
+		// carries the newer one.
+		if c.cfg.ModelCatalog == update.ModelCatalog {
+			c.catalogChanged = false
+		}
+		c.catalogMu.Unlock()
+	}
+	return err
 }
 
 // SendMonitorInventory reconciles watches which never reached local durable launch.

@@ -207,7 +207,7 @@ const STEPS: Step[] = [
     path: '/settings/backends',
     target: 'main ul',
     title: 'Your machines',
-    body: 'The icon identifies Claude or Codex. Every quota window, reset and provider threshold appears here; hover or focus a session’s backend to read the same report. Unknown usage stays unknown.',
+    body: 'The icon identifies Claude, Codex or Ollama. Every quota window, reset and provider threshold appears here; hover or focus a session’s backend to read the same report. Unknown usage stays unknown.',
   },
   {
     path: '/settings/permissions',

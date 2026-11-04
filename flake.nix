@@ -26,18 +26,21 @@
       packages = forAllSystems (pkgs: rec {
         threavia-backend-claude = pkgs.callPackage ./nix/backend-claude.nix { inherit version; };
         threavia-backend-codex = pkgs.callPackage ./nix/backend-codex.nix { inherit version; };
+        threavia-backend-ollama = pkgs.callPackage ./nix/backend-ollama.nix { inherit version; };
         default = threavia-backend-claude;
       });
 
       nixosModules = rec {
         backend-claude = import ./nix/backend-claude-module.nix;
         backend-codex = import ./nix/backend-codex-module.nix;
+        backend-ollama = import ./nix/backend-ollama-module.nix;
         default = backend-claude;
       };
 
       overlays.default = _final: prev: {
         threavia-backend-claude = self.packages.${prev.stdenv.hostPlatform.system}.threavia-backend-claude;
         threavia-backend-codex = self.packages.${prev.stdenv.hostPlatform.system}.threavia-backend-codex;
+        threavia-backend-ollama = self.packages.${prev.stdenv.hostPlatform.system}.threavia-backend-ollama;
       };
 
       checks = forAllSystems (
@@ -45,6 +48,7 @@
         {
           package = self.packages.${pkgs.stdenv.hostPlatform.system}.threavia-backend-claude;
           package-codex = self.packages.${pkgs.stdenv.hostPlatform.system}.threavia-backend-codex;
+          package-ollama = self.packages.${pkgs.stdenv.hostPlatform.system}.threavia-backend-ollama;
         }
         // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           nixos-module-codex =
@@ -73,6 +77,34 @@
                 }
               ];
             }).config.systemd.units."threavia-backend-codex.service".unit;
+          nixos-module-ollama =
+            (nixpkgs.lib.nixosSystem {
+              system = pkgs.stdenv.hostPlatform.system;
+              modules = [
+                self.nixosModules.backend-ollama
+                {
+                  boot.loader.grub.devices = [ "nodev" ];
+                  fileSystems."/" = {
+                    device = "/dev/null";
+                    fsType = "ext4";
+                  };
+                  system.stateVersion = "25.05";
+                  networking.hostName = "ollama-laptop";
+                  services.threavia-backend-ollama = {
+                    enable = true;
+                    package = self.packages.${pkgs.stdenv.hostPlatform.system}.threavia-backend-ollama;
+                    coreAddress = "threavia.example.com:9090";
+                    coreApi = "https://threavia.example.com";
+                    user = "alex";
+                    defaultWorkingDirectory = "/home/alex/git";
+                    codexBinary = "/home/alex/.local/bin/codex";
+                    ollamaUrl = "http://gpu.lan:11434";
+                    model = "qwen3-coder:30b";
+                    environmentFile = "/run/secrets/threavia-ollama";
+                  };
+                }
+              ];
+            }).config.systemd.units."threavia-backend-ollama.service".unit;
           # The module has to keep evaluating. A renamed option or an
           # environment variable the backend no longer reads would otherwise be
           # found by the first person to rebuild their laptop, which is the one

@@ -4,6 +4,7 @@ import { artifactKind, bytes, clock, cost, duration, humanise, tokens } from '..
 import type { BackendQuotas } from '../api/types';
 import claudeIcon from '../../media/providers/claude.svg';
 import codexIcon from '../../media/providers/codex.png';
+import ollamaIcon from '../../media/providers/ollama.svg';
 import { quotaPanel } from './quotas';
 import { repositoryPanel } from './repository';
 import type { DraftStart } from '../conversation/draft';
@@ -459,7 +460,7 @@ function createRepositoryMeta() {
 }
 
 function backendMeta(name: string, provider?: string, snapshot?: BackendQuotas) {
-  const source = provider?.toLowerCase() === 'claude' ? claudeIcon : provider?.toLowerCase() === 'codex' ? codexIcon : undefined;
+  const source = ({ claude: claudeIcon, codex: codexIcon, ollama: ollamaIcon } as Record<string, string | undefined>)[provider?.toLowerCase() ?? ''];
   return metaPopover(
     h('summary', { class: 'meta-item', 'aria-label': `${name}: show quotas` }, source ? h('img', { src: source, alt: '', class: 'provider-icon' }) : icon('server'), name),
     h('div', { class: 'meta-panel quota-panel' }, quotaPanel(snapshot)),

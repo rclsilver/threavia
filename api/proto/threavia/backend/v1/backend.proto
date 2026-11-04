@@ -42,6 +42,10 @@ message StatusUpdate {
   repeated Condition conditions = 2;
   Capacity capacity = 3;
   ProviderAuthState provider_auth_state = 4;
+  // The models the backend offers now, when they changed since Hello: a model
+  // server whose models come and go without the backend restarting. Absent
+  // keeps the catalog Core already has.
+  ModelCatalog model_catalog = 5;
 }
 
 // Complete quota-only snapshot, shaped as BackendQuotas in api/openapi.yaml.

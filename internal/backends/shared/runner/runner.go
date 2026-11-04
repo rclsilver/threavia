@@ -22,6 +22,9 @@ var (
 	ErrUnknownJob = errors.New("job is not running on this backend")
 	// ErrProviderUnavailable means the provider executable cannot be found.
 	ErrProviderUnavailable = errors.New("provider executable is not available")
+	// ErrProviderUnreachable means the executable is there but the model
+	// server it talks to does not answer, or offers nothing to run.
+	ErrProviderUnreachable = errors.New("model server is unreachable")
 )
 
 // StartParams describes the work to start or resume.
@@ -78,6 +81,12 @@ type Runner interface {
 	Inject(jobID, text string, interrupt bool) error
 	// Available reports whether the provider can run at all.
 	Available() error
+}
+
+// ModelCatalogSource is a provider whose models change while it runs. Its
+// catalog is read again each time Available is, and nil until it has one.
+type ModelCatalogSource interface {
+	CurrentModelCatalog() *backendv1.ModelCatalog
 }
 
 // LookPath reports whether an executable can be found.

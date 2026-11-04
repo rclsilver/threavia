@@ -3,7 +3,6 @@ package runner
 import (
 	"context"
 	"io"
-	"os/exec"
 	"sort"
 	"time"
 
@@ -15,7 +14,10 @@ func (c *Codex) Quotas(ctx context.Context) quotas.Status {
 	if c.options.APIKey != "" {
 		return quotas.Status{Availability: "UNSUPPORTED", ObservedAt: time.Now().UTC(), Message: "Account quotas are unavailable for API-key authentication."}
 	}
-	cmd := exec.CommandContext(ctx, c.binary, "app-server", "--listen", "stdio://")
+	if c.options.Ollama != nil {
+		return quotas.Status{Availability: "UNSUPPORTED", ObservedAt: time.Now().UTC(), Message: "Ollama runs on its own hardware and has no account quota."}
+	}
+	cmd := c.appServer(ctx)
 	cmd.Stderr = io.Discard
 	input, err := cmd.StdinPipe()
 	if err != nil {

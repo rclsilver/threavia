@@ -27,6 +27,7 @@ describe('composer suggestions', () => {
   it('names a Skill the way each provider reads it', () => {
     expect(skillMention('claude', 'review')).toBe('/threavia-skills:review');
     expect(skillMention('codex', 'review')).toBe('$review');
+    expect(skillMention('ollama', 'review')).toBe('$review');
     expect(skillMention(undefined, 'review')).toBeUndefined();
   });
 

@@ -5,7 +5,7 @@ outbound control stream, holds the provider credentials and owns the filesystem
 the agent works on. That is why a laptop backend needs no cluster, no inbound
 port and no chart — only a service on the machine that holds the code.
 
-The flake packages the Claude and Codex backends and a NixOS module for each. Core is not
+The flake packages the Claude, Codex and Ollama backends and a NixOS module for each. Core is not
 packaged here: it is deployed from its container image and its Helm chart, and
 its binary embeds a web client that needs the whole Node toolchain to build. A
 Nix package of Core that silently served no client would be worse than none.
@@ -24,6 +24,8 @@ nix develop github:rclsilver/threavia            # the development shell
 | `nixosModules.backend-claude` | `services.threavia-backend-claude` |
 | `packages.<system>.threavia-backend-codex` | the Codex backend binary |
 | `nixosModules.backend-codex` | `services.threavia-backend-codex` |
+| `packages.<system>.threavia-backend-ollama` | the Ollama backend binary (Codex CLI on an Ollama server) |
+| `nixosModules.backend-ollama` | `services.threavia-backend-ollama` |
 | `overlays.default` | the package under `pkgs.threavia-backend-claude` |
 | `devShells.<system>.default` | Go, Node, Helm, buf — the same shell as `shell.nix` |
 
@@ -89,6 +91,29 @@ THREAVIA_BACKEND_REGISTRATION_TOKEN=…
 Then `nixos-rebuild switch`. The backend registers once, stores its persistent
 credential in `/var/lib/threavia-backend-claude`, and never uses the token
 again. It appears in the client as soon as it connects.
+
+### Ollama
+
+`services.threavia-backend-ollama` takes the same options as the Codex module,
+plus the server it sends model requests to. No provider login is involved.
+
+```nix
+services.threavia-backend-ollama = {
+  enable = true;
+  coreAddress = "threavia.example.com:9090";
+  coreApi = "https://threavia.example.com";
+  user = "thomas";
+  defaultWorkingDirectory = "/home/thomas/git";
+  codexPackage = pkgs.codex;
+
+  ollamaUrl = "http://gpu.lan:11434";
+  model = "qwen3-coder:30b";   # null: the first model able to call tools
+  contextLength = 32768;       # the server's OLLAMA_CONTEXT_LENGTH
+  environmentFile = "/run/secrets/threavia-ollama";
+};
+```
+
+See [the Ollama backend](ollama.md) for what differs from Codex.
 
 ## What the service does and does not bound
 

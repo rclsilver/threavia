@@ -165,6 +165,7 @@ and backend features can require updating both components; see the
 | [Installation](docs/installation.md) | Docker, Kubernetes, release binaries, backend registration, storage and authentication |
 | [VS Code](clients/vscode/README.md) | Installation, sign-in, views, commands and several Cores |
 | [Codex backend](docs/codex.md) | Provider setup, execution modes and supported features |
+| [Ollama backend](docs/ollama.md) | Codex CLI on a local or remote Ollama server: setup and differences |
 | [NixOS](docs/nix.md) | Backend packages and services |
 | [MCP servers](docs/mcp.md) | Existing external servers, credentials, discovery and project/session selection |
 | [Control over MCP](docs/control-mcp.md) | Pilot another Threavia with scoped accesses, session events and delegated permission decisions |

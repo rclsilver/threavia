@@ -81,31 +81,13 @@ func (s *Service) Connected(ctx context.Context, instanceID domain.BackendInstan
 		return backendconn.ErrUnknownBackendToken
 	}
 
-	var catalog *domain.ModelCatalog
-	if wire := hello.GetModelCatalog(); wire != nil {
-		catalog = &domain.ModelCatalog{Models: []domain.ModelOption{}, DefaultModel: wire.GetDefaultModel(), DefaultEffort: wire.GetDefaultEffort()}
-		for _, m := range wire.GetModels() {
-			catalog.Models = append(catalog.Models, domain.ModelOption{ID: m.GetId(), Name: m.GetName(), Efforts: append([]string{}, m.GetEfforts()...), DefaultEffort: m.GetDefaultEffort()})
-		}
-	}
-	b := &batch{}
-	accepted, err = s.withBackendReport(ctx, instanceID, func(tx *postgres.Store, backend domain.BackendInstance) error {
-		if err := tx.SetBackendModels(ctx, instanceID, catalog); err != nil {
-			return err
-		}
-		if backend.OwnerID == nil {
-			return nil
-		}
-		b.ownerID = *backend.OwnerID
-		return s.appendAll(ctx, tx, b, record{eventType: events.TypeBackendModelsUpdated, payload: map[string]any{"backendInstanceId": instanceID}})
-	})
+	accepted, err = s.setBackendModels(ctx, instanceID, modelCatalogFromProto(hello.GetModelCatalog()))
 	if err != nil {
 		return err
 	}
 	if !accepted {
 		return backendconn.ErrUnknownBackendToken
 	}
-	s.flush(b)
 
 	// The name follows the backend's configuration, the only place a person
 	// can rename it. It is cosmetic, so a name another of the owner's backends
@@ -190,9 +172,46 @@ func (s *Service) StatusUpdate(ctx context.Context, instanceID domain.BackendIns
 		s.logger.Error("cannot record the backend status and conditions",
 			slog.String("backendInstanceId", string(instanceID)), slog.String("error", err.Error()))
 	}
+	if wire := update.GetModelCatalog(); wire != nil {
+		if _, err := s.setBackendModels(ctx, instanceID, modelCatalogFromProto(wire)); err != nil {
+			s.logger.Error("cannot record the backend model catalog",
+				slog.String("backendInstanceId", string(instanceID)), slog.String("error", err.Error()))
+		}
+	}
 	if accepted && err == nil && status == domain.BackendReady && providerAuthFromProto(update.GetProviderAuthState()) == domain.ProviderAuthenticated {
 		go s.releaseQueuedWork(context.WithoutCancel(ctx), instanceID)
 	}
+}
+
+// setBackendModels replaces the models a backend offers and tells its owner's
+// clients, at connection and whenever the backend reports a change.
+func (s *Service) setBackendModels(ctx context.Context, instanceID domain.BackendInstanceID, catalog *domain.ModelCatalog) (bool, error) {
+	b := &batch{}
+	accepted, err := s.withBackendReport(ctx, instanceID, func(tx *postgres.Store, backend domain.BackendInstance) error {
+		if err := tx.SetBackendModels(ctx, instanceID, catalog); err != nil {
+			return err
+		}
+		if backend.OwnerID == nil {
+			return nil
+		}
+		b.ownerID = *backend.OwnerID
+		return s.appendAll(ctx, tx, b, record{eventType: events.TypeBackendModelsUpdated, payload: map[string]any{"backendInstanceId": instanceID}})
+	})
+	if err == nil && accepted {
+		s.flush(b)
+	}
+	return accepted, err
+}
+
+func modelCatalogFromProto(wire *backendv1.ModelCatalog) *domain.ModelCatalog {
+	if wire == nil {
+		return nil
+	}
+	catalog := &domain.ModelCatalog{Models: []domain.ModelOption{}, DefaultModel: wire.GetDefaultModel(), DefaultEffort: wire.GetDefaultEffort()}
+	for _, m := range wire.GetModels() {
+		catalog.Models = append(catalog.Models, domain.ModelOption{ID: m.GetId(), Name: m.GetName(), Efforts: append([]string{}, m.GetEfforts()...), DefaultEffort: m.GetDefaultEffort()})
+	}
+	return catalog
 }
 
 // conditionsFromProto translates what a backend reported. Core stores the

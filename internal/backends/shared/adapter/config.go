@@ -64,6 +64,13 @@ type ProviderConfig struct {
 	// LocalInstructions are backend-private rules appended to the project ones.
 	// They are machine or provider specific and never travel to Core.
 	LocalInstructions string
+	// OllamaURL is the Ollama server an ollama backend sends its model requests
+	// to, through Codex CLI. Empty for every other provider.
+	OllamaURL string
+	// OllamaContextLength is the context window the server gives a model, its
+	// OLLAMA_CONTEXT_LENGTH. It cannot be read from the server, and Codex must
+	// know it: a conversation longer than the window is silently cut short.
+	OllamaContextLength int
 }
 
 // RegistrationConfig is how a backend obtains its credential the first time
@@ -146,17 +153,20 @@ func Load() (Config, error) {
 // LoadFor shares the control-plane configuration while isolating provider state.
 func LoadFor(provider string) (Config, error) {
 	cfg := Default()
-	if provider != "claude" && provider != "codex" {
+	if provider != "claude" && provider != "codex" && provider != "ollama" {
 		return cfg, errors.New("unknown backend provider: " + provider)
 	}
-	if provider == "codex" {
+	// An ollama backend is Codex CLI with Ollama as its model provider: the same
+	// executable, but its own identity, state and scratch, so that it can run
+	// beside a Codex backend on the same machine.
+	if provider == "codex" || provider == "ollama" {
 		cfg.Client.BackendName = provider
-		cfg.Client.InstanceName += "-codex"
-		cfg.StatePath = filepath.Join(filepath.Dir(cfg.StatePath), "codex", "backend.db")
+		cfg.Client.InstanceName += "-" + provider
+		cfg.StatePath = filepath.Join(filepath.Dir(cfg.StatePath), provider, "backend.db")
 		cfg.Provider.Binary = "codex"
-		cfg.Provider.SkillCachePath = filepath.Join(cfg.Provider.SkillCachePath, "codex")
+		cfg.Provider.SkillCachePath = filepath.Join(cfg.Provider.SkillCachePath, provider)
 		if cfg.Provider.ScratchPath != "" {
-			cfg.Provider.ScratchPath = filepath.Join(filepath.Dir(filepath.Dir(cfg.Provider.ScratchPath)), "codex", "scratch")
+			cfg.Provider.ScratchPath = filepath.Join(filepath.Dir(filepath.Dir(cfg.Provider.ScratchPath)), provider, "scratch")
 		}
 		cfg.Client.FeatureJobInputNow = true
 		cfg.Client.FeatureJobInputNext = true
@@ -183,9 +193,18 @@ func LoadFor(provider string) (Config, error) {
 	cfg.Client.ReconnectMinBackoff = l.Duration("RECONNECT_MIN_BACKOFF", cfg.Client.ReconnectMinBackoff)
 	cfg.Client.ReconnectMaxBackoff = l.Duration("RECONNECT_MAX_BACKOFF", cfg.Client.ReconnectMaxBackoff)
 
-	cfg.Provider.Binary = l.String(strings.ToUpper(provider)+"_BINARY", cfg.Provider.Binary)
-	cfg.Provider.Model = l.String("CODEX_MODEL", "")
-	cfg.Provider.ReasoningEffort = l.String("CODEX_REASONING_EFFORT", "")
+	if provider == "ollama" {
+		// The executable is still Codex CLI; the model is an Ollama one.
+		cfg.Provider.Binary = l.String("CODEX_BINARY", cfg.Provider.Binary)
+		cfg.Provider.Model = l.String("OLLAMA_MODEL", "")
+		cfg.Provider.ReasoningEffort = l.String("OLLAMA_REASONING_EFFORT", "")
+		cfg.Provider.OllamaURL = l.String("OLLAMA_URL", "http://localhost:11434")
+		cfg.Provider.OllamaContextLength = l.Int("OLLAMA_CONTEXT_LENGTH", 32768)
+	} else {
+		cfg.Provider.Binary = l.String(strings.ToUpper(provider)+"_BINARY", cfg.Provider.Binary)
+		cfg.Provider.Model = l.String("CODEX_MODEL", "")
+		cfg.Provider.ReasoningEffort = l.String("CODEX_REASONING_EFFORT", "")
+	}
 	cfg.Provider.DiscoveryRoots = l.StringSlice("DISCOVERY_ROOTS", cfg.Provider.DiscoveryRoots)
 	cfg.Provider.DefaultWorkingDirectory = l.String("DEFAULT_WORKING_DIRECTORY", cfg.Provider.DefaultWorkingDirectory)
 	cfg.Provider.SkillCachePath = l.String("SKILL_CACHE_PATH", cfg.Provider.SkillCachePath)
@@ -237,7 +256,11 @@ func (c Config) Validate() error {
 		return errors.New(EnvPrefix + "STATE_PATH: a durable state path is required")
 	}
 	if c.Provider.Binary == "" {
-		return errors.New(EnvPrefix + strings.ToUpper(c.Client.BackendName) + "_BINARY: an executable is required")
+		name := c.Client.BackendName
+		if name == "ollama" {
+			name = "codex"
+		}
+		return errors.New(EnvPrefix + strings.ToUpper(name) + "_BINARY: an executable is required")
 	}
 	if c.Provider.SkillCachePath == "" {
 		return errors.New(EnvPrefix + "SKILL_CACHE_PATH: a directory is required to cache skill bundles")

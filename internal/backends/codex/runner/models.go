@@ -4,14 +4,18 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os/exec"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 )
 
 // Models reads the authenticated provider catalog without starting agent work.
 func (c *Codex) Models(ctx context.Context) (*backendv1.ModelCatalog, error) {
-	cmd := exec.CommandContext(ctx, c.binary, "app-server", "--listen", "stdio://")
+	// Codex lists OpenAI's models whatever the provider: Ollama's own are
+	// read from the server, which also writes the catalog Codex loads.
+	if c.options.Ollama != nil {
+		return c.ollamaCatalog(ctx)
+	}
+	cmd := c.appServer(ctx)
 	cmd.Stderr = io.Discard
 	input, err := cmd.StdinPipe()
 	if err != nil {

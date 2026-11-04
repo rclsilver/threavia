@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
@@ -66,7 +67,11 @@ func (a *Adapter) reportProviderStatusLocked(ctx context.Context) error {
 	status := backendv1.BackendOperationalStatus_BACKEND_OPERATIONAL_STATUS_READY
 	auth := backendv1.ProviderAuthState_PROVIDER_AUTH_STATE_AUTHENTICATED
 	var conditions []*backendv1.Condition
-	if err := a.runner.Available(); err != nil {
+	if err := a.runner.Available(); errors.Is(err, runner.ErrProviderUnreachable) {
+		// Nothing to log in to: the server is down, or has no usable model.
+		status = backendv1.BackendOperationalStatus_BACKEND_OPERATIONAL_STATUS_DEGRADED
+		conditions = append(conditions, &backendv1.Condition{Type: "ProviderAvailable", Status: "False", Reason: "ProviderUnreachable", Message: err.Error()})
+	} else if err != nil {
 		status = backendv1.BackendOperationalStatus_BACKEND_OPERATIONAL_STATUS_DEGRADED
 		auth = backendv1.ProviderAuthState_PROVIDER_AUTH_STATE_AUTHENTICATION_REQUIRED
 		conditions = append(conditions, &backendv1.Condition{Type: "ProviderAvailable", Status: "False", Reason: "ExecutableNotFound", Message: err.Error()})
@@ -80,6 +85,11 @@ func (a *Adapter) reportProviderStatusLocked(ctx context.Context) error {
 		conditions = append(conditions, &backendv1.Condition{Type: kind, Status: "False", Reason: block.Reason, Message: block.Message})
 	}
 	if sdk := a.sdk(); sdk != nil {
+		// Availability was just checked, which is what refreshes the catalog
+		// of a provider whose models change while it runs.
+		if source, ok := a.runner.(runner.ModelCatalogSource); ok {
+			sdk.UpdateModelCatalog(source.CurrentModelCatalog())
+		}
 		return sdk.SendStatus(ctx, status, auth, conditions...)
 	}
 	return nil

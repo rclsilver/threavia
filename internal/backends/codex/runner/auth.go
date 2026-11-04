@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"os/exec"
 )
 
 func (c *Codex) Authenticated(ctx context.Context) (bool, bool) {
@@ -13,7 +12,11 @@ func (c *Codex) Authenticated(ctx context.Context) (bool, bool) {
 	if c.options.APIKey != "" {
 		return false, false
 	}
-	cmd := exec.CommandContext(ctx, c.binary, "app-server", "--listen", "stdio://")
+	// Ollama has no account. Whether it answers is Available's question.
+	if c.options.Ollama != nil {
+		return true, true
+	}
+	cmd := c.appServer(ctx)
 	cmd.Stderr = io.Discard
 	input, err := cmd.StdinPipe()
 	if err != nil {

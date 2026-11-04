@@ -77,7 +77,8 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 		"mcp_servers": map[string]any{"threavia": map[string]any{"url": url, "required": true, "tool_timeout_sec": 2147483647}},
 		"web_search":  "disabled", "features.hooks": true,
 		// Sub-agents run in this process, under this Job's hook and approvals.
-		"features.multi_agent": true,
+		// Not on Ollama, where Codex does not run them reliably.
+		"features.multi_agent": c.options.Ollama == nil,
 		"features.apps":        false, "features.plugins": false, "features.goals": false,
 		"features.browser_use": false, "features.computer_use": false,
 		"features.shell_snapshot": false,
@@ -171,7 +172,7 @@ func (c *Codex) drive(ctx, reportCtx context.Context, r *rpc, live *execution, p
 	live.mu.Unlock()
 	approval, reviewer := nativeApproval(p.Policy)
 	args := map[string]any{"cwd": p.WorkingDirectory, "approvalPolicy": approval, "sandbox": "read-only", "approvalsReviewer": reviewer,
-		"developerInstructions": instructions(p, c.available, contract.ScratchDir(c.options.Scratch, p.RunID), c.options.ExternalSandbox), "config": config}
+		"developerInstructions": instructions(p, c.available, contract.ScratchDir(c.options.Scratch, p.RunID), promptOptions{External: c.options.ExternalSandbox, NoWebSearch: c.options.Ollama != nil}), "config": config}
 	model := p.Model
 	if model == "" {
 		model = c.options.Model

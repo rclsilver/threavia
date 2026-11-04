@@ -2,11 +2,12 @@ import { Server } from 'lucide-react';
 import type { BackendInstance, BackendQuotas as QuotaSnapshot } from '@/api/types';
 import claudeIcon from '@/assets/providers/claude.svg';
 import codexIcon from '@/assets/providers/codex.png';
+import ollamaIcon from '@/assets/providers/ollama.svg';
 import { quotaLabel, quotaNumber, quotaPercent, quotaReset } from '@/lib/backend';
 import { cn, humanise } from '@/lib/utils';
 
 export function BackendIcon({ provider, className = 'size-4 shrink-0' }: { provider?: string; className?: string }) {
-  const source = provider?.toLowerCase() === 'claude' ? claudeIcon : provider?.toLowerCase() === 'codex' ? codexIcon : undefined;
+  const source = ({ claude: claudeIcon, codex: codexIcon, ollama: ollamaIcon } as Record<string, string | undefined>)[provider?.toLowerCase() ?? ''];
   return source ? <img src={source} alt="" className={className} /> : <Server className={className} aria-hidden="true" />;
 }
 

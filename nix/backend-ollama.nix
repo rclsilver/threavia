@@ -1,0 +1,85 @@
+{
+  lib,
+  buildGoModule,
+  go_1_26,
+  version ? "dev",
+  stdenv,
+  makeWrapper,
+  bubblewrap,
+  bash,
+}:
+
+# The Ollama backend (Codex CLI on an Ollama server), for a machine that holds
+# the code.
+#
+# Only the backend is packaged here. Core is deployed from its container image
+# and its Helm chart, and its binary embeds a web client that would need the
+# whole Node toolchain to build; a Nix package of Core that silently served no
+# client would be worse than none.
+(buildGoModule.override { go = go_1_26; }) {
+  pname = "threavia-backend-ollama";
+  inherit version;
+
+  # Everything the Go build reads, and nothing else: the client, the artwork and
+  # the deployment files are not inputs, and leaving them in would rebuild the
+  # backend every time one of them changes.
+  src = lib.cleanSourceWith {
+    name = "threavia-source";
+    src = ../.;
+    filter =
+      path: _type:
+      let
+        relative = lib.removePrefix (toString ../. + "/") (toString path);
+        top = builtins.head (lib.splitString "/" relative);
+
+        # The client is not an input of the backend, and the built one would
+        # change this package's hash every time a stylesheet did. The Go package
+        # that embeds it still has to exist, because resolving the module graph
+        # walks Core's import of it, and the embed needs a directory to match.
+        insideClient = lib.hasPrefix "web/ui" relative;
+        clientKept = builtins.elem relative [
+          "web/ui"
+          "web/ui/dist"
+          "web/ui/dist/.gitkeep"
+        ];
+      in
+      !(builtins.elem top [
+        "bin"
+        "brand"
+        "deploy"
+        "docs"
+        "examples"
+        "nix"
+      ])
+      && !(lib.hasInfix "node_modules" relative)
+      && (!insideClient || clientKept);
+  };
+
+  vendorHash = "sha256-CBMZgvwToJTu9WvefLyU72ojuBYwnWo7FMJ1gfqdnHM=";
+
+  subPackages = [ "cmd/threavia-backend-ollama" ];
+
+  ldflags = [
+    "-s"
+    "-w"
+    "-X main.version=${version}"
+  ];
+
+  nativeBuildInputs = lib.optionals stdenv.hostPlatform.isLinux [ makeWrapper ];
+  postInstall = lib.optionalString stdenv.hostPlatform.isLinux ''
+    wrapProgram "$out/bin/threavia-backend-ollama" --prefix PATH : "${lib.makeBinPath [ bubblewrap bash ]}"
+  '';
+
+  # The suite needs a PostgreSQL to talk to and a Docker daemon for the
+  # end-to-end paths, neither of which exists in a build sandbox. It runs in CI,
+  # where both do.
+  doCheck = false;
+
+  meta = {
+    description = "Threavia backend for Codex CLI on an Ollama server";
+    homepage = "https://github.com/rclsilver/threavia";
+    license = lib.licenses.asl20;
+    mainProgram = "threavia-backend-ollama";
+    platforms = lib.platforms.unix;
+  };
+}

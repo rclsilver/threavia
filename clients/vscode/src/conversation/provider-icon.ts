@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import { join } from 'node:path';
 
+const icons: Record<string, string> = { claude: 'claude.svg', codex: 'codex.png', ollama: 'ollama.svg' };
+
 export function providerIcon(provider?: string): vscode.Uri | vscode.ThemeIcon {
-  const name = provider?.toLowerCase();
-  return name === 'claude' || name === 'codex'
-    ? vscode.Uri.file(join(__dirname, '..', 'media', 'providers', name === 'claude' ? 'claude.svg' : 'codex.png'))
-    : new vscode.ThemeIcon('server');
+  const file = icons[provider?.toLowerCase() ?? ''];
+  return file ? vscode.Uri.file(join(__dirname, '..', 'media', 'providers', file)) : new vscode.ThemeIcon('server');
 }

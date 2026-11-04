@@ -145,3 +145,40 @@ func TestLegacyBackendsRefuseExplicitModelPreferences(t *testing.T) {
 	c.mustDo(http.MethodPatch, "/api/v1/sessions/"+session, map[string]any{"model": "beta"}, nil, http.StatusBadRequest)
 	c.mustDo(http.MethodPost, "/api/v1/sessions/start", map[string]any{"projectId": project, "backendInstanceId": backendID, "message": "explicit", "model": "beta"}, nil, http.StatusBadRequest)
 }
+
+// A model server's models change while the backend runs: the next status
+// report carries the new catalog, and Core offers it without a reconnection.
+func TestAChangedModelCatalogReachesCoreWithTheNextStatus(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	c := newCore(t)
+	backendID, credential := c.registerBackend("catalog")
+	first := &backendv1.ModelCatalog{DefaultModel: "small", Models: []*backendv1.ModelOption{{Id: "small", Name: "Small"}}}
+	backend := c.connectBackendWithReconcileGate(credential, nil, first)
+	models := func() int {
+		instance, err := c.store.GetBackendInstance(ctx, domain.UserID("thomas"), domain.BackendInstanceID(backendID))
+		if err != nil || instance.ModelCatalog == nil {
+			return -1
+		}
+		return len(instance.ModelCatalog.Models)
+	}
+	waitUntil(t, "the catalog of the Hello", func() bool { return models() == 1 })
+
+	ready := backendv1.BackendOperationalStatus_BACKEND_OPERATIONAL_STATUS_READY
+	authenticated := backendv1.ProviderAuthState_PROVIDER_AUTH_STATE_AUTHENTICATED
+	pulled := &backendv1.ModelCatalog{DefaultModel: "small", Models: []*backendv1.ModelOption{{Id: "small", Name: "Small"}, {Id: "large", Name: "Large", Efforts: []string{"low", "high"}}}}
+	backend.sdk.UpdateModelCatalog(pulled)
+	if err := backend.sdk.SendStatus(ctx, ready, authenticated); err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, "the pulled model", func() bool { return models() == 2 })
+
+	// A status without a change leaves the catalog alone.
+	if err := backend.sdk.SendStatus(ctx, ready, authenticated); err != nil {
+		t.Fatal(err)
+	}
+	instance, err := c.store.GetBackendInstance(ctx, domain.UserID("thomas"), domain.BackendInstanceID(backendID))
+	if err != nil || len(instance.ModelCatalog.Models) != 2 || instance.ModelCatalog.Models[1].Efforts[1] != "high" {
+		t.Fatalf("catalog after an unchanged status = %+v, %v", instance.ModelCatalog, err)
+	}
+}
