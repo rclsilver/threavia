@@ -248,6 +248,11 @@
         "category": "Threavia"
       },
       {
+        "command": "threavia.moveSessionToBackend",
+        "title": "Move to Backend…",
+        "category": "Threavia"
+      },
+      {
         "command": "threavia.archiveSession",
         "title": "Archive",
         "category": "Threavia"
@@ -520,6 +525,10 @@
         },
         {
           "command": "threavia.renameSession",
+          "when": "false"
+        },
+        {
+          "command": "threavia.moveSessionToBackend",
           "when": "false"
         },
         {
@@ -897,6 +906,11 @@
           "command": "threavia.renameSession",
           "when": "view == threavia.sidebar && viewItem =~ /^session/",
           "group": "2_session@2"
+        },
+        {
+          "command": "threavia.moveSessionToBackend",
+          "when": "view == threavia.sidebar && viewItem =~ /^session/",
+          "group": "2_session@3"
         },
         {
           "command": "threavia.archiveSession",

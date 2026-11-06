@@ -5,6 +5,8 @@ import type {
   Attention,
   AuthPublic,
   BackendInstance,
+  Handoff,
+  HandoffPreview,
   Decision,
   DecisionImportance,
   Delivery,
@@ -290,12 +292,17 @@ export class CoreClient {
     return this.patch<Session>(`/api/v1/sessions/${sessionId}`, { title });
   }
 
+/** What moving a Session to this backend would keep, lose and change. */
+  handoffPreview(sessionId: string, backendInstanceId: string) {
+    return this.get<HandoffPreview>(`/api/v1/sessions/${sessionId}/handoff?backendInstanceId=${encodeURIComponent(backendInstanceId)}`);
+  }
+
   /**
    * Moves a Session to another backend. The Run it leaves guards against a
    * move made meanwhile elsewhere; Core checks everything again.
    */
   moveSessionToBackend(sessionId: string, backendInstanceId: string, expectedRunId: string) {
-    return this.patch<{ missingSkills?: string[] }>(`/api/v1/sessions/${sessionId}`, { backendInstanceId, expectedRunId });
+    return this.patch<Handoff>(`/api/v1/sessions/${sessionId}`, { backendInstanceId, expectedRunId });
   }
 
   /** Puts a Session out of the way until a time, or until something changes. */

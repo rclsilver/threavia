@@ -31,6 +31,7 @@ import { UNTITLED, titleOf } from './tree/model';
 import { isSnoozed, sessionsByTitle, snoozeBack, snoozeChoices } from '../../shared/sessions';
 import { SidebarProvider, type Node, type RequestNode, type SessionNode } from './tree/provider';
 import { PathResolver } from './workspace/resolve';
+import { moveSessionToBackend } from './handoff';
 import { Reviews } from './review/view';
 
 /**
@@ -576,6 +577,20 @@ export function activate(context: vscode.ExtensionContext): Threavia {
       sidebar.invalidateSessions(core.id);
     } catch (error) {
       failed(error, 'Not restored');
+    }
+  });
+
+  command('threavia.moveSessionToBackend', async (target: unknown) => {
+    const ref = targetSession(target);
+    const core = cores.get(ref?.coreId);
+    if (!ref || !core) return;
+    try {
+      if (!(await moveSessionToBackend(core.client, ref.sessionId))) return;
+      core.invalidateBackends();
+      sidebar.invalidateSessions(core.id);
+      panels.refresh(ref);
+    } catch (error) {
+      failed(error, 'Not moved');
     }
   });
 

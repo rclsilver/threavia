@@ -34,7 +34,11 @@ pinned global decisions are read by agents in all your projects on that Core.
   see its branch, how far it is from its upstream and what is left to
   commit. Right-click a
   session to pin, rename, archive, refresh its repository from origin, or open
-  it in the browser. Archiving closes its conversation, permissions, diffs and
+  it in the browser. **Move to Backend…** moves it to another backend while
+  nothing runs or waits in it: pick the backend, then confirm after reading
+  what changes (fresh provider session, working directory there, missing
+  local skills, a model or effort that backend lacks going back to its
+  default). Archiving closes its conversation, permissions, diffs and
   artifact previews across editor groups, including when archived from another
   client. Undo restores the session; open it again to resume the conversation.
   **Threavia: Open Threavia** focuses this dedicated activity-bar container,

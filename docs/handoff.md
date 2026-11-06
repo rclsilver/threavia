@@ -49,8 +49,9 @@ remains searchable through Core tools. A failed history read leaves work queued.
 After native binding, later messages resume normally without re-injecting it.
 
 Web and VS Code render the move notice, including its destination name and the
-fresh-session/workspace boundary. Besides `/backend`, VS Code has no move
-action; the Web and API own the preview/confirmation flow. No backend or protocol update is
+fresh-session/workspace boundary. In VS Code, **Move to Backend…** in a
+session's context menu reads the same preview and asks for confirmation with
+its warnings, missing Skills and directory before moving. No backend or protocol update is
 required for explicit moves. Native resume recovery additionally uses the
 shared failure contract in docs/protocol.md. It keeps the same backend and Run,
 excludes the current prompt and later queued messages from history excerpts,
