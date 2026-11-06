@@ -290,6 +290,14 @@ export class CoreClient {
     return this.patch<Session>(`/api/v1/sessions/${sessionId}`, { title });
   }
 
+  /**
+   * Moves a Session to another backend. The Run it leaves guards against a
+   * move made meanwhile elsewhere; Core checks everything again.
+   */
+  moveSessionToBackend(sessionId: string, backendInstanceId: string, expectedRunId: string) {
+    return this.patch<{ missingSkills?: string[] }>(`/api/v1/sessions/${sessionId}`, { backendInstanceId, expectedRunId });
+  }
+
   /** Puts a Session out of the way until a time, or until something changes. */
   snoozeSession(sessionId: string, until?: Date) {
     return this.request<Session>('PUT', `/api/v1/sessions/${sessionId}/snooze`, until ? { until: until.toISOString() } : { untilChange: true });

@@ -75,7 +75,8 @@ export type ComposerCommand =
   | { kind: 'effort'; id: string; label: string; detail?: string; effort: string }
   | { kind: 'delivery'; id: string; label: string; detail?: string; delivery: 'NEXT' | 'NOW' }
   | { kind: 'stop'; id: string; label: string; detail?: string }
-  | { kind: 'rename'; id: string; label: string; detail?: string; insert: string };
+  | { kind: 'rename'; id: string; label: string; detail?: string; insert: string }
+  | { kind: 'backend'; id: string; label: string; detail?: string; backendInstanceId: string };
 
 /**
  * What a command writes into the field rather than acting at once: a Skill,
@@ -108,6 +109,11 @@ export interface CommandSources {
   running?: boolean;
   /** The Session exists, so it can be renamed. */
   renamable?: boolean;
+  /**
+   * The backends the Session can move to: given only when nothing is running
+   * or queued, since a move leaves no work behind.
+   */
+  backends?: { id: string; name: string; detail?: string }[];
 }
 
 /**
@@ -146,7 +152,37 @@ export function composerCommands(sources: CommandSources): ComposerCommand[] {
   if (sources.renamable) {
     commands.push({ kind: 'rename', id: 'rename', label: 'rename', detail: 'Rename this session: /rename <name>', insert: '/rename' });
   }
+  for (const backend of sources.backends ?? []) {
+    commands.push({ kind: 'backend', id: `backend:${backend.id}`, label: `backend ${backend.name}`, detail: backend.detail ? `Move this session here · ${backend.detail}` : 'Move this session here', backendInstanceId: backend.id });
+  }
   return commands;
+}
+
+/**
+ * The backends `/backend` offers: those that take CODE work and have room for
+ * it, the current one aside. One that is offline stays a choice; the next
+ * message waits for it.
+ */
+export function backendTargets(
+  backends: {
+    id: string;
+    name: string;
+    backend?: string;
+    ownershipStatus: string;
+    operationalStatus: string;
+    capabilities: string[];
+    capacity: { activeRuns: number; maxConcurrentRuns: number };
+  }[],
+  currentId: string | undefined,
+): { id: string; name: string; detail?: string }[] {
+  return backends
+    .filter((backend) => backend.id !== currentId && backend.ownershipStatus !== 'REVOKED' && backend.capabilities.includes('CODE')
+      && backend.capacity.maxConcurrentRuns > 0 && backend.capacity.activeRuns < backend.capacity.maxConcurrentRuns)
+    .map((backend) => ({
+      id: backend.id,
+      name: backend.name,
+      detail: [backend.backend, backend.operationalStatus.toLowerCase().replace(/_/g, ' ')].filter(Boolean).join(' · '),
+    }));
 }
 
 /** The commands that match what was typed after `/`, best first. */

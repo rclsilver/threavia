@@ -28,6 +28,10 @@ type HandoffPreview struct {
 	MissingSkills            []string               `json:"missingSkills"`
 	WorkingDirectory         HandoffDirectory       `json:"workingDirectory"`
 	NativeSessionTransferred bool                   `json:"nativeSessionTransferred"`
+	// Model and Effort are what the session uses after the move: its own when
+	// the destination offers them, the destination's defaults otherwise.
+	Model  string `json:"model"`
+	Effort string `json:"effort"`
 }
 
 type HandoffDirectory struct {
@@ -44,6 +48,8 @@ func (s *Service) PreviewHandoff(ctx context.Context, identity auth.Identity, se
 
 // model and effort, when set, are the values the session will have after the
 // move, so the destination is judged against them rather than the old ones.
+// Those the session only carries over fall back to the destination's default
+// when it does not offer them.
 func (s *Service) previewHandoff(ctx context.Context, store *postgres.Store, identity auth.Identity, sessionID domain.SessionID, instanceID domain.BackendInstanceID, model, effort *string) (HandoffPreview, error) {
 	p := HandoffPreview{Reasons: []string{}, Warnings: []string{}, MissingSkills: []string{}, WorkingDirectory: HandoffDirectory{Resolution: "backend_default"}}
 	session, err := store.GetSession(ctx, identity.UserID, sessionID)
@@ -83,8 +89,14 @@ func (s *Service) previewHandoff(ctx context.Context, store *postgres.Store, ide
 	if effort != nil {
 		reasoning = *effort
 	}
-	if _, _, err := backend.ResolveModel(selected, reasoning); err != nil {
+	p.Model, p.Effort, err = destinationModel(backend, selected, reasoning, model != nil, effort != nil)
+	switch {
+	case err != nil:
 		p.Reasons = append(p.Reasons, "Session model or effort is incompatible: "+err.Error())
+	case p.Model != selected:
+		p.Warnings = append(p.Warnings, fmt.Sprintf("The backend does not offer the model %q; the session will use its default model.", selected))
+	case p.Effort != reasoning:
+		p.Warnings = append(p.Warnings, fmt.Sprintf("The backend does not offer the effort %q for this model; the session will use its default effort.", reasoning))
 	}
 	pending, err := store.SessionHasPendingJobs(ctx, sessionID)
 	if err != nil {
@@ -171,26 +183,47 @@ func (s *Service) moveSessionToBackend(ctx context.Context, identity auth.Identi
 		if err := s.appendAll(ctx, tx, b, record{events.TypeRunCreated, scope, RunCreatedPayload{BackendInstanceID: string(instanceID), FromBackendInstanceID: string(current.BackendInstanceID), BackendName: preview.Backend.Name}}); err != nil {
 			return err
 		}
-		selected, reasoning := session.Model, session.Effort
-		if model != nil {
-			selected = *model
-		}
-		if effort != nil {
-			reasoning = *effort
-		}
-		if selected == session.Model && reasoning == session.Effort {
+		if preview.Model == session.Model && preview.Effort == session.Effort {
 			return nil
 		}
-		if _, err := tx.SetSessionModel(ctx, identity.UserID, sessionID, selected, reasoning); err != nil {
+		if _, err := tx.SetSessionModel(ctx, identity.UserID, sessionID, preview.Model, preview.Effort); err != nil {
 			return err
 		}
-		return s.appendAll(ctx, tx, b, record{events.TypeSessionModelChanged, domain.Scope{ProjectID: session.ProjectID, SessionID: sessionID}, ModelPayload{selected, reasoning}})
+		return s.appendAll(ctx, tx, b, record{events.TypeSessionModelChanged, domain.Scope{ProjectID: session.ProjectID, SessionID: sessionID}, ModelPayload{preview.Model, preview.Effort}})
 	})
 	if err != nil {
 		return Handoff{}, translate(err)
 	}
 	s.flush(b)
 	return result, nil
+}
+
+// destinationModel keeps a model and effort the destination offers. One the
+// session merely carries over from its previous backend gives way to the
+// destination's default — the effort first, then the model — so a choice made
+// for another catalog never blocks the move. A value given with the move
+// itself is kept as asked, and refused when the destination lacks it.
+func destinationModel(backend domain.BackendInstance, model, effort string, explicitModel, explicitEffort bool) (string, string, error) {
+	models, efforts := []string{model}, []string{effort}
+	if !explicitModel && model != "" {
+		models = append(models, "")
+	}
+	if !explicitEffort && effort != "" {
+		efforts = append(efforts, "")
+	}
+	var refused error
+	for _, m := range models {
+		for _, e := range efforts {
+			_, _, err := backend.ResolveModel(m, e)
+			if err == nil {
+				return m, e, nil
+			}
+			if refused == nil {
+				refused = err
+			}
+		}
+	}
+	return model, effort, refused
 }
 
 func skillsLostInHandoff(ctx context.Context, store *postgres.Store, from, to domain.BackendInstanceID) ([]string, error) {

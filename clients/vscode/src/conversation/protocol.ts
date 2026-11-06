@@ -21,6 +21,8 @@ export interface SessionView {
   backendTooltip?: string;
   backendQuotas?: BackendQuotas;
   modelSettings: { model: string; effort: string; supported: boolean; catalog?: BackendInstance['modelCatalog']; saving?: boolean; error?: string };
+  /** Where `/backend` can move the Session; absent while work is running or queued. */
+  backendTargets?: { id: string; name: string; detail?: string }[];
   learnings?: { sourceJobId?: string; pending: boolean; error?: string };
   /** The compact branch label and the Git status shown in its hover panel. */
   repository?: { text: string; status: Repository; fetching?: boolean; error?: string };
@@ -91,6 +93,8 @@ export type WebviewMessage =
   | { type: 'setModelSettings'; model: string; effort: string }
   /** `/rename <name>`: `text` is the command, given back if renaming fails. */
   | { type: 'rename'; title: string; text: string }
+  /** `/backend`: move the Session to this backend. */
+  | { type: 'moveBackend'; backendInstanceId: string }
   /** The model pill: the extension shows the choice in the editor's Quick Pick. */
   | { type: 'pickModel' }
   | { type: 'archive' }

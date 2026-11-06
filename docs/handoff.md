@@ -9,10 +9,21 @@ invent or copy a physical path. Local files must already be available there.
 
 `GET /api/v1/sessions/{sessionId}/handoff?backendInstanceId=…` is read-only and
 owner-scoped. `canMove` and `reasons` explain an archived session, pending work,
-same destination, revoked/non-CODE target, incompatible model/effort, or full /
-draining target. An offline or starting backend remains an explicit choice with
-a warning: a message may wait for reconnection/provider readiness. Moving does
-not reserve a capacity slot; actual dispatch remains authoritative.
+same destination, revoked/non-CODE target, or full / draining target. An offline
+or starting backend remains an explicit choice with a warning: a message may
+wait for reconnection/provider readiness. Moving does not reserve a capacity
+slot; actual dispatch remains authoritative.
+
+The session's model and effort were chosen for the source catalog. `model` and
+`effort` in the preview are what it keeps on the destination: its own when the
+destination offers them, otherwise its default — the effort alone when the model
+is offered, both when it is not — with a warning saying so. The move applies
+them in the same transaction and emits `session.model_changed`. Only a model or
+effort given with the move itself (the `session_update` tool) is refused when
+the destination lacks it.
+
+In the composer, `/backend` lists the other backends; choosing one moves the
+session at once, with the same checks, when nothing is running or queued.
 
 The PATCH move accepts `expectedRunId` from the preview. It locks the session,
 revalidates the destination, refuses all pending Jobs (including QUEUED), and
@@ -38,8 +49,8 @@ remains searchable through Core tools. A failed history read leaves work queued.
 After native binding, later messages resume normally without re-injecting it.
 
 Web and VS Code render the move notice, including its destination name and the
-fresh-session/workspace boundary. VS Code has no existing move action; the Web
-and API own this preview/confirmation flow. No backend or protocol update is
+fresh-session/workspace boundary. Besides `/backend`, VS Code has no move
+action; the Web and API own the preview/confirmation flow. No backend or protocol update is
 required for explicit moves. Native resume recovery additionally uses the
 shared failure contract in docs/protocol.md. It keeps the same backend and Run,
 excludes the current prompt and later queued messages from history excerpts,

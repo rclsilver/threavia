@@ -1,7 +1,7 @@
 import { mediaType } from '../../../shared/media';
 import { learningSource, requestLearningCapture } from '../../../shared/learnings';
 import { readUpTo, wokeFromSnooze } from '../../../shared/sessions';
-import { modelPill } from '../../../shared/composer';
+import { backendTargets, modelPill } from '../../../shared/composer';
 import { artifactKind } from './format';
 import * as vscode from 'vscode';
 
@@ -302,6 +302,9 @@ class ConversationPanel {
     userInputs: [],
   };
   private backend: BackendInstance | undefined;
+  /** The other backends `/backend` offers. */
+  private targets: { id: string; name: string; detail?: string }[] = [];
+  private moving = false;
   private backendGeneration = 0;
   private repository: Repository | undefined;
   private fetchingRepository = false;
@@ -532,9 +535,10 @@ class ConversationPanel {
     const run = currentRun(this.runs);
     if (!run) return;
     try {
-      const backend = (await this.core.backends()).find((candidate) => candidate.id === run.backendInstanceId);
+      const backends = await this.core.backends();
       if (generation !== this.backendGeneration) return;
-      this.backend = backend;
+      this.backend = backends.find((candidate) => candidate.id === run.backendInstanceId);
+      this.targets = backendTargets(backends, run.backendInstanceId);
       void this.loadComposer();
       this.postView();
     } catch {
@@ -626,6 +630,7 @@ class ConversationPanel {
       backendTooltip: this.backend && backendTooltip(this.backend),
       backendQuotas: this.backend?.quotas,
       modelSettings: { model: this.session.model || '', effort: this.session.effort || '', supported: this.backend?.features?.includes('MODEL_SELECTION') ?? false, catalog: this.backend?.modelCatalog, saving: this.savingModel, error: this.modelError },
+      backendTargets: active || this.moving ? undefined : this.targets,
       learnings: { sourceJobId: learningSource({ session: this.session, jobs: this.jobs })?.id, pending: this.capturingLearnings, error: this.learningError },
       repository: repo && text ? { text, status: repo, fetching: this.fetchingRepository, error: this.repositoryError } : undefined,
       activity: active?.status === 'RUNNING' && fresh ? humanise(fresh) : undefined,
@@ -692,6 +697,27 @@ class ConversationPanel {
           await this.core.client.renameSession(sessionId, message.title.trim());
         } catch (error) {
           this.post({ type: 'sendFailed', text: message.text, error: reason(error) });
+        }
+        return;
+      }
+      case 'moveBackend': {
+        const sessionId = this.sessionId;
+        const run = currentRun(this.runs);
+        const target = this.targets.find((candidate) => candidate.id === message.backendInstanceId);
+        if (!sessionId || !run || !target || this.moving) return;
+        this.moving = true;
+        this.postView();
+        try {
+          const moved = await client.moveSessionToBackend(sessionId, target.id, run.id);
+          if (moved.missingSkills?.length) {
+            void vscode.window.showWarningMessage(`Moved to ${target.name}. These local skills are not there: ${moved.missingSkills.join(', ')}.`);
+          }
+          await this.reload();
+        } catch (error) {
+          void vscode.window.showErrorMessage(`Not moved to ${target.name}: ${reason(error)}`);
+        } finally {
+          this.moving = false;
+          this.postView();
         }
         return;
       }

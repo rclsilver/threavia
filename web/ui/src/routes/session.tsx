@@ -18,6 +18,7 @@ import {
   usePinnedSessions,
   useSnapshot,
   useSessionModel,
+  useMoveSession,
   type Delivery,
 } from '@/api/queries';
 import { payloadOf, type BackendInstance, type Event, type Session } from '@/api/types';
@@ -40,7 +41,7 @@ import { cn, humanise } from '@/lib/utils';
 import { isSnoozed, readUpTo, snoozeBack, wokeFromSnooze } from '../../../../clients/shared/sessions';
 import { SnoozeMenu } from '@/components/snooze-menu';
 import { ArchiveButton } from '@/components/session-actions';
-import { composerCommands, promptHistory, recall, renameRequest } from '../../../../clients/shared/composer';
+import { backendTargets, composerCommands, promptHistory, recall, renameRequest } from '../../../../clients/shared/composer';
 
 const FINISHED = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
 
@@ -288,6 +289,8 @@ export function SessionView() {
         projectId={data.session.projectId}
         session={data.session}
         backend={backend}
+        runId={run?.id}
+        targets={active ? undefined : backendTargets(backends.data ?? [], run?.backendInstanceId)}
         active={active}
         deliveries={deliveries}
         held={held}
@@ -503,6 +506,8 @@ function Composer({
   projectId,
   session,
   backend,
+  runId,
+  targets,
   active,
   deliveries,
   held = [],
@@ -517,6 +522,10 @@ function Composer({
   projectId: string;
   session: Session;
   backend?: BackendInstance;
+  /** The Run a `/backend` move starts from, so a move made elsewhere is not undone. */
+  runId?: string;
+  /** Where `/backend` can move the Session; none while work is running or queued. */
+  targets?: { id: string; name: string; detail?: string }[];
   /** What it could take once its backend runs it, shown but unavailable. */
   held?: ('NEXT' | 'NOW')[];
   /** What the running work can take besides a queued message. */
@@ -534,6 +543,7 @@ function Composer({
   const send = usePostMessage(sessionId);
   const rename = useRenameSession(sessionId);
   const modelSettings = useSessionModel(sessionId);
+  const move = useMoveSession(sessionId);
   const attachments = usePromptAttachments(projectId, send.isPending);
   const [message, setMessage] = useDraft(sessionId);
 
@@ -567,6 +577,7 @@ function Composer({
     deliveries,
     running: Boolean(active && active.status !== 'CANCELLING'),
     renamable: true,
+    backends: targets,
   });
   const suggestions = useComposerSuggestions({
     field,
@@ -579,6 +590,7 @@ function Composer({
       else if (command.kind === 'effort') modelSettings.mutate({ model: session.model ?? '', effort: command.effort });
       else if (command.kind === 'delivery') setDelivery(command.delivery);
       else if (command.kind === 'stop') onStop();
+      else if (command.kind === 'backend' && runId) move.mutate({ backendInstanceId: command.backendInstanceId, expectedRunId: runId });
     },
   });
 
@@ -745,6 +757,12 @@ function Composer({
       </form>
       <ActionError error={modelSettings.error} outcome="Model settings not saved" recovery="Choose the model or effort again to retry." className="mt-2" />
       <ActionError error={rename.error} outcome="Not renamed" recovery="The command is still in the field; send it again." className="mt-2" />
+      <ActionError error={move.error} outcome="Not moved" recovery="The session stays on its backend; type /backend to try again." className="mt-2" />
+      {move.data?.missingSkills?.length ? (
+        <p className="text-warn-text mt-2 text-sm">
+          Moved. These local skills are not on the new backend: {move.data.missingSkills.join(', ')}.
+        </p>
+      ) : null}
       {/* The text is kept in the field when sending fails; this says why. */}
       <ActionError
         error={send.error}

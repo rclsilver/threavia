@@ -33,9 +33,15 @@ it('previews a destination, confirms the reviewed run and tells both clients abo
     await expect(demoRequest('PATCH', path, { backendInstanceId: IDS.laptop, expectedRunId: preview.fromRunId })).rejects.toMatchObject({ status: 409 });
     await expect(demoRequest('PATCH', path, { backendInstanceId: IDS.laptop, title: 'Must not rename' })).rejects.toMatchObject({ status: 400 });
     expect((await demoRequest('GET', path, null) as Snapshot).session.title).toBe(before.session.title);
-    await demoRequest('PATCH', path, { model: 'demo-codex' });
-    const incompatible = await demoRequest('GET', `${path}/handoff?backendInstanceId=${IDS.laptop}`, null) as HandoffPreview;
-    expect(incompatible.canMove).toBe(false);
-    expect(incompatible.reasons.join(' ')).toContain('model');
+    // A model chosen for the NAS does not hold the session there: back on the
+    // laptop it takes the laptop's default, and the preview says so.
+    await demoRequest('PATCH', path, { model: 'demo-codex', effort: 'xhigh' });
+    const fallback = await demoRequest('GET', `${path}/handoff?backendInstanceId=${IDS.laptop}`, null) as HandoffPreview;
+    expect(fallback).toMatchObject({ canMove: true, model: '', effort: '' });
+    expect(fallback.warnings.join(' ')).toContain('"demo-codex"');
+    await demoRequest('PATCH', path, { backendInstanceId: IDS.laptop, expectedRunId: fallback.fromRunId });
+    const back = await demoRequest('GET', path, null) as Snapshot;
+    expect(back.session).toMatchObject({ model: '', effort: '' });
+    expect(back.events.at(-1)?.type).toBe('session.model_changed');
   } finally { stop(); queries.clear(); }
 });

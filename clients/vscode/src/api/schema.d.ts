@@ -6935,6 +6935,13 @@ export interface components {
             missingSkills: string[];
             /** @constant */
             nativeSessionTransferred: false;
+            /** @description The model the session uses after the move, empty for the backend's
+             *     default. A model the session carries over and the destination does
+             *     not offer falls back to the default, with a warning.
+             *      */
+            model: string;
+            /** @description The effort after the move, empty for the default; same fallback. */
+            effort: string;
             workingDirectory: {
                 knownDirectoryId?: components["schemas"]["UUID"];
                 name?: string;

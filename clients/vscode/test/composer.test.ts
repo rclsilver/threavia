@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { commandInsert, composerCommands, composerToken, matchCommands, modelPill, promptHistory, recall, renameRequest, replaceToken, skillMention } from '../../shared/composer';
+import { backendTargets, commandInsert, composerCommands, composerToken, matchCommands, modelPill, promptHistory, recall, renameRequest, replaceToken, skillMention } from '../../shared/composer';
 
 describe('composer suggestions', () => {
   it('offers commands only for the first word and files for any @ word', () => {
@@ -101,6 +101,34 @@ describe('composer suggestions', () => {
     expect(renameRequest('/renamed it')).toBeUndefined();
     expect(renameRequest('please /rename this')).toBeUndefined();
     expect(renameRequest('Look at the build')).toBeUndefined();
+  });
+});
+
+describe('/backend', () => {
+  const backend = (id: string, extra: object = {}) => ({
+    id, name: id, backend: 'codex', ownershipStatus: 'ACTIVE', operationalStatus: 'READY', capabilities: ['CODE'],
+    capacity: { activeRuns: 0, maxConcurrentRuns: 2 }, ...extra,
+  });
+
+  it('offers the backends that can take the work, the current one aside', () => {
+    const targets = backendTargets([
+      backend('laptop'),
+      backend('nas', { operationalStatus: 'OFFLINE', backend: 'claude' }),
+      backend('revoked', { ownershipStatus: 'REVOKED' }),
+      backend('chat only', { capabilities: ['CHAT'] }),
+      backend('draining', { capacity: { activeRuns: 0, maxConcurrentRuns: 0 } }),
+      backend('full', { capacity: { activeRuns: 2, maxConcurrentRuns: 2 } }),
+    ], 'laptop');
+    expect(targets).toEqual([{ id: 'nas', name: 'nas', detail: 'claude · offline' }]);
+  });
+
+  it('moves at once, by the backend\'s name', () => {
+    const commands = composerCommands({ skills: [], backends: [{ id: 'b1', name: 'Home NAS', detail: 'codex · ready' }] });
+    const [move] = matchCommands(commands, 'nas');
+    expect(move).toMatchObject({ kind: 'backend', label: 'backend Home NAS', backendInstanceId: 'b1' });
+    expect(commandInsert(move)).toBe('');
+    expect(matchCommands(commands, 'backend')).toHaveLength(1);
+    expect(composerCommands({ skills: [] }).some((command) => command.kind === 'backend')).toBe(false);
   });
 });
 

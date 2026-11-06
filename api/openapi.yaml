@@ -4231,7 +4231,7 @@ components:
 
     HandoffPreview:
       type: object
-      required: [fromRunId, backend, canMove, reasons, warnings, missingSkills, workingDirectory, nativeSessionTransferred]
+      required: [fromRunId, backend, canMove, reasons, warnings, missingSkills, workingDirectory, nativeSessionTransferred, model, effort]
       properties:
         fromRunId: { $ref: "#/components/schemas/UUID" }
         backend: { $ref: "#/components/schemas/BackendInstance" }
@@ -4240,6 +4240,15 @@ components:
         warnings: { type: array, items: { type: string } }
         missingSkills: { type: array, items: { type: string } }
         nativeSessionTransferred: { type: boolean, const: false }
+        model:
+          type: string
+          description: |
+            The model the session uses after the move, empty for the backend's
+            default. A model the session carries over and the destination does
+            not offer falls back to the default, with a warning.
+        effort:
+          type: string
+          description: The effort after the move, empty for the default; same fallback.
         workingDirectory:
           type: object
           required: [resolution]

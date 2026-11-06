@@ -222,6 +222,22 @@ function modelSettings(sessionId: string, model?: string, effort?: string, targe
   return { model: effective, effort: reasoning || (selected ? option?.defaultEffort : catalog?.defaultEffort) || option?.defaultEffort || '' };
 }
 
+/** The session's model and effort on another backend: kept where offered, its default otherwise. */
+function destinationModel(sessionId: string, backend: Json) {
+  const session = sessionOf(sessionId);
+  const model = text(session.model);
+  const effort = text(session.effort);
+  for (const m of model ? [model, ''] : ['']) {
+    for (const e of effort ? [effort, ''] : ['']) {
+      try {
+        modelSettings(sessionId, m, e, backend);
+        return { model: m, effort: e };
+      } catch { /* the next fallback */ }
+    }
+  }
+  return { model: '', effort: '' };
+}
+
 function previewHandoff(sessionId: string, target: string) {
   const session = sessionOf(sessionId);
   const timeline = timelineOf(sessionId);
@@ -238,12 +254,14 @@ function previewHandoff(sessionId: string, target: string) {
   if (capacity.maxConcurrentRuns <= 0) reasons.push('The backend is draining and accepts no new work.');
   else if (capacity.activeRuns >= capacity.maxConcurrentRuns) reasons.push('The backend is full.');
   if (timeline.jobs.some((job) => !['COMPLETED', 'FAILED', 'CANCELLED'].includes(String(job.status)))) reasons.push('Finish or cancel all running and queued jobs before moving.');
-  try { modelSettings(sessionId, undefined, undefined, backend); } catch (error) { reasons.push((error as Error).message); }
+  const kept = destinationModel(sessionId, backend);
+  if (kept.model !== text(session.model)) warnings.push(`The backend does not offer the model "${text(session.model)}"; the session will use its default model.`);
+  else if (kept.effort !== text(session.effort)) warnings.push(`The backend does not offer the effort "${text(session.effort)}" for this model; the session will use its default effort.`);
   if (backend.operationalStatus !== 'READY') warnings.push(`The backend is ${text(backend.operationalStatus).toLowerCase()}; the next job may wait for it.`);
   if (backend.providerAuthState === 'AUTHENTICATION_REQUIRED') warnings.push('Provider sign-in is required on the destination backend.');
   const directory = state.directories.find((entry) => entry.id === session.workingDirectoryId);
   const binding = directory && state.bindings.find((entry) => entry.knownDirectoryId === directory.id && entry.backendInstanceId === target);
-  return { fromRunId: current?.id, backend: clone(backend), canMove: reasons.length === 0, reasons, warnings, missingSkills: [], nativeSessionTransferred: false,
+  return { fromRunId: current?.id, backend: clone(backend), canMove: reasons.length === 0, reasons, warnings, missingSkills: [], nativeSessionTransferred: false, ...kept,
     workingDirectory: directory ? { knownDirectoryId: directory.id, name: directory.name, ...(binding && { path: binding.path }), resolution: binding ? 'bound' : 'resolve' } : { resolution: 'backend_default' } };
 }
 
@@ -796,12 +814,20 @@ const routes: [string, RegExp, Handler][] = [
     if (body.backendInstanceId) {
       const timeline = timelineOf(m[1]);
       const from = timeline.runs.at(-1)?.backendInstanceId;
+      const preview = previewHandoff(m[1], text(body.backendInstanceId));
       const runEntry = { id: newId(), sessionId: m[1], backendInstanceId: body.backendInstanceId, resumeStatus: 'UNKNOWN', createdAt: nowIso(), updatedAt: nowIso() };
       timeline.runs.push(runEntry);
-      const moved = { backendInstanceId: body.backendInstanceId, fromBackendInstanceId: from, backendName: previewHandoff(m[1], text(body.backendInstanceId)).backend.name };
+      const moved = { backendInstanceId: body.backendInstanceId, fromBackendInstanceId: from, backendName: preview.backend.name };
       pushEvent(m[1], 'run.created', moved);
       emitLifecycle('run.created', text(session.projectId), moved, m[1]);
       record('session.backend_changed', { projectId: session.projectId, sessionId: m[1], subjectId: body.backendInstanceId, detail: { from, to: body.backendInstanceId, missingSkills: [] } });
+      // What the destination does not offer falls back to its default.
+      if (preview.model !== text(session.model) || preview.effort !== text(session.effort)) {
+        session.model = preview.model;
+        session.effort = preview.effort;
+        pushEvent(m[1], 'session.model_changed', { model: preview.model, effort: preview.effort });
+        record('session.model_changed', { projectId: session.projectId, sessionId: m[1], subjectId: m[1], detail: { model: preview.model, effort: preview.effort } });
+      }
       return { run: runEntry, missingSkills: [] };
     }
     return session;

@@ -181,6 +181,7 @@ const suggestions = createSuggestions(field, {
       deliveries: view?.deliveries,
       running: Boolean(view?.active && view.active.status !== 'CANCELLING'),
       renamable: Boolean(view),
+      backends: view?.backendTargets,
     });
   },
   files: () => composerSources.files,
@@ -196,6 +197,7 @@ const suggestions = createSuggestions(field, {
       persist();
       renderComposer();
     } else if (command.kind === 'stop') stop();
+    else if (command.kind === 'backend') post({ type: 'moveBackend', backendInstanceId: command.backendInstanceId });
   },
   onChange: () => {
     recalled = -1;
