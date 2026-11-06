@@ -2,7 +2,7 @@
 
 When a session's latest Job has completed successfully and no work is pending,
 **Capture learnings** is available in the Web session header (inside session
-details on a phone) and in the VS Code conversation. Archived sessions must be
+details on a phone, as a book icon) and in the VS Code conversation. Archived sessions must be
 restored first. Failed or cancelled Jobs are not presented as verified resolutions.
 
 Confirm **Propose learnings** to start a normal turn on that session's backend,

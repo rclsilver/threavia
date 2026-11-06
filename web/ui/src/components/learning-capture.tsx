@@ -31,7 +31,9 @@ export function LearningCapture({ snapshot, backend }: { snapshot: Snapshot; bac
   // becomes unavailable rather than silently closing or losing its error.
   if (!source && !open) return null;
   return <Dialog open={open} onOpenChange={(next) => { if (!capture.isPending) { setOpen(next); capture.reset(); } }}>
-    <DialogTrigger asChild><Button variant="ghost" size="lg" className="h-11 md:h-9" data-tour="capture-learnings"><BookOpen className="size-4" />Capture learnings</Button></DialogTrigger>
+    {/* An icon on a phone, like the header actions beside it: with its label
+        the row no longer fits and pushes Session settings off the screen. */}
+    <DialogTrigger asChild><Button variant="ghost" size="lg" className="h-11 max-sm:size-11 max-sm:p-0 md:h-9" data-tour="capture-learnings"><BookOpen className="size-4" /><span className="max-sm:sr-only">Capture learnings</span></Button></DialogTrigger>
     <DialogContent onEscapeKeyDown={(event) => { if (capture.isPending) event.preventDefault(); }} onPointerDownOutside={(event) => { if (capture.isPending) event.preventDefault(); }}>
       <DialogTitle>Capture learnings from this resolution</DialogTitle>
       <DialogDescription>Ask the agent to compare this result with existing memory and propose up to three useful facts, procedures or project rules.</DialogDescription>

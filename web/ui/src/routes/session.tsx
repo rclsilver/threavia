@@ -2,7 +2,7 @@ import { AttachButton, AttachedFiles } from '@/components/prompt-attachments';
 import { usePromptAttachments, type AttachedFile } from '@/lib/prompt-attachments';
 import { useComposerSuggestions, useSessionSkills } from '@/components/composer-suggestions';
 import { Link, useParams } from '@tanstack/react-router';
-import { AlarmClock, ArrowUp, ChevronDown, LoaderCircle, Pin, Settings2, Square } from 'lucide-react';
+import { AlarmClock, ArrowUp, ChevronDown, FileDiff, LoaderCircle, Pin, Settings2, Square } from 'lucide-react';
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 
 import {
@@ -240,7 +240,7 @@ export function SessionView() {
           </div>
           <div className="flex items-center gap-1 md:col-start-2 md:row-span-2 md:row-start-1">
             <LearningCapture key={sessionId} snapshot={data} backend={backend} />
-            <Button asChild size="lg" variant="ghost" className="h-11 md:h-9"><Link to="/sessions/$sessionId/review" params={{ sessionId }} data-tour="open-review">Review</Link></Button>
+            <Button asChild size="lg" variant="ghost" className="h-11 max-sm:size-11 max-sm:p-0 md:h-9"><Link to="/sessions/$sessionId/review" params={{ sessionId }} data-tour="open-review"><FileDiff /><span className="max-sm:sr-only">Review</span></Link></Button>
             <SnoozeButton session={data.session} />
             <PinButton session={data.session} />
             <ArchiveButton session={data.session} />
