@@ -13,7 +13,6 @@ import (
 	"github.com/rclsilver/threavia/internal/core/events"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 	"strings"
-	"time"
 )
 
 func controlHash(token string) string {
@@ -131,59 +130,11 @@ func (s *Service) RecordControlCall(ctx context.Context, a domain.ControlAccess,
 }
 
 func (s *Service) ControlSessionWait(ctx context.Context, i auth.Identity, in map[string]any) (any, error) {
-	id := domain.SessionID(text(in, "sessionId"))
-	after, err := integerInput(in, "afterSequence", 0, 0, 1<<53-1)
+	session, err := s.ownedSession(ctx, i, text(in, "sessionId"))
 	if err != nil {
 		return nil, err
 	}
-	seconds, err := integerInput(in, "timeoutSeconds", 20, 0, 30)
-	if err != nil {
-		return nil, err
-	}
-	deadline := time.NewTimer(time.Duration(seconds) * time.Second)
-	defer deadline.Stop()
-	// Database-backed forward pages survive disconnects; the timer is only the
-	// bound of this active read, never a background schedule or subscription.
-	ticker := time.NewTicker(250 * time.Millisecond)
-	defer ticker.Stop()
-	timedOut := false
-	for {
-		session, err := s.ownedSession(ctx, i, string(id))
-		if err != nil {
-			return nil, err
-		}
-		history, err := s.store.SessionEventsAfter(ctx, i.UserID, id, domain.Sequence(after), 100)
-		if err != nil {
-			return nil, translate(err)
-		}
-		result, err := s.managedState(ctx, i, session, history)
-		if err != nil {
-			return nil, err
-		}
-		finished := true
-		for _, job := range result["jobs"].([]domain.Job) {
-			finished = finished && job.Status.Terminal()
-		}
-		attention := result["attention"].(domain.Attention)
-		if len(history) > 0 || !attention.Empty() || finished || timedOut || seconds == 0 {
-			cursor := after
-			if len(history) > 0 {
-				cursor = int64(history[len(history)-1].Sequence)
-			}
-			result["cursor"] = cursor
-			result["hasMore"] = len(history) == 100
-			result["finished"] = finished
-			result["timedOut"] = timedOut || (seconds == 0 && len(history) == 0 && attention.Empty() && !finished)
-			return result, nil
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-deadline.C:
-			timedOut = true
-		case <-ticker.C:
-		}
-	}
+	return s.waitSession(ctx, i, session, in)
 }
 
 func (s *Service) ControlSessionRead(ctx context.Context, i auth.Identity, in map[string]any) (any, error) {

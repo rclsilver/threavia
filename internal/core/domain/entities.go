@@ -109,6 +109,10 @@ type Job struct {
 	// Job notifies nobody.
 	Quiet     bool `json:"-"`
 	Dismissed bool `json:"-"`
+	// CallbackSessionID is the session whose agent sent the message that made
+	// this Job. It is told of the Job's questions, permissions and end, and
+	// may answer them (docs/session-management.md).
+	CallbackSessionID *SessionID `json:"callbackSessionId,omitempty"`
 }
 
 // BackendWait describes a stopped provider attempt that Core can retry.

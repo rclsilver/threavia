@@ -186,6 +186,12 @@ event page has been consumed. Cursors advance only to the last returned event,
 not a global snapshot position that might skip results. Waiting is scoped to
 this active call; this V1 does not wake an inactive controller conversation.
 
+To follow a message, pass the job id returned by `session_send` as `jobId` and
+`until: "attention"`: the call returns only when that Job asks a question,
+needs a permission or ends, with the Job as `job` and only its pending
+requests in `attention`, rather than at every streamed event. Answer or decide,
+then wait again with the returned `cursor`.
+
 Answer questions with `session_answer`; permission decisions require the separate
 `session_resolve_validation` tool and the original `payloadSha256` from attention.
 Both require the matching session and request IDs. Choice questions reject

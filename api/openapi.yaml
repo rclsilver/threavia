@@ -3495,6 +3495,10 @@ components:
         model: { type: string, description: 'Model at launch, updated when the provider confirms it. Absent when unknown.' }
         effort: { type: string, description: 'Effort at launch, updated when the provider confirms it. Absent when unknown.' }
         originChannel: { $ref: "#/components/schemas/Channel" }
+        callbackSessionId:
+          type: string
+          format: uuid
+          description: The session whose agent sent, with session_send, the message that made this Job. It is told of the Job's questions, permissions and end, and may answer them.
         error: { type: string }
         backendWait:
           type: object

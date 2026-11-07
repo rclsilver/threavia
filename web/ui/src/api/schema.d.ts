@@ -6310,6 +6310,11 @@ export interface components {
             /** @description Effort at launch, updated when the provider confirms it. Absent when unknown. */
             effort?: string;
             originChannel?: components["schemas"]["Channel"];
+            /**
+             * Format: uuid
+             * @description The session whose agent sent, with session_send, the message that made this Job. It is told of the Job's questions, permissions and end, and may answer them.
+             */
+            callbackSessionId?: string;
             error?: string;
             /** @description A stopped provider attempt, retained while WAITING_BACKEND. The same Job retries; waiting time consumes no execution budget. */
             backendWait?: {

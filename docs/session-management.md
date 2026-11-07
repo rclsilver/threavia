@@ -27,10 +27,10 @@ as `mcp__threavia__<name>` when a Job starts:
 | `session_create` | Start a session with a self-contained `message` and optional `title`, `projectId`, `workingDirectoryId`, `backendInstanceId` (default: the creator's), `model`, `effort` and `idempotencyKey`. The default is the current project. Returns `session`, `run` and `job`. The created session is a direct delegate. |
 | `session_list` | `scope: project` (default) lists the current project, or `projectId`; `all` lists sessions across the user's projects; `managed` lists this conversation's direct delegates across projects, optionally filtered by `projectId`. `includeArchived` includes archived sessions and projects. `limit` is 1–100 (default 50); pass `nextOffset` as `offset` for the next page. Results are ordered newest-created first, so activity does not shift existing sessions between pages. |
 | `session_read` | Read any owned session's `session`, up to 50 recent Jobs (unfinished first), pending `attention`, and recent `events`, including user and agent messages. `limit` is 1–100 (default 50); `before` pages backwards using `beforeSequence`. |
-| `session_send` | Send a message to any owned session. `QUEUE` creates a later Job, `NEXT` reaches the next step, `NOW` interrupts work and abandons pending questions and permissions. NEXT/NOW require backend support. Messages are attributed to the sending agent; they do not adopt the recipient as a delegate or change its policy. |
-| `session_answer` | Answer a pending information request using `sessionId`, `requestId` and `value`. Closed choices are enforced. It resumes the worker; it cannot approve permissions. |
-| `session_resolve_validation` | Relay the exact worker permission for approval in the manager conversation, then forward the decision. Requires `sessionId`, `requestId`, `approved`, original `payloadSha256` and `requestPayload`, plus optional `note`. |
-| `session_wait` | Wait for events, attention or completion. `afterSequence` pages forwards; `timeoutSeconds` is 0–30 (default 20). Returns state, events, a session event `cursor` and `timedOut`. A timeout is not completion. |
+| `session_send` | Send a message to any owned session. `QUEUE` creates a later Job, `NEXT` reaches the next step, `NOW` interrupts work and abandons pending questions and permissions. NEXT/NOW require backend support. Messages are attributed to the sending agent; they do not adopt the recipient as a delegate or change its policy. A `QUEUE` message starts a Job that calls the sender back (see below). |
+| `session_answer` | Answer a pending information request of a delegate, or of a Job started by this conversation's `session_send`, using `sessionId`, `requestId` and `value`. Closed choices are enforced. It resumes the worker; it cannot approve permissions. |
+| `session_resolve_validation` | Relay the exact permission of a delegate, or of a Job started by this conversation's `session_send`, for approval in this conversation, then forward the decision. Requires `sessionId`, `requestId`, `approved`, original `payloadSha256` and `requestPayload`, plus optional `note`. |
+| `session_wait` | Wait for events, attention or completion in any owned session. `afterSequence` pages forwards; `timeoutSeconds` is 0–30 (default 20). `jobId` narrows attention and completion to one Job of the session (returned as `job`); `until: attention` returns only on a question, a permission or the end of the work rather than at every event (default `event`). Returns state, events, a session event `cursor`, `hasMore`, `finished` and `timedOut`. A timeout is not completion. |
 | `session_cancel` | Stop a specific `jobId` in a managed `sessionId`, with an optional `reason`. History and files stay available. |
 | `session_archive` | Archive or restore using `archived`. Jobs must finish or be cancelled before archival. |
 | `session_control` | After human validation, act on **any** owned session, managed or not: `action` is `cancel` (`jobId`, `reason`), `archive`, `restore`, `update` (the `session_update` fields), `answer` (`requestId`, `value`), `pin` (`pinned`), `snooze` (`until`, `untilChange` or `clear`), `mark_read` (`sequence`) or `fetch` (repository state after a remote fetch). For this conversation and its direct delegates, the unvalidated tools remain the normal path. |
@@ -93,6 +93,31 @@ and `job.failed` events carry `delegated: true`, which the Web and VS Code
 clients do not announce. Requests remain visible through the existing API for
 manual recovery. Archiving the manager restores ordinary worker notifications;
 deleting it detaches workers and keeps their sessions and files.
+
+### Callbacks to a sender
+
+A conversation that messages a session it does not manage is called back the
+same way for the Job its message made (decided 2026-11-07). A `QUEUE` message
+records the sending session on the new Job (`callbackSessionId`); a `NOW` with
+files, or one replacing a Job that waits for its backend, makes a Job too and
+records it the same way. When that Job asks a question, requests permission or
+ends, the sender receives a queued message naming the session and the Job, and
+may answer with `session_answer` or relay with `session_resolve_validation`,
+for that Job only. The relay still needs the person's approval in the sender's
+own Job, as for a manager. The person can still answer from their clients; the
+first answer wins.
+
+There is no callback when:
+- the message joins a running Job (`NEXT`, or `NOW` without files): it does not
+  take that Job over; use `session_wait` with its `jobId`;
+- the sender manages the target: it is told as the manager;
+- the sender replies to the session whose message started its own Job: that
+  session hears when this turn ends anyway, and two agents answering each
+  other's callbacks would never stop.
+
+A client that cannot be called back, such as a control client
+([control-mcp.md](control-mcp.md)), calls `session_wait` with the `jobId` that
+`session_send` returned and `until: attention`.
 
 ## Permission receipts and attribution
 

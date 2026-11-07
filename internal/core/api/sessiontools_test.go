@@ -117,7 +117,8 @@ func TestSessionToolsRespectOwnershipAndDelegationScope(t *testing.T) {
 		if read["session"].(map[string]any)["id"] != id {
 			t.Fatalf("read returned the wrong session: %v", read)
 		}
-		for _, tool := range []string{"session_wait", "session_archive", "session_cancel", "session_answer", "session_resolve_validation"} {
+		backend.callCoreTool(t, ctx, manager.GetRunId(), manager.GetJobId(), "session_wait", map[string]any{"sessionId": id, "timeoutSeconds": 0})
+		for _, tool := range []string{"session_archive", "session_cancel", "session_answer", "session_resolve_validation"} {
 			backend.callCoreToolExpectingFailure(t, ctx, manager.GetRunId(), manager.GetJobId(), tool,
 				map[string]any{"sessionId": id, "message": "interfere", "archived": true, "timeoutSeconds": 0})
 		}
@@ -587,5 +588,68 @@ func TestSessionToolsChildCompletionQueuesOneManagerCallback(t *testing.T) {
 	}
 	if ends := delegated(managerID); len(ends) != 1 || ends[0] {
 		t.Fatalf("manager job.completed delegated = %v, want [false]", ends)
+	}
+}
+
+// A conversation that messages a session it does not manage hears back from
+// the Job its message made and may answer it, and only it; a reply to that
+// conversation from the Job calls nobody back.
+func TestSessionToolsSendCallsTheSenderBack(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	senderID := c.startSession(projectID, c.backendID, dirID, "Coordinate")
+	sender := receive(t, "the sender", backend.starts)
+	targetID := c.startSession(projectID, c.backendID, dirID, "Independent work")
+	own := receive(t, "the target's own job", backend.starts)
+	completeDelegatedJob(t, c, backend, own)
+	c.startSession(projectID, c.backendID, dirID, "Bystander")
+	bystander := receive(t, "the bystander", backend.starts)
+	ctx := context.Background()
+
+	sent := backend.callCoreTool(t, ctx, sender.GetRunId(), sender.GetJobId(), "session_send", map[string]any{"sessionId": targetID, "message": "Which branch is deployed?"})
+	job := sent["job"].(map[string]any)
+	if job["callbackSessionId"] != senderID {
+		t.Fatalf("sent job = %v, want it to call %s back", job, senderID)
+	}
+	target := receive(t, "the job the message made", backend.starts)
+	if target.GetJobId() != job["id"] {
+		t.Fatalf("started job = %s, want %v", target.GetJobId(), job["id"])
+	}
+	completeDelegatedJob(t, c, backend, sender)
+
+	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
+		return backend.events.UserInputRequested(ctx, target.GetRunId(), target.GetJobId(), &backendv1.UserInputRequested{
+			RequestId: "branch", Prompt: "Which branch?", Choices: []string{"main", "dev"},
+		})
+	}))
+	awakened := receive(t, "the sender woken by the question", backend.starts)
+	if awakened.GetSessionId() != senderID || awakened.GetRunId() != sender.GetRunId() {
+		t.Fatalf("woken Job = %+v, want the sender conversation", awakened)
+	}
+	waited := backend.callCoreTool(t, ctx, awakened.GetRunId(), awakened.GetJobId(), "session_wait", map[string]any{
+		"sessionId": targetID, "jobId": target.GetJobId(), "until": "attention", "timeoutSeconds": 0,
+	})
+	inputs := waited["attention"].(map[string]any)["userInputs"].([]any)
+	if len(inputs) != 1 || waited["finished"] != false || waited["timedOut"] != false {
+		t.Fatalf("wait = %v, want the job's pending question", waited)
+	}
+	answer := map[string]any{"sessionId": targetID, "requestId": inputs[0].(map[string]any)["id"], "value": "main"}
+	backend.callCoreToolExpectingFailure(t, ctx, bystander.GetRunId(), bystander.GetJobId(), "session_answer", answer)
+	backend.callCoreTool(t, ctx, awakened.GetRunId(), awakened.GetJobId(), "session_answer", answer)
+	if resolved := receive(t, "the sender's answer", backend.inputs); resolved.GetJobId() != target.GetJobId() || resolved.GetValue() != "main" {
+		t.Fatalf("input resolution = %+v, want the sender's answer", resolved)
+	}
+
+	reply := backend.callCoreTool(t, ctx, target.GetRunId(), target.GetJobId(), "session_send", map[string]any{"sessionId": senderID, "message": "main is deployed"})
+	if _, found := reply["job"].(map[string]any)["callbackSessionId"]; found {
+		t.Fatalf("reply = %v, want no callback to the session that asked", reply)
+	}
+	completeDelegatedJob(t, c, backend, target)
+	// The sender's first Job, its wake, the reply and the completion callback.
+	waitUntil(t, "the completion callback behind the active sender", func() bool { return len(c.snapshot(senderID).Jobs) == 4 })
+	ended := backend.callCoreTool(t, ctx, awakened.GetRunId(), awakened.GetJobId(), "session_wait", map[string]any{
+		"sessionId": targetID, "jobId": target.GetJobId(), "until": "attention", "timeoutSeconds": 1,
+	})
+	if ended["finished"] != true || ended["job"].(map[string]any)["status"] != "COMPLETED" {
+		t.Fatalf("wait = %v, want the finished job", ended)
 	}
 }

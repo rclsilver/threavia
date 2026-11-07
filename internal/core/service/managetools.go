@@ -600,7 +600,7 @@ func (s *Service) sessionManageTool(ctx context.Context, identity auth.Identity,
 		case "update":
 			return s.updateManagedSession(ctx, identity, session, input)
 		case "answer":
-			return s.answerSession(ctx, identity, session, input)
+			return s.answerSession(ctx, identity, session, input, nil)
 		case "pin":
 			return s.pinSession(ctx, identity, session, input)
 		case "snooze":

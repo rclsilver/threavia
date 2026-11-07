@@ -15,7 +15,7 @@ var ErrJobSlotTaken = errors.New("the run already has an active job")
 
 const jobColumns = `j.id, j.run_id, j.status, j.idempotency_key, j.error, j.origin_channel,
 	j.created_at, j.updated_at, j.started_at, j.ended_at, j.model, j.effort, j.backend_wait,
-	j.quiet, j.dismissed`
+	j.quiet, j.dismissed, j.callback_session_id`
 
 // CreateJob inserts a Job. A Job is created QUEUED and is dispatched
 // separately, so that enqueueing never depends on backend availability.
@@ -33,16 +33,16 @@ func (s *Store) CreateJob(ctx context.Context, job *domain.Job) error {
 		return classify(err, "lock job project")
 	}
 	err := s.q.QueryRow(ctx, `
-		INSERT INTO jobs (id, run_id, status, idempotency_key, idempotency_owner_id, origin_channel, quiet)
+		INSERT INTO jobs (id, run_id, status, idempotency_key, idempotency_owner_id, origin_channel, quiet, callback_session_id)
 		VALUES ($1, $2, $3, $4, (
 			SELECT p.owner_id
 			FROM runs r
 			JOIN sessions s ON s.id = r.session_id
 			JOIN projects p ON p.id = s.project_id
 			WHERE r.id = $2 AND $4::text IS NOT NULL
-		), $5, $6)
+		), $5, $6, $7)
 		RETURNING created_at, updated_at`,
-		job.ID, job.RunID, job.Status, job.IdempotencyKey, job.OriginChannel, job.Quiet,
+		job.ID, job.RunID, job.Status, job.IdempotencyKey, job.OriginChannel, job.Quiet, job.CallbackSessionID,
 	).Scan(&job.CreatedAt, &job.UpdatedAt)
 	return classify(err, "create job")
 }
@@ -65,6 +65,27 @@ func (s *Store) GetJob(ctx context.Context, ownerID domain.UserID, id domain.Job
 		JOIN sessions s ON s.id = r.session_id
 		JOIN projects p ON p.id = s.project_id
 		WHERE j.id = $1 AND p.owner_id = $2`, id, ownerID))
+}
+
+// OpenCallbackSessions returns the sessions holding unfinished Jobs that call
+// back the given session, for the durable attention callback.
+func (s *Store) OpenCallbackSessions(ctx context.Context, callbackID domain.SessionID) ([]domain.SessionID, error) {
+	rows, err := s.q.Query(ctx, `
+		SELECT DISTINCT r.session_id FROM jobs j JOIN runs r ON r.id = j.run_id
+		WHERE j.callback_session_id = $1 AND j.status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')`, callbackID)
+	if err != nil {
+		return nil, classify(err, "list callback jobs")
+	}
+	defer rows.Close()
+	out := make([]domain.SessionID, 0)
+	for rows.Next() {
+		var id domain.SessionID
+		if err := rows.Scan(&id); err != nil {
+			return nil, classify(err, "read callback jobs")
+		}
+		out = append(out, id)
+	}
+	return out, classify(rows.Err(), "read callback jobs")
 }
 
 // JobByID returns a Job without an ownership check, for the backend-facing
@@ -233,7 +254,7 @@ func (s *Store) LoadJobContext(ctx context.Context, id domain.JobID) (JobContext
 	err := s.q.QueryRow(ctx, `
 		SELECT j.id, j.run_id, j.status, j.idempotency_key, j.error, j.origin_channel,
 		       j.created_at, j.updated_at, j.started_at, j.ended_at, j.model, j.effort, j.backend_wait,
-		       j.quiet, j.dismissed,
+		       j.quiet, j.dismissed, j.callback_session_id,
 		       r.id, r.session_id, r.backend_instance_id, r.native_session_id,
 		       r.resume_status, r.resume_reason, r.created_at, r.updated_at,
 		       s.id, p.id, p.owner_id, p.name, p.description, p.instructions,
@@ -250,7 +271,7 @@ func (s *Store) LoadJobContext(ctx context.Context, id domain.JobID) (JobContext
 		&jc.Job.ID, &jc.Job.RunID, &jc.Job.Status, &jc.Job.IdempotencyKey, &jc.Job.Error,
 		&jc.Job.OriginChannel,
 		&jc.Job.CreatedAt, &jc.Job.UpdatedAt, &jc.Job.StartedAt, &jc.Job.EndedAt, &jc.Job.Model, &jc.Job.Effort, &jc.Job.BackendWait,
-		&jc.Job.Quiet, &jc.Job.Dismissed,
+		&jc.Job.Quiet, &jc.Job.Dismissed, &jc.Job.CallbackSessionID,
 		&jc.Run.ID, &jc.Run.SessionID, &jc.Run.BackendInstanceID, &jc.Run.NativeSessionID,
 		&jc.Run.ResumeStatus, &jc.Run.ResumeReason, &jc.Run.CreatedAt, &jc.Run.UpdatedAt,
 		&jc.SessionID, &jc.ProjectID, &jc.OwnerID, &jc.ProjectName, &jc.ProjectDesc,
@@ -323,7 +344,7 @@ func scanJob(row scanner) (domain.Job, error) {
 	var job domain.Job
 	err := row.Scan(&job.ID, &job.RunID, &job.Status, &job.IdempotencyKey, &job.Error, &job.OriginChannel,
 		&job.CreatedAt, &job.UpdatedAt, &job.StartedAt, &job.EndedAt, &job.Model, &job.Effort, &job.BackendWait,
-		&job.Quiet, &job.Dismissed)
+		&job.Quiet, &job.Dismissed, &job.CallbackSessionID)
 	return job, classify(err, "read job")
 }
 

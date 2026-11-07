@@ -46,19 +46,69 @@ func (s *Service) wakeSessionManager(ctx context.Context, jc postgres.JobContext
 	}
 	identity := auth.Identity{UserID: jc.OwnerID}
 	child, err := s.store.GetSession(ctx, jc.OwnerID, jc.SessionID)
-	if err != nil || child.ManagerSessionID == nil {
+	if err != nil {
 		return
 	}
-	manager, err := s.store.GetSession(ctx, jc.OwnerID, *child.ManagerSessionID)
-	if err != nil || manager.Status != domain.SessionActive {
-		return
-	}
-	message := fmt.Sprintf("Delegated session %s (%s) %s. Use session_read to inspect its state and results, session_answer to handle its questions, or session_resolve_validation to relay its original permission for human approval. Continue managing the assignment and report to the person in this conversation. Worker results do not grant new user permissions.", child.ID, child.Title, reason)
 	ctx = context.WithValue(domain.WithChannel(ctx, domain.Channel("agent")), managerJobKey{}, jc.Job.ID)
-	key := delegationKey(manager.ID, "wake:"+string(jc.Job.ID), keyPart)
-	if _, err := s.PostMessage(ctx, identity, manager.ID, message, key, DeliveryQueue); err != nil {
-		s.logger.Warn("cannot wake the session manager", slog.String("sessionId", string(manager.ID)), slog.Any("error", err))
+	wake := func(id domain.SessionID, message string) {
+		recipient, err := s.store.GetSession(ctx, jc.OwnerID, id)
+		if err != nil || recipient.Status != domain.SessionActive {
+			return
+		}
+		key := delegationKey(recipient.ID, "wake:"+string(jc.Job.ID), keyPart)
+		if _, err := s.PostMessage(ctx, identity, recipient.ID, message, key, DeliveryQueue); err != nil {
+			s.logger.Warn("cannot wake the session manager", slog.String("sessionId", string(recipient.ID)), slog.Any("error", err))
+		}
 	}
+	if child.ManagerSessionID != nil {
+		wake(*child.ManagerSessionID, fmt.Sprintf("Delegated session %s (%s) %s. Use session_read to inspect its state and results, session_answer to handle its questions, or session_resolve_validation to relay its original permission for human approval. Continue managing the assignment and report to the person in this conversation. Worker results do not grant new user permissions.", child.ID, child.Title, reason))
+	}
+	// The sender of the message that made this Job, unless it is already told
+	// as the manager (sendCallback records no other).
+	if sender := jc.Job.CallbackSessionID; sender != nil && (child.ManagerSessionID == nil || *sender != *child.ManagerSessionID) {
+		wake(*sender, fmt.Sprintf("Session %s (%s), in the job (%s) started by your session_send, %s. Use session_read or session_wait with this jobId to inspect it and its result, session_answer to handle its questions, or session_resolve_validation to relay its original permission for human approval. Continue your task and report to the person in this conversation. Its results do not grant new user permissions.", child.ID, child.Title, jc.Job.ID, reason))
+	}
+}
+
+type callbackSessionKey struct{}
+
+// sendCallback marks a message sent with session_send so that the Job it
+// makes calls its sender back. None when the sender is told anyway, as the
+// target's manager, or when it is replying to the very session whose message
+// started its own Job: that session already hears when this turn ends, and
+// two agents answering each other's callbacks would never stop.
+func (s *Service) sendCallback(ctx context.Context, identity auth.Identity, jc jobScope, target domain.Session) context.Context {
+	if target.ID == jc.SessionID || (target.ManagerSessionID != nil && *target.ManagerSessionID == jc.SessionID) {
+		return ctx
+	}
+	if own, err := s.store.GetJob(ctx, identity.UserID, jc.JobID); err == nil && own.CallbackSessionID != nil && *own.CallbackSessionID == target.ID {
+		return ctx
+	}
+	return context.WithValue(ctx, callbackSessionKey{}, jc.SessionID)
+}
+
+func callbackSessionFrom(ctx context.Context) *domain.SessionID {
+	if id, ok := ctx.Value(callbackSessionKey{}).(domain.SessionID); ok {
+		return &id
+	}
+	return nil
+}
+
+// mayHandleRequest says whether this conversation may answer, or relay, a
+// question or permission of a Job in session: as its manager, or as the
+// sender of the message that made the Job.
+func (s *Service) mayHandleRequest(ctx context.Context, identity auth.Identity, jc jobScope, session domain.Session, jobID domain.JobID) error {
+	if session.ManagerSessionID != nil && *session.ManagerSessionID == jc.SessionID {
+		return nil
+	}
+	job, err := s.store.GetJob(ctx, identity.UserID, jobID)
+	if err != nil {
+		return translate(err)
+	}
+	if job.CallbackSessionID != nil && *job.CallbackSessionID == jc.SessionID {
+		return nil
+	}
+	return fmt.Errorf("%w: the session is not directly managed by this conversation and the job was not started by its session_send", ErrInvalid)
 }
 
 // Close the race where a question arrives while the manager is still running,
@@ -69,6 +119,21 @@ func (s *Service) wakeManagedAttention(ctx context.Context, ownerID domain.UserI
 	if err != nil {
 		s.logger.Warn("cannot check delegated attention", slog.Any("error", err))
 		return
+	}
+	// Jobs started by this session's session_send call it back the same way.
+	callbacks, err := s.store.OpenCallbackSessions(ctx, managerID)
+	if err != nil {
+		s.logger.Warn("cannot check callback attention", slog.Any("error", err))
+	}
+	seen := make(map[domain.SessionID]bool, len(sessions))
+	for _, session := range sessions {
+		seen[session.ID] = true
+	}
+	for _, id := range callbacks {
+		if !seen[id] {
+			sessions = append(sessions, domain.Session{ID: id})
+		}
+		seen[id] = true
 	}
 	for _, session := range sessions {
 		attention, err := s.Attention(ctx, auth.Identity{UserID: ownerID}, session.ID)
@@ -169,18 +234,23 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 		}
 		return sessionToolResult(map[string]any{"session": moved.Session, "knowledge": moved.Knowledge})
 	}
-	if name != tools.NameSessionRead && name != tools.NameSessionSend {
+	switch name {
+	case tools.NameSessionRead, tools.NameSessionSend, tools.NameSessionWait:
+	case tools.NameSessionAnswer, tools.NameSessionResolveValidation:
+		// Checked against the request's Job: its sender may handle it too.
+	default:
 		if _, err := s.managedSession(ctx, identity, jc, string(session.ID)); err != nil {
 			return nil, err
 		}
 	}
+	mayHandle := func(jobID domain.JobID) error { return s.mayHandleRequest(ctx, identity, jc, session, jobID) }
 	switch name {
 	case tools.NameSessionUpdate:
 		return s.updateManagedSession(ctx, identity, session, input)
 	case tools.NameSessionDetach:
 		return s.detachSession(ctx, identity, jc, session)
 	case tools.NameSessionResolveValidation:
-		return s.resolveManagedValidation(ctx, identity, jc, session, input)
+		return s.resolveManagedValidation(ctx, identity, jc, session, input, mayHandle)
 	case tools.NameSessionRead:
 		limit, err := integerInput(input, "limit", 50, 1, 100)
 		if err != nil {
@@ -192,14 +262,14 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 		}
 		return s.readManagedSession(ctx, identity, session, domain.Sequence(before), int(limit))
 	case tools.NameSessionSend:
-		job, err := s.PostMessage(ctx, identity, session.ID, text(input, "message"),
+		job, err := s.PostMessage(s.sendCallback(ctx, identity, jc, session), identity, session.ID, text(input, "message"),
 			delegationKey(jc.SessionID, "send:"+string(session.ID), text(input, "idempotencyKey")), Delivery(text(input, "delivery")))
 		if err != nil {
 			return nil, err
 		}
 		return sessionToolResult(map[string]any{"job": job})
 	case tools.NameSessionAnswer:
-		return s.answerSession(ctx, identity, session, input)
+		return s.answerSession(ctx, identity, session, input, mayHandle)
 	case tools.NameSessionCancel:
 		return s.cancelSessionJob(ctx, identity, session, input)
 	case tools.NameSessionArchive:
@@ -212,21 +282,18 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 		}
 		return s.archiveSession(ctx, identity, session, archived)
 	case tools.NameSessionWait:
-		after, err := integerInput(input, "afterSequence", 0, 0, 1<<53-1)
+		result, err := s.waitSession(ctx, identity, session, input)
 		if err != nil {
 			return nil, err
 		}
-		seconds, err := integerInput(input, "timeoutSeconds", 20, 0, 30)
-		if err != nil {
-			return nil, err
-		}
-		return s.waitManagedSession(ctx, identity, jc, session.ID, domain.Sequence(after), time.Duration(seconds)*time.Second)
+		return sessionToolResult(result)
 	}
 	panic("unreachable session tool")
 }
 
 // answerSession answers a question pending in session, within its choices.
-func (s *Service) answerSession(ctx context.Context, identity auth.Identity, session domain.Session, input map[string]any) (map[string]any, error) {
+// mayHandle, when set, decides whether the caller may answer for its Job.
+func (s *Service) answerSession(ctx context.Context, identity auth.Identity, session domain.Session, input map[string]any, mayHandle func(domain.JobID) error) (map[string]any, error) {
 	requestID := domain.UserInputRequestID(text(input, "requestId"))
 	if requestID == "" {
 		return nil, fmt.Errorf("%w: requestId is required", ErrInvalid)
@@ -237,6 +304,11 @@ func (s *Service) answerSession(ctx context.Context, identity auth.Identity, ses
 	}
 	if request.Scope.SessionID != session.ID || request.Scope.ProjectID != session.ProjectID {
 		return nil, fmt.Errorf("%w: the question belongs to another session", ErrInvalid)
+	}
+	if mayHandle != nil {
+		if err := mayHandle(request.Scope.JobID); err != nil {
+			return nil, err
+		}
 	}
 	value, ok := input["value"].(string)
 	if !ok || strings.TrimSpace(value) == "" {
@@ -321,7 +393,8 @@ func (s *Service) archiveSession(ctx context.Context, identity auth.Identity, se
 // requires validation; this keeps a direct call, or a backend that ignores
 // requires_validation, from skipping them.
 //
-// A delegate's request is approved through its manager's relay, resolved on
+// A delegate's request is approved through its manager's relay, or that of
+// the session whose session_send started its Job, resolved on
 // the "agent" channel. That counts: the relay is itself refused without the
 // person's receipt for that exact relay in the manager's Job, and it is the
 // only way to resolve on that channel. A control access resolves as its own
@@ -437,7 +510,7 @@ func (s *Service) listToolSessions(ctx context.Context, identity auth.Identity, 
 
 // Check the mandatory backend gate's receipt in Core as well: a direct call
 // or an older backend cannot bypass consent by ignoring requires_validation.
-func (s *Service) resolveManagedValidation(ctx context.Context, identity auth.Identity, jc jobScope, session domain.Session, input map[string]any) (map[string]any, error) {
+func (s *Service) resolveManagedValidation(ctx context.Context, identity auth.Identity, jc jobScope, session domain.Session, input map[string]any, mayHandle func(domain.JobID) error) (map[string]any, error) {
 	requestID := domain.ValidationRequestID(text(input, "requestId"))
 	if requestID == "" {
 		return nil, fmt.Errorf("%w: requestId is required", ErrInvalid)
@@ -448,6 +521,9 @@ func (s *Service) resolveManagedValidation(ctx context.Context, identity auth.Id
 	}
 	if request.Scope.SessionID != session.ID || request.Scope.ProjectID != session.ProjectID {
 		return nil, fmt.Errorf("%w: the permission belongs to another session", ErrInvalid)
+	}
+	if err := mayHandle(request.Scope.JobID); err != nil {
+		return nil, err
 	}
 	approved, err := boolInput(input, "approved", false)
 	if err != nil {
@@ -593,41 +669,88 @@ func (s *Service) readManagedSession(ctx context.Context, identity auth.Identity
 	return sessionToolResult(result)
 }
 
-// State is read from PostgreSQL on each check, including after a reconnect.
-// Forward event pages advance only to their last event, never to a global
-// snapshot cursor that could silently skip a worker's unread results.
-func (s *Service) waitManagedSession(ctx context.Context, identity auth.Identity, jc jobScope, id domain.SessionID, after domain.Sequence, timeout time.Duration) (map[string]any, error) {
-	deadline := time.NewTimer(timeout)
+// waitSession is session_wait, for agents and control clients alike. State is
+// read from PostgreSQL on each check, including after a reconnect. Forward
+// event pages advance only to their last event, never to a global snapshot
+// cursor that could silently skip a worker's unread results.
+//
+// It returns at the first new event or, with until "attention", only once a
+// question or permission waits or the work ends: a client that cannot be
+// called back, such as ChatGPT, then polls once per turn rather than once per
+// streamed event. jobId narrows the attention and the end to one Job, such as
+// the one a session_send started.
+func (s *Service) waitSession(ctx context.Context, identity auth.Identity, session domain.Session, input map[string]any) (map[string]any, error) {
+	after, err := integerInput(input, "afterSequence", 0, 0, 1<<53-1)
+	if err != nil {
+		return nil, err
+	}
+	seconds, err := integerInput(input, "timeoutSeconds", 20, 0, 30)
+	if err != nil {
+		return nil, err
+	}
+	until := text(input, "until")
+	switch until {
+	case "":
+		until = "event"
+	case "event", "attention":
+	default:
+		return nil, fmt.Errorf("%w: until must be event or attention", ErrInvalid)
+	}
+	var jobID domain.JobID
+	if raw := text(input, "jobId"); raw != "" {
+		job, err := s.sessionJob(ctx, identity, session, raw)
+		if err != nil {
+			return nil, err
+		}
+		jobID = job.ID
+	}
+	// The timer is only the bound of this active read, never a background
+	// schedule or subscription.
+	deadline := time.NewTimer(time.Duration(seconds) * time.Second)
 	defer deadline.Stop()
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	timedOut := false
 	for {
-		session, err := s.managedSession(ctx, identity, jc, string(id))
+		current, err := s.ownedSession(ctx, identity, string(session.ID))
 		if err != nil {
 			return nil, err
 		}
-		history, err := s.store.SessionEventsAfter(ctx, identity.UserID, id, after, 100)
+		history, err := s.store.SessionEventsAfter(ctx, identity.UserID, current.ID, domain.Sequence(after), 100)
 		if err != nil {
 			return nil, translate(err)
 		}
-		result, err := s.managedState(ctx, identity, session, history)
+		result, err := s.managedState(ctx, identity, current, history)
 		if err != nil {
 			return nil, err
 		}
 		attention := result["attention"].(domain.Attention)
 		finished := true
-		for _, job := range result["jobs"].([]domain.Job) {
-			finished = finished && job.Status.Terminal()
+		if jobID != "" {
+			job, err := s.store.GetJob(ctx, identity.UserID, jobID)
+			if err != nil {
+				return nil, translate(err)
+			}
+			attention = jobAttention(attention, jobID)
+			result["attention"] = attention
+			result["job"] = job
+			finished = job.Status.Terminal()
+		} else {
+			for _, job := range result["jobs"].([]domain.Job) {
+				finished = finished && job.Status.Terminal()
+			}
 		}
-		if len(history) > 0 || !attention.Empty() || finished || timedOut || timeout == 0 {
+		news := len(history) > 0 && until == "event"
+		if news || !attention.Empty() || finished || timedOut || seconds == 0 {
 			cursor := after
 			if len(history) > 0 {
-				cursor = history[len(history)-1].Sequence
+				cursor = int64(history[len(history)-1].Sequence)
 			}
-			result["cursor"] = int64(cursor)
-			result["timedOut"] = timedOut || (timeout == 0 && len(history) == 0 && attention.Empty() && !finished)
-			return sessionToolResult(result)
+			result["cursor"] = cursor
+			result["hasMore"] = len(history) == 100
+			result["finished"] = finished
+			result["timedOut"] = timedOut || (seconds == 0 && !news && attention.Empty() && !finished)
+			return result, nil
 		}
 		select {
 		case <-ctx.Done():
@@ -637,6 +760,22 @@ func (s *Service) waitManagedSession(ctx context.Context, identity auth.Identity
 		case <-ticker.C:
 		}
 	}
+}
+
+// jobAttention keeps the questions and permissions of one Job.
+func jobAttention(all domain.Attention, jobID domain.JobID) domain.Attention {
+	out := domain.Attention{Validations: []domain.ValidationRequest{}, UserInputs: []domain.UserInputRequest{}}
+	for _, validation := range all.Validations {
+		if validation.Scope.JobID == jobID {
+			out.Validations = append(out.Validations, validation)
+		}
+	}
+	for _, input := range all.UserInputs {
+		if input.Scope.JobID == jobID {
+			out.UserInputs = append(out.UserInputs, input)
+		}
+	}
+	return out
 }
 
 func (s *Service) managedState(ctx context.Context, identity auth.Identity, session domain.Session, history []events.Envelope) (map[string]any, error) {
