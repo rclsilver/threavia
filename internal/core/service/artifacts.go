@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -44,6 +45,19 @@ func (s *Service) MaxArtifactBytes() int64 { return s.maxArtifactBytes }
 // section 24). The Session and the Job it is attached to are checked like the
 // Project, before any byte is written.
 func (s *Service) UploadArtifact(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, filename, mimeType string, body io.Reader, scope domain.Scope) (domain.Artifact, error) {
+	artifact, err := s.storeUpload(ctx, identity, projectID, filename, mimeType, body, scope)
+	if err != nil {
+		return domain.Artifact{}, err
+	}
+	if scope.JobID == "" {
+		s.emit(ctx, identity.UserID, events.TypeArtifactCreated, domain.Scope{ProjectID: projectID}, ArtifactPayload{ArtifactID: string(artifact.ID), Filename: artifact.Filename, MimeType: artifact.MimeType, Size: artifact.Size})
+	}
+	return artifact, nil
+}
+
+// storeUpload is UploadArtifact without its notice, for a caller that
+// announces the Artifact itself, in the conversation it was published to.
+func (s *Service) storeUpload(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, filename, mimeType string, body io.Reader, scope domain.Scope) (domain.Artifact, error) {
 	if s.objects == nil {
 		return domain.Artifact{}, ErrStorageUnavailable
 	}
@@ -77,9 +91,6 @@ func (s *Service) UploadArtifact(ctx context.Context, identity auth.Identity, pr
 
 	if err := s.storeArtifact(ctx, &artifact, body); err != nil {
 		return domain.Artifact{}, err
-	}
-	if scope.JobID == "" {
-		s.emit(ctx, identity.UserID, events.TypeArtifactCreated, domain.Scope{ProjectID: projectID}, ArtifactPayload{ArtifactID: string(artifact.ID), Filename: artifact.Filename, MimeType: artifact.MimeType, Size: artifact.Size})
 	}
 	return artifact, nil
 }
@@ -208,6 +219,21 @@ func (s *Service) ListArtifacts(ctx context.Context, identity auth.Identity, pro
 	return artifacts, translate(err)
 }
 
+// RenameArtifact changes the filename an Artifact is listed and downloaded
+// under. Its bytes, checksum and type are what was stored, and stay so.
+func (s *Service) RenameArtifact(ctx context.Context, identity auth.Identity, id domain.ArtifactID, filename string) (domain.Artifact, error) {
+	filename = sanitiseFilename(filename)
+	if filename == "" || utf8.RuneCountInString(filename) > 255 {
+		return domain.Artifact{}, fmt.Errorf("%w: a filename of 1 to 255 characters is required", ErrInvalid)
+	}
+	artifact, err := s.store.RenameArtifact(ctx, identity.UserID, id, filename)
+	if err != nil {
+		return domain.Artifact{}, translate(err)
+	}
+	s.emit(ctx, identity.UserID, events.TypeArtifactUpdated, domain.Scope{ProjectID: artifact.ProjectID}, map[string]any{"artifactId": string(id), "filename": artifact.Filename})
+	return artifact, nil
+}
+
 // DeleteArtifact removes an Artifact and the bytes behind it.
 func (s *Service) DeleteArtifact(ctx context.Context, identity auth.Identity, id domain.ArtifactID) error {
 	artifact, err := s.GetArtifact(ctx, identity, id)
@@ -280,7 +306,17 @@ func (s *Service) publishArtifact(ctx context.Context, identity auth.Identity, j
 	mimeType := publishedType(filename, file)
 
 	scope := domain.Scope{ProjectID: jc.ProjectID, SessionID: jc.SessionID, JobID: jc.JobID}
-	artifact, err := s.UploadArtifact(ctx, identity, jc.ProjectID, filename, mimeType, bytes.NewReader(file), scope)
+	if raw := text(input, "sessionId"); raw != "" && raw != string(jc.SessionID) {
+		// Published into a delegate's conversation: it is announced there, and
+		// attached to no Job of that session. Writing into a conversation this
+		// one does not manage is acting on it, which needs the person.
+		target, err := s.managedSession(ctx, identity, jc, raw)
+		if err != nil {
+			return nil, err
+		}
+		scope = domain.Scope{ProjectID: target.ProjectID, SessionID: target.ID}
+	}
+	artifact, err := s.storeUpload(ctx, identity, scope.ProjectID, filename, mimeType, bytes.NewReader(file), scope)
 	if err != nil {
 		return nil, err
 	}

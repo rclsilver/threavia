@@ -328,6 +328,34 @@ menus and VS Code's Memory menu and directory manager expose **Make global** thr
 `POST /api/v1/decisions/{decisionId}/global` and
 `POST /api/v1/directories/{directoryId}/global`.
 
+An agent can consult and manage everything a person can in the clients:
+
+- memory: `decision_list` (project or global, optionally with superseded
+  history), `decision_read` (with the chain it replaced and its replacement),
+  `decision_set_importance` and `decision_delete`;
+- tasks: `task_list` (by status), `task_read` (with what it waits on and what
+  waits on it), `task_dependency_add`, `task_dependency_remove` and
+  `task_delete`;
+- artifacts: `artifact_list`, `artifact_read` (text content up to 256 KiB,
+  metadata only for binary files), `artifact_rename`, `artifact_delete`, and
+  `artifact_publish` with `sessionId` to publish into a direct delegate's conversation;
+- projects: `project_list`, `project_read` (with instructions),
+  `project_create`, `project_update`, `project_archive` and `project_delete`;
+- `audit_read`, and the session tools of
+  [session-management.md](session-management.md).
+
+Anything that deletes (`decision_delete`, `task_delete`, `artifact_delete`,
+`session_delete`, `job_delete`, `project_delete`), archives a project, adopts
+or moves a session, or acts on a session that is neither the conversation nor
+one of its direct delegates (`session_control`) requires validation. The
+backend asks the person in every execution mode, and Core also requires their
+approval receipt for that exact call in the calling Job, so a direct call or a
+backend ignoring `requires_validation` cannot skip them. A delegate's request
+approved through its manager's relay counts, since the relay itself needs the
+person's receipt. A receipt is matched by tool and exact input, not consumed: a
+repeated identical call in the same Job is covered by the same approval.
+A conversation cannot delete itself, or archive or delete its own project.
+
 ### What a Run context carries
 
 Section 12 asks for a compact structured context, so the budget is spent

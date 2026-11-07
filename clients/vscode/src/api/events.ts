@@ -53,6 +53,7 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
       return [{ kind: 'attentionCleared', jobId: event.jobId, before: event.timestamp }, { kind: 'attention' }, { kind: 'sessions' }, ...snapshot(sessionId)];
     case 'artifact.created':
     case 'artifact.deleted':
+    case 'artifact.updated':
       return [{ kind: 'artifacts', projectId: event.projectId }];
     case 'skill.installed':
     case 'skill.removed':

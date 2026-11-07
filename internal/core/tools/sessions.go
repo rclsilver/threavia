@@ -36,12 +36,14 @@ func sessionSpecs() []Spec {
 		},
 		{
 			Name:        NameSessionUpdate,
-			Description: "Change the backend, model or effort of a directly managed session, for its next jobs. Moving to another backend needs the session to have no running or queued job; pass model and effort too when the current ones do not exist on the destination. Choose values from backend_list.",
+			Description: "Rename a directly managed session, or change its working directory, backend, model or effort for its next jobs. Moving to another backend needs the session to have no running or queued job; pass model and effort too when the current ones do not exist on the destination. Choose values from backend_list and known_directory_list. For a session you do not manage, use session_control.",
 			InputSchema: object(map[string]any{
-				"sessionId":         str("The directly managed session."),
-				"backendInstanceId": str("Destination backend instance; omit to keep the current one."),
-				"model":             str("Model id from the backend's catalog; empty string selects the backend default."),
-				"effort":            str("Reasoning effort supported by the model; empty string selects the default."),
+				"sessionId":          str("The directly managed session."),
+				"title":              str("Its new title."),
+				"workingDirectoryId": str("Known directory of the session's project, or global; empty string detaches it. Applies from its next job."),
+				"backendInstanceId":  str("Destination backend instance; omit to keep the current one."),
+				"model":              str("Model id from the backend's catalog; empty string selects the backend default."),
+				"effort":             str("Reasoning effort supported by the model; empty string selects the default."),
 			}, "sessionId"),
 		},
 		{

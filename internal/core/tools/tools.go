@@ -279,8 +279,9 @@ func Specs() []Spec {
 				"publish it. Use it for what is meant to be looked at, not for every file you " +
 				"change: the code you edit is already shown as the job's changes.",
 			InputSchema: object(map[string]any{
-				"path":  str("The file to publish, absolute or relative to the working directory. Up to 10 MiB."),
-				"title": str("What it is, in a few words, as the person should read it."),
+				"path":      str("The file to publish, absolute or relative to the working directory. Up to 10 MiB."),
+				"title":     str("What it is, in a few words, as the person should read it."),
+				"sessionId": str("Publish it in a session this conversation directly manages instead of here; it is kept with that session's project."),
 			}, "path"),
 		},
 		{
@@ -295,5 +296,5 @@ func Specs() []Spec {
 				"knownDirectoryId": str("Identifier of the known directory to work in."),
 			}, "knownDirectoryId"),
 		},
-	}, append(append(append(sessionSpecs(), scheduleSpecs()...), reviewSpecs()...), append(append(mcpSpecs(), skillSpecs()...), monitorSpecs()...)...)...)
+	}, append(append(append(append(sessionSpecs(), manageSpecs()...), scheduleSpecs()...), reviewSpecs()...), append(append(mcpSpecs(), skillSpecs()...), monitorSpecs()...)...)...)
 }

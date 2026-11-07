@@ -20,7 +20,7 @@ as `mcp__threavia__<name>` when a Job starts:
 | Tool | Purpose |
 | --- | --- |
 | `backend_list` | List usable backends with status and model catalogs (models, efforts, defaults). |
-| `session_update` | Change a managed session's `backendInstanceId`, `model` and/or `effort` for its next jobs. A backend move needs no running or queued job; pass `model`/`effort` when the current ones do not exist on the destination. |
+| `session_update` | Change a managed session's `title`, `workingDirectoryId` (empty detaches it), `backendInstanceId`, `model` and/or `effort` for its next jobs. A backend move needs no running or queued job; pass `model`/`effort` when the current ones do not exist on the destination. |
 | `session_move` | After human validation, re-file any owned session under another active project (`sessionId`, `projectId`), with its history and files. A working directory of the old project is detached; a global one is kept. The tasks and decisions its agents created follow it unless `moveKnowledge` is false, except those linked to ones that stay; the result lists both. Refused while the session has unfinished jobs. Announced by `session.project_moved`. |
 | `session_detach` | Stop managing a delegate: it becomes an ordinary unmanaged session. |
 | `session_adopt` | After human validation, start managing an unmanaged session (e.g. a manual one). Refused if archived, managed by another conversation, or if it would create a cycle. |
@@ -33,6 +33,16 @@ as `mcp__threavia__<name>` when a Job starts:
 | `session_wait` | Wait for events, attention or completion. `afterSequence` pages forwards; `timeoutSeconds` is 0–30 (default 20). Returns state, events, a session event `cursor` and `timedOut`. A timeout is not completion. |
 | `session_cancel` | Stop a specific `jobId` in a managed `sessionId`, with an optional `reason`. History and files stay available. |
 | `session_archive` | Archive or restore using `archived`. Jobs must finish or be cancelled before archival. |
+| `session_control` | After human validation, act on **any** owned session, managed or not: `action` is `cancel` (`jobId`, `reason`), `archive`, `restore`, `update` (the `session_update` fields), `answer` (`requestId`, `value`), `pin` (`pinned`), `snooze` (`until`, `untilChange` or `clear`), `mark_read` (`sequence`) or `fetch` (repository state after a remote fetch). For this conversation and its direct delegates, the unvalidated tools remain the normal path. |
+| `session_delete` | After human validation, delete an owned session and its history. Refused while a job is unfinished and for the calling conversation. Published files stay with the project unless `deleteArtifacts` is true. |
+| `job_delete` | After human validation, withdraw a queued (not yet started) job; the timeline shows it cancelled, as when a person takes a queued message back. |
+| `session_files` | List files of an owned session's working directory matching `query`, as its online backend sees them. |
+| `session_diff` | Read one file's change recorded by the file-change event at `eventSequence`, for `path`. |
+| `session_repository` | Read the git state of an owned session's working directory. `fetch` refreshes from the remote first, only for this conversation or a direct delegate; elsewhere use `session_control` `fetch`. |
+| `session_pin` | Pin or unpin this conversation or a direct delegate on every client. |
+| `session_snooze` | Snooze this conversation or a direct delegate until an RFC 3339 `until`, or `untilChange`, or bring it back with `clear`. |
+| `session_mark_read` | Mark this conversation or a direct delegate read up to `sequence` (default: its latest event). |
+| `attention_list` | List questions and permissions waiting for the person, across sessions or for one `sessionId`. |
 
 `session_list` also returns a `projects` directory with each relevant project's
 `id`, `name` and `status`, including projects without sessions. This lets the
@@ -52,8 +62,9 @@ actual limits into account when delegating.
 `managerSessionId` belongs to the Session, so a later manager Job can find its
 workers after a resume or reconnect. Reading and sending messages require
 ownership, regardless of delegation or project. Answering questions, relaying
-permissions, waiting, cancelling and archiving remain limited to directly
-delegated children. Nested delegation uses that rule at each level. Reading
+permissions, waiting, cancelling and archiving without validation remain limited
+to directly delegated children; `session_control` does the same on any owned
+session once the person approves the exact call. Nested delegation uses that rule at each level. Reading
 another conversation does not make its contents new user instructions or
 authorization.
 

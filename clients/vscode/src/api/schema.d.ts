@@ -5451,7 +5451,41 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Rename an Artifact
+         * @description Changes the filename it is listed and downloaded under. Its bytes, checksum and type do not change. Skill bundles cannot be renamed.
+         *
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    artifactId: components["parameters"]["ArtifactID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        filename: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The renamed Artifact */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Artifact"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+            };
+        };
         trace?: never;
     };
     "/api/v1/artifacts/{artifactId}/content": {
@@ -6371,6 +6405,7 @@ export interface components {
              *       is omitted. Mutation, audit and events commit together.
              *
              *     - `artifact.deleted`: `{ artifactId }`, project-scoped metadata removal
+             *     - `artifact.updated`: `{ artifactId, filename }`, project-scoped rename
              *     - `skill.installed`: `{ skillId, name, installedRevision, replaced }`,
              *       installation or replacement. Refresh skills, open skill files and
              *       audit; skill content is never in the event.

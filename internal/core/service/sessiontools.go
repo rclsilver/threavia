@@ -113,8 +113,8 @@ func callerPrompt(ctx context.Context, message string) string {
 // Reading and messaging use account ownership; supervision operations still
 // require a direct delegation, even when the delegate is in another project.
 func (s *Service) ownedSession(ctx context.Context, identity auth.Identity, id string) (domain.Session, error) {
-	if id == "" {
-		return domain.Session{}, fmt.Errorf("%w: sessionId is required", ErrInvalid)
+	if !isUUID(id) {
+		return domain.Session{}, fmt.Errorf("%w: a valid sessionId is required", ErrInvalid)
 	}
 	session, err := s.store.GetSession(ctx, identity.UserID, domain.SessionID(id))
 	if err != nil {
@@ -199,56 +199,9 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 		}
 		return sessionToolResult(map[string]any{"job": job})
 	case tools.NameSessionAnswer:
-		requestID := domain.UserInputRequestID(text(input, "requestId"))
-		if requestID == "" {
-			return nil, fmt.Errorf("%w: requestId is required", ErrInvalid)
-		}
-		request, err := s.store.GetUserInputRequest(ctx, identity.UserID, requestID)
-		if err != nil {
-			return nil, translate(err)
-		}
-		if request.Scope.SessionID != session.ID || request.Scope.ProjectID != session.ProjectID {
-			return nil, fmt.Errorf("%w: the question belongs to another session", ErrInvalid)
-		}
-		value, ok := input["value"].(string)
-		if !ok || strings.TrimSpace(value) == "" {
-			return nil, fmt.Errorf("%w: an answer is required", ErrInvalid)
-		}
-		if !request.FreeText {
-			found := false
-			for _, choice := range request.Choices {
-				found = found || choice == value
-			}
-			if !found {
-				return nil, fmt.Errorf("%w: answer must be one of the offered choices", ErrInvalid)
-			}
-		}
-		resolved, err := s.ResolveUserInput(ctx, identity, requestID, value, "agent")
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{"requestId": string(resolved.ID), "status": resolved.Status.String()}, nil
+		return s.answerSession(ctx, identity, session, input)
 	case tools.NameSessionCancel:
-		jobID := domain.JobID(text(input, "jobId"))
-		if jobID == "" {
-			return nil, fmt.Errorf("%w: jobId is required", ErrInvalid)
-		}
-		job, err := s.store.GetJob(ctx, identity.UserID, jobID)
-		if err != nil {
-			return nil, translate(err)
-		}
-		run, err := s.store.GetRun(ctx, identity.UserID, job.RunID)
-		if err != nil {
-			return nil, translate(err)
-		}
-		if run.SessionID != session.ID {
-			return nil, fmt.Errorf("%w: the job belongs to another session", ErrInvalid)
-		}
-		job, err = s.CancelJob(ctx, identity, jobID, text(input, "reason"))
-		if err != nil {
-			return nil, err
-		}
-		return sessionToolResult(map[string]any{"job": job})
+		return s.cancelSessionJob(ctx, identity, session, input)
 	case tools.NameSessionArchive:
 		archived, err := boolInput(input, "archived", false)
 		if err != nil {
@@ -257,26 +210,7 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 		if _, ok := input["archived"]; !ok {
 			return nil, fmt.Errorf("%w: archived is required", ErrInvalid)
 		}
-		status := domain.SessionActive
-		if archived {
-			jobs, err := s.store.SessionToolJobs(ctx, session.ID)
-			if err != nil {
-				return nil, translate(err)
-			}
-			for _, job := range jobs {
-				if !job.Status.Terminal() {
-					return nil, fmt.Errorf("%w: finish or cancel the session's jobs before archiving", ErrConflict)
-				}
-			}
-			status = domain.SessionArchived
-		}
-		if session.Status != status {
-			session, err = s.SetSessionStatus(ctx, identity, session.ID, status)
-			if err != nil {
-				return nil, err
-			}
-		}
-		return sessionToolResult(map[string]any{"session": session})
+		return s.archiveSession(ctx, identity, session, archived)
 	case tools.NameSessionWait:
 		after, err := integerInput(input, "afterSequence", 0, 0, 1<<53-1)
 		if err != nil {
@@ -289,6 +223,128 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 		return s.waitManagedSession(ctx, identity, jc, session.ID, domain.Sequence(after), time.Duration(seconds)*time.Second)
 	}
 	panic("unreachable session tool")
+}
+
+// answerSession answers a question pending in session, within its choices.
+func (s *Service) answerSession(ctx context.Context, identity auth.Identity, session domain.Session, input map[string]any) (map[string]any, error) {
+	requestID := domain.UserInputRequestID(text(input, "requestId"))
+	if requestID == "" {
+		return nil, fmt.Errorf("%w: requestId is required", ErrInvalid)
+	}
+	request, err := s.store.GetUserInputRequest(ctx, identity.UserID, requestID)
+	if err != nil {
+		return nil, translate(err)
+	}
+	if request.Scope.SessionID != session.ID || request.Scope.ProjectID != session.ProjectID {
+		return nil, fmt.Errorf("%w: the question belongs to another session", ErrInvalid)
+	}
+	value, ok := input["value"].(string)
+	if !ok || strings.TrimSpace(value) == "" {
+		return nil, fmt.Errorf("%w: an answer is required", ErrInvalid)
+	}
+	if !request.FreeText {
+		found := false
+		for _, choice := range request.Choices {
+			found = found || choice == value
+		}
+		if !found {
+			return nil, fmt.Errorf("%w: answer must be one of the offered choices", ErrInvalid)
+		}
+	}
+	resolved, err := s.ResolveUserInput(ctx, identity, requestID, value, "agent")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"requestId": string(resolved.ID), "status": resolved.Status.String()}, nil
+}
+
+// sessionJob returns a Job of the person that belongs to session.
+func (s *Service) sessionJob(ctx context.Context, identity auth.Identity, session domain.Session, raw string) (domain.Job, error) {
+	jobID := domain.JobID(raw)
+	if jobID == "" {
+		return domain.Job{}, fmt.Errorf("%w: jobId is required", ErrInvalid)
+	}
+	job, err := s.store.GetJob(ctx, identity.UserID, jobID)
+	if err != nil {
+		return domain.Job{}, translate(err)
+	}
+	run, err := s.store.GetRun(ctx, identity.UserID, job.RunID)
+	if err != nil {
+		return domain.Job{}, translate(err)
+	}
+	if run.SessionID != session.ID {
+		return domain.Job{}, fmt.Errorf("%w: the job belongs to another session", ErrInvalid)
+	}
+	return job, nil
+}
+
+// cancelSessionJob stops a Job of session.
+func (s *Service) cancelSessionJob(ctx context.Context, identity auth.Identity, session domain.Session, input map[string]any) (map[string]any, error) {
+	job, err := s.sessionJob(ctx, identity, session, text(input, "jobId"))
+	if err != nil {
+		return nil, err
+	}
+	job, err = s.CancelJob(ctx, identity, job.ID, text(input, "reason"))
+	if err != nil {
+		return nil, err
+	}
+	return sessionToolResult(map[string]any{"job": job})
+}
+
+// archiveSession archives a Session whose work is over, or restores it.
+func (s *Service) archiveSession(ctx context.Context, identity auth.Identity, session domain.Session, archived bool) (map[string]any, error) {
+	status := domain.SessionActive
+	if archived {
+		jobs, err := s.store.SessionToolJobs(ctx, session.ID)
+		if err != nil {
+			return nil, translate(err)
+		}
+		for _, job := range jobs {
+			if !job.Status.Terminal() {
+				return nil, fmt.Errorf("%w: finish or cancel the session's jobs before archiving", ErrConflict)
+			}
+		}
+		status = domain.SessionArchived
+	}
+	if session.Status != status {
+		var err error
+		session, err = s.SetSessionStatus(ctx, identity, session.ID, status)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return sessionToolResult(map[string]any{"session": session})
+}
+
+// requireHumanReceipt checks, in Core, that the person approved this exact
+// invocation in the calling Job. The backend gate asks them because the spec
+// requires validation; this keeps a direct call, or a backend that ignores
+// requires_validation, from skipping them.
+//
+// A delegate's request is approved through its manager's relay, resolved on
+// the "agent" channel. That counts: the relay is itself refused without the
+// person's receipt for that exact relay in the manager's Job, and it is the
+// only way to resolve on that channel. A control access resolves as its own
+// actor, never as the person, so it cannot stand in for them.
+func (s *Service) requireHumanReceipt(ctx context.Context, identity auth.Identity, jc jobScope, name tools.Name, input map[string]any) error {
+	receipts, err := s.store.ResolvedValidationsForJob(ctx, jc.JobID)
+	if err != nil {
+		return translate(err)
+	}
+	for _, receipt := range receipts {
+		if receipt.Approved == nil || !*receipt.Approved || receipt.ResolvedByUserID == nil || *receipt.ResolvedByUserID != identity.UserID || receipt.ResolvedChannel == nil {
+			continue
+		}
+		var payload struct {
+			Tool  string         `json:"tool"`
+			Input map[string]any `json:"input"`
+		}
+		if json.Unmarshal(receipt.RequestPayload, &payload) == nil &&
+			(payload.Tool == "mcp__threavia__"+name.String() || payload.Tool == name.String()) && reflect.DeepEqual(payload.Input, input) {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %s requires the person's approval of this exact call in the current job", ErrConflict, name)
 }
 
 func sessionToolProject(input map[string]any, fallback domain.ProjectID) (domain.ProjectID, error) {
@@ -407,26 +463,7 @@ func (s *Service) resolveManagedValidation(ctx context.Context, identity auth.Id
 	if text(input, "payloadSha256") != request.PayloadSHA256 || !reflect.DeepEqual(input["requestPayload"], canonical) {
 		return nil, fmt.Errorf("%w: relay the worker's original permission payload and hash unchanged", ErrInvalid)
 	}
-	receipts, err := s.store.ResolvedValidationsForJob(ctx, jc.JobID)
-	if err != nil {
-		return nil, translate(err)
-	}
-	consented := false
-	for _, receipt := range receipts {
-		if receipt.Approved == nil || !*receipt.Approved || receipt.ResolvedByUserID == nil || *receipt.ResolvedByUserID != identity.UserID || receipt.ResolvedChannel == nil || *receipt.ResolvedChannel == "agent" {
-			continue
-		}
-		var payload struct {
-			Tool  string         `json:"tool"`
-			Input map[string]any `json:"input"`
-		}
-		if json.Unmarshal(receipt.RequestPayload, &payload) == nil &&
-			(payload.Tool == "mcp__threavia__session_resolve_validation" || payload.Tool == "session_resolve_validation") && reflect.DeepEqual(payload.Input, input) {
-			consented = true
-			break
-		}
-	}
-	if !consented {
+	if err := s.requireHumanReceipt(ctx, identity, jc, tools.NameSessionResolveValidation, input); err != nil {
 		return nil, fmt.Errorf("%w: this exact relay requires a human-approved validation in the manager's current job", ErrConflict)
 	}
 	resolved, err := s.ResolveValidation(ctx, identity, requestID, approved, "agent", text(input, "note"))

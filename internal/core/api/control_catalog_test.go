@@ -18,6 +18,8 @@ func TestControlCatalogHasValidatedSchemasAndOnlyDocumentedHandlers(t *testing.T
 	h.registerKnowledge(mux)
 	h.registerPolicy(mux)
 	h.registerMCP(mux)
+	h.registerAttention(mux)
+	h.registerArtifacts(mux)
 	definitions, err := h.controlCatalog()
 	if err != nil {
 		t.Fatal(err)

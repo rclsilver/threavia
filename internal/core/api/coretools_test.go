@@ -435,6 +435,14 @@ func TestScopeAndPermissionToolsRequireValidation(t *testing.T) {
 		"session_resolve_validation": true,
 		"session_adopt":              true,
 		"session_move":               true,
+		"decision_delete":            true,
+		"task_delete":                true,
+		"artifact_delete":            true,
+		"session_control":            true,
+		"session_delete":             true,
+		"job_delete":                 true,
+		"project_archive":            true,
+		"project_delete":             true,
 	}
 	declared := start.GetProjectContext().GetTools()
 	if len(declared) <= len(want) {

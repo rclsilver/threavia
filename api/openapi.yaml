@@ -2727,6 +2727,31 @@ paths:
               schema: { $ref: "#/components/schemas/Artifact" }
         "404":
           $ref: "#/components/responses/Error"
+    patch:
+      tags: [artifacts]
+      summary: Rename an Artifact
+      description: >
+        Changes the filename it is listed and downloaded under. Its bytes,
+        checksum and type do not change. Skill bundles cannot be renamed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename]
+              properties:
+                filename: { type: string, minLength: 1, maxLength: 255 }
+      responses:
+        "200":
+          description: The renamed Artifact
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Artifact" }
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
     delete:
       tags: [artifacts]
       summary: Remove an Artifact and the bytes behind it
@@ -3554,6 +3579,7 @@ components:
               is omitted. Mutation, audit and events commit together.
 
             - `artifact.deleted`: `{ artifactId }`, project-scoped metadata removal
+            - `artifact.updated`: `{ artifactId, filename }`, project-scoped rename
             - `skill.installed`: `{ skillId, name, installedRevision, replaced }`,
               installation or replacement. Refresh skills, open skill files and
               audit; skill content is never in the event.

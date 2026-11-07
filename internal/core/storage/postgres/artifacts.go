@@ -91,3 +91,23 @@ func scanArtifact(row scanner) (domain.Artifact, error) {
 		&a.Size, &a.SHA256, &a.ObjectKey, &a.SessionID, &a.JobID, &a.CreatedAt)
 	return a, classify(err, "read artifact")
 }
+
+// RenameArtifact changes the filename an Artifact is listed and downloaded
+// under. The object key never derives from it, so the bytes stay where they are.
+// A Skill bundle is the Skill's content, not a file of the Project, and is
+// left alone like ListArtifacts leaves it out.
+func (s *Store) RenameArtifact(ctx context.Context, ownerID domain.UserID, id domain.ArtifactID, filename string) (domain.Artifact, error) {
+	return scanArtifact(s.q.QueryRow(ctx, `
+		UPDATE artifacts a SET filename = $3
+		WHERE a.id = $1 AND a.owner_id = $2 AND a.project_id IS NOT NULL
+		  AND NOT EXISTS (SELECT 1 FROM skills s WHERE s.artifact_id = a.id)
+		RETURNING `+artifactColumns, id, ownerID, filename))
+}
+
+// IsSkillArtifact reports whether an Artifact is the bundle of a Skill, which
+// belongs to the Skill rather than to the files of its Project.
+func (s *Store) IsSkillArtifact(ctx context.Context, id domain.ArtifactID) (bool, error) {
+	var found bool
+	err := s.q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM skills WHERE artifact_id = $1)`, id).Scan(&found)
+	return found, classify(err, "check skill artifact")
+}

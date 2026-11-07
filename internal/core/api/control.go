@@ -133,6 +133,10 @@ func (h *handler) callControl(ctx context.Context, a domain.ControlAccess, d con
 	if d.pattern == "session_answer" {
 		result, err = h.svc.ControlSessionAnswer(ctx, i, in)
 	}
+	if d.pattern == "artifact_read" {
+		id, _ := in["artifactId"].(string)
+		result, err = h.svc.ReadArtifactText(ctx, i, id)
+	}
 	if d.pattern == "session_resolve_validation" {
 		result, err = h.svc.ControlResolveValidation(ctx, i, in)
 	}

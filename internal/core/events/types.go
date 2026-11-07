@@ -64,6 +64,7 @@ const (
 	TypeWorkspaceChanged        Type = "workspace.changed"
 	TypeArtifactCreated         Type = "artifact.created"
 	TypeArtifactDeleted         Type = "artifact.deleted"
+	TypeArtifactUpdated         Type = "artifact.updated"
 	TypeSkillInstalled          Type = "skill.installed"
 	TypeSkillRemoved            Type = "skill.removed"
 	TypeSkillChanged            Type = "skill.changed"
@@ -141,6 +142,7 @@ var persistentTypes = map[Type]bool{
 	TypeWorkspaceChanged:        true,
 	TypeArtifactCreated:         true,
 	TypeArtifactDeleted:         true,
+	TypeArtifactUpdated:         true,
 	TypeSkillInstalled:          true,
 	TypeSkillRemoved:            true,
 	TypeSkillChanged:            true,

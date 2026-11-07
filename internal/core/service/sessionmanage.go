@@ -42,28 +42,65 @@ func (s *Service) updateManagedSession(ctx context.Context, identity auth.Identi
 	if err != nil {
 		return nil, err
 	}
-	if backend == nil && model == nil && effort == nil {
-		return nil, fmt.Errorf("%w: give backendInstanceId, model or effort to change", ErrInvalid)
-	}
-	run, err := s.store.LatestRun(ctx, session.ID)
+	title, err := presentString(input, "title")
 	if err != nil {
-		return nil, translate(err)
+		return nil, err
+	}
+	directory, err := presentString(input, "workingDirectoryId")
+	if err != nil {
+		return nil, err
+	}
+	if backend == nil && model == nil && effort == nil && title == nil && directory == nil {
+		return nil, fmt.Errorf("%w: give title, workingDirectoryId, backendInstanceId, model or effort to change", ErrInvalid)
+	}
+	// Check what can be checked before changing anything, then apply the
+	// backend or model change, the part most likely to be refused, first: a
+	// refusal then leaves the session as it was.
+	if title != nil && strings.TrimSpace(*title) == "" {
+		return nil, fmt.Errorf("%w: the title cannot be empty", ErrInvalid)
+	}
+	var dirID *domain.KnownDirectoryID
+	if directory != nil {
+		if value := strings.TrimSpace(*directory); value != "" {
+			id := domain.KnownDirectoryID(value)
+			dirID = &id
+		}
+		if err := s.checkWorkingDirectory(ctx, identity, session.ProjectID, "", dirID); err != nil {
+			return nil, err
+		}
 	}
 	result := map[string]any{}
-	if backend != nil && domain.BackendInstanceID(strings.TrimSpace(*backend)) != run.BackendInstanceID {
-		id := domain.BackendInstanceID(strings.TrimSpace(*backend))
-		handoff, err := s.moveSessionToBackend(ctx, identity, session.ID, id, run.ID, model, effort)
+	if backend != nil || model != nil || effort != nil {
+		run, err := s.store.LatestRun(ctx, session.ID)
 		if err != nil {
+			return nil, translate(err)
+		}
+		if backend != nil && domain.BackendInstanceID(strings.TrimSpace(*backend)) != run.BackendInstanceID {
+			id := domain.BackendInstanceID(strings.TrimSpace(*backend))
+			handoff, err := s.moveSessionToBackend(ctx, identity, session.ID, id, run.ID, model, effort)
+			if err != nil {
+				return nil, err
+			}
+			result["run"] = handoff.Run
+			if len(handoff.MissingSkills) > 0 {
+				result["missingSkills"] = handoff.MissingSkills
+			}
+		} else if model != nil || effort != nil {
+			if _, err := s.SetSessionModel(ctx, identity, session.ID, model, effort); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if title != nil {
+		if _, err := s.RenameSession(ctx, identity, session.ID, *title); err != nil {
 			return nil, err
 		}
-		result["run"] = handoff.Run
-		if len(handoff.MissingSkills) > 0 {
-			result["missingSkills"] = handoff.MissingSkills
-		}
-	} else if model != nil || effort != nil {
-		if _, err := s.SetSessionModel(ctx, identity, session.ID, model, effort); err != nil {
+	}
+	if directory != nil {
+		if _, err := s.setSessionWorkingDirectory(ctx, identity, session.ID, dirID, managerJobFrom(ctx)); err != nil {
 			return nil, err
 		}
+		result["workingDirectoryEffectiveFrom"] = "next_job"
 	}
 	updated, err := s.store.GetSession(ctx, identity.UserID, session.ID)
 	if err != nil {

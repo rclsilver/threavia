@@ -97,6 +97,14 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 	// Audit attributes every Core tool mutation to the authenticated calling
 	// Job. These values never come from tool input.
 	ctx = context.WithValue(domain.WithChannel(ctx, domain.Channel("agent")), managerJobKey{}, jc.JobID)
+	if tools.ValidatedReceiptTools[name] {
+		if err := s.requireHumanReceipt(ctx, identity, jc, name, input); err != nil {
+			return nil, err
+		}
+	}
+	if isManageTool(name) {
+		return s.manageTool(ctx, identity, jc, name, input)
+	}
 	switch name {
 	case "skill_list", "skill_read", "skill_import", "skill_install_git", "skill_set_enabled", "skill_make_global", "skill_delete":
 		return s.skillTool(ctx, identity, jc, name, input, file)

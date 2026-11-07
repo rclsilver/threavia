@@ -418,8 +418,13 @@ available tools. A deleted attachment fails queued work explicitly.
 
 User uploads emit a Project-scoped `artifact.created`, without adding a second
 card to the conversation. Agent publications keep their existing Session-scoped
-event. Removal emits Project-scoped `artifact.deleted` with `{ artifactId }`, so
-all clients refresh their artifact lists. Downloads still use authenticated
+event; one an agent publishes into a delegate's session (`artifact_publish` with
+`sessionId`) is announced in that session, without a Job. Removal emits
+Project-scoped `artifact.deleted` with `{ artifactId }`, and a rename
+(`PATCH /api/v1/artifacts/{artifactId}` or `artifact_rename`) emits
+Project-scoped `artifact.updated` with `{ artifactId, filename }`, so all
+clients refresh their artifact lists. A conversation card keeps the filename
+announced when the file was published. Downloads still use authenticated
 attachment responses; clients render fetched bytes locally with their media
 MIME type, and generated HTML stays isolated from the conversation.
 # Human review extension

@@ -22,6 +22,7 @@ func (h *handler) registerArtifacts(mux *http.ServeMux) {
 	h.handle(mux, "GET /api/v1/artifacts/{artifactId}", h.getArtifact)
 	h.handle(mux, "GET /api/v1/artifacts/{artifactId}/content", h.downloadArtifact)
 	h.handle(mux, "DELETE /api/v1/artifacts/{artifactId}", h.deleteArtifact)
+	h.handle(mux, "PATCH /api/v1/artifacts/{artifactId}", h.renameArtifact)
 }
 
 func (h *handler) listArtifacts(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
@@ -160,4 +161,21 @@ func partContentType(header *multipart.FileHeader) string {
 		return value
 	}
 	return ""
+}
+
+// renameArtifact changes the filename an Artifact is listed and downloaded
+// under; its bytes do not change.
+func (h *handler) renameArtifact(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	body, ok := decode[struct {
+		Filename string `json:"filename"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	artifact, err := h.svc.RenameArtifact(r.Context(), identity, domain.ArtifactID(r.PathValue("artifactId")), body.Filename)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, artifact)
 }

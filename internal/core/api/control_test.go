@@ -368,3 +368,53 @@ func TestControlSessionQuestionsPermissionsCancellationAndCleanup(t *testing.T) 
 		t.Fatal("missing durable permission audit")
 	}
 }
+
+// Project knowledge and files are reachable over control MCP with the same
+// read/manage split as the rest of the catalog.
+func TestControlManagesTasksDecisionsAndArtifacts(t *testing.T) {
+	c := newCore(t)
+	c.svc.SetObjectStore(newMemoryObjects(), 8<<20)
+	project := c.createProject("Knowledge fixture")
+	_, readToken := createControlAccess(t, c, "read")
+	_, manageToken := createControlAccess(t, c, "read", "manage")
+	reader := connectControl(t, c, readToken)
+	manager := connectControl(t, c, manageToken)
+
+	controlRefused(t, reader, "task_create", map[string]any{"projectId": project, "title": "forbidden"})
+	first := controlCall(t, manager, "task_create", map[string]any{"projectId": project, "title": "First"})["id"].(string)
+	second := controlCall(t, manager, "task_create", map[string]any{"projectId": project, "title": "Second"})["id"].(string)
+	controlCall(t, manager, "task_dependency_add", map[string]any{"taskId": second, "dependsOn": first})
+	if ready := controlCall(t, reader, "task_ready", map[string]any{"projectId": project}); len(ready["items"].([]any)) != 1 {
+		t.Fatalf("task_ready = %v", ready)
+	}
+	controlCall(t, manager, "task_dependency_remove", map[string]any{"taskId": second, "dependsOnId": first})
+	controlCall(t, manager, "task_delete", map[string]any{"taskId": second})
+	if listed := controlCall(t, reader, "task_list", map[string]any{"projectId": project}); len(listed["items"].([]any)) != 1 {
+		t.Fatalf("task_list = %v", listed)
+	}
+
+	decision := controlCall(t, manager, "decision_create", map[string]any{"projectId": project, "title": "Use Go"})["id"].(string)
+	controlCall(t, manager, "decision_set_importance", map[string]any{"decisionId": decision, "importance": "IMPORTANT"})
+	if listed := controlCall(t, reader, "decision_list", map[string]any{"projectId": project}); len(listed["items"].([]any)) != 1 {
+		t.Fatalf("decision_list = %v", listed)
+	}
+	controlCall(t, manager, "decision_delete", map[string]any{"decisionId": decision})
+
+	var artifact struct {
+		ID string `json:"id"`
+	}
+	if status := c.doRaw(http.MethodPost, "/api/v1/projects/"+project+"/artifacts?filename=notes.txt", "text/plain", "plain notes", &artifact); status != http.StatusCreated {
+		t.Fatalf("upload = %d", status)
+	}
+	if read := controlCall(t, reader, "artifact_read", map[string]any{"artifactId": artifact.ID}); read["content"] != "plain notes" {
+		t.Fatalf("artifact_read = %v", read)
+	}
+	controlRefused(t, reader, "artifact_rename", map[string]any{"artifactId": artifact.ID, "filename": "x.txt"})
+	if renamed := controlCall(t, manager, "artifact_rename", map[string]any{"artifactId": artifact.ID, "filename": "renamed.txt"}); renamed["filename"] != "renamed.txt" {
+		t.Fatalf("artifact_rename = %v", renamed)
+	}
+	controlCall(t, manager, "artifact_delete", map[string]any{"artifactId": artifact.ID})
+	if listed := controlCall(t, reader, "artifact_list", map[string]any{"projectId": project}); len(listed["items"].([]any)) != 0 {
+		t.Fatalf("artifact_list = %v", listed)
+	}
+}

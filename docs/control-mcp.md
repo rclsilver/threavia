@@ -193,6 +193,17 @@ unoffered answers; a second permission decision returns a conflict. `job_cancel`
 requests cancellation; follow events until the backend confirms its outcome.
 Cancellation does not undo an external side effect already committed.
 
+Project knowledge and files are reachable too. `read` covers `task_list`,
+`task_ready`, `decision_list`, `decision_global_list`, `memory_search`,
+`project_history_search`, `artifact_list`, `artifact_metadata`, `artifact_read`
+(text up to 256 KiB, metadata only for binary files), `attention_list`,
+`session_pinned_list`, `session_files`, `session_diff`, `session_repository` and
+`audit_read`. `manage` covers `task_create`, `task_update`, `task_delete`,
+`task_dependency_add/remove`, `decision_create`, `decision_global_create`,
+`decision_set_importance`, `decision_make_global`, `decision_delete`,
+`artifact_rename`, `artifact_delete`, `session_snooze`, `session_unsnooze` and
+`session_mark_read`. Each maps to the HTTP route of the same contract.
+
 For the external MCP recipe, configure only the fictional
 [OAuth mock](mcp-oauth-mock.md), refuse the first note creation, accept the
 second, inspect the result and cleanup, interrupt the slow read, then resume.
