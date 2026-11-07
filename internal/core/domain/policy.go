@@ -172,7 +172,15 @@ type ExecutionPolicy struct {
 	// Supervision is what the reviewer of SUPERVISED is told, in the user's own
 	// words: what counts as ordinary work here and what it should stop.
 	//
-	// It is not the Project instructions and must not become them. Those
+	// Stored, it is only the Session or Job layer of that text. The global,
+	// project and backend layers live with the Instructions of their level,
+	// and an instance, backend or project policy carrying one is refused: as
+	// part of a policy replaced as a whole, a project that only changed its
+	// mode used to drop the global supervision with it. On the wire Core
+	// replaces the field with the text assembled from every level, so a
+	// backend reads all of them where it always read this one.
+	//
+	// It is not the agent instructions and must not become them. Those
 	// address the agent — how to work in this repository — and reach it through
 	// the provider's system prompt, which the reviewer does not read. This
 	// addresses the reviewer, and reaches it the only way anything reaches it:
@@ -257,11 +265,13 @@ func (p ExecutionPolicy) Binding() []PermissionRule {
 // instance, backend, project, session, job. A nil level inherits its parent.
 //
 // The mode, the switches and the limits come from the narrowest level that sets
-// one: a Session overrides its Project, a Job overrides its Session. The rules
-// do not work that way. They are the union of every level, outermost first, and
-// they are evaluated deny before ask before allow — so a refusal written on the
-// Project stands however the Session is configured, because nothing below can
-// take it out of the set. That is what makes a Project rule a limit rather than
+// one: a Session overrides its Project, a Job overrides its Session. The
+// supervision comes along with them, which leaves only a Session or Job's own
+// text, since no level above may carry one: the inherited layers are assembled
+// with the instructions, not here. The rules do not work that way. They are
+// the union of every level, outermost first, and they are evaluated deny
+// before ask before allow — so a refusal written on the Project stands however
+// the Session is configured, because nothing below can take it out of the set. That is what makes a Project rule a limit rather than
 // a suggestion.
 func Effective(levels ...*ExecutionPolicy) ExecutionPolicy {
 	effective := DefaultExecutionPolicy()

@@ -384,8 +384,8 @@ Permissions inherit in this order: instance → the Run's backend → project �
 session → job. Instance defaults belong to the authenticated account, preserving
 the same owner isolation as projects and backends. A level with no stored policy
 follows its parent live; resetting it removes the override instead of copying
-today's defaults. An explicit policy replaces the mode, switches, supervision
-and limits as a whole. Rules from every level are merged, with DENY evaluated
+today's defaults. An explicit policy replaces the mode, switches and limits as
+a whole. Rules from every level are merged, with DENY evaluated
 before ASK and ALLOW, so narrower overrides cannot remove explicit refusals.
 
 `GET/PUT /api/v1/me/policy` manages instance defaults; the corresponding
@@ -400,6 +400,67 @@ The web client exposes instance defaults under Settings → Permissions, backend
 overrides beside each backend, and an explicit return to inheritance on projects.
 The VS Code extension consumes the same permissions when it dispatches work;
 editing these defaults remains in the web client.
+
+Supervision used to belong to that whole: a project that set its own policy only
+to change the mode replaced the global supervision too, even with an empty text,
+and nothing said so. It has therefore left the instance, backend and project
+policies, which now refuse it, and is written with the
+[instructions](#instructions) of each level instead. A Session or Job policy
+still carries a supervision of its own, because that is where a person tightens
+the reviewer for one piece of work.
+
+### Instructions
+
+Instructions are written at several levels, each completing the one above it.
+For the reviewer of SUPERVISED they are global (per account) → project →
+backend → session → job. For the agent they are the same minus session and job:
+what changes per Session or Job (delegation, transferred excerpts, unavailable
+MCP servers) Core adds itself, after the assembled text. The backend comes after
+the project because the machine is the narrowest thing a Job knows about: what
+is true of this host outranks what is true of the repository in general. A
+backend's `LOCAL_INSTRUCTIONS` are still appended after everything Core sends.
+
+The agent and the reviewer get separate texts because they have different
+readers. The agent reads its system prompt; the reviewer reads only what the
+user said, so the backend repeats the supervision at the start of every Job as a
+user message.
+
+There is no "replace" mode. A level that wants to correct the one above writes
+the correction as one more instruction, and the reader is told which one wins:
+once two or more levels have something to say, the assembled text opens with a
+preamble saying that they come from several levels, broadest first, and that
+the narrower wins a conflict, then gives each level a labelled section. Without
+it a model follows whichever line it read last or found most emphatic. A single
+level is sent as written, with no header and no preamble, so an installation
+that only ever writes one level sees no difference.
+
+Core assembles both texts and sends them where backends already look:
+`ProjectContext.project_instructions` for the agent and
+`ExecutionPolicy.supervision` for the reviewer. The protocol did not change and
+no backend had to be redeployed. The cost is that a backend sees one block
+rather than levels, which holds until some backend needs to treat a level on
+its own.
+
+In a computed policy, `supervision` holds only the Session or Job's own text,
+never what it inherited. A policy copied to a delegate, stored by a monitor or
+used as the starting point of an override therefore never duplicates the levels
+above it. A delegate Session reads its own levels, not its manager's: a rule
+that should follow work everywhere belongs to the global level. A change at the
+global, project or backend level reaches the next Job. A Session policy change
+is still pushed to the running Job, with the supervision reassembled.
+
+`GET/PUT /api/v1/me/instructions`, `/api/v1/projects/{projectId}/instructions`
+and `/api/v1/backends/{backendId}/instructions` read and replace both texts of
+one level, and show the global text above a project or a backend. A project's
+agent text is its `instructions` field, so the project `PATCH` still edits it.
+The project above a backend depends on the Job, so it is not shown there.
+`GET /api/v1/projects/{projectId}/instructions/preview?backendId=…[&sessionId=…]`
+returns the two texts a Job of that project would read on that backend. The
+function that builds it is the one that builds a Job's, so the preview cannot
+drift from what is sent. It leaves out what only exists when a Job starts: the
+per-Job notes, the fixed Threavia text and the backend's local instructions.
+The web client and the VS Code extension (**Threavia: Instructions…**) both
+edit every level and show the preview.
 
 Section 17 is explicit that a policy is enforced rather than suggested: one
 forbidding a push rejects the push instead of asking the model not to. So the
@@ -484,7 +545,10 @@ development id, a basic username, or an OIDC claim. A table would only duplicate
 the issuer.
 
 `project_instructions` is a column on `projects`, because it holds exactly one
-value per project and a table of one-row-per-project is a join for nothing.
+value per project and a table of one-row-per-project is a join for nothing. The
+project's supervision instructions and a backend's two texts are columns for the
+same reason. Only the global level has a table, `instance_instructions`, because
+no other table holds one row per account.
 
 `project_skills` is absent because `skills` carries `project_id` directly: a
 Skill is installed on a Project, and V1 has no sharing of Skills between
