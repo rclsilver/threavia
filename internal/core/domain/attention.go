@@ -58,7 +58,7 @@ type ValidationRequest struct {
 	// Context is filled when the request is read for a client.
 	Context *AttentionContext `json:"context,omitempty"`
 
-	Approved        *bool      `json:"approved,omitempty"`
+	Approved         *bool      `json:"approved,omitempty"`
 	ResolvedByUserID *UserID    `json:"resolvedByUserId,omitempty"`
 	ResolvedChannel  *string    `json:"resolvedChannel,omitempty"`
 	Note             *string    `json:"note,omitempty"`
@@ -86,7 +86,7 @@ type UserInputRequest struct {
 	// Context is filled when the request is read for a client.
 	Context *AttentionContext `json:"context,omitempty"`
 
-	Value           *string    `json:"value,omitempty"`
+	Value            *string    `json:"value,omitempty"`
 	ResolvedByUserID *UserID    `json:"resolvedByUserId,omitempty"`
 	ResolvedChannel  *string    `json:"resolvedChannel,omitempty"`
 	CreatedAt        time.Time  `json:"createdAt"`
