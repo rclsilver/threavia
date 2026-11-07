@@ -32,8 +32,8 @@ func TestAgentInstructionsLayeredBeforeDynamicNotes(t *testing.T) {
 	if !strings.HasPrefix(text, domain.LayeredPreamble) || sections < 0 || note < 0 {
 		t.Fatalf("delegated agent instructions = %q, want the sections and the delegation note", text)
 	}
-	if note < sections+len("[Project homelab]\nP") || !strings.HasPrefix(text[sections:], "[Project homelab]\nP\n") {
-		t.Fatalf("delegated agent instructions = %q, want the delegation note after the sections, on its own line", text)
+	if note < sections+len("[Project homelab]\nP") || !strings.HasPrefix(text[sections:], "[Project homelab]\nP\n\nThis session is delegated") {
+		t.Fatalf("delegated agent instructions = %q, want the delegation note after the sections, past a blank line", text)
 	}
 }
 

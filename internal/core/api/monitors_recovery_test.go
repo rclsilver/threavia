@@ -191,3 +191,23 @@ func TestMonitorSurvivesSupervisionChange(t *testing.T) {
 		t.Fatal("monitor stopped for a supervision change")
 	}
 }
+
+// TestMonitorSnapshotWithSupervisionSurvives pins the monitors registered
+// before supervision left their snapshot: theirs still holds the text the
+// policy inherited then, which the current policy no longer carries.
+func TestMonitorSnapshotWithSupervisionSurvives(t *testing.T) {
+	c, b, p, d := setup(t)
+	c.startSession(p, c.backendID, d, "Watch")
+	start := receive(t, "original job", b.starts)
+	v := registerMonitor(t, c, b, start)
+	completeDelegatedJob(t, c, b, start)
+	if _, err := c.db.Pool().Exec(context.Background(),
+		`UPDATE monitors SET policy = jsonb_set(policy, '{supervision}', '"old inherited text"') WHERE id=$1`, v.ID); err != nil {
+		t.Fatal(err)
+	}
+	v.State = "RUNNING"
+	v.Sequence = 1
+	if ctrl := sendMonitor(t, c, v.Snapshot, c.backendID); ctrl.Stop {
+		t.Fatal("monitor stopped for the supervision its old snapshot holds")
+	}
+}

@@ -121,6 +121,10 @@ func (s *Service) SetSessionExecutionPolicy(ctx context.Context, identity auth.I
 // A Job with its own override keeps it: the Session default does not apply to
 // it. A backend that is offline gets nothing, and the Job carries on with the
 // policy it started with; that is the one case left to the next Job.
+//
+// A push re-reads every level of the instructions, so a running Job may pick
+// up instruction edits made since it started. That is accepted: an edit of the
+// instructions on its own pushes nothing and waits for the next Job.
 func (s *Service) pushPolicy(ctx context.Context, session domain.Session) {
 	runs, err := s.store.ListRuns(ctx, session.ID)
 	if err != nil {
