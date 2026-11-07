@@ -207,6 +207,11 @@ export function SessionView() {
             {backend && (
               <BackendInfo backend={backend} compact />
             )}
+            {/* On a desktop the branch shares this line; on a phone it waits
+                with the other details behind the toggle. */}
+            <span className="hidden md:contents">
+              <RepositoryStatus sessionId={sessionId} />
+            </span>
             {active && working && (
               <span className="text-accent hidden shrink-0 md:inline">{humanise(working)}…</span>
             )}
@@ -230,7 +235,9 @@ export function SessionView() {
             {active?.status === 'WAITING_BACKEND' && active.backendWait && (
               <span className="text-warn-text" role="status">{active.backendWait.message}{active.backendWait.retryAt && ` Next attempt no earlier than ${new Date(active.backendWait.retryAt).toLocaleString()}.`}</span>
             )}
-            <RepositoryStatus sessionId={sessionId} />
+            <span className="contents md:hidden">
+              <RepositoryStatus sessionId={sessionId} />
+            </span>
             {active && working && (
               // A liveness signal, not history: it says the agent is still
               // there between two things worth remembering. Shown only while a
