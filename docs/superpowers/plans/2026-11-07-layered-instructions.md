@@ -132,6 +132,7 @@
 - Modify: `internal/core/service/jobs.go`. Around line 133 (dispatch), and in `projectContext` (line ~279), where the base becomes the assembled agent text instead of `jc.ProjectInstructions`.
 - Modify: `internal/core/service/policy.go:146` (`pushPolicy`). Assemble the supervision before `policyToProto`.
 - Modify: `internal/core/service/sessiontools.go:592`. Set `policy.Supervision = ""` before the policy is copied into the delegated session.
+- Modify: `internal/core/service/monitors.go:88-95` and `:222-238`. A monitor snapshots `EffectivePolicy` and stops itself when the current one differs (`reflect.DeepEqual`). Compare both with `Supervision` cleared. Otherwise migration 37, which removes supervision from the default policies, would stop every running monitor, and so would any later instruction edit. Test `TestMonitorSurvivesSupervisionChange`: register a monitor, change the session policy's supervision only, report, and check that the monitor is not stop-requested.
 - Test: `internal/core/api/instructions_job_test.go`
 
 **Interfaces:**
