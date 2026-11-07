@@ -20,6 +20,7 @@ import {
   ShieldX,
   Pencil,
   Square,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -1071,8 +1072,10 @@ function Stop({ status, onStop, onEdit }: { status: JobStatus; onStop: () => voi
         }
         onClick={onStop}
       >
-        <Square className="fill-current" />
-        Stop
+        {/* A queued message is dropped, not stopped: it reaches nobody, and
+            calling that Stop read as "stop the agent waiting and read this". */}
+        {status === 'QUEUED' ? <X /> : <Square className="fill-current" />}
+        {status === 'QUEUED' ? 'Drop' : 'Stop'}
       </Button>
     </div>
   );

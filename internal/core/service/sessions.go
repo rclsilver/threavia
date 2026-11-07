@@ -209,8 +209,10 @@ func (s *Service) replayStartSession(ctx context.Context, identity auth.Identity
 func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string, delivery Delivery, artifactIDs ...domain.ArtifactID) (domain.Job, error) {
 	var attachments []ArtifactPayload
 	if len(artifactIDs) > 0 {
-		if delivery != "" && delivery != DeliveryQueue {
-			return domain.Job{}, fmt.Errorf("%w: attachments require QUEUE delivery", ErrInvalid)
+		// A running step takes text only. Files go in a Job of their own, now
+		// in place of the running one, or after it.
+		if delivery == DeliveryNext {
+			return domain.Job{}, fmt.Errorf("%w: attachments require QUEUE or NOW delivery", ErrInvalid)
 		}
 		if job, found, err := s.replayAttachmentMessage(ctx, identity, sessionID, idempotencyKey); err != nil {
 			return domain.Job{}, err
@@ -235,10 +237,46 @@ func (s *Service) PostMessage(ctx context.Context, identity auth.Identity, sessi
 	}
 	switch delivery {
 	case "", DeliveryQueue:
-	case DeliveryNow, DeliveryNext:
+	case DeliveryNow:
+		if len(attachments) > 0 {
+			return s.replaceRunningJob(ctx, identity, sessionID, message, idempotencyKey, attachments)
+		}
+		return s.deliverToRunningJob(ctx, identity, sessionID, message, delivery)
+	case DeliveryNext:
 		return s.deliverToRunningJob(ctx, identity, sessionID, message, delivery)
 	default:
 		return domain.Job{}, fmt.Errorf("%w: unknown delivery %q", ErrInvalid, delivery)
+	}
+	return s.queueMessage(ctx, identity, sessionID, message, idempotencyKey, nil, attachments...)
+}
+
+// replaceRunningJob interrupts with files. A running step cannot take them, so
+// interrupting means what it means for a Job waiting for its backend: the
+// running Job is stopped, its pending questions with it, and the message
+// becomes the Job queued in its place, on the same Run, so the agent reads it
+// in the same conversation. It is how an agent waiting for an answer gets a
+// screenshot rather than a description of one.
+func (s *Service) replaceRunningJob(ctx context.Context, identity auth.Identity, sessionID domain.SessionID, message, idempotencyKey string, attachments []ArtifactPayload) (domain.Job, error) {
+	session, err := s.store.GetSession(ctx, identity.UserID, sessionID)
+	if err != nil {
+		return domain.Job{}, translate(err)
+	}
+	if session.Status != domain.SessionActive {
+		return domain.Job{}, fmt.Errorf("%w: the session is archived", ErrConflict)
+	}
+	run, err := s.store.LatestRun(ctx, sessionID)
+	if err != nil {
+		return domain.Job{}, translate(err)
+	}
+	job, err := s.store.ActiveJob(ctx, run.ID)
+	if errors.Is(err, postgres.ErrNotFound) {
+		return domain.Job{}, fmt.Errorf("%w: no job is running to interrupt; send it as a new message", ErrConflict)
+	}
+	if err != nil {
+		return domain.Job{}, translate(err)
+	}
+	if _, err := s.CancelJob(ctx, identity, job.ID, "interrupted by a new message with files"); err != nil {
+		return domain.Job{}, err
 	}
 	return s.queueMessage(ctx, identity, sessionID, message, idempotencyKey, nil, attachments...)
 }

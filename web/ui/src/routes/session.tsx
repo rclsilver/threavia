@@ -450,24 +450,28 @@ function DeliveryChoice({
   value,
   offered,
   held = [],
-  replacing = false,
+  heldReason = 'Nothing runs while the job waits for its backend: there is no next step to wait for.',
+  replacing,
   onChange,
 }: {
   value: Delivery;
   offered: ('NEXT' | 'NOW')[];
-  /** Offered by the backend but not now, while its Job waits for it: greyed out. */
+  /** Offered but not now: greyed out, saying why. */
   held?: ('NEXT' | 'NOW')[];
-  /** The Job waits for its backend: interrupting it replaces it. */
-  replacing?: boolean;
+  heldReason?: string;
+  /** Interrupting replaces the Job: it waits for its backend, or files cannot reach it. */
+  replacing?: 'backend' | 'files';
   onChange: (delivery: Delivery) => void;
 }) {
   const options: Delivery[] = ['QUEUE', ...(['NEXT', 'NOW'] as const).filter((d) => offered.includes(d))];
   const titleOf = (option: Delivery) =>
     held.includes(option as 'NEXT' | 'NOW')
-      ? 'Nothing runs while the job waits for its backend: there is no next step to wait for.'
-      : option === 'NOW' && replacing
+      ? heldReason
+      : option === 'NOW' && replacing === 'backend'
         ? 'Cancel the job waiting for its backend and send this instead'
-        : DELIVERY_LABELS[option].title;
+        : option === 'NOW' && replacing === 'files'
+          ? 'Stop the job, even one waiting for your answer, and send this with its files in its place'
+          : DELIVERY_LABELS[option].title;
   return (
     <div role="radiogroup" aria-label="How to send" className="border-border bg-surface-2 text-muted flex rounded-md border p-0.5 text-xs">
       {options.map((option) => {
@@ -615,7 +619,17 @@ function Composer({
   // decided; the other two only when the backend holding the Session can do
   // them, and only while there is something running to receive them.
   const [delivery, setDelivery] = useState<Delivery>('QUEUE');
-  const chosen = deliveries.includes(delivery as 'NEXT' | 'NOW') ? delivery : 'QUEUE';
+  // A running step takes text only. With files, interrupting stops the job —
+  // an agent waiting for an answer included — and sends them in its place,
+  // whatever the backend can inject; the next step cannot take them.
+  const withFiles = attachments.files.length > 0;
+  const interruptible = Boolean(active && !['QUEUED', 'CANCELLING'].includes(active.status));
+  const offered: ('NEXT' | 'NOW')[] = withFiles
+    ? interruptible ? ['NEXT', 'NOW'] : []
+    : [...deliveries, ...held];
+  const unavailable: ('NEXT' | 'NOW')[] = withFiles ? ['NEXT'] : held;
+  const usable = offered.filter((option) => !unavailable.includes(option));
+  const chosen = usable.includes(delivery as 'NEXT' | 'NOW') ? delivery : 'QUEUE';
 
   const submit = () => {
     const text = message.trim();
@@ -630,7 +644,7 @@ function Composer({
     }
     write('');
     send.mutate(
-      { message: text, delivery: attachments.files.length ? 'QUEUE' : chosen, artifactIds: attachments.files.map((file) => file.id) },
+      { message: text, delivery: chosen, artifactIds: attachments.files.map((file) => file.id) },
       {
         onError: () => setMessage(text),
         // One message at a time reaches the running work; the next one is
@@ -726,8 +740,15 @@ function Composer({
           <div className="border-border flex items-center gap-1 border-t px-1 py-1 sm:gap-1.5 sm:px-1.5">
             <AttachButton attachments={attachments} disabled={send.isPending} />
             <ComposerModelPill session={session} backend={backend} disabled={modelSettings.isPending || send.isPending} saving={modelSettings.isPending} onChange={(settings) => modelSettings.mutate(settings)} />
-            {active && active.status !== 'CANCELLING' && (deliveries.length > 0 || held.length > 0) && (
-              <DeliveryChoice value={chosen} offered={[...deliveries, ...held]} held={held} replacing={active.status === 'WAITING_BACKEND'} onChange={setDelivery} />
+            {active && active.status !== 'CANCELLING' && offered.length > 0 && (
+              <DeliveryChoice
+                value={chosen}
+                offered={offered}
+                held={unavailable}
+                heldReason={withFiles ? 'Files cannot be read at the next step: queue them, or interrupt to send them now.' : undefined}
+                replacing={active.status === 'WAITING_BACKEND' ? 'backend' : withFiles ? 'files' : undefined}
+                onChange={setDelivery}
+              />
             )}
             <span className="ml-auto" />
             {active && (active.status === 'CANCELLING' ? (

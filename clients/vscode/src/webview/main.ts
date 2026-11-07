@@ -781,7 +781,9 @@ function stopControl(jobId: string, status: string, mine = false): HTMLElement {
       class: 'ghost small',
       title: 'Take this message back to rewrite it (Alt+↑ for the last one)',
     }),
-    button([icon('debug-stop'), 'Stop'], () => post({ type: 'stop', jobId }), {
+    // A queued message is dropped, not stopped: it reaches nobody, and calling
+    // that Stop read as "stop the agent waiting and read this".
+    button(status === 'QUEUED' ? [icon('close'), 'Drop'] : [icon('debug-stop'), 'Stop'], () => post({ type: 'stop', jobId }), {
       class: 'ghost small',
       title: status === 'QUEUED' ? 'Drop this message before it runs' : 'Stop what this message started',
     }),
@@ -1214,9 +1216,27 @@ const DELIVERY_LABELS: Record<Delivery, { label: string; short: string; title: s
   NOW: { label: 'Interrupt', short: 'Now', title: 'Stop what it is doing and redirect it with this message' },
 };
 
+/**
+ * What a message can do besides being queued, and what shows greyed out. A
+ * running step takes text only: with files, interrupting stops the job — an
+ * agent waiting for an answer included — and sends them in its place, whatever
+ * the backend can inject; the next step cannot take them.
+ */
+function deliveryOptions(): { offered: ('NEXT' | 'NOW')[]; held: ('NEXT' | 'NOW')[] } {
+  const active = view?.active;
+  if (!view || !active) return { offered: [], held: [] };
+  if (attachments.length > 0) {
+    const interruptible = !['QUEUED', 'CANCELLING'].includes(active.status);
+    return interruptible ? { offered: ['NEXT', 'NOW'], held: ['NEXT'] } : { offered: [], held: [] };
+  }
+  const held = view.held ?? [];
+  return { offered: (['NEXT', 'NOW'] as const).filter((option) => view?.deliveries.includes(option) || held.includes(option)), held };
+}
+
 /** The delivery in force: one the running work can take, or a queued message. */
 function chosen(): Delivery {
-  return view?.deliveries.includes(delivery as 'NEXT' | 'NOW') ? delivery : 'QUEUE';
+  const { offered, held } = deliveryOptions();
+  return offered.includes(delivery as 'NEXT' | 'NOW') && !held.includes(delivery as 'NEXT' | 'NOW') ? delivery : 'QUEUE';
 }
 
 function renderComposer() {
@@ -1230,15 +1250,20 @@ function renderComposer() {
     return;
   }
   const items: HTMLElement[] = [];
-  const held = view?.held ?? [];
-  if (active.status !== 'CANCELLING' && view && (view.deliveries.length > 0 || held.length > 0)) {
-    const options: Delivery[] = ['QUEUE', ...(['NEXT', 'NOW'] as const).filter((option) => view?.deliveries.includes(option) || held.includes(option))];
+  const { offered, held } = deliveryOptions();
+  if (active.status !== 'CANCELLING' && view && offered.length > 0) {
+    const options: Delivery[] = ['QUEUE', ...offered];
     // Waiting for its backend, no agent reads a message: Interrupt replaces
-    // the Job, and Next step shows greyed out, saying why.
+    // the Job, and Next step shows greyed out, saying why. Files replace it too.
+    const withFiles = attachments.length > 0;
     const replacing = active.status === 'WAITING_BACKEND';
     const titleOf = (option: Delivery) => held.includes(option as 'NEXT' | 'NOW')
-      ? 'Nothing runs while the job waits for its backend: there is no next step to wait for.'
-      : option === 'NOW' && replacing ? 'Cancel the job waiting for its backend and send this instead' : DELIVERY_LABELS[option].title;
+      ? withFiles
+        ? 'Files cannot be read at the next step: queue them, or interrupt to send them now.'
+        : 'Nothing runs while the job waits for its backend: there is no next step to wait for.'
+      : option === 'NOW' && replacing ? 'Cancel the job waiting for its backend and send this instead'
+        : option === 'NOW' && withFiles ? 'Stop the job, even one waiting for your answer, and send this with its files in its place'
+          : DELIVERY_LABELS[option].title;
     const group = h('div', { class: 'deliveries', role: 'radiogroup', 'aria-label': 'How to send' });
     for (const option of options) {
       const selected = chosen() === option;
@@ -1345,7 +1370,7 @@ function submit() {
   starting = Boolean(start);
   sendingMessage = true;
   renderComposer();
-  post({ type: 'send', text, delivery: attachments.length ? 'QUEUE' : view?.active ? chosen() : 'QUEUE', artifactIds: attachments.map((file) => file.artifactId) });
+  post({ type: 'send', text, delivery: view?.active ? chosen() : 'QUEUE', artifactIds: attachments.map((file) => file.artifactId) });
   renderAttachments();
   field.value = '';
   sendError.hidden = true;
@@ -1453,7 +1478,8 @@ function renderAttachments() {
     ...(attaching ? [h('p', {}, 'Attaching…')] : []),
     );
   attachButton.disabled = sendingMessage || attaching > 0;
-  updateSend(); persist();
+  // Files change what a message can do while work runs.
+  renderComposer(); persist();
 }
 async function addFiles(files: File[]) {
   if (sendingMessage || starting || attaching) return;

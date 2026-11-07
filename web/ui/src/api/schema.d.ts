@@ -3104,7 +3104,7 @@ export interface paths {
                          *     before checking this precondition again.
                          *      */
                         afterJobId?: components["schemas"]["UUID"];
-                        /** @description Files from this project attached to the prompt (3 MiB total). Requires QUEUE delivery. */
+                        /** @description Files from this project attached to the prompt (3 MiB total). With QUEUE delivery, or NOW, which cancels the running Job and queues this message in its place; NEXT is refused. */
                         artifactIds?: components["schemas"]["UUID"][];
                         /**
                          * @description How the message reaches a Session that is already working

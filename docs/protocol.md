@@ -400,7 +400,10 @@ messages on an older backend, rather than letting it silently ignore the files.
 
 The HTTP start and message routes accept `artifactIds`: at most eight distinct
 artifacts owned by the caller, from the same Project, totalling at most 3 MiB.
-They require QUEUE delivery; text may be empty when files are present. The
+They take QUEUE or NOW delivery, never NEXT: a running step takes text only, so
+NOW with files cancels the running Job (and what it was waiting on) and queues
+the message in its place, on the same Run. Text may be empty when files are
+present. The
 `user.message` event keeps an `attachments` array of
 `{ artifactId, filename, mimeType, size }` references. The bytes remain in object
 storage and are fetched again when queued work is dispatched or replayed.
