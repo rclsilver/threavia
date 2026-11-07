@@ -54,3 +54,19 @@ func TestInstructionsValidate(t *testing.T) {
 		t.Errorf("texts of 4000 characters were refused: %v", err)
 	}
 }
+
+// TestLayeredAgentEndsStackedTextWithANewline pins the newline a stacked agent
+// text ends with, and that a single layer is still sent as written.
+func TestLayeredAgentEndsStackedTextWithANewline(t *testing.T) {
+	t.Parallel()
+
+	if got, want := LayeredAgent([]Layer{{"Global", "A"}, {"Backend z", "C"}}), LayeredPreamble+"\n\n[Global]\nA\n\n[Backend z]\nC\n"; got != want {
+		t.Errorf("LayeredAgent(two) = %q, want %q", got, want)
+	}
+	if got := LayeredAgent([]Layer{{"Global", " A "}}); got != "A" {
+		t.Errorf("LayeredAgent(single) = %q, want %q", got, "A")
+	}
+	if got := LayeredAgent(nil); got != "" {
+		t.Errorf("LayeredAgent(nil) = %q, want empty", got)
+	}
+}

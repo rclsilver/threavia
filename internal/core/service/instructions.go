@@ -64,7 +64,7 @@ func (s *Service) inheritedInstructions(ctx context.Context, identity auth.Ident
 		return domain.Instructions{}, translate(err)
 	}
 	return domain.Instructions{
-		Agent:       domain.Layered(domain.LayeredPreamble, []domain.Layer{{Label: "Global", Text: global.Agent}}),
+		Agent:       domain.LayeredAgent([]domain.Layer{{Label: "Global", Text: global.Agent}}),
 		Supervision: domain.Layered(domain.LayeredSupervisionPreamble, []domain.Layer{{Label: "Global", Text: global.Supervision}}),
 	}, nil
 }
@@ -302,7 +302,7 @@ func labelName(name string) string {
 // added after this text by Core, as the notes of projectContext.
 func assembleInstructions(l postgres.JobLayers) domain.Instructions {
 	return domain.Instructions{
-		Agent: domain.Layered(domain.LayeredPreamble, []domain.Layer{
+		Agent: domain.LayeredAgent([]domain.Layer{
 			{Label: "Global", Text: l.Global.Agent},
 			{Label: "Project " + labelName(l.ProjectName), Text: l.Project.Agent},
 			{Label: "Backend " + labelName(l.BackendName), Text: l.Backend.Agent},

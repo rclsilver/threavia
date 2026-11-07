@@ -66,6 +66,24 @@ const LayeredSupervisionPreamble = "These instructions come from several levels,
 // noise in every installation that only ever writes one level. With two or
 // more, each gets a labelled section under the preamble.
 func Layered(preamble string, layers []Layer) string {
+	text, _ := layered(preamble, layers)
+	return text
+}
+
+// LayeredAgent assembles the agent text under LayeredPreamble. A stacked text
+// ends with a newline: a backend already deployed appends its notes after a
+// single "\n", and without it the first one would read as part of the last
+// section, as if that level had written it. A single layer stays as written.
+func LayeredAgent(layers []Layer) string {
+	text, stacked := layered(LayeredPreamble, layers)
+	if stacked {
+		text += "\n"
+	}
+	return text
+}
+
+// layered is Layered, also saying whether two or more layers were stacked.
+func layered(preamble string, layers []Layer) (string, bool) {
 	kept := make([]Layer, 0, len(layers))
 	for _, layer := range layers {
 		if text := strings.TrimSpace(layer.Text); text != "" {
@@ -74,14 +92,14 @@ func Layered(preamble string, layers []Layer) string {
 	}
 	switch len(kept) {
 	case 0:
-		return ""
+		return "", false
 	case 1:
-		return kept[0].Text
+		return kept[0].Text, false
 	}
 	sections := make([]string, 0, len(kept)+1)
 	sections = append(sections, preamble)
 	for _, layer := range kept {
 		sections = append(sections, "["+layer.Label+"]\n"+layer.Text)
 	}
-	return strings.Join(sections, "\n\n")
+	return strings.Join(sections, "\n\n"), true
 }

@@ -382,7 +382,11 @@ func (s *Service) projectContext(ctx context.Context, store *postgres.Store, jc 
 	if err != nil {
 		return nil, fmt.Errorf("read the session transfer context: %w", err)
 	}
-	pc.ProjectInstructions += handoff
+	// One blank line before the excerpts, as before any other note, whether or
+	// not the text above already ends with a newline.
+	if handoff != "" {
+		pc.ProjectInstructions = appendNote(pc.ProjectInstructions, strings.TrimPrefix(handoff, "\n"))
+	}
 	pc.McpServers, err = s.effectiveMCP(ctx, store, jc)
 	if err != nil {
 		return nil, fmt.Errorf("read MCP configuration: %w", err)
@@ -411,7 +415,8 @@ func (s *Service) projectContext(ctx context.Context, store *postgres.Store, jc 
 // The assembled instructions end with their last labelled section. A note
 // that followed it on the next line would read as part of that section, as if
 // the project or the backend had written it; the blank line closes the section
-// first. An empty text gets the note as it always did.
+// first. A stacked text already ends with a newline (domain.LayeredAgent), so
+// it only gets the note's own. An empty text gets the note as it always did.
 func appendNote(text, note string) string {
 	if text != "" && !strings.HasSuffix(text, "\n") {
 		text += "\n"
