@@ -170,15 +170,24 @@ texte « for this project » devient trompeur (appréciation du builder).
 
 ### API
 
-- `GET/PUT /api/v1/me/instructions` → `{agent, supervision}`.
-- `GET/PUT /api/v1/backends/{backendId}/instructions` → `{agent, supervision}`.
-- Projet : `supervisionInstructions` ajouté au modèle projet (lecture /
-  `PATCH` existant), à côté de `instructions`.
+Un même endpoint pour les trois niveaux (choix du concepteur, plus simple
+que d'étendre le `PATCH` projet) :
+
+- `GET/PUT /api/v1/me/instructions`
+- `GET/PUT /api/v1/projects/{projectId}/instructions` (`agent` lit et écrit
+  `projects.instructions`, le `PATCH` projet existant continue de fonctionner)
+- `GET/PUT /api/v1/backends/{backendId}/instructions`
+
+Corps du `PUT` : `{agent, supervision}` (textes complets, vide = effacé).
+Réponse (`InstructionsView`) : `{own: {agent, supervision}, inherited:
+{agent, supervision}}`, où `inherited` est le texte assemblé des niveaux du
+dessus — le global pour le projet et pour le backend (le projet du dessus
+d'un backend varie selon le job, il n'est donc pas montré).
+
 - OpenAPI mis à jour, schémas TS régénérés (web et vscode).
-- Audit : chaque écriture journalisée (`instructions.set`, avec niveau).
-- Optionnel mais utile : `GET /api/v1/projects/{id}/instructions/preview?backendId=`
-  qui renvoie le texte final agent et superviseur, pour voir ce que le LLM
-  recevra.
+- Audit : chaque écriture journalisée (`instructions.instance_set`,
+  `instructions.project_set`, `instructions.backend_set`).
+- Pas d'aperçu du texte final dans cette itération.
 
 ### Outils MCP
 
@@ -188,22 +197,29 @@ global/backend dans cette itération.
 
 ### Interface web
 
-- Réglages globaux (`default-policy.tsx`) et page backend : deux zones de
-  texte « Consignes de l'agent » / « Consignes du superviseur ».
-- Page projet : la zone « instructions » existante + une zone superviseur.
+- Réglages globaux et page backend (`settings.tsx`) : un panneau « Consignes »
+  avec deux zones « Consignes de l'agent » / « Consignes du superviseur ».
+- Page projet, vue « Instructions » : la zone existante + une zone superviseur.
 - Le champ supervision disparaît des formulaires de politique instance,
   backend et projet (`policy-form.tsx`), reste pour session/job.
-- Sous chaque zone, rappel du texte hérité des niveaux du dessus (lecture
-  seule) pour que l'on sache ce qu'on complète.
+- Sous chaque zone, le texte hérité des niveaux du dessus en lecture seule,
+  pour que l'on sache ce qu'on complète.
+- Le serveur `/demo` répond aux nouvelles routes (`make web-demo-check`).
 
-VS Code : seulement la régénération du schéma et le retrait du champ
-supervision là où il n'a plus cours (`clients/vscode/src/permissions/page.ts`).
+### VS Code (demande utilisateur : configurable depuis web **et** VS Code)
+
+- Nouvelle commande `threavia.manageInstructions` (« Instructions… »), sur le
+  modèle de `threavia.managePermissions` : depuis un nœud projet ou backend de
+  l'arbre, ou par un choix Global / Backend / Projet.
+- Elle ouvre un éditeur webview avec les deux zones et le texte hérité en
+  lecture seule, et enregistre via le `PUT …/instructions`.
+- L'éditeur de permissions (`permissions/page.ts`) n'affiche plus le champ
+  supervision qu'au niveau session.
 
 ## Laissé au builder
 
-- Noms exacts des colonnes/endpoints et découpage en commits.
+- Noms exacts des colonnes et découpage en commits.
 - Formulation exacte de l'avertissement et des libellés.
-- Forme de l'aperçu (endpoint dédié ou calcul côté client).
 - Tests : unitaires sur l'assembleur (0/1/n couches, ordre, couches vides),
   sur la migration, et un test d'API vérifiant que la supervision globale
   survit à une politique projet qui change seulement le mode.
