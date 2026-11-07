@@ -452,6 +452,11 @@ function changedInstructions(before: { agent: string; supervision: string }, aft
   return (['agent', 'supervision'] as const).filter((field) => before[field] !== after[field]);
 }
 
+/** The audit detail of a global or backend write: what changed, and its new text. */
+function instructionsAudit(changedFields: ('agent' | 'supervision')[], after: { agent: string; supervision: string }) {
+  return { changedFields, ...Object.fromEntries(changedFields.map((field) => [field, after[field]])) };
+}
+
 function projectInstructionsView(projectId: string) {
   const project = state.projects.find((entry) => entry.id === projectId);
   if (!project) throw notFound('This project');
@@ -559,16 +564,22 @@ const routes: [string, RegExp, Handler][] = [
   ['PUT', /^\/api\/v1\/me\/instructions$/, (_m, body) => {
     const before = state.instanceInstructions;
     state.instanceInstructions = instructionsBody(body, true);
-    record('instructions.instance_set', { detail: clone(state.instanceInstructions) });
-    if (changedInstructions(before, state.instanceInstructions).length) emitLifecycle('instructions.updated', undefined, { level: 'instance' });
+    const changedFields = changedInstructions(before, state.instanceInstructions);
+    if (changedFields.length) {
+      record('instructions.instance_set', { detail: instructionsAudit(changedFields, state.instanceInstructions) });
+      emitLifecycle('instructions.updated', undefined, { level: 'instance' });
+    }
     return { own: clone(state.instanceInstructions), inherited: { agent: '', supervision: '' } };
   }],
   ['GET', /^\/api\/v1\/backends\/([^/]+)\/instructions$/, (m) => backendInstructionsView(m[1])],
   ['PUT', /^\/api\/v1\/backends\/([^/]+)\/instructions$/, (m, body) => {
     const before = backendInstructionsView(m[1]).own;
     state.backendInstructions[m[1]] = instructionsBody(body, true);
-    record('instructions.backend_set', { subjectId: m[1], detail: clone(state.backendInstructions[m[1]]) });
-    if (changedInstructions(before, state.backendInstructions[m[1]]).length) emitLifecycle('instructions.updated', undefined, { level: 'backend', backendId: m[1] });
+    const changedFields = changedInstructions(before, state.backendInstructions[m[1]]);
+    if (changedFields.length) {
+      record('instructions.backend_set', { subjectId: m[1], detail: instructionsAudit(changedFields, state.backendInstructions[m[1]]) });
+      emitLifecycle('instructions.updated', undefined, { level: 'backend', backendId: m[1] });
+    }
     return backendInstructionsView(m[1]);
   }],
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/instructions$/, (m) => projectInstructionsView(m[1])],
@@ -584,7 +595,9 @@ const routes: [string, RegExp, Handler][] = [
     state.projectSupervision[m[1]] = next.supervision;
     if (changedFields.length) {
       project.updatedAt = nowIso();
-      record('instructions.project_set', { projectId: m[1], subjectId: m[1], detail: { changedFields } });
+      // One row, as for any other edit of the Project, with only the bounded text.
+      const supervision = changedFields.includes('supervisionInstructions') ? { supervisionInstructions: next.supervision } : {};
+      record('project.updated', { projectId: m[1], subjectId: m[1], detail: { ...projectDetail(project), changedFields, ...supervision } });
       emitLifecycle('project.updated', m[1], { ...projectDetail(project), changedFields });
     }
     return projectInstructionsView(m[1]);

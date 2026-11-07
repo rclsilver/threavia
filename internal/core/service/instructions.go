@@ -68,6 +68,35 @@ func (s *Service) inheritedInstructions(ctx context.Context, identity auth.Ident
 	}, nil
 }
 
+// instructionsAudit is the detail of an instructions edit at the global or a
+// backend level: the fields it changed and the new text of each, which is
+// bounded at these levels. An edit that changes nothing is not audited.
+type instructionsAudit struct {
+	ChangedFields []string `json:"changedFields"`
+	Agent         *string  `json:"agent,omitempty"`
+	Supervision   *string  `json:"supervision,omitempty"`
+}
+
+func instructionsAuditDetail(fields []string, in domain.Instructions) instructionsAudit {
+	detail := instructionsAudit{ChangedFields: fields}
+	for _, field := range fields {
+		switch field {
+		case "agent":
+			detail.Agent = &in.Agent
+		case "supervision":
+			detail.Supervision = &in.Supervision
+		}
+	}
+	return detail
+}
+
+// projectInstructionsAudit is the project.updated audit detail of a project
+// instructions edit.
+type projectInstructionsAudit struct {
+	ProjectPayload
+	SupervisionInstructions *string `json:"supervisionInstructions,omitempty"`
+}
+
 // replaceInstructions writes the texts of the global or a backend level and,
 // when one of them changed, announces it as instructions.updated with the
 // level in the payload: an editor open in another client is otherwise left
@@ -117,7 +146,7 @@ func (s *Service) SetInstanceInstructions(ctx context.Context, identity auth.Ide
 	if err := in.Validate(); err != nil {
 		return InstructionsView{}, fmt.Errorf("%w: %s", ErrInvalid, err)
 	}
-	_, err := s.replaceInstructions(ctx, identity, in, map[string]any{"level": "instance"},
+	fields, err := s.replaceInstructions(ctx, identity, in, map[string]any{"level": "instance"},
 		func(tx *postgres.Store) (domain.Instructions, error) {
 			return tx.InstanceInstructions(ctx, identity.UserID)
 		},
@@ -125,7 +154,9 @@ func (s *Service) SetInstanceInstructions(ctx context.Context, identity auth.Ide
 	if err != nil {
 		return InstructionsView{}, err
 	}
-	s.audit(ctx, identity, postgres.AuditEntry{Action: "instructions.instance_set", SubjectID: string(identity.UserID), Detail: mustJSON(in)})
+	if len(fields) > 0 {
+		s.audit(ctx, identity, postgres.AuditEntry{Action: "instructions.instance_set", SubjectID: string(identity.UserID), Detail: mustJSON(instructionsAuditDetail(fields, in))})
+	}
 	return s.InstanceInstructions(ctx, identity)
 }
 
@@ -187,13 +218,23 @@ func (s *Service) SetProjectInstructions(ctx context.Context, identity auth.Iden
 		}
 		payload := projectAuditPayload(project)
 		payload.ChangedFields = fields
-		return s.recordAuditedChange(ctx, tx, b, identity, events.TypeProjectUpdated, domain.Scope{ProjectID: id}, string(id), payload)
+		// One audit row, as for any other edit of the Project. It carries the
+		// supervision, which is bounded, but never the agent text, which is not.
+		// The event leaves both out, as it does the other contents.
+		detail := projectInstructionsAudit{ProjectPayload: payload}
+		if in.Supervision != current.Supervision {
+			detail.SupervisionInstructions = &in.Supervision
+		}
+		scope := domain.Scope{ProjectID: id}
+		if err := s.recordLifecycleAudit(ctx, tx, identity, events.TypeProjectUpdated, scope, string(id), detail); err != nil {
+			return err
+		}
+		return s.appendAll(ctx, tx, b, record{eventType: events.TypeProjectUpdated, scope: scope, payload: payload})
 	})
 	if err != nil {
 		return InstructionsView{}, translate(err)
 	}
 	s.flush(b)
-	s.audit(ctx, identity, postgres.AuditEntry{Action: "instructions.project_set", ProjectID: string(id), SubjectID: string(id), Detail: mustJSON(in)})
 	return s.ProjectInstructions(ctx, identity, id)
 }
 
@@ -215,7 +256,7 @@ func (s *Service) SetBackendInstructions(ctx context.Context, identity auth.Iden
 	if err := in.Validate(); err != nil {
 		return InstructionsView{}, fmt.Errorf("%w: %s", ErrInvalid, err)
 	}
-	_, err := s.replaceInstructions(ctx, identity, in, map[string]any{"level": "backend", "backendId": id},
+	fields, err := s.replaceInstructions(ctx, identity, in, map[string]any{"level": "backend", "backendId": id},
 		func(tx *postgres.Store) (domain.Instructions, error) {
 			return tx.BackendInstructions(ctx, identity.UserID, id)
 		},
@@ -223,7 +264,9 @@ func (s *Service) SetBackendInstructions(ctx context.Context, identity auth.Iden
 	if err != nil {
 		return InstructionsView{}, err
 	}
-	s.audit(ctx, identity, postgres.AuditEntry{Action: "instructions.backend_set", SubjectID: string(id), Detail: mustJSON(in)})
+	if len(fields) > 0 {
+		s.audit(ctx, identity, postgres.AuditEntry{Action: "instructions.backend_set", SubjectID: string(id), Detail: mustJSON(instructionsAuditDetail(fields, in))})
+	}
 	return s.BackendInstructions(ctx, identity, id)
 }
 

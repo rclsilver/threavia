@@ -1,8 +1,10 @@
 package api_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -246,5 +248,54 @@ func TestInstanceAndBackendInstructionsAnnounceTheChange(t *testing.T) {
 	want := []scope{{Level: "instance"}, {Level: "backend", BackendID: c.backendID}}
 	if got := announced(); !slices.Equal(got, want) {
 		t.Fatalf("announced %+v, want %+v", got, want)
+	}
+}
+
+// TestInstructionEditsAuditedOnceWhenChanged pins one bounded audit row per
+// edit that changes something: none for a PUT that repeats what is stored, and
+// for a project only the project.updated row its other edits write too.
+func TestInstructionEditsAuditedOnceWhenChanged(t *testing.T) {
+	c, _, projectID, _ := setup(t)
+	audited := func(action string) []map[string]any {
+		t.Helper()
+		rows, err := c.db.Pool().Query(context.Background(), `SELECT detail FROM audit_entries WHERE action = $1 ORDER BY created_at, id`, action)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var out []map[string]any
+		for rows.Next() {
+			var detail map[string]any
+			if err := rows.Scan(&detail); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, detail)
+		}
+		return out
+	}
+	twice := func(path string, body instructions) {
+		c.mustDo(http.MethodPut, path, body, nil, http.StatusOK)
+		c.mustDo(http.MethodPut, path, body, nil, http.StatusOK)
+	}
+
+	twice("/api/v1/me/instructions", instructions{Agent: "G"})
+	twice("/api/v1/backends/"+c.backendID+"/instructions", instructions{Supervision: "S"})
+	twice("/api/v1/projects/"+projectID+"/instructions", instructions{Agent: strings.Repeat("p", 5000), Supervision: "SP"})
+
+	if got := audited("instructions.instance_set"); len(got) != 1 ||
+		!reflect.DeepEqual(got[0], map[string]any{"changedFields": []any{"agent"}, "agent": "G"}) {
+		t.Errorf("instance audit = %v", got)
+	}
+	if got := audited("instructions.backend_set"); len(got) != 1 ||
+		!reflect.DeepEqual(got[0], map[string]any{"changedFields": []any{"supervision"}, "supervision": "S"}) {
+		t.Errorf("backend audit = %v", got)
+	}
+	if got := audited("instructions.project_set"); len(got) != 0 {
+		t.Errorf("a project edit wrote a second audit row: %v", got)
+	}
+	got := audited("project.updated")
+	if len(got) != 1 || !reflect.DeepEqual(got[0]["changedFields"], []any{"instructions", "supervisionInstructions"}) ||
+		got[0]["supervisionInstructions"] != "SP" || got[0]["instructions"] != nil {
+		t.Errorf("project audit = %v, want the changed fields and only the bounded text", got)
 	}
 }
