@@ -147,6 +147,16 @@ func (s *Service) pushPolicy(ctx context.Context, session domain.Session) {
 				slog.String("jobId", string(job.ID)), slog.String("error", err.Error()))
 			continue
 		}
+		// The policy sent replaces the one the Job started with, supervision
+		// included, so it carries the assembled text as dispatch does: the
+		// Session level alone would drop every level above it.
+		instructions, err := s.jobInstructions(ctx, job.ID)
+		if err != nil {
+			s.logger.Error("cannot read the instructions of a running job",
+				slog.String("jobId", string(job.ID)), slog.String("error", err.Error()))
+			continue
+		}
+		effective.Supervision = instructions.Supervision
 		scope := domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID, RunID: run.ID, JobID: job.ID}
 		s.sendToBackend(ctx, scope, &backendv1.CoreToBackend{
 			Message: &backendv1.CoreToBackend_UpdateJobPolicy{

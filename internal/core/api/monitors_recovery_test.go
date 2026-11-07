@@ -170,3 +170,24 @@ func TestMonitorPolicyChangeAndStaleObservationAreVisible(t *testing.T) {
 	}
 	expectNothing(t, "model call for a policy stop", b.starts)
 }
+
+// TestMonitorSurvivesSupervisionChange pins that a monitor is stopped for a
+// change of permissions, not of what the reviewer is told: supervision gives
+// the watched command no more and no less, and every edit of the instructions
+// or migration of them would otherwise stop the monitors of every Session.
+func TestMonitorSurvivesSupervisionChange(t *testing.T) {
+	c, b, p, d := setup(t)
+	session := c.startSession(p, c.backendID, d, "Watch")
+	start := receive(t, "original job", b.starts)
+	policy := map[string]any{"mode": "SUPERVISED", "allowFilesystemWrite": true, "allowGitCommit": true, "allowNetwork": true, "supervision": "Reading is ordinary work."}
+	c.mustDo(http.MethodPut, "/api/v1/sessions/"+session+"/policy", policy, nil, http.StatusOK)
+	v := registerMonitor(t, c, b, start)
+	completeDelegatedJob(t, c, b, start)
+	policy["supervision"] = "Never touch production."
+	c.mustDo(http.MethodPut, "/api/v1/sessions/"+session+"/policy", policy, nil, http.StatusOK)
+	v.State = "RUNNING"
+	v.Sequence = 1
+	if ctrl := sendMonitor(t, c, v.Snapshot, c.backendID); ctrl.Stop {
+		t.Fatal("monitor stopped for a supervision change")
+	}
+}

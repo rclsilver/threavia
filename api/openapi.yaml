@@ -2002,6 +2002,40 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
 
+  /api/v1/projects/{projectId}/instructions/preview:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      tags: [projects]
+      summary: The instructions a Job started here would read
+      description: |
+        Assembled from every level as for a Job: global, project, backend and,
+        when `sessionId` is given, the supervision of that Session's own policy.
+        The agent text is what opens the instructions of the Job, before the
+        notes Core adds for that Job alone (delegation, transferred excerpts,
+        unavailable MCP servers).
+      parameters:
+        - name: backendId
+          in: query
+          required: true
+          description: The backend the Job would run on.
+          schema: { type: string }
+        - name: sessionId
+          in: query
+          required: false
+          description: An existing Session of this Project.
+          schema: { type: string }
+      responses:
+        "200":
+          description: The assembled instructions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Instructions" }
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
   /api/v1/sessions/{sessionId}/policy:
     parameters:
       - $ref: "#/components/parameters/SessionID"

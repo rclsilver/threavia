@@ -172,3 +172,53 @@ func (s *Service) SetBackendInstructions(ctx context.Context, identity auth.Iden
 	s.audit(ctx, identity, postgres.AuditEntry{Action: "instructions.backend_set", SubjectID: string(id), Detail: mustJSON(in)})
 	return s.BackendInstructions(ctx, identity, id)
 }
+
+// assembleInstructions orders and labels the layers of a Job. It is the only
+// place that does, so a preview and the Job it previews cannot drift apart.
+//
+// The agent has no session or job level: what changes per Session or Job is
+// added after this text by Core, as the notes of projectContext.
+func assembleInstructions(l postgres.JobLayers) domain.Instructions {
+	return domain.Instructions{
+		Agent: domain.Layered([]domain.Layer{
+			{Label: "Global", Text: l.Global.Agent},
+			{Label: "Project " + l.ProjectName, Text: l.Project.Agent},
+			{Label: "Backend " + l.BackendName, Text: l.Backend.Agent},
+		}),
+		Supervision: domain.Layered([]domain.Layer{
+			{Label: "Global", Text: l.Global.Supervision},
+			{Label: "Project " + l.ProjectName, Text: l.Project.Supervision},
+			{Label: "Backend " + l.BackendName, Text: l.Backend.Supervision},
+			{Label: "Session", Text: l.SessionSupervision},
+			{Label: "Job", Text: l.JobSupervision},
+		}),
+	}
+}
+
+// jobInstructions returns the assembled instructions of a Job, as they are
+// right now: a change reaches the next Job, or a running one when its policy
+// is pushed again.
+func (s *Service) jobInstructions(ctx context.Context, jobID domain.JobID) (domain.Instructions, error) {
+	layers, err := s.store.JobInstructionLayers(ctx, jobID)
+	if err != nil {
+		return domain.Instructions{}, err
+	}
+	return assembleInstructions(layers), nil
+}
+
+// PreviewInstructions returns what a Job started in a Project on a backend
+// would read, and in an existing Session of that Project when one is given.
+// The agent text is the one Core opens the system prompt with, before the
+// notes it adds for a particular Job.
+func (s *Service) PreviewInstructions(ctx context.Context, identity auth.Identity, projectID domain.ProjectID, backendID domain.BackendInstanceID, sessionID *domain.SessionID) (domain.Instructions, error) {
+	// An identifier the database cannot even parse names nothing, rather than
+	// failing the query.
+	if !isUUID(string(projectID)) || !isUUID(string(backendID)) || (sessionID != nil && !isUUID(string(*sessionID))) {
+		return domain.Instructions{}, ErrNotFound
+	}
+	layers, err := s.store.PreviewInstructionLayers(ctx, identity.UserID, projectID, backendID, sessionID)
+	if err != nil {
+		return domain.Instructions{}, translate(err)
+	}
+	return assembleInstructions(layers), nil
+}

@@ -135,6 +135,15 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 		s.logger.Error("cannot read the execution policy", slog.String("jobId", string(jobID)), slog.String("error", err.Error()))
 		return
 	}
+	// The instructions of every level, assembled for this Job. The supervision
+	// replaces whatever the policy carried: only the session and job levels
+	// put any there, and they are layers of the assembled text too.
+	instructions, err := s.jobInstructions(ctx, jobID)
+	if err != nil {
+		s.logger.Error("cannot read the instructions", slog.String("jobId", string(jobID)), slog.String("error", err.Error()))
+		return
+	}
+	policy.Supervision = instructions.Supervision
 
 	// Built before the slot is reserved: a Job sent without the knowledge it was
 	// supposed to carry is worse than a Job that waits. An agent cannot tell
@@ -172,7 +181,7 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 		if jc.Run.ResumeStatus == domain.ResumeUnavailable {
 			jc.NativeSessionID = nil
 		}
-		projectContext, err = s.projectContext(ctx, tx, jc)
+		projectContext, err = s.projectContext(ctx, tx, jc, instructions.Agent)
 		if err != nil {
 			return err
 		}
@@ -271,12 +280,17 @@ func (s *Service) DispatchJob(ctx context.Context, jobID domain.JobID) {
 // recorded so that every later session would know goes unread. Refusing to
 // build the context leaves the Job queued, which is recoverable; sending it
 // without is not.
-func (s *Service) projectContext(ctx context.Context, store *postgres.Store, jc postgres.JobContext) (*backendv1.ProjectContext, error) {
+//
+// The agent instructions, assembled from every level, open the instructions
+// text. What Core adds for this Job alone (the delegation note, the transfer
+// excerpts, an unavailable MCP server) follows them, outside any labelled
+// section, so it reads as narrower than all of them.
+func (s *Service) projectContext(ctx context.Context, store *postgres.Store, jc postgres.JobContext, agentInstructions string) (*backendv1.ProjectContext, error) {
 	pc := &backendv1.ProjectContext{
 		ProjectId:           string(jc.ProjectID),
 		ProjectName:         jc.ProjectName,
 		ProjectDescription:  jc.ProjectDesc,
-		ProjectInstructions: jc.ProjectInstructions,
+		ProjectInstructions: agentInstructions,
 		Tools:               coreToolSpecs(jc.Job.Quiet),
 	}
 	if jc.WorkingDirectoryPath != nil {

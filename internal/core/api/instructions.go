@@ -95,3 +95,28 @@ func (h *handler) setBackendInstructions(w http.ResponseWriter, r *http.Request,
 	}
 	writeJSON(w, http.StatusOK, view)
 }
+
+// previewInstructions answers what a Job started in a Project on a backend
+// would read, and in one of its Sessions when sessionId is given. The backend
+// is required: which one runs a Session is known per Job, and its level is part
+// of the text.
+func (h *handler) previewInstructions(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
+	query := r.URL.Query()
+	backendID := query.Get("backendId")
+	if backendID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "backendId is required")
+		return
+	}
+	var sessionID *domain.SessionID
+	if value := query.Get("sessionId"); value != "" {
+		id := domain.SessionID(value)
+		sessionID = &id
+	}
+	preview, err := h.svc.PreviewInstructions(r.Context(), identity,
+		domain.ProjectID(r.PathValue("projectId")), domain.BackendInstanceID(backendID), sessionID)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, preview)
+}

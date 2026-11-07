@@ -254,6 +254,7 @@ func (h *handler) registerPolicy(mux *http.ServeMux) {
 	h.handle(mux, "PUT /api/v1/backends/{backendId}/instructions", h.setBackendInstructions)
 	h.handle(mux, "GET /api/v1/projects/{projectId}/instructions", h.getProjectInstructions)
 	h.handle(mux, "PUT /api/v1/projects/{projectId}/instructions", h.setProjectInstructions)
+	h.handle(mux, "GET /api/v1/projects/{projectId}/instructions/preview", h.previewInstructions)
 	h.handle(mux, "GET /api/v1/me/audit", h.listAudit)
 }
 

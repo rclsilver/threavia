@@ -225,19 +225,16 @@ func (s *Store) DeleteQueuedJob(ctx context.Context, ownerID domain.UserID, id d
 // JobContext is everything needed to dispatch a Job to its backend, resolved in
 // a single query.
 type JobContext struct {
-	Job         domain.Job
-	Run         domain.Run
-	SessionID   domain.SessionID
-	ProjectID   domain.ProjectID
-	ProjectName string
-	ProjectDesc string
-	// ProjectInstructions are the provider-independent project rules of
-	// specification section 18. The backend maps them to its provider.
-	ProjectInstructions string
-	OwnerID             domain.UserID
-	BackendInstanceID   domain.BackendInstanceID
-	NativeSessionID     *string
-	KnownDirectoryID    *domain.KnownDirectoryID
+	Job               domain.Job
+	Run               domain.Run
+	SessionID         domain.SessionID
+	ProjectID         domain.ProjectID
+	ProjectName       string
+	ProjectDesc       string
+	OwnerID           domain.UserID
+	BackendInstanceID domain.BackendInstanceID
+	NativeSessionID   *string
+	KnownDirectoryID  *domain.KnownDirectoryID
 	// KnownDirectoryName and KnownDirectoryGitRemote let a backend with no
 	// binding resolve the directory rather than guess (spec section 11).
 	KnownDirectoryName      string
@@ -257,7 +254,7 @@ func (s *Store) LoadJobContext(ctx context.Context, id domain.JobID) (JobContext
 		       j.quiet, j.dismissed, j.callback_session_id, j.sender_session_id,
 		       r.id, r.session_id, r.backend_instance_id, r.native_session_id,
 		       r.resume_status, r.resume_reason, r.created_at, r.updated_at,
-		       s.id, p.id, p.owner_id, p.name, p.description, p.instructions,
+		       s.id, p.id, p.owner_id, p.name, p.description,
 		       s.working_directory_id, coalesce(d.name,''), coalesce(d.git_remote,''), b.path
 		FROM jobs j
 		JOIN runs r ON r.id = j.run_id
@@ -275,7 +272,6 @@ func (s *Store) LoadJobContext(ctx context.Context, id domain.JobID) (JobContext
 		&jc.Run.ID, &jc.Run.SessionID, &jc.Run.BackendInstanceID, &jc.Run.NativeSessionID,
 		&jc.Run.ResumeStatus, &jc.Run.ResumeReason, &jc.Run.CreatedAt, &jc.Run.UpdatedAt,
 		&jc.SessionID, &jc.ProjectID, &jc.OwnerID, &jc.ProjectName, &jc.ProjectDesc,
-		&jc.ProjectInstructions,
 		&jc.KnownDirectoryID, &jc.KnownDirectoryName, &jc.KnownDirectoryGitRemote,
 		&jc.WorkingDirectoryPath,
 	)

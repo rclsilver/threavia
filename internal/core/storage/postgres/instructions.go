@@ -119,3 +119,40 @@ func (s *Store) JobInstructionLayers(ctx context.Context, jobID domain.JobID) (J
 	}
 	return l, nil
 }
+
+// PreviewInstructionLayers reads the layers a Job would have in a Project, on
+// a backend and, when one is given, in an existing Session of that Project.
+// There is no Job yet, so JobSupervision stays empty.
+//
+// Each of them has to be the owner's, and the Session has to belong to the
+// Project: ErrNotFound otherwise, so a preview tells nothing about what
+// another account wrote.
+func (s *Store) PreviewInstructionLayers(ctx context.Context, ownerID domain.UserID, projectID domain.ProjectID, backendID domain.BackendInstanceID, sessionID *domain.SessionID) (JobLayers, error) {
+	var l JobLayers
+	err := s.q.QueryRow(ctx, `
+		SELECT p.name, b.name,
+		       COALESCE(ii.agent, ''), COALESCE(ii.supervision, ''),
+		       p.instructions, p.supervision_instructions,
+		       b.agent_instructions, b.supervision_instructions
+		FROM projects p
+		JOIN backend_instances b ON b.id = $3 AND b.owner_id = p.owner_id
+		LEFT JOIN instance_instructions ii ON ii.owner_id = p.owner_id
+		WHERE p.id = $2 AND p.owner_id = $1`, ownerID, projectID, backendID).Scan(
+		&l.ProjectName, &l.BackendName,
+		&l.Global.Agent, &l.Global.Supervision,
+		&l.Project.Agent, &l.Project.Supervision,
+		&l.Backend.Agent, &l.Backend.Supervision)
+	if err != nil {
+		return JobLayers{}, classify(err, "read the instruction layers of a preview")
+	}
+	if sessionID == nil {
+		return l, nil
+	}
+	err = s.q.QueryRow(ctx, `
+		SELECT COALESCE(execution_policy->>'supervision', '')
+		FROM sessions WHERE id = $1 AND project_id = $2`, *sessionID, projectID).Scan(&l.SessionSupervision)
+	if err != nil {
+		return JobLayers{}, classify(err, "read the session supervision of a preview")
+	}
+	return l, nil
+}

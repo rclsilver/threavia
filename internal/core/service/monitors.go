@@ -92,7 +92,7 @@ func (s *Service) monitorTool(ctx context.Context, i auth.Identity, jc jobScope,
 	if currentPolicy.MaxDurationSeconds > 0 && seconds > int64(currentPolicy.MaxDurationSeconds) {
 		return nil, fmt.Errorf("%w: monitor duration exceeds policy", ErrInvalid)
 	}
-	v.Policy, err = json.Marshal(currentPolicy)
+	v.Policy, err = monitorPolicy(currentPolicy)
 	if err != nil {
 		return nil, err
 	}
@@ -223,15 +223,16 @@ func (s *Service) MonitorReport(ctx context.Context, backend domain.BackendInsta
 		if err != nil {
 			return err
 		}
-		encoded, err := json.Marshal(policy)
+		encoded, err := monitorPolicy(policy)
 		if err != nil {
 			return err
 		}
-		var storedPolicy, currentPolicy any
-		if err = json.Unmarshal(v.Policy, &storedPolicy); err != nil {
+		storedPolicy, err := comparablePolicy(v.Policy)
+		if err != nil {
 			return err
 		}
-		if err = json.Unmarshal(encoded, &currentPolicy); err != nil {
+		currentPolicy, err := comparablePolicy(encoded)
+		if err != nil {
 			return err
 		}
 		if session.Status != domain.SessionActive || string(run.ID) != v.RunID || !reflect.DeepEqual(storedPolicy, currentPolicy) {
@@ -301,4 +302,30 @@ func (s *Service) reconcileMonitors(ctx context.Context, backend domain.BackendI
 		}
 	}
 	return nil
+}
+
+// monitorPolicy encodes the policy a monitor runs under, without its
+// supervision.
+//
+// A monitor is stopped when the permissions it was registered under change,
+// and supervision grants or withholds none: it is what the reviewer is told.
+// Kept in, every edit of the instructions at any level would stop the monitors
+// of every Session it reaches.
+func monitorPolicy(policy domain.ExecutionPolicy) ([]byte, error) {
+	policy.Supervision = ""
+	return json.Marshal(policy)
+}
+
+// comparablePolicy decodes the policy of a monitor for comparison, dropping
+// the supervision a snapshot taken before monitorPolicy existed still holds,
+// so those monitors are not stopped by the migration that moved it.
+func comparablePolicy(raw []byte) (any, error) {
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, err
+	}
+	if fields, ok := decoded.(map[string]any); ok {
+		delete(fields, "supervision")
+	}
+	return decoded, nil
 }

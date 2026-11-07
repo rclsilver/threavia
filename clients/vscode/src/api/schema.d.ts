@@ -4060,6 +4060,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{projectId}/instructions/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The instructions a Job started here would read
+         * @description Assembled from every level as for a Job: global, project, backend and,
+         *     when `sessionId` is given, the supervision of that Session's own policy.
+         *     The agent text is what opens the instructions of the Job, before the
+         *     notes Core adds for that Job alone (delegation, transferred excerpts,
+         *     unavailable MCP servers).
+         *
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description The backend the Job would run on. */
+                    backendId: string;
+                    /** @description An existing Session of this Project. */
+                    sessionId?: string;
+                };
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The assembled instructions */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Instructions"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{sessionId}/policy": {
         parameters: {
             query?: never;

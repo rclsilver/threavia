@@ -593,6 +593,10 @@ func (s *Service) createManagedSession(ctx context.Context, identity auth.Identi
 	if err != nil {
 		return nil, translate(err)
 	}
+	// The delegate takes its manager's permissions, not what the manager's
+	// reviewer was told: that text describes the manager's work, possibly in
+	// another Project, and the delegate's own levels supply its supervision.
+	policy.Supervision = ""
 	var directory *domain.KnownDirectoryID
 	if projectID == jc.ProjectID && manager.WorkingDirectoryID != nil {
 		id := domain.KnownDirectoryID(*manager.WorkingDirectoryID)
