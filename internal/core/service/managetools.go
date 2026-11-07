@@ -556,17 +556,17 @@ func (s *Service) projectTool(ctx context.Context, identity auth.Identity, jc jo
 			}
 			return s.projectDetail(ctx, identity, updated)
 		}
-		// The supervision is written with the agent text, both in full: when
-		// the call gives both they land together, and when it gives only the
-		// supervision the agent text goes back as it is. The supervision is
-		// checked before a name or description change so that a refused text
-		// does not leave the call half applied.
-		next := domain.Instructions{Agent: project.Instructions, Supervision: strings.TrimSpace(*supervision)}
-		if agent, given := fields["instructions"]; given {
-			next.Agent = agent
+		// The supervision is written with the agent text: when the call gives
+		// both they land together, and when it gives only the supervision the
+		// stored agent text is kept, as read under the project lock. The
+		// supervision is checked before a name or description change so that
+		// a refused text does not leave the call half applied.
+		var agent *string
+		if given, ok := fields["instructions"]; ok {
+			agent = &given
 			delete(fields, "instructions")
 		}
-		if err := (domain.Instructions{Supervision: next.Supervision}).Validate(); err != nil {
+		if err := (domain.Instructions{Supervision: strings.TrimSpace(*supervision)}).Validate(); err != nil {
 			return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
 		}
 		if len(fields) > 0 {
@@ -574,7 +574,7 @@ func (s *Service) projectTool(ctx context.Context, identity auth.Identity, jc jo
 				return nil, err
 			}
 		}
-		if _, err := s.SetProjectInstructions(ctx, identity, project.ID, next); err != nil {
+		if _, err := s.setProjectInstructions(ctx, identity, project.ID, agent, *supervision); err != nil {
 			return nil, err
 		}
 		return s.projectDetail(ctx, identity, project)

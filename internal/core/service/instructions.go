@@ -110,8 +110,16 @@ func (s *Service) ProjectInstructions(ctx context.Context, identity auth.Identit
 // The agent text has no length limit, as through the project form: it predates
 // the limit and may already be longer. Only the supervision is bounded.
 func (s *Service) SetProjectInstructions(ctx context.Context, identity auth.Identity, id domain.ProjectID, in domain.Instructions) (InstructionsView, error) {
-	in = trimInstructions(in)
-	if err := (domain.Instructions{Supervision: in.Supervision}).Validate(); err != nil {
+	return s.setProjectInstructions(ctx, identity, id, &in.Agent, in.Supervision)
+}
+
+// setProjectInstructions is SetProjectInstructions where a nil agent keeps
+// the stored agent text. It is read under the project lock, so a caller that
+// changes only the supervision cannot write back an agent text someone else
+// replaced in the meantime.
+func (s *Service) setProjectInstructions(ctx context.Context, identity auth.Identity, id domain.ProjectID, agent *string, supervision string) (InstructionsView, error) {
+	in := domain.Instructions{Supervision: strings.TrimSpace(supervision)}
+	if err := in.Validate(); err != nil {
 		return InstructionsView{}, fmt.Errorf("%w: %s", ErrInvalid, err)
 	}
 	b := &batch{ownerID: identity.UserID}
@@ -123,6 +131,10 @@ func (s *Service) SetProjectInstructions(ctx context.Context, identity auth.Iden
 		current, err := tx.ProjectInstructionsOf(ctx, identity.UserID, id)
 		if err != nil {
 			return err
+		}
+		in.Agent = current.Agent
+		if agent != nil {
+			in.Agent = strings.TrimSpace(*agent)
 		}
 		var fields []string
 		if in.Agent != current.Agent {
