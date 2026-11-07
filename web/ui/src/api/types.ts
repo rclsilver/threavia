@@ -73,6 +73,7 @@ export interface EventPayloads {
   'run.resume_failed': { reason: string };
   'backend.status_changed': { backendInstanceId: string; operationalStatus: BackendInstance['operationalStatus']; providerAuthState: BackendInstance['providerAuthState'] };
   'backend.quotas_updated': { backendInstanceId: string };
+  'instructions.updated': { level: 'instance' | 'backend'; backendId?: string };
   'project.updated': { projectId: string; name: string };
   'project.created': { projectId: string; name: string; status: Project['status'] };
   'project.archived': { projectId: string; name: string; status: Project['status'] };

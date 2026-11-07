@@ -283,6 +283,11 @@ export class EventStream {
         void this.invalidate({ queryKey: ['control-accesses'] });
         void this.invalidate({ queryKey: ['audit'] });
         break;
+      // Another client saved the global or a backend's instructions: the
+      // editors and every preview read them.
+      case 'instructions.updated':
+        void this.invalidate({ queryKey: ['instructions'] });
+        break;
       case 'monitor.changed':
         void this.invalidate({ queryKey: ['monitors'] });
         break;

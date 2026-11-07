@@ -57,6 +57,17 @@ export class InstructionEditors implements vscode.Disposable {
     const closed = panel.onDidDispose(() => { disposed = true; this.panels.delete(key); received.dispose(); closed.dispose(); });
   }
 
+  /**
+   * Tells the editors showing `path` that it was saved elsewhere; the page
+   * reloads unless it holds unsaved changes. Every editor shows the global
+   * level, as its own or as inherited, so a global change reaches them all.
+   */
+  changed(coreId: string, path: string) {
+    for (const [key, panel] of this.panels) {
+      if (key === `${coreId}/${path}` || (path === '/api/v1/me/instructions' && key.startsWith(`${coreId}/`))) void panel.webview.postMessage({ type: 'changed' });
+    }
+  }
+
   closeCore(coreId: string) { for (const [key, panel] of this.panels) if (key.startsWith(`${coreId}/`)) panel.dispose(); }
   dispose() { for (const panel of this.panels.values()) panel.dispose(); this.panels.clear(); }
 }

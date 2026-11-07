@@ -6668,6 +6668,9 @@ export interface components {
              *     - `monitor.changed`: session-scoped watch state or output changed; refresh monitor lists. Payload contains the watch id and state, with observation fields when available. Output is untrusted data.
              *     - `mcp.changed`: owner-scoped MCP declaration, activation or restriction changed; refresh MCP views. No credentials are included.
              *     - `control_access.changed`: `{ accessId, action: "created" | "revoked" }`, owner-scoped; refresh MCP accesses and audit. No secret or hash is included.
+             *     - `instructions.updated`: `{ level: "instance" | "backend", backendId? }`, owner-scoped;
+             *       the global or a backend's instructions changed. Refresh the instructions
+             *       and previews. A Project's are announced as `project.updated`.
              *     - `user.message` may carry `actorId: "mcp:<accessId>"` for a remote controller, distinct from a human message and from a local delegation's `actorJobId`. The provider receives this provenance with the prompt.
              *     - `directory.changed`: `{ knownDirectoryId }`, owner-scoped; refresh
              *       directory lists and bindings after metadata or paths change.

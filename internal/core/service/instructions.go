@@ -68,6 +68,41 @@ func (s *Service) inheritedInstructions(ctx context.Context, identity auth.Ident
 	}, nil
 }
 
+// replaceInstructions writes the texts of the global or a backend level and,
+// when one of them changed, announces it as instructions.updated with the
+// level in the payload: an editor open in another client is otherwise left
+// showing, and saving back, the old texts. It returns the names of the fields
+// that changed, none for a PUT that repeats what is stored.
+func (s *Service) replaceInstructions(ctx context.Context, identity auth.Identity, in domain.Instructions, level map[string]any,
+	read func(*postgres.Store) (domain.Instructions, error), write func(*postgres.Store) error) ([]string, error) {
+	var fields []string
+	b := &batch{ownerID: identity.UserID}
+	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		current, err := read(tx)
+		if err != nil {
+			return err
+		}
+		if in.Agent != current.Agent {
+			fields = append(fields, "agent")
+		}
+		if in.Supervision != current.Supervision {
+			fields = append(fields, "supervision")
+		}
+		if len(fields) == 0 {
+			return nil
+		}
+		if err := write(tx); err != nil {
+			return err
+		}
+		return s.appendAll(ctx, tx, b, record{eventType: events.TypeInstructionsUpdated, payload: level})
+	})
+	if err != nil {
+		return nil, translate(err)
+	}
+	s.flush(b)
+	return fields, nil
+}
+
 // InstanceInstructions returns the caller's global instructions.
 func (s *Service) InstanceInstructions(ctx context.Context, identity auth.Identity) (InstructionsView, error) {
 	own, err := s.store.InstanceInstructions(ctx, identity.UserID)
@@ -76,13 +111,19 @@ func (s *Service) InstanceInstructions(ctx context.Context, identity auth.Identi
 
 // SetInstanceInstructions replaces the caller's global instructions. Like
 // every instructions change, it reaches the next Job: no running Job is told.
+// Clients are, so an editor open elsewhere can refresh.
 func (s *Service) SetInstanceInstructions(ctx context.Context, identity auth.Identity, in domain.Instructions) (InstructionsView, error) {
 	in = trimInstructions(in)
 	if err := in.Validate(); err != nil {
 		return InstructionsView{}, fmt.Errorf("%w: %s", ErrInvalid, err)
 	}
-	if err := s.store.SetInstanceInstructions(ctx, identity.UserID, in); err != nil {
-		return InstructionsView{}, translate(err)
+	_, err := s.replaceInstructions(ctx, identity, in, map[string]any{"level": "instance"},
+		func(tx *postgres.Store) (domain.Instructions, error) {
+			return tx.InstanceInstructions(ctx, identity.UserID)
+		},
+		func(tx *postgres.Store) error { return tx.SetInstanceInstructions(ctx, identity.UserID, in) })
+	if err != nil {
+		return InstructionsView{}, err
 	}
 	s.audit(ctx, identity, postgres.AuditEntry{Action: "instructions.instance_set", SubjectID: string(identity.UserID), Detail: mustJSON(in)})
 	return s.InstanceInstructions(ctx, identity)
@@ -167,14 +208,20 @@ func (s *Service) BackendInstructions(ctx context.Context, identity auth.Identit
 	return InstructionsView{Own: own, Inherited: inherited}, err
 }
 
-// SetBackendInstructions replaces both instruction texts of a backend.
+// SetBackendInstructions replaces both instruction texts of a backend, and
+// announces a change as SetInstanceInstructions does.
 func (s *Service) SetBackendInstructions(ctx context.Context, identity auth.Identity, id domain.BackendInstanceID, in domain.Instructions) (InstructionsView, error) {
 	in = trimInstructions(in)
 	if err := in.Validate(); err != nil {
 		return InstructionsView{}, fmt.Errorf("%w: %s", ErrInvalid, err)
 	}
-	if err := s.store.SetBackendInstructions(ctx, identity.UserID, id, in); err != nil {
-		return InstructionsView{}, translate(err)
+	_, err := s.replaceInstructions(ctx, identity, in, map[string]any{"level": "backend", "backendId": id},
+		func(tx *postgres.Store) (domain.Instructions, error) {
+			return tx.BackendInstructions(ctx, identity.UserID, id)
+		},
+		func(tx *postgres.Store) error { return tx.SetBackendInstructions(ctx, identity.UserID, id, in) })
+	if err != nil {
+		return InstructionsView{}, err
 	}
 	s.audit(ctx, identity, postgres.AuditEntry{Action: "instructions.backend_set", SubjectID: string(id), Detail: mustJSON(in)})
 	return s.BackendInstructions(ctx, identity, id)

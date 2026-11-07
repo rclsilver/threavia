@@ -32,6 +32,8 @@ export type Effect =
   | { kind: 'backends' }
   | { kind: 'directories' }
   | { kind: 'projects' }
+  /** The instructions read at `path`, a level's `/instructions` path, changed elsewhere. */
+  | { kind: 'instructions'; path: string }
   | { kind: 'mcp' };
 
 /** How old an ended Job can be and still be told: a replay is not news. */
@@ -74,8 +76,19 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
     case 'project.created':
     case 'project.archived':
     case 'project.restored':
-    case 'project.updated':
       return [{ kind: 'projects' }];
+    case 'instructions.updated': {
+      const payload = payloadOf(event, 'instructions.updated');
+      const path = payload?.level === 'backend' ? `/api/v1/backends/${payload.backendId ?? ''}/instructions` : '/api/v1/me/instructions';
+      return [{ kind: 'instructions', path }];
+    }
+    case 'project.updated': {
+      // A Project's instructions are its own fields, announced with the rest.
+      const payload = payloadOf(event, 'project.updated');
+      const instructions = payload?.changedFields?.some((field) => field === 'instructions' || field === 'supervisionInstructions');
+      if (!payload || !instructions) return [{ kind: 'projects' }];
+      return [{ kind: 'projects' }, { kind: 'instructions', path: `/api/v1/projects/${payload.projectId}/instructions` }];
+    }
     case 'project.deleted':
       return [{ kind: 'projects' }, { kind: 'sessions' }, { kind: 'attention' }];
     // Pending attention is current state, not a count of unread events, so it

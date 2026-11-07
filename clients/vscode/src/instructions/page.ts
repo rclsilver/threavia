@@ -36,7 +36,7 @@ ${inherited('agent')}
 <p class="hint">What counts as ordinary work and what to stop. Only the reviewer of a SUPERVISED session reads this.</p>
 <textarea id="supervision" rows="6" maxlength="4000"></textarea>
 ${inherited('supervision')}
-<p id="error" role="alert"></p><p id="status" role="status"></p>
+<p id="error" role="alert"></p><p id="status" role="status"></p><p id="notice" class="hint" role="status"></p>
 <footer><button id="save" type="submit">Save instructions</button><button id="reload" type="button">Reload / discard changes</button>${scope === 'project' ? '<button id="preview" type="button">Preview…</button>' : ''}</footer></form>
 ${scope === 'project' ? `<section id="preview-panel" hidden><h2 id="preview-title">Preview</h2>
 <p class="hint">The saved instructions, as a job started now would read them. The Threavia base prompt, this machine's LOCAL_INSTRUCTIONS and per-job notes are added when a job starts.</p>
@@ -65,7 +65,15 @@ field('reload').onclick = () => send('reload');
 if (field('preview')) field('preview').onclick = () => send('preview');
 window.addEventListener('message', (event) => {
   const data = event.data;
-  if (data?.type === 'saved') { view = data.view; pending = false; fill(); vscode.setState(null); field('status').textContent = data.reloaded ? 'Instructions reloaded.' : 'Instructions saved.'; }
+  if (data?.type === 'saved') { view = data.view; pending = false; fill(); vscode.setState(null); field('notice').textContent = ''; field('status').textContent = data.reloaded ? 'Instructions reloaded.' : 'Instructions saved.'; }
+  // Saved elsewhere. Unsaved changes here are kept, and saving them replaces
+  // what was saved there, so the page says so instead of reloading.
+  else if (data?.type === 'changed') {
+    if (pending) return;
+    const draft = texts();
+    if (draft.agent === view.own.agent && draft.supervision === view.own.supervision) send('reload');
+    else field('notice').textContent = 'These instructions changed elsewhere. Saving replaces that change; Reload / discard changes shows it.';
+  }
   else if (data?.type === 'preview') {
     pending = false; controls();
     // No preview means the backend choice was dismissed.

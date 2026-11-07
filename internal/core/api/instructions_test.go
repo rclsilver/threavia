@@ -213,3 +213,38 @@ func TestPolicySupervisionRejectedAboveSession(t *testing.T) {
 	session := c.startSession(projectID, c.backendID, dirID, "Inspect")
 	c.mustDo(http.MethodPut, "/api/v1/sessions/"+session+"/policy", policy, nil, http.StatusOK)
 }
+
+// TestInstanceAndBackendInstructionsAnnounceTheChange pins the event other
+// clients refresh an open editor from, and that a PUT that changes nothing is
+// not announced.
+func TestInstanceAndBackendInstructionsAnnounceTheChange(t *testing.T) {
+	c, _, _, _ := setup(t)
+	type scope struct {
+		Level     string `json:"level"`
+		BackendID string `json:"backendId,omitempty"`
+	}
+	announced := func() []scope {
+		var out []scope
+		for _, event := range lifecycleEvents(t, c, "instructions.updated") {
+			var payload scope
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, payload)
+		}
+		return out
+	}
+
+	global := instructions{Agent: "Answer in French."}
+	c.mustDo(http.MethodPut, "/api/v1/me/instructions", global, nil, http.StatusOK)
+	c.mustDo(http.MethodPut, "/api/v1/me/instructions", global, nil, http.StatusOK)
+	backend := instructions{Supervision: "Local builds are fine."}
+	c.mustDo(http.MethodPut, "/api/v1/backends/"+c.backendID+"/instructions", backend, nil, http.StatusOK)
+	// Whitespace is trimmed before the comparison, as before the write.
+	c.mustDo(http.MethodPut, "/api/v1/backends/"+c.backendID+"/instructions", instructions{Supervision: " Local builds are fine.\n"}, nil, http.StatusOK)
+
+	want := []scope{{Level: "instance"}, {Level: "backend", BackendID: c.backendID}}
+	if got := announced(); !slices.Equal(got, want) {
+		t.Fatalf("announced %+v, want %+v", got, want)
+	}
+}

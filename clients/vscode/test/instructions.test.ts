@@ -59,6 +59,19 @@ describe('layered instructions across Core and the editor', () => {
     expect(sent[1]).toEqual({ type: 'save', instructions: { agent: 'Use worktrees and rebase.', supervision: 'Stop before a push.' } });
   });
 
+  it('reloads after an edit made elsewhere, unless there are unsaved changes', () => {
+    const clean = open('backend');
+    clean.receive({ type: 'changed' });
+    expect(clean.sent).toEqual([{ type: 'reload' }]);
+
+    const dirty = open('backend');
+    dirty.field<HTMLTextAreaElement>('agent').value = 'Mine.';
+    dirty.receive({ type: 'changed' });
+    expect(dirty.sent).toEqual([]);
+    expect(dirty.field('notice').textContent).toContain('changed elsewhere');
+    expect(dirty.field<HTMLTextAreaElement>('agent').value).toBe('Mine.');
+  });
+
   it('bounds every text but the project agent text, which has never had a limit', () => {
     for (const scope of ['global', 'backend'] as const) {
       const { field } = open(scope);

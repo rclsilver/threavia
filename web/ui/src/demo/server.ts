@@ -447,6 +447,11 @@ function instructionsBody(body: Json, bounded: boolean, storedAgent?: string) {
   return { agent, supervision: body.supervision };
 }
 
+/** The texts a write changed, named as Core names them in its audit. */
+function changedInstructions(before: { agent: string; supervision: string }, after: { agent: string; supervision: string }) {
+  return (['agent', 'supervision'] as const).filter((field) => before[field] !== after[field]);
+}
+
 function projectInstructionsView(projectId: string) {
   const project = state.projects.find((entry) => entry.id === projectId);
   if (!project) throw notFound('This project');
@@ -552,15 +557,18 @@ const routes: [string, RegExp, Handler][] = [
   }],
   ['GET', /^\/api\/v1\/me\/instructions$/, () => ({ own: clone(state.instanceInstructions), inherited: { agent: '', supervision: '' } })],
   ['PUT', /^\/api\/v1\/me\/instructions$/, (_m, body) => {
+    const before = state.instanceInstructions;
     state.instanceInstructions = instructionsBody(body, true);
     record('instructions.instance_set', { detail: clone(state.instanceInstructions) });
+    if (changedInstructions(before, state.instanceInstructions).length) emitLifecycle('instructions.updated', undefined, { level: 'instance' });
     return { own: clone(state.instanceInstructions), inherited: { agent: '', supervision: '' } };
   }],
   ['GET', /^\/api\/v1\/backends\/([^/]+)\/instructions$/, (m) => backendInstructionsView(m[1])],
   ['PUT', /^\/api\/v1\/backends\/([^/]+)\/instructions$/, (m, body) => {
-    backendInstructionsView(m[1]);
+    const before = backendInstructionsView(m[1]).own;
     state.backendInstructions[m[1]] = instructionsBody(body, true);
     record('instructions.backend_set', { subjectId: m[1], detail: clone(state.backendInstructions[m[1]]) });
+    if (changedInstructions(before, state.backendInstructions[m[1]]).length) emitLifecycle('instructions.updated', undefined, { level: 'backend', backendId: m[1] });
     return backendInstructionsView(m[1]);
   }],
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/instructions$/, (m) => projectInstructionsView(m[1])],

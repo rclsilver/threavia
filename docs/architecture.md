@@ -451,7 +451,11 @@ used as the starting point of an override therefore never duplicates the levels
 above it. A delegate Session reads its own levels, not its manager's: a rule
 that should follow work everywhere belongs to the global level. A change at the
 global, project or backend level reaches the next Job. A Session policy change
-is still pushed to the running Job, with the supervision reassembled.
+is still pushed to the running Job, with the supervision reassembled. Every
+edit that changes a text is announced, so an editor open elsewhere can
+refresh: `instructions.updated` (`{level, backendId?}`) for the global level or
+a backend, `project.updated` for a project, whose agent text is a field of the
+Project.
 
 `GET/PUT /api/v1/me/instructions`, `/api/v1/projects/{projectId}/instructions`
 and `/api/v1/backends/{backendId}/instructions` read and replace both texts of

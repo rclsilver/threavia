@@ -124,6 +124,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     instructionEditors,
     cores.onDidRemove((coreId) => permissionEditors.closeCore(coreId)),
     cores.onDidRemove((coreId) => instructionEditors.closeCore(coreId)),
+    cores.on('effect', (core, effect) => { if (effect.kind === 'instructions') instructionEditors.changed(core.id, effect.path); }),
     cores.onDidRemove((coreId) => projectEditors.closeCore(coreId)),
     cores.on('event', (core, event) => {
       if (event.sessionId) {
