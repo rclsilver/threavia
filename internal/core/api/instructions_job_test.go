@@ -76,7 +76,7 @@ func TestSupervisionLayeredWithSession(t *testing.T) {
 
 	session := c.startSession(projectID, c.backendID, dirID, "Work")
 	first := receive(t, "the first job", backend.starts)
-	want := domain.LayeredPreamble + "\n\n[Global]\nS1\n\n[Backend test-backend]\nS2"
+	want := domain.LayeredSupervisionPreamble + "\n\n[Global]\nS1\n\n[Backend test-backend]\nS2"
 	if got := first.GetExecutionPolicy().GetSupervision(); got != want {
 		t.Fatalf("supervision = %q, want %q", got, want)
 	}

@@ -42,23 +42,30 @@ type Layer struct {
 	Text  string
 }
 
-// LayeredPreamble opens a text assembled from more than one level.
+// LayeredPreamble opens an agent text assembled from more than one level.
 //
 // Each level only adds to the ones above it, so a correction is written as a
 // further instruction. The reader has to be told which one wins, or it will
 // pick whichever it read last or found most emphatic. The last sentence covers
 // what the backend appends after Core's text, such as LOCAL_INSTRUCTIONS.
-const LayeredPreamble = "These instructions come from several levels, broadest first. " +
-	"When two of them conflict, the later (narrower) level wins. " +
+const LayeredPreamble = LayeredSupervisionPreamble + " " +
 	"Anything appended after them is narrower still."
 
-// Layered assembles the layers, given broadest first, into one text.
+// LayeredSupervisionPreamble opens a supervision assembled from more than one
+// level. It lacks the agent's last sentence: the backends prefix the
+// supervision to every user message, so what follows it is the message, which
+// must not be ranked above the standing instructions.
+const LayeredSupervisionPreamble = "These instructions come from several levels, broadest first. " +
+	"When two of them conflict, the later (narrower) level wins."
+
+// Layered assembles the layers, given broadest first, into one text opened by
+// preamble.
 //
 // Blank layers are dropped. A single remaining layer is returned as it is,
 // without a header or the preamble: nothing is stacked, and a header would be
 // noise in every installation that only ever writes one level. With two or
 // more, each gets a labelled section under the preamble.
-func Layered(layers []Layer) string {
+func Layered(preamble string, layers []Layer) string {
 	kept := make([]Layer, 0, len(layers))
 	for _, layer := range layers {
 		if text := strings.TrimSpace(layer.Text); text != "" {
@@ -72,7 +79,7 @@ func Layered(layers []Layer) string {
 		return kept[0].Text
 	}
 	sections := make([]string, 0, len(kept)+1)
-	sections = append(sections, LayeredPreamble)
+	sections = append(sections, preamble)
 	for _, layer := range kept {
 		sections = append(sections, "["+layer.Label+"]\n"+layer.Text)
 	}

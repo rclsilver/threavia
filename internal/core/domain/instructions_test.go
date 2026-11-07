@@ -10,10 +10,10 @@ import (
 func TestLayeredEmpty(t *testing.T) {
 	t.Parallel()
 
-	if got := Layered(nil); got != "" {
+	if got := Layered(LayeredPreamble, nil); got != "" {
 		t.Errorf("Layered(nil) = %q, want empty", got)
 	}
-	if got := Layered([]Layer{{"Global", "  "}}); got != "" {
+	if got := Layered(LayeredPreamble, []Layer{{"Global", "  "}}); got != "" {
 		t.Errorf("Layered(blank layer) = %q, want empty", got)
 	}
 }
@@ -23,7 +23,7 @@ func TestLayeredEmpty(t *testing.T) {
 func TestLayeredSingleIsVerbatim(t *testing.T) {
 	t.Parallel()
 
-	got := Layered([]Layer{{"Global", ""}, {"Project p", " Use worktrees. "}})
+	got := Layered(LayeredPreamble, []Layer{{"Global", ""}, {"Project p", " Use worktrees. "}})
 	if got != "Use worktrees." {
 		t.Errorf("Layered(single) = %q, want %q", got, "Use worktrees.")
 	}
@@ -32,7 +32,7 @@ func TestLayeredSingleIsVerbatim(t *testing.T) {
 func TestLayeredOrderAndPreamble(t *testing.T) {
 	t.Parallel()
 
-	got := Layered([]Layer{{"Global", "A"}, {"Project p", "B"}, {"Backend z", "C"}})
+	got := Layered(LayeredPreamble, []Layer{{"Global", "A"}, {"Project p", "B"}, {"Backend z", "C"}})
 	want := LayeredPreamble + "\n\n[Global]\nA\n\n[Project p]\nB\n\n[Backend z]\nC"
 	if got != want {
 		t.Errorf("Layered(three) =\n%s\nwant\n%s", got, want)

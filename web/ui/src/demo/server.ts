@@ -415,13 +415,19 @@ function defaultPolicyView(own: Json | null, outer: Json | null = null) {
 /**
  * The levels of instructions put together the way Core does for a Job: one
  * level alone as written, several under the precedence note and their labels.
+ * The agent's note also ranks what its backend appends; the reviewer's does
+ * not, since what follows its text is the user's message.
  */
-function layered(layers: [string, string][]) {
+const SUPERVISION_PREAMBLE =
+  'These instructions come from several levels, broadest first. When two of them conflict, the later (narrower) level wins.';
+const AGENT_PREAMBLE = `${SUPERVISION_PREAMBLE} Anything appended after them is narrower still.`;
+
+function layered(preamble: string, layers: [string, string][]) {
   const present = layers.filter(([, body]) => body.trim());
   if (present.length === 0) return '';
   if (present.length === 1) return present[0][1].trim();
   return [
-    'These instructions come from several levels, broadest first. When two of them conflict, the later (narrower) level wins. Anything appended after them is narrower still.',
+    preamble,
     ...present.map(([label, body]) => `[${label}]\n${body.trim()}`),
   ].join('\n\n');
 }
@@ -464,8 +470,8 @@ function instructionsPreview(projectId: string, query: URLSearchParams) {
   const projectLabel = `Project ${text(project.name)}`;
   const backendLabel = `Backend ${text(backend.name)}`;
   return {
-    agent: layered([['Global', global.agent], [projectLabel, text(project.instructions)], [backendLabel, own.agent]]),
-    supervision: layered([
+    agent: layered(AGENT_PREAMBLE, [['Global', global.agent], [projectLabel, text(project.instructions)], [backendLabel, own.agent]]),
+    supervision: layered(SUPERVISION_PREAMBLE, [
       ['Global', global.supervision],
       [projectLabel, state.projectSupervision[projectId] ?? ''],
       [backendLabel, own.supervision],

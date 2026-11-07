@@ -430,7 +430,11 @@ the correction as one more instruction, and the reader is told which one wins:
 once two or more levels have something to say, the assembled text opens with a
 preamble saying that they come from several levels, broadest first, and that
 the narrower wins a conflict, then gives each level a labelled section. Without
-it a model follows whichever line it read last or found most emphatic. A single
+it a model follows whichever line it read last or found most emphatic. The
+agent's preamble adds that anything appended after the levels is narrower
+still, which covers `LOCAL_INSTRUCTIONS`; the reviewer's does not, because what
+follows the supervision is the user's message, which must not outrank the
+standing instructions. A single
 level is sent as written, with no header and no preamble, so an installation
 that only ever writes one level sees no difference.
 
