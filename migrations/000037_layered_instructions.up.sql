@@ -33,8 +33,17 @@ ALTER TABLE backend_instances
 -- own and is kept.
 --
 -- Jobs go first: their inherited value includes the Session policy, and must
--- be read before the Session's own copy is taken out. A Job uses its own Run's
--- backend; a Session the backend of its latest Run, as Core did.
+-- be read before the Session's own copy is taken out. A Job is pinned to its
+-- Run, so its Run's backend is the one it inherited from.
+--
+-- A Session is not pinned: Core took the backend of its latest Run, and the
+-- next Run may use another. Its own text applied whatever the backend, while
+-- the backend's applies only on that backend, so a copy matched against the
+-- backend is removed only when every Run of the Session used that backend.
+-- One matched against the project or the instance reaches it either way.
+--
+-- btrim covers ASCII whitespace only. A copy that differs from its source by
+-- Unicode whitespace is kept, which duplicates the text rather than losing it.
 WITH copies AS (
     SELECT j.id AS job_id, sess.id AS session_id, p.id AS project_id, p.owner_id,
            j.execution_policy->>'supervision' AS supervision
@@ -65,11 +74,17 @@ WITH copies AS (
         SELECT backend_instance_id FROM runs WHERE session_id = s.id
         ORDER BY created_at DESC, id DESC LIMIT 1
     ) r ON true
+    LEFT JOIN LATERAL (
+        SELECT count(DISTINCT backend_instance_id) AS backends FROM runs WHERE session_id = s.id
+    ) used ON true
     LEFT JOIN backend_instances b ON b.id = r.backend_instance_id
     LEFT JOIN instance_execution_policies i ON i.owner_id = p.owner_id
     WHERE btrim(COALESCE(s.execution_policy->>'supervision', ''), E' \t\n\r\f\v') <> ''
       AND btrim(s.execution_policy->>'supervision', E' \t\n\r\f\v') =
           btrim(COALESCE(COALESCE(p.execution_policy, b.execution_policy, i.execution_policy)->>'supervision', ''), E' \t\n\r\f\v')
+      -- The match came from the project or the instance, or from a backend the
+      -- Session never left.
+      AND (p.execution_policy IS NOT NULL OR b.execution_policy IS NULL OR used.backends = 1)
 ), audited AS (
     INSERT INTO audit_entries (id, owner_id, actor_id, action, project_id, session_id, detail)
     SELECT gen_random_uuid(), owner_id, 'migration', 'instructions.migration_copy_removed',
@@ -79,7 +94,8 @@ WITH copies AS (
 UPDATE sessions SET execution_policy = sessions.execution_policy - 'supervision'
 FROM copies WHERE sessions.id = copies.session_id;
 
--- Move the supervision of the three broad levels to their new place.
+-- Move the supervision of the three broad levels to their new place. A blank
+-- text carries nothing and is dropped without an audit row.
 INSERT INTO instance_instructions (owner_id, supervision)
 SELECT owner_id, execution_policy->>'supervision'
 FROM instance_execution_policies

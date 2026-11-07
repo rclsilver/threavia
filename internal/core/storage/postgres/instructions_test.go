@@ -210,19 +210,52 @@ func TestMigrationMovesSupervision(t *testing.T) {
 
 // TestMigrationStripsInheritedCopies pins that a Session or Job policy holding
 // a copy of the supervision it inherited loses the copy, audited, so the text
-// does not reach the reviewer twice once levels add up; and that a text of its
-// own is kept.
+// does not reach the reviewer twice once levels add up; that a text of its own
+// is kept; and that a Session copy matched against a backend is kept unless
+// the Session never ran anywhere else.
 func TestMigrationStripsInheritedCopies(t *testing.T) {
 	store, db := pgtest.New(t)
 	ctx := context.Background()
 	f := newFixture(t, store, ctx)
-	other := domain.Session{
-		ID: domain.NewSessionID(), ProjectID: f.project.ID,
-		Title: "Another session", Status: domain.SessionActive,
+
+	// A second Project with no policy of its own, so its Sessions inherit from
+	// the backend or the instance, and a second backend.
+	bare := domain.Project{
+		ID: domain.NewProjectID(), OwnerID: f.owner, Name: "bare",
+		Status: domain.ProjectActive,
 	}
-	if err := store.CreateSession(ctx, &other); err != nil {
+	if err := store.CreateProject(ctx, &bare); err != nil {
 		t.Fatal(err)
 	}
+	desktop := domain.BackendInstance{
+		ID: domain.NewBackendInstanceID(), OwnerID: &f.owner, Name: "desktop",
+		OwnershipStatus: domain.BackendClaimed,
+		Capabilities:    []domain.Capability{domain.CapabilityCode},
+		Capacity:        domain.Capacity{MaxConcurrentRuns: 1},
+	}
+	if err := store.CreateBackendInstance(ctx, &desktop, "hash-"+domain.NewUUID(), nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	session := func(project domain.ProjectID, title string, backends ...domain.BackendInstanceID) domain.SessionID {
+		t.Helper()
+		s := domain.Session{ID: domain.NewSessionID(), ProjectID: project, Title: title, Status: domain.SessionActive}
+		if err := store.CreateSession(ctx, &s); err != nil {
+			t.Fatal(err)
+		}
+		for _, backend := range backends {
+			run := domain.Run{ID: domain.NewRunID(), SessionID: s.ID, BackendInstanceID: backend, ResumeStatus: domain.ResumeUnknown}
+			if err := store.CreateRun(ctx, &run); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return s.ID
+	}
+	other := session(f.project.ID, "Another session")
+	backendOnly := session(bare.ID, "Always on the laptop", f.backend.ID, f.backend.ID)
+	twoBackends := session(bare.ID, "Laptop and desktop", desktop.ID, f.backend.ID)
+	instanceCopy := session(bare.ID, "Never ran")
+	noRuns := session(bare.ID, "Never ran either")
+
 	migrationFile(t, db, instructionsDown)
 
 	policy := func(supervision string) *domain.ExecutionPolicy {
@@ -231,37 +264,62 @@ func TestMigrationStripsInheritedCopies(t *testing.T) {
 		p.Supervision = supervision
 		return &p
 	}
+	if err := store.SetInstanceExecutionPolicy(ctx, f.owner, policy("Global rule.")); err != nil {
+		t.Fatal(err)
+	}
+	// Both backends say the same, so twoBackends matches whichever Run Core
+	// takes as its latest.
+	for _, backend := range []domain.BackendInstanceID{f.backend.ID, desktop.ID} {
+		if err := store.SetBackendExecutionPolicy(ctx, f.owner, backend, policy("Backend rule.")); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := store.SetProjectExecutionPolicy(ctx, f.owner, f.project.ID, policy("Stop before deploys.")); err != nil {
 		t.Fatal(err)
 	}
-	// Session A holds what "Override" pre-filled, give or take whitespace.
-	if err := store.SetSessionExecutionPolicy(ctx, f.owner, f.session.ID, policy(" Stop before deploys.\n")); err != nil {
-		t.Fatal(err)
+	sessions := map[domain.SessionID]string{
+		// Session A holds what "Override" pre-filled, give or take whitespace.
+		f.session.ID: " Stop before deploys.\n",
+		// Session B says something of its own.
+		other: "Never touch prod.",
+		// Copies of the backend's text: removable only where the Session never
+		// left that backend.
+		backendOnly: "Backend rule.",
+		twoBackends: "Backend rule.",
+		// A Session without Runs inherited from the instance, never a backend.
+		instanceCopy: "Global rule.",
+		noRuns:       "Backend rule.",
 	}
-	// Its Job holds a copy of the Session's, which it inherited from the
-	// Session rather than the Project: the Job is judged before the Session
-	// loses its copy.
+	for id, text := range sessions {
+		if err := store.SetSessionExecutionPolicy(ctx, f.owner, id, policy(text)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The Job of Session A holds a copy of the Session's, which it inherited
+	// from the Session rather than the Project: the Job is judged before the
+	// Session loses its copy.
 	if err := store.SetJobExecutionPolicy(ctx, f.job.ID, policy("Stop before deploys.")); err != nil {
-		t.Fatal(err)
-	}
-	// Session B says something of its own.
-	if err := store.SetSessionExecutionPolicy(ctx, f.owner, other.ID, policy("Never touch prod.")); err != nil {
 		t.Fatal(err)
 	}
 
 	migrationFile(t, db, instructionsUp)
 
-	if hasSupervisionKey(t, db, `SELECT execution_policy ? 'supervision' FROM sessions WHERE id = $1`, f.session.ID) {
-		t.Error("session A kept its copy of the project supervision")
+	removed := map[domain.SessionID]bool{f.session.ID: true, backendOnly: true, instanceCopy: true}
+	for id, text := range sessions {
+		got, err := store.SessionPolicy(ctx, id)
+		if err != nil || got == nil || got.Mode != domain.ExecutionSupervised {
+			t.Errorf("session %q lost more than its copy: %+v, %v", text, got, err)
+			continue
+		}
+		switch {
+		case removed[id] && got.Supervision != "":
+			t.Errorf("session with %q kept its inherited copy", text)
+		case !removed[id] && got.Supervision != text:
+			t.Errorf("session with %q now has %q; its text must stay", text, got.Supervision)
+		}
 	}
 	if hasSupervisionKey(t, db, `SELECT execution_policy ? 'supervision' FROM jobs WHERE id = $1`, f.job.ID) {
 		t.Error("the job kept its copy of the session supervision")
-	}
-	if got, err := store.SessionPolicy(ctx, other.ID); err != nil || got == nil || got.Supervision != "Never touch prod." {
-		t.Errorf("session B = %+v, %v; its own text must stay", got, err)
-	}
-	if got, err := store.SessionPolicy(ctx, f.session.ID); err != nil || got == nil || got.Mode != domain.ExecutionSupervised {
-		t.Errorf("session A lost more than its copy: %+v, %v", got, err)
 	}
 	if got, err := store.ProjectInstructionsOf(ctx, f.owner, f.project.ID); err != nil || got.Supervision != "Stop before deploys." {
 		t.Errorf("project supervision = %+v, %v", got, err)
@@ -269,8 +327,7 @@ func TestMigrationStripsInheritedCopies(t *testing.T) {
 
 	rows, err := db.Pool().Query(ctx, `
 		SELECT owner_id, actor_id, project_id, session_id, COALESCE(job_id, ''), detail
-		FROM audit_entries WHERE action = 'instructions.migration_copy_removed'
-		ORDER BY job_id NULLS LAST`)
+		FROM audit_entries WHERE action = 'instructions.migration_copy_removed'`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +336,7 @@ func TestMigrationStripsInheritedCopies(t *testing.T) {
 		owner, actor, project, session, job string
 		detail                              map[string]string
 	}
-	var got []entry
+	got := map[string]entry{}
 	for rows.Next() {
 		var e entry
 		var raw []byte
@@ -289,19 +346,36 @@ func TestMigrationStripsInheritedCopies(t *testing.T) {
 		if err := json.Unmarshal(raw, &e.detail); err != nil {
 			t.Fatal(err)
 		}
-		got = append(got, e)
+		key := e.session
+		if e.job != "" {
+			key = e.job
+		}
+		if _, dup := got[key]; dup {
+			t.Errorf("two audit entries for %s", key)
+		}
+		got[key] = e
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 {
-		t.Fatalf("audit entries = %+v, want one for the job and one for session A", got)
+	want := map[string]entry{
+		string(f.job.ID):     {project: string(f.project.ID), session: string(f.session.ID), job: string(f.job.ID)},
+		string(f.session.ID): {project: string(f.project.ID), session: string(f.session.ID)},
+		string(backendOnly):  {project: string(bare.ID), session: string(backendOnly)},
+		string(instanceCopy): {project: string(bare.ID), session: string(instanceCopy)},
 	}
-	for i, wantJob := range []string{string(f.job.ID), ""} {
-		e := got[i]
-		if e.owner != string(f.owner) || e.actor != "migration" || e.project != string(f.project.ID) ||
-			e.session != string(f.session.ID) || e.job != wantJob || e.detail["supervision"] == "" {
-			t.Errorf("audit entry %d = %+v", i, e)
+	if len(got) != len(want) {
+		t.Errorf("audit entries = %+v, want one per removed copy (%d)", got, len(want))
+	}
+	for key, w := range want {
+		e, ok := got[key]
+		if !ok {
+			t.Errorf("no audit entry for %s", key)
+			continue
+		}
+		if e.owner != string(f.owner) || e.actor != "migration" || e.project != w.project ||
+			e.session != w.session || e.job != w.job || e.detail["supervision"] == "" {
+			t.Errorf("audit entry for %s = %+v", key, e)
 		}
 	}
 }

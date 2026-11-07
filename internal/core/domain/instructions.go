@@ -6,8 +6,9 @@ import (
 	"unicode/utf8"
 )
 
-// MaxInstructionsLength bounds each instructions text, in characters. It is the
-// limit the supervision statement of a policy has always had.
+// MaxInstructionsLength bounds each instructions text, in characters (runes).
+// It takes the figure of the supervision statement of a policy, which counts
+// bytes instead, so any text that passed that check also passes this one.
 const MaxInstructionsLength = 4000
 
 // Instructions are what one level — global, project or backend — tells the
