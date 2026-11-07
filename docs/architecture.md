@@ -422,8 +422,8 @@ backend's `LOCAL_INSTRUCTIONS` are still appended after everything Core sends.
 
 The agent and the reviewer get separate texts because they have different
 readers. The agent reads its system prompt; the reviewer reads only what the
-user said, so the backend repeats the supervision at the start of every Job as a
-user message.
+user said, so the backend prefixes the supervision to every user message it
+passes on.
 
 There is no "replace" mode. A level that wants to correct the one above writes
 the correction as one more instruction, and the reader is told which one wins:
@@ -448,7 +448,10 @@ its own.
 In a computed policy, `supervision` holds only the Session or Job's own text,
 never what it inherited. A policy copied to a delegate, stored by a monitor or
 used as the starting point of an override therefore never duplicates the levels
-above it. A delegate Session reads its own levels, not its manager's: a rule
+above it. `domain.Effective` gets this for free today because nothing gives a Job a
+policy of its own: the computed supervision is the Session's own text.
+Job-level overrides would need `Effective` to keep the Session and Job texts
+apart, as the layers do, rather than letting the narrower replace the other. A delegate Session reads its own levels, not its manager's: a rule
 that should follow work everywhere belongs to the global level. A change at the
 global, project or backend level reaches the next Job. A Session policy change
 is still pushed to the running Job, with the supervision reassembled. Every
