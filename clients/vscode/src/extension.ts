@@ -20,6 +20,7 @@ import { CurrentProject } from './knowledge/current';
 import { MemoryView } from './knowledge/memory';
 import { TasksView } from './knowledge/tasks';
 import { ProjectEditors } from './projects/editor';
+import { InstructionEditors } from './instructions/editor';
 import { PermissionEditors } from './permissions/editor';
 import { openInBrowser, runOpenSession, setSessionOpener } from './sessions';
 import { closeSessionViews, sessionRestored } from './session-views';
@@ -84,6 +85,7 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     if (created) currentProject.follow(core.id, project.id);
   });
   const permissionEditors = new PermissionEditors();
+  const instructionEditors = new InstructionEditors();
 
   /** A Session's title from what is already known, asking Core only as a last resort. */
   const sessionTitle = async (core: Core, sessionId: string): Promise<string> => {
@@ -119,7 +121,9 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     currentProject,
     projectEditors,
     permissionEditors,
+    instructionEditors,
     cores.onDidRemove((coreId) => permissionEditors.closeCore(coreId)),
+    cores.onDidRemove((coreId) => instructionEditors.closeCore(coreId)),
     cores.onDidRemove((coreId) => projectEditors.closeCore(coreId)),
     cores.on('event', (core, event) => {
       if (event.sessionId) {
@@ -385,6 +389,32 @@ export function activate(context: vscode.ExtensionContext): Threavia {
       }
       await permissionEditors.open(core, path, label);
     } catch (error) { failed(error, 'Permissions could not be opened'); }
+  });
+
+  command('threavia.manageInstructions', async (target?: unknown) => {
+    const core = await readyCore('Instructions', target);
+    if (!core?.ready) return;
+    try {
+      const node = target as { type?: string; project?: { id: string; name: string }; backend?: { id: string; name: string } } | undefined;
+      let path = '/api/v1/me/instructions';
+      let label = 'Global';
+      if (node?.type === 'project' && node.project) { path = `/api/v1/projects/${node.project.id}/instructions`; label = node.project.name; }
+      else if (node?.type === 'backend' && node.backend) { path = `/api/v1/backends/${node.backend.id}/instructions`; label = node.backend.name; }
+      else {
+        const scope = await vscode.window.showQuickPick(['Global', 'Backend', 'Project'], { title: 'Instructions', placeHolder: 'Which level do you want to manage?', ignoreFocusOut: true });
+        if (!scope) return;
+        if (scope === 'Backend') {
+          const backend = await pickBackend(core.client, 'Instructions');
+          if (!backend) return;
+          path = `/api/v1/backends/${backend.id}/instructions`; label = backend.name;
+        } else if (scope === 'Project') {
+          const project = await pickProject(core.client, core.projectSetting, 'Instructions', 'Which Project?', core.id);
+          if (!project) return;
+          path = `/api/v1/projects/${project.id}/instructions`; label = project.name;
+        }
+      }
+      await instructionEditors.open(core, path, label);
+    } catch (error) { failed(error, 'Instructions could not be opened'); }
   });
 
   command('threavia.newProject', async (target?: unknown) => {

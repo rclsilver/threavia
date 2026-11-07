@@ -19,7 +19,7 @@ export class PermissionEditors implements vscode.Disposable {
     if (!core.ready) throw new Error('Core is not connected. Sign in or refresh, then try again.');
     const panel = vscode.window.createWebviewPanel('threavia.permissions', `Permissions: ${label} — ${core.name}`, vscode.ViewColumn.Active, { enableScripts: true, localResourceRoots: [], retainContextWhenHidden: true });
     this.panels.set(key, panel);
-    panel.webview.html = permissionsPage(nonce(), label, view);
+    panel.webview.html = permissionsPage(nonce(), label, view, path.startsWith('/api/v1/sessions/'));
     let busy = false;
     let disposed = false;
     const received = panel.webview.onDidReceiveMessage((message: unknown) => {

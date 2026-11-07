@@ -14,6 +14,8 @@ import type {
   ExecutionPolicy,
   PolicyView,
   SessionPolicy,
+  Instructions,
+  InstructionsView,
   FileDiff,
   Job,
   KnownDirectory,
@@ -383,6 +385,21 @@ export class CoreClient {
   async setPolicy(path: string, policy: ExecutionPolicy | null): Promise<PolicyView> {
     await this.request<unknown>('PUT', path, policy ?? {});
     return this.policy(path);
+  }
+
+  /** A level's own instructions, `path` being its `/instructions` path, and what the levels above say. */
+  instructions(path: string) {
+    return this.get<InstructionsView>(path);
+  }
+
+  /** Replaces both texts of a level: an empty one clears it. */
+  setInstructions(path: string, instructions: Instructions) {
+    return this.request<InstructionsView>('PUT', path, instructions);
+  }
+
+  /** The instructions a Job of this Project would read on this backend. */
+  instructionsPreview(projectId: string, backendId: string) {
+    return this.get<Instructions>(`/api/v1/projects/${projectId}/instructions/preview?backendId=${encodeURIComponent(backendId)}`);
   }
 
   directories(projectId = '') {
