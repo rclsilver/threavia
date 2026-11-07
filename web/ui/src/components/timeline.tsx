@@ -118,6 +118,19 @@ function dayOf(timestamp: string): { key: string; label: string } {
   };
 }
 
+/** Today's date, which changes at midnight while the page stays open. */
+function useToday(): string {
+  const [today, setToday] = useState(() => new Date().toDateString());
+  useEffect(() => {
+    const midnight = new Date();
+    midnight.setHours(24, 0, 1, 0);
+    // A sleeping phone fires it late, on waking, which is when it is read.
+    const timer = setTimeout(() => setToday(new Date().toDateString()), midnight.getTime() - Date.now());
+    return () => clearTimeout(timer);
+  }, [today]);
+  return today;
+}
+
 /**
  * Folds the event stream into what a reader sees.
  *
@@ -392,7 +405,10 @@ export function Timeline({
   const parentRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [opened, setOpened] = useState<ReadonlySet<number>>(new Set());
-  const all = useMemo(() => rowsOf(events), [events]);
+  // Labels say Today and Yesterday, so they are named again past midnight,
+  // not only when the next event arrives.
+  const today = useToday();
+  const all = useMemo(() => rowsOf(events), [events, today]);
   const rows = useMemo(() => foldFinished(foldDismissed(all, opened), opened), [all, opened]);
 
   const virtualizer = useVirtualizer({
@@ -426,11 +442,26 @@ export function Timeline({
   // find it. It is the last message sent above the top of the view, so a
   // message added to a running Job takes over from the one that started it.
   const [prompt, setPrompt] = useState(-1);
+  // The day the top of the view belongs to, once its separator has scrolled
+  // out of sight: rows only give a time, and a Session left for a few days
+  // otherwise reads as if it were this morning.
+  const [day, setDay] = useState('');
   const findPrompt = useRef<() => void>(() => {});
   findPrompt.current = () => {
     const element = parentRef.current;
     const top = element?.scrollTop ?? 0;
     const first = element ? virtualizer.getVirtualItemForOffset(top) : undefined;
+    let separator = -1;
+    for (let index = first?.index ?? -1; index >= 0; index--) {
+      if (rows[index].kind === 'day') {
+        separator = index;
+        break;
+      }
+    }
+    const shown = separator >= 0 ? virtualizer.measurementsCache[separator] : undefined;
+    const current = rows[separator];
+    setDay(current?.kind === 'day' && shown && shown.end <= top + 4 ? current.label : '');
+
     let found = -1;
     for (let index = first?.index ?? -1; index >= 0; index--) {
       const row = rows[index];
@@ -682,10 +713,19 @@ export function Timeline({
         {rows.length === 0 && <p className="text-muted p-4 text-sm">Nothing yet.</p>}
         {/* No height of its own, so the rows below keep the offsets the
             virtualiser computed for them. */}
-        {promptRow?.kind === 'event' && (
+        {promptRow?.kind === 'event' ? (
           <div className="sticky top-0 z-10 h-0">
             <StickyPrompt key={promptRow.key} event={promptRow.event} onJump={toPrompt} />
           </div>
+        ) : (
+          day &&
+          !earlier?.loading && (
+            <div className="sticky top-0 z-10 h-0">
+              <p className="text-muted bg-surface border-border mx-auto mt-2 w-fit rounded-full border px-3 py-1 text-xs shadow-sm">
+                {day}
+              </p>
+            </div>
+          )
         )}
         {earlier?.loading && (
           <div className="sticky top-0 z-10 h-0">
@@ -874,7 +914,8 @@ function StickyPrompt({ event, onJump }: { event: Event; onJump: () => void }) {
           >
             <span className="text-muted flex items-center gap-1.5 text-xs">
               <span className="text-text font-medium">{user.monitorId ? 'Monitor' : user.actorId ? 'MCP controller' : user.actorJobId ? 'Agent' : user.scheduleId ? 'Schedule' : 'You'}</span>
-              {clock(event.timestamp)}
+              {/* Its day too: the separator saying it is out of sight. */}
+              {dayOf(event.timestamp).label} {clock(event.timestamp)}
             </span>
             <span
               className={cn(

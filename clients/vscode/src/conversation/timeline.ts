@@ -390,6 +390,24 @@ export function stickyPrompt(
   return found;
 }
 
+/**
+ * The day the top of the view belongs to, once its separator has scrolled out
+ * of sight; empty while it is on screen. Rows only give a time, and a Session
+ * left for a few days otherwise reads as if it were this morning.
+ */
+export function stickyDay(
+  rows: readonly { day?: string; top: number; bottom: number }[],
+  scrollTop: number,
+): string {
+  let first = rows.findIndex((row) => row.bottom > scrollTop);
+  if (first === -1) first = rows.length - 1;
+  for (let index = first; index >= 0; index--) {
+    const day = rows[index].day;
+    if (day !== undefined) return rows[index].bottom <= scrollTop + 4 ? day : '';
+  }
+  return '';
+}
+
 /** The field that says what a call actually did: a command, a path, a URL. */
 const TELLING = ['command', 'file_path', 'path', 'notebook_path', 'pattern', 'query', 'url', 'prompt'];
 

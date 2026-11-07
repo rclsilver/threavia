@@ -8,6 +8,7 @@ import {
   messageAuthor,
   rowsOf,
   stepsLabel,
+  stickyDay,
   stickyPrompt,
   type Row,
 } from '../src/conversation/timeline';
@@ -271,5 +272,26 @@ describe('describe', () => {
       text: 'Denied.',
     });
     expect(describeEvent(event('job.failed', { error: 'boom' })).text).toBe('Failed: boom');
+  });
+});
+
+describe('stickyDay', () => {
+  const geometry = [
+    { day: '4 November', top: 0, bottom: 40 },
+    { top: 40, bottom: 400 },
+    { day: 'Today', top: 400, bottom: 440 },
+    { top: 440, bottom: 900 },
+  ];
+
+  it('names the day of the top of the view once its separator is out of sight', () => {
+    expect(stickyDay(geometry, 0)).toBe('');
+    expect(stickyDay(geometry, 100)).toBe('4 November');
+    expect(stickyDay(geometry, 420)).toBe('');
+    expect(stickyDay(geometry, 600)).toBe('Today');
+    expect(stickyDay(geometry, 5000)).toBe('Today');
+  });
+
+  it('says nothing for rows before any separator', () => {
+    expect(stickyDay([{ top: 0, bottom: 100 }], 50)).toBe('');
   });
 });

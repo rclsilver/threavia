@@ -11,6 +11,7 @@ import type { DraftStart } from '../conversation/draft';
 import type { HostMessage, PersistedState, SessionView, WebviewMessage } from '../conversation/protocol';
 import { riskOf } from '../conversation/risk';
 import {
+  dayOf,
   describe,
   fileOfTool,
   foldDismissed,
@@ -20,6 +21,7 @@ import {
   QUIET_LABEL,
   rowsOf,
   stepsLabel,
+  stickyDay,
   stickyPrompt,
   summariseInput,
   toolName,
@@ -225,6 +227,18 @@ document.body.append(header, timelineFrame, bottom);
 
 const follower = new Follower(scroller, list, () => onMove());
 
+// Labels say Today and Yesterday, so they are named again past midnight, not
+// only when the next event arrives. A sleeping machine fires it on waking.
+(function renameDaysAtMidnight() {
+  const midnight = new Date();
+  midnight.setHours(24, 0, 1, 0);
+  setTimeout(() => {
+    renderTimeline();
+    updateSticky();
+    renameDaysAtMidnight();
+  }, midnight.getTime() - Date.now());
+})();
+
 // ---------------------------------------------------------------- messages
 
 window.addEventListener('message', (message: MessageEvent<HostMessage>) => {
@@ -274,6 +288,8 @@ window.addEventListener('message', (message: MessageEvent<HostMessage>) => {
       earlierNote.replaceChildren(
         ...(loadingEarlier ? [h('p', { class: 'pill' }, 'Loading earlier messages…')] : []),
       );
+      // The day gives way to that note, in the same place.
+      updateSticky();
       break;
     case 'paths':
       for (const [path, exists] of Object.entries(data.resolved)) resolved.set(path, exists);
@@ -963,7 +979,7 @@ document.addEventListener('keydown', (event) => {
 
 // ---------------------------------------------------------- sticky prompt
 
-let promptKey: number | undefined;
+let promptKey: string | undefined;
 
 /** After every move: the sticky prompt, the way back down, earlier history. */
 function onMove() {
@@ -981,24 +997,28 @@ function updateSticky() {
     const top = element?.offsetTop ?? 0;
     return {
       user: row.kind === 'event' && row.event.type === 'user.message',
+      day: row.kind === 'day' ? row.label : undefined,
       top,
       bottom: top + (element?.offsetHeight ?? 0),
     };
   });
   const index = stickyPrompt(geometry, scroller.scrollTop, scroller.clientHeight);
   const row = index >= 0 ? rows[index] : undefined;
-  const key = row?.key;
+  const day = stickyDay(geometry, scroller.scrollTop);
+  const key = row ? `p${row.key}:${dayOf(row.kind === 'event' ? row.event.timestamp : '').label}` : day && !loadingEarlier ? `d${day}` : '';
   if (key === promptKey) return;
   promptKey = key;
   if (!row || row.kind !== 'event') {
-    stickySlot.replaceChildren();
+    stickySlot.replaceChildren(...(key ? [h('p', { class: 'pill' }, day)] : []));
     return;
   }
   const user = payloadOf(row.event, 'user.message');
   if (!user) return;
   const text = h('span', { class: 'sticky-text' }, user.text);
+  // Its day too: the separator saying it is out of sight.
+  const when = `${dayOf(row.event.timestamp).label} ${clock(row.event.timestamp)}`;
   const toggle = button(
-    [h('span', { class: 'message-meta' }, h('strong', {}, messageAuthor(row.event)), clock(row.event.timestamp)), text],
+    [h('span', { class: 'message-meta' }, h('strong', {}, messageAuthor(row.event)), when), text],
     () => {
       const open = toggle.getAttribute('aria-expanded') !== 'true';
       toggle.setAttribute('aria-expanded', String(open));
