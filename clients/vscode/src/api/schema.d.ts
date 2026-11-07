@@ -3587,10 +3587,11 @@ export interface paths {
         /**
          * Set the caller's instance defaults
          * @description Account-scoped. Inheritance order is instance, backend, project, session,
-         *     job. The narrowest configured level sets mode, switches, supervision and
-         *     limits. Rules are merged; DENY cannot be lifted below. An empty object
-         *     restores built-in defaults. Changes are sent to running jobs; a provider
-         *     may only apply its native permissions on its next process start.
+         *     job. The narrowest configured level sets mode, switches and limits.
+         *     Rules are merged; DENY cannot be lifted below. An empty object restores
+         *     built-in defaults. Changes are sent to running jobs; a provider may only
+         *     apply its native permissions on its next process start. Supervision is
+         *     refused here: it is set with `/api/v1/me/instructions`.
          *
          */
         put: {
@@ -3660,7 +3661,7 @@ export interface paths {
         };
         /**
          * Override the instance defaults on a backend
-         * @description An empty object returns to instance inheritance. Does not change the project's own settings.
+         * @description An empty object returns to instance inheritance. Does not change the project's own settings. Supervision is refused here; it is set with the backend's `/instructions`.
          */
         put: {
             parameters: {
@@ -3787,6 +3788,9 @@ export interface paths {
          *     DENY is not: it is carried into every Session and answered first, so no
          *     Session can lift it.
          *
+         *     Supervision is refused here: it is set with the Project's
+         *     `/instructions`.
+         *
          */
         put: {
             parameters: {
@@ -3825,6 +3829,227 @@ export interface paths {
                     };
                 };
                 400: components["responses"]["Error"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/instructions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's global agent and supervisor instructions */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The global instructions. Nothing is inherited above them. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InstructionsView"];
+                    };
+                };
+            };
+        };
+        /**
+         * Set the caller's global agent and supervisor instructions
+         * @description Account-scoped, like the instance policy. Every level adds to the ones
+         *     above it, broadest first: global, project, backend, then the session and
+         *     job supervision. When two conflict, the narrower wins. Both texts are
+         *     replaced; a blank text removes the level. Changes reach the next Job:
+         *     running Jobs are not told.
+         *
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["Instructions"];
+                };
+            };
+            responses: {
+                /** @description The global instructions now stored */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InstructionsView"];
+                    };
+                };
+                400: components["responses"]["Error"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/backends/{backendId}/instructions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                backendId: components["schemas"]["UUID"];
+            };
+            cookie?: never;
+        };
+        /** Backend agent and supervisor instructions, and the global ones above them */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    backendId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The instructions */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InstructionsView"];
+                    };
+                };
+                404: components["responses"]["Error"];
+            };
+        };
+        /**
+         * Set the agent and supervisor instructions of a backend
+         * @description They apply to every Job this backend runs, after the global and project
+         *     ones. Changes reach the next Job.
+         *
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    backendId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["Instructions"];
+                };
+            };
+            responses: {
+                /** @description The instructions now stored */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InstructionsView"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/instructions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Project agent and supervisor instructions, and the global ones above them
+         * @description The agent text is the Project's `instructions` field.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The instructions */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InstructionsView"];
+                    };
+                };
+                404: components["responses"]["Error"];
+            };
+        };
+        /**
+         * Set the agent and supervisor instructions of a Project
+         * @description The agent text is the Project's `instructions` field, which the project
+         *     form edits too. It may predate the length limit: sent back unchanged,
+         *     it is accepted whatever its length. Changes reach the next Job.
+         *
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["Instructions"];
+                };
+            };
+            responses: {
+                /** @description The instructions now stored */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InstructionsView"];
+                    };
+                };
+                400: components["responses"]["Error"];
+                404: components["responses"]["Error"];
             };
         };
         post?: never;
@@ -6784,6 +7009,12 @@ export interface components {
              *
              *     A statement, never a guarantee: a rule is what holds whatever the
              *     conversation looks like.
+             *
+             *     Session and Job policies only. The instance, backend and project
+             *     levels write theirs with their instructions (`/instructions`), where
+             *     each level adds to the ones above it instead of replacing them; a
+             *     policy carrying a non-blank supervision at those levels is refused
+             *     with 400. On a session read, it is the Session's own statement.
              *      */
             supervision?: string;
             /** @description Stops a Run that has been going too long. Zero means no limit. */
@@ -6823,6 +7054,25 @@ export interface components {
             match?: string;
             /** @description Why. Kept for the audit and shown beside the rule, because a rule nobody can explain is a rule nobody dares remove. */
             note?: string;
+        };
+        /** @description What one level tells the agent and its reviewer. The agent reads its
+         *     text in its system prompt; the reviewer of SUPERVISED reads only what
+         *     the user said, so the supervision text reaches it that way. Blank texts
+         *     are skipped. Each new or changed text holds at most 4000 characters.
+         *      */
+        Instructions: {
+            /** @description How to work, added to the agent's system prompt. */
+            agent: string;
+            /** @description What counts as ordinary work and what to stop, told to the reviewer of SUPERVISED. */
+            supervision: string;
+        };
+        /** @description A level's own instructions and what the levels above it already say. */
+        InstructionsView: {
+            own: components["schemas"]["Instructions"];
+            /** @description The global instructions as a Job reads them, for a project or a
+             *     backend. Empty at the global level.
+             *      */
+            inherited: components["schemas"]["Instructions"];
         };
         /** @description A level's own settings, effective permissions and fallback. */
         PolicyView: {

@@ -134,7 +134,8 @@ func TestCodexRealCoreFeatureParity(t *testing.T) {
 	if err != nil || !strings.Contains(string(report), "resumed-codex-confirmed") {
 		t.Fatal("resumed job did not edit the report", err)
 	}
-	projectPolicy["mode"], projectPolicy["supervision"] = "SUPERVISED", "The user authorizes ordinary edits and commands only in this integration-test working directory. Never access production or push git."
+	c.mustDo(http.MethodPut, "/api/v1/projects/"+project+"/instructions", map[string]any{"agent": "", "supervision": "The user authorizes ordinary edits and commands only in this integration-test working directory. Never access production or push git."}, nil, http.StatusOK)
+	projectPolicy["mode"] = "SUPERVISED"
 	projectPolicy["rules"] = []map[string]any{}
 	c.mustDo(http.MethodPut, "/api/v1/projects/"+project+"/policy", projectPolicy, nil, http.StatusOK)
 	c.mustDo(http.MethodPost, "/api/v1/sessions/"+session+"/messages", map[string]any{"message": "Write supervised.txt containing automatic-review-confirmed. You are authorized to create this one test file. Finish without asking a question."}, nil, http.StatusCreated)

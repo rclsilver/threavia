@@ -1,0 +1,166 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/rclsilver/threavia/internal/core/auth"
+	"github.com/rclsilver/threavia/internal/core/domain"
+	"github.com/rclsilver/threavia/internal/core/storage/postgres"
+)
+
+// InstructionsView is what an editor of one level needs: what this level
+// says, and what the levels above it already say, assembled as a Job would
+// read them.
+//
+// Inherited is only the global level today: a project and a backend never sit
+// above each other, since which backend runs a Session is known per Job, not
+// per Project.
+type InstructionsView struct {
+	Own       domain.Instructions `json:"own"`
+	Inherited domain.Instructions `json:"inherited"`
+}
+
+// errSupervisionAboveSession refuses a default policy carrying supervision.
+// Supervision is written with the instructions now, where each level adds to
+// the others; a policy replaces the one above it wholesale, which is how a
+// project that only changed the mode lost the global supervision. An old
+// client that still sends it has to hear where it went rather than see it
+// silently dropped.
+var errSupervisionAboveSession = fmt.Errorf("%w: supervision is set with the instructions now: use /instructions", ErrInvalid)
+
+// checkDefaultPolicy validates a policy set at the instance, backend or
+// project level, where only the session and job levels may carry supervision.
+// A blank statement is what an old client sends when nothing was written, so
+// it is cleared rather than refused.
+func checkDefaultPolicy(policy *domain.ExecutionPolicy) error {
+	if policy == nil {
+		return nil
+	}
+	if strings.TrimSpace(policy.Supervision) != "" {
+		return errSupervisionAboveSession
+	}
+	policy.Supervision = ""
+	if err := policy.Validate(); err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	return nil
+}
+
+// trimInstructions drops the surrounding whitespace of both texts, as the
+// project form always did for the project agent text.
+func trimInstructions(in domain.Instructions) domain.Instructions {
+	return domain.Instructions{Agent: strings.TrimSpace(in.Agent), Supervision: strings.TrimSpace(in.Supervision)}
+}
+
+// validateChanged checks the length of the texts that differ from what is
+// stored. projects.instructions predates the limit and may be longer: an
+// editor that sends it back unchanged alongside a new supervision is not
+// writing it, and must not be refused for it.
+func validateChanged(current, next domain.Instructions) error {
+	checked := next
+	if next.Agent == current.Agent {
+		checked.Agent = ""
+	}
+	if next.Supervision == current.Supervision {
+		checked.Supervision = ""
+	}
+	if err := checked.Validate(); err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	return nil
+}
+
+// inheritedInstructions renders the global level as a project or backend
+// editor shows it above its own fields.
+func (s *Service) inheritedInstructions(ctx context.Context, identity auth.Identity) (domain.Instructions, error) {
+	global, err := s.store.InstanceInstructions(ctx, identity.UserID)
+	if err != nil {
+		return domain.Instructions{}, translate(err)
+	}
+	return domain.Instructions{
+		Agent:       domain.Layered([]domain.Layer{{Label: "Global", Text: global.Agent}}),
+		Supervision: domain.Layered([]domain.Layer{{Label: "Global", Text: global.Supervision}}),
+	}, nil
+}
+
+// InstanceInstructions returns the caller's global instructions.
+func (s *Service) InstanceInstructions(ctx context.Context, identity auth.Identity) (InstructionsView, error) {
+	own, err := s.store.InstanceInstructions(ctx, identity.UserID)
+	return InstructionsView{Own: own}, translate(err)
+}
+
+// SetInstanceInstructions replaces the caller's global instructions. Like
+// every instructions change, it reaches the next Job: no running Job is told.
+func (s *Service) SetInstanceInstructions(ctx context.Context, identity auth.Identity, in domain.Instructions) (InstructionsView, error) {
+	in = trimInstructions(in)
+	if err := in.Validate(); err != nil {
+		return InstructionsView{}, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	if err := s.store.SetInstanceInstructions(ctx, identity.UserID, in); err != nil {
+		return InstructionsView{}, translate(err)
+	}
+	s.audit(ctx, identity, postgres.AuditEntry{Action: "instructions.instance_set", SubjectID: string(identity.UserID), Detail: mustJSON(in)})
+	return s.InstanceInstructions(ctx, identity)
+}
+
+// ProjectInstructions returns the instructions of a Project and the global
+// ones above them.
+func (s *Service) ProjectInstructions(ctx context.Context, identity auth.Identity, id domain.ProjectID) (InstructionsView, error) {
+	own, err := s.store.ProjectInstructionsOf(ctx, identity.UserID, id)
+	if err != nil {
+		return InstructionsView{}, translate(err)
+	}
+	inherited, err := s.inheritedInstructions(ctx, identity)
+	return InstructionsView{Own: own, Inherited: inherited}, err
+}
+
+// SetProjectInstructions replaces both instruction texts of a Project. The
+// agent text is the one the project form edits too; the row is locked so the
+// comparison against the stored text holds until the write.
+func (s *Service) SetProjectInstructions(ctx context.Context, identity auth.Identity, id domain.ProjectID, in domain.Instructions) (InstructionsView, error) {
+	in = trimInstructions(in)
+	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
+		if _, err := tx.LockProject(ctx, identity.UserID, id); err != nil {
+			return err
+		}
+		current, err := tx.ProjectInstructionsOf(ctx, identity.UserID, id)
+		if err != nil {
+			return err
+		}
+		if err := validateChanged(current, in); err != nil {
+			return err
+		}
+		return tx.SetProjectInstructions(ctx, identity.UserID, id, in)
+	})
+	if err != nil {
+		return InstructionsView{}, translate(err)
+	}
+	s.audit(ctx, identity, postgres.AuditEntry{Action: "instructions.project_set", ProjectID: string(id), SubjectID: string(id), Detail: mustJSON(in)})
+	return s.ProjectInstructions(ctx, identity, id)
+}
+
+// BackendInstructions returns the instructions of a backend and the global
+// ones above them.
+func (s *Service) BackendInstructions(ctx context.Context, identity auth.Identity, id domain.BackendInstanceID) (InstructionsView, error) {
+	own, err := s.store.BackendInstructions(ctx, identity.UserID, id)
+	if err != nil {
+		return InstructionsView{}, translate(err)
+	}
+	inherited, err := s.inheritedInstructions(ctx, identity)
+	return InstructionsView{Own: own, Inherited: inherited}, err
+}
+
+// SetBackendInstructions replaces both instruction texts of a backend.
+func (s *Service) SetBackendInstructions(ctx context.Context, identity auth.Identity, id domain.BackendInstanceID, in domain.Instructions) (InstructionsView, error) {
+	in = trimInstructions(in)
+	if err := in.Validate(); err != nil {
+		return InstructionsView{}, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	if err := s.store.SetBackendInstructions(ctx, identity.UserID, id, in); err != nil {
+		return InstructionsView{}, translate(err)
+	}
+	s.audit(ctx, identity, postgres.AuditEntry{Action: "instructions.backend_set", SubjectID: string(id), Detail: mustJSON(in)})
+	return s.BackendInstructions(ctx, identity, id)
+}

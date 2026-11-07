@@ -21,10 +21,8 @@ func (s *Service) SetProjectExecutionPolicy(ctx context.Context, identity auth.I
 	if _, err := s.store.GetProject(ctx, identity.UserID, projectID); err != nil {
 		return domain.ExecutionPolicy{}, translate(err)
 	}
-	if policy != nil {
-		if err := policy.Validate(); err != nil {
-			return domain.ExecutionPolicy{}, fmt.Errorf("%w: %s", ErrInvalid, err)
-		}
+	if err := checkDefaultPolicy(policy); err != nil {
+		return domain.ExecutionPolicy{}, err
 	}
 	if err := s.store.SetProjectExecutionPolicy(ctx, identity.UserID, projectID, policy); err != nil {
 		return domain.ExecutionPolicy{}, translate(err)

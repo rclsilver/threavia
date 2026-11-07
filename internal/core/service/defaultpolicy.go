@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
@@ -52,10 +51,8 @@ func (s *Service) ProjectPolicyOrigin(ctx context.Context, identity auth.Identit
 }
 
 func (s *Service) SetInstanceExecutionPolicy(ctx context.Context, identity auth.Identity, policy *domain.ExecutionPolicy) (PolicyView, error) {
-	if policy != nil {
-		if err := policy.Validate(); err != nil {
-			return PolicyView{}, fmt.Errorf("%w: %s", ErrInvalid, err)
-		}
+	if err := checkDefaultPolicy(policy); err != nil {
+		return PolicyView{}, err
 	}
 	if err := s.store.SetInstanceExecutionPolicy(ctx, identity.UserID, policy); err != nil {
 		return PolicyView{}, translate(err)
@@ -70,10 +67,8 @@ func (s *Service) SetInstanceExecutionPolicy(ctx context.Context, identity auth.
 }
 
 func (s *Service) SetBackendExecutionPolicy(ctx context.Context, identity auth.Identity, id domain.BackendInstanceID, policy *domain.ExecutionPolicy) (PolicyView, error) {
-	if policy != nil {
-		if err := policy.Validate(); err != nil {
-			return PolicyView{}, fmt.Errorf("%w: %s", ErrInvalid, err)
-		}
+	if err := checkDefaultPolicy(policy); err != nil {
+		return PolicyView{}, err
 	}
 	if err := s.store.SetBackendExecutionPolicy(ctx, identity.UserID, id, policy); err != nil {
 		return PolicyView{}, translate(err)
