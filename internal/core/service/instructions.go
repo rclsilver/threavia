@@ -7,6 +7,7 @@ import (
 
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
+	"github.com/rclsilver/threavia/internal/core/events"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
 )
 
@@ -54,24 +55,6 @@ func trimInstructions(in domain.Instructions) domain.Instructions {
 	return domain.Instructions{Agent: strings.TrimSpace(in.Agent), Supervision: strings.TrimSpace(in.Supervision)}
 }
 
-// validateChanged checks the length of the texts that differ from what is
-// stored. projects.instructions predates the limit and may be longer: an
-// editor that sends it back unchanged alongside a new supervision is not
-// writing it, and must not be refused for it.
-func validateChanged(current, next domain.Instructions) error {
-	checked := next
-	if next.Agent == current.Agent {
-		checked.Agent = ""
-	}
-	if next.Supervision == current.Supervision {
-		checked.Supervision = ""
-	}
-	if err := checked.Validate(); err != nil {
-		return fmt.Errorf("%w: %s", ErrInvalid, err)
-	}
-	return nil
-}
-
 // inheritedInstructions renders the global level as a project or backend
 // editor shows it above its own fields.
 func (s *Service) inheritedInstructions(ctx context.Context, identity auth.Identity) (domain.Instructions, error) {
@@ -116,27 +99,52 @@ func (s *Service) ProjectInstructions(ctx context.Context, identity auth.Identit
 	return InstructionsView{Own: own, Inherited: inherited}, err
 }
 
-// SetProjectInstructions replaces both instruction texts of a Project. The
-// agent text is the one the project form edits too; the row is locked so the
-// comparison against the stored text holds until the write.
+// SetProjectInstructions replaces both instruction texts of a Project.
+//
+// The agent text is projects.instructions, the one the project form edits too,
+// so a change to it is announced as project.updated like a change made there:
+// clients refresh their copy of the Project from that event, and a form left
+// open on the old text would otherwise PATCH it back. The supervision is
+// announced the same way so an open instructions editor hears of it.
+//
+// The agent text has no length limit, as through the project form: it predates
+// the limit and may already be longer. Only the supervision is bounded.
 func (s *Service) SetProjectInstructions(ctx context.Context, identity auth.Identity, id domain.ProjectID, in domain.Instructions) (InstructionsView, error) {
 	in = trimInstructions(in)
+	if err := (domain.Instructions{Supervision: in.Supervision}).Validate(); err != nil {
+		return InstructionsView{}, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	b := &batch{ownerID: identity.UserID}
 	err := s.store.WithTx(ctx, func(tx *postgres.Store) error {
-		if _, err := tx.LockProject(ctx, identity.UserID, id); err != nil {
+		project, err := tx.LockProject(ctx, identity.UserID, id)
+		if err != nil {
 			return err
 		}
 		current, err := tx.ProjectInstructionsOf(ctx, identity.UserID, id)
 		if err != nil {
 			return err
 		}
-		if err := validateChanged(current, in); err != nil {
+		var fields []string
+		if in.Agent != current.Agent {
+			fields = append(fields, "instructions")
+		}
+		if in.Supervision != current.Supervision {
+			fields = append(fields, "supervisionInstructions")
+		}
+		if len(fields) == 0 {
+			return nil
+		}
+		if err := tx.SetProjectInstructions(ctx, identity.UserID, id, in); err != nil {
 			return err
 		}
-		return tx.SetProjectInstructions(ctx, identity.UserID, id, in)
+		payload := projectAuditPayload(project)
+		payload.ChangedFields = fields
+		return s.recordAuditedChange(ctx, tx, b, identity, events.TypeProjectUpdated, domain.Scope{ProjectID: id}, string(id), payload)
 	})
 	if err != nil {
 		return InstructionsView{}, translate(err)
 	}
+	s.flush(b)
 	s.audit(ctx, identity, postgres.AuditEntry{Action: "instructions.project_set", ProjectID: string(id), SubjectID: string(id), Detail: mustJSON(in)})
 	return s.ProjectInstructions(ctx, identity, id)
 }

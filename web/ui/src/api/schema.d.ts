@@ -3884,7 +3884,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["Instructions"];
+                    "application/json": components["schemas"]["BoundedInstructions"];
                 };
             };
             responses: {
@@ -3957,7 +3957,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["Instructions"];
+                    "application/json": components["schemas"]["BoundedInstructions"];
                 };
             };
             responses: {
@@ -4020,8 +4020,9 @@ export interface paths {
         /**
          * Set the agent and supervisor instructions of a Project
          * @description The agent text is the Project's `instructions` field, which the project
-         *     form edits too. It may predate the length limit: sent back unchanged,
-         *     it is accepted whatever its length. Changes reach the next Job.
+         *     form edits too, and like there it has no length limit; the supervision
+         *     is bounded as at every level. Changes reach the next Job, and the
+         *     Project is announced as `project.updated`.
          *
          */
         put: {
@@ -7058,9 +7059,20 @@ export interface components {
         /** @description What one level tells the agent and its reviewer. The agent reads its
          *     text in its system prompt; the reviewer of SUPERVISED reads only what
          *     the user said, so the supervision text reaches it that way. Blank texts
-         *     are skipped. Each new or changed text holds at most 4000 characters.
+         *     are skipped. Both texts are required on a write, since both are
+         *     replaced; send an empty text to clear one. The project agent text, the
+         *     Project's `instructions` field, has no length limit.
          *      */
         Instructions: {
+            /** @description How to work, added to the agent's system prompt. */
+            agent: string;
+            /** @description What counts as ordinary work and what to stop, told to the reviewer of SUPERVISED. */
+            supervision: string;
+        };
+        /** @description Instructions written at the global or backend level, where the agent
+         *     text is bounded like the supervision.
+         *      */
+        BoundedInstructions: {
             /** @description How to work, added to the agent's system prompt. */
             agent: string;
             /** @description What counts as ordinary work and what to stop, told to the reviewer of SUPERVISED. */
