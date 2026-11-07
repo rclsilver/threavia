@@ -21,10 +21,8 @@ func (s *Service) SetProjectExecutionPolicy(ctx context.Context, identity auth.I
 	if _, err := s.store.GetProject(ctx, identity.UserID, projectID); err != nil {
 		return domain.ExecutionPolicy{}, translate(err)
 	}
-	if policy != nil {
-		if err := policy.Validate(); err != nil {
-			return domain.ExecutionPolicy{}, fmt.Errorf("%w: %s", ErrInvalid, err)
-		}
+	if err := checkDefaultPolicy(policy); err != nil {
+		return domain.ExecutionPolicy{}, err
 	}
 	if err := s.store.SetProjectExecutionPolicy(ctx, identity.UserID, projectID, policy); err != nil {
 		return domain.ExecutionPolicy{}, translate(err)
@@ -123,6 +121,10 @@ func (s *Service) SetSessionExecutionPolicy(ctx context.Context, identity auth.I
 // A Job with its own override keeps it: the Session default does not apply to
 // it. A backend that is offline gets nothing, and the Job carries on with the
 // policy it started with; that is the one case left to the next Job.
+//
+// A push re-reads every level of the instructions, so a running Job may pick
+// up instruction edits made since it started. That is accepted: an edit of the
+// instructions on its own pushes nothing and waits for the next Job.
 func (s *Service) pushPolicy(ctx context.Context, session domain.Session) {
 	runs, err := s.store.ListRuns(ctx, session.ID)
 	if err != nil {
@@ -149,6 +151,16 @@ func (s *Service) pushPolicy(ctx context.Context, session domain.Session) {
 				slog.String("jobId", string(job.ID)), slog.String("error", err.Error()))
 			continue
 		}
+		// The policy sent replaces the one the Job started with, supervision
+		// included, so it carries the assembled text as dispatch does: the
+		// Session level alone would drop every level above it.
+		instructions, err := s.jobInstructions(ctx, job.ID)
+		if err != nil {
+			s.logger.Error("cannot read the instructions of a running job",
+				slog.String("jobId", string(job.ID)), slog.String("error", err.Error()))
+			continue
+		}
+		effective.Supervision = instructions.Supervision
 		scope := domain.Scope{ProjectID: session.ProjectID, SessionID: session.ID, RunID: run.ID, JobID: job.ID}
 		s.sendToBackend(ctx, scope, &backendv1.CoreToBackend{
 			Message: &backendv1.CoreToBackend_UpdateJobPolicy{

@@ -46,6 +46,10 @@ const state = {
   instancePolicy: clone(data.instancePolicy) as Json | null,
   backendPolicies: {} as Record<string, Json | null>,
   sessionPolicies: {} as Record<string, Json | null>,
+  // The project agent text is the project's own `instructions` field.
+  instanceInstructions: { agent: '', supervision: '' },
+  backendInstructions: {} as Record<string, { agent: string; supervision: string }>,
+  projectSupervision: {} as Record<string, string>,
   pushSubscriptions: clone(data.pushConfig.subscriptions) as Json[],
   files: {} as Record<string, Blob>,
 };
@@ -408,6 +412,89 @@ function defaultPolicyView(own: Json | null, outer: Json | null = null) {
   return { effective: { ...(own ?? parent), rules: merged }, parent, inherited: !own, ...(own ? { own } : {}) };
 }
 
+/**
+ * The levels of instructions put together the way Core does for a Job: one
+ * level alone as written, several under the precedence note and their labels.
+ * The agent's note also ranks what its backend appends; the reviewer's does
+ * not, since what follows its text is the user's message. A stacked agent text
+ * ends with a newline, which keeps a backend's notes out of its last section.
+ */
+const SUPERVISION_PREAMBLE =
+  'These instructions come from several levels, broadest first. When two of them conflict, the later (narrower) level wins.';
+const AGENT_PREAMBLE = `${SUPERVISION_PREAMBLE} Anything appended after them is narrower still.`;
+
+function layered(preamble: string, layers: [string, string][], end = '') {
+  const present = layers.filter(([, body]) => body.trim());
+  if (present.length === 0) return '';
+  if (present.length === 1) return present[0][1].trim();
+  return [
+    preamble,
+    ...present.map(([label, body]) => `[${label}]\n${body.trim()}`),
+  ].join('\n\n') + end;
+}
+
+/**
+ * The texts of a write, required and bounded as Core has them. A project may
+ * leave out its agent text, given here as `storedAgent`, which is then kept.
+ */
+function instructionsBody(body: Json, bounded: boolean, storedAgent?: string) {
+  const agent = body.agent === undefined && storedAgent !== undefined ? storedAgent : body.agent;
+  if (typeof agent !== 'string' || typeof body.supervision !== 'string') {
+    throw new ApiError(400, 'invalid', 'Send both the agent and the supervision text; an empty text clears one.');
+  }
+  if ((bounded && agent.length > 4000) || body.supervision.length > 4000) {
+    throw new ApiError(400, 'invalid', 'Each text holds at most 4000 characters.');
+  }
+  return { agent, supervision: body.supervision };
+}
+
+/** The texts a write changed, named as Core names them in its audit. */
+function changedInstructions(before: { agent: string; supervision: string }, after: { agent: string; supervision: string }) {
+  return (['agent', 'supervision'] as const).filter((field) => before[field] !== after[field]);
+}
+
+/** The audit detail of a global or backend write: what changed, and its new text. */
+function instructionsAudit(changedFields: ('agent' | 'supervision')[], after: { agent: string; supervision: string }) {
+  return { changedFields, ...Object.fromEntries(changedFields.map((field) => [field, after[field]])) };
+}
+
+function projectInstructionsView(projectId: string) {
+  const project = state.projects.find((entry) => entry.id === projectId);
+  if (!project) throw notFound('This project');
+  return {
+    own: { agent: text(project.instructions), supervision: state.projectSupervision[projectId] ?? '' },
+    inherited: clone(state.instanceInstructions),
+  };
+}
+
+function backendInstructionsView(backendId: string) {
+  if (!state.backends.some((backend) => backend.id === backendId)) throw notFound('This backend');
+  return { own: state.backendInstructions[backendId] ?? { agent: '', supervision: '' }, inherited: clone(state.instanceInstructions) };
+}
+
+function instructionsPreview(projectId: string, query: URLSearchParams) {
+  const project = state.projects.find((entry) => entry.id === projectId);
+  if (!project) throw notFound('This project');
+  const backend = state.backends.find((entry) => entry.id === query.get('backendId'));
+  if (!backend) throw new ApiError(400, 'invalid', 'Choose the backend the Job would run on.');
+  const sessionId = query.get('sessionId');
+  const session = sessionId ? sessionOf(sessionId) : undefined;
+  if (session && session.projectId !== projectId) throw notFound('This session');
+  const global = state.instanceInstructions;
+  const own = state.backendInstructions[String(backend.id)] ?? { agent: '', supervision: '' };
+  const projectLabel = `Project ${text(project.name)}`;
+  const backendLabel = `Backend ${text(backend.name)}`;
+  return {
+    agent: layered(AGENT_PREAMBLE, [['Global', global.agent], [projectLabel, text(project.instructions)], [backendLabel, own.agent]], '\n'),
+    supervision: layered(SUPERVISION_PREAMBLE, [
+      ['Global', global.supervision],
+      [projectLabel, state.projectSupervision[projectId] ?? ''],
+      [backendLabel, own.supervision],
+      ['Session', text(sessionId ? state.sessionPolicies[sessionId]?.supervision : '')],
+    ]),
+  };
+}
+
 function ready(projectId: string) {
   const byId = new Map(state.tasks.map((task) => [task.id, task]));
   return state.tasks.filter(
@@ -474,6 +561,49 @@ const routes: [string, RegExp, Handler][] = [
     record('execution_policy.backend_set', { subjectId: m[1], detail: body });
     return defaultPolicyView(state.backendPolicies[m[1]], state.instancePolicy);
   }],
+  ['GET', /^\/api\/v1\/me\/instructions$/, () => ({ own: clone(state.instanceInstructions), inherited: { agent: '', supervision: '' } })],
+  ['PUT', /^\/api\/v1\/me\/instructions$/, (_m, body) => {
+    const before = state.instanceInstructions;
+    state.instanceInstructions = instructionsBody(body, true);
+    const changedFields = changedInstructions(before, state.instanceInstructions);
+    if (changedFields.length) {
+      record('instructions.instance_set', { detail: instructionsAudit(changedFields, state.instanceInstructions) });
+      emitLifecycle('instructions.updated', undefined, { level: 'instance' });
+    }
+    return { own: clone(state.instanceInstructions), inherited: { agent: '', supervision: '' } };
+  }],
+  ['GET', /^\/api\/v1\/backends\/([^/]+)\/instructions$/, (m) => backendInstructionsView(m[1])],
+  ['PUT', /^\/api\/v1\/backends\/([^/]+)\/instructions$/, (m, body) => {
+    const before = backendInstructionsView(m[1]).own;
+    state.backendInstructions[m[1]] = instructionsBody(body, true);
+    const changedFields = changedInstructions(before, state.backendInstructions[m[1]]);
+    if (changedFields.length) {
+      record('instructions.backend_set', { subjectId: m[1], detail: instructionsAudit(changedFields, state.backendInstructions[m[1]]) });
+      emitLifecycle('instructions.updated', undefined, { level: 'backend', backendId: m[1] });
+    }
+    return backendInstructionsView(m[1]);
+  }],
+  ['GET', /^\/api\/v1\/projects\/([^/]+)\/instructions$/, (m) => projectInstructionsView(m[1])],
+  ['PUT', /^\/api\/v1\/projects\/([^/]+)\/instructions$/, (m, body) => {
+    const before = projectInstructionsView(m[1]).own;
+    const next = instructionsBody(body, false, before.agent);
+    const project = state.projects.find((entry) => entry.id === m[1]) as Json;
+    const changedFields = [
+      ...(next.agent !== before.agent ? ['instructions'] : []),
+      ...(next.supervision !== before.supervision ? ['supervisionInstructions'] : []),
+    ];
+    project.instructions = next.agent;
+    state.projectSupervision[m[1]] = next.supervision;
+    if (changedFields.length) {
+      project.updatedAt = nowIso();
+      // One row, as for any other edit of the Project, with only the bounded text.
+      const supervision = changedFields.includes('supervisionInstructions') ? { supervisionInstructions: next.supervision } : {};
+      record('project.updated', { projectId: m[1], subjectId: m[1], detail: { ...projectDetail(project), changedFields, ...supervision } });
+      emitLifecycle('project.updated', m[1], { ...projectDetail(project), changedFields });
+    }
+    return projectInstructionsView(m[1]);
+  }],
+  ['GET', /^\/api\/v1\/projects\/([^/]+)\/instructions\/preview$/, (m, _b, query) => instructionsPreview(m[1], query)],
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/policy\/origin$/, (m) => defaultPolicyView(state.projectPolicies[m[1]] ?? null, state.instancePolicy)],
   ['GET', /^\/api\/v1\/me$/, () => data.me],
   ['POST', /^\/api\/v1\/me\/presence$/, () => undefined],

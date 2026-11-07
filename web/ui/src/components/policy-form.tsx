@@ -94,12 +94,19 @@ export function PolicyForm({
   onChange,
   idPrefix,
   disabled,
+  showSupervision = false,
 }: {
   value: ExecutionPolicy;
   onChange: (next: ExecutionPolicy) => void;
   idPrefix: string;
   /** Showing what applies, rather than editing what this level sets. */
   disabled?: boolean;
+  /**
+   * The reviewer's statement, which a policy carries at the Session level
+   * only. Above it, each level writes it with its instructions, where levels
+   * add up instead of replacing one another.
+   */
+  showSupervision?: boolean;
 }) {
   const set = (patch: Partial<ExecutionPolicy>) => onChange({ ...value, ...patch });
 
@@ -152,7 +159,7 @@ export function PolicyForm({
         {/* Only under a reviewer, because only there does anyone read it. The
             other modes answer from the rules below, and a box nobody reads is
             a box that invites writing a policy that does nothing. */}
-        {value.mode === 'SUPERVISED' && (
+        {showSupervision && value.mode === 'SUPERVISED' && (
           <div className="space-y-1.5 pt-2">
             <label htmlFor={`${idPrefix}-supervision`} className="text-sm font-medium">
               What the reviewer should know
@@ -166,9 +173,10 @@ export function PolicyForm({
               placeholder="This cluster is shared and runs in production. Never deploy or migrate without asking. Reading anything is fine."
             />
             <p className="text-muted text-xs">
-              Said to the reviewer before every message, in your words. It is not the project
-              instructions, which speak to the agent and which the reviewer never reads. A statement,
-              not a guarantee: write a refusal below for what has to hold regardless.
+              Said to the reviewer before every message, in your words, after the global, project
+              and backend supervisor instructions; when they conflict, this wins. The agent never
+              reads it. A statement, not a guarantee: write a refusal below for what has to hold
+              regardless.
             </p>
           </div>
         )}

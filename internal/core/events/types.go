@@ -82,6 +82,10 @@ const (
 	TypeDirectoryChanged      Type = "directory.changed"
 	TypeBackendDefaultChanged Type = "backend.default_changed"
 	TypeControlAccessChanged  Type = "control_access.changed"
+	// TypeInstructionsUpdated says that the global or a backend's instructions
+	// changed. A project's are announced as project.updated, since its agent
+	// text is a field of the Project.
+	TypeInstructionsUpdated Type = "instructions.updated"
 
 	// TypeScheduleSkipped says, in the Session, that a scheduled message was
 	// not sent and why.
@@ -96,6 +100,7 @@ const (
 var persistentTypes = map[Type]bool{
 	TypeMonitorChanged:          true,
 	TypeControlAccessChanged:    true,
+	TypeInstructionsUpdated:     true,
 	TypeReviewChanged:           true,
 	TypeProjectCreated:          true,
 	TypeProjectArchived:         true,

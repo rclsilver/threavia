@@ -1,13 +1,14 @@
 import { MCPPane } from '@/components/mcp-pane';
 import { ControlAccessPane } from '@/components/control-access-pane';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, ChevronRight, Copy, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, BookText, ChevronRight, Copy, KeyRound, Monitor, Moon, Server, ShieldCheck, Sun, Trash2, type LucideIcon } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
 import { useBackends, useClaimBackend, useIssueBackendToken, useMe, useProjects, useRevokeBackend, useSetDefaultBackend } from '@/api/queries';
 import type { BackendInstance } from '@/api/types';
 import { NotificationsPane } from '@/components/notifications-pane';
 import { DefaultPolicyPane } from '@/components/default-policy';
+import { InstructionsPanel } from '@/components/instructions-panel';
 import { DirectoriesPane } from '@/components/directories-pane';
 import { BackendIcon, BackendQuotas } from '@/components/backend-info';
 import { ConfirmLine, NewButton, RecordList, RecordRow } from '@/components/record-list';
@@ -103,13 +104,33 @@ export function SettingsView() {
             {current.tab === 'appearance' && <AppearancePane />}
             {current.tab === 'notifications' && <NotificationsPane />}
             {current.tab === 'backends' && <BackendsPane />}
-            {current.tab === 'permissions' && <DefaultPolicyPane />}
+            {current.tab === 'permissions' && <InstancePermissions />}
             {current.tab === 'directories' && <DirectorySettings />}
             {current.tab === 'memory' && <CoreMemorySettings />}
             {current.tab === 'audit' && <AuditTimeline />}
           </section>}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The broadest level, both halves: what the agent and its reviewer are told,
+ * then what the agent may do. Each has its own save, as they are different
+ * things that happen to be set at the same level.
+ */
+function InstancePermissions() {
+  return (
+    <div className="space-y-10">
+      <section aria-labelledby="instance-instructions-title" className="space-y-3">
+        <h2 id="instance-instructions-title" className="text-base font-semibold">Instructions</h2>
+        <InstructionsPanel scope={{ kind: 'instance' }} />
+      </section>
+      <section aria-labelledby="instance-policy-title" className="space-y-3">
+        <h2 id="instance-policy-title" className="text-base font-semibold">Permissions</h2>
+        <DefaultPolicyPane />
+      </section>
     </div>
   );
 }
@@ -259,6 +280,7 @@ function BackendRow({ backend }: { backend: BackendInstance }) {
   const revoke = useRevokeBackend();
   const [asking, setAsking] = useState(false);
   const [permissions, setPermissions] = useState(false);
+  const [instructions, setInstructions] = useState(false);
   const revoked = backend.ownershipStatus === 'REVOKED';
 
   return (
@@ -289,7 +311,10 @@ function BackendRow({ backend }: { backend: BackendInstance }) {
         </>
       }
       menuLabel={`More for ${backend.name}`}
-      action={!revoked && <Button size="sm" onClick={() => setPermissions(!permissions)} aria-expanded={permissions}><ShieldCheck /><span>Permissions</span></Button>}
+      action={!revoked && <>
+        <Button size="sm" onClick={() => setInstructions(!instructions)} aria-expanded={instructions}><BookText /><span>Instructions</span></Button>
+        <Button size="sm" onClick={() => setPermissions(!permissions)} aria-expanded={permissions}><ShieldCheck /><span>Permissions</span></Button>
+      </>}
       menu={
         !revoked && (
           <><MenuItem className="min-h-11 sm:min-h-0" disabled={setDefault.isPending} onSelect={() => setDefault.mutate(backend.isDefault ? null : backend.id)}>{backend.isDefault ? 'Clear default' : 'Use as default'}</MenuItem><MenuItem className="text-danger" onSelect={() => setAsking(true)}>
@@ -302,6 +327,7 @@ function BackendRow({ backend }: { backend: BackendInstance }) {
         <div className="space-y-3">
           <ActionError error={setDefault.error} outcome="Default backend not saved" recovery="Try again." />
           <BackendQuotas snapshot={backend.quotas} />
+          {instructions && <InstructionsPanel scope={{ kind: 'backend', backendId: backend.id }} />}
           {permissions && <DefaultPolicyPane backendId={backend.id} />}
           {(asking || revoke.error) && <>
             <ConfirmLine

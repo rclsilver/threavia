@@ -25,7 +25,6 @@ func TestInstanceBackendProjectPolicyInheritance(t *testing.T) {
 	}
 	backendPolicy := guarded()
 	backendPolicy["mode"] = "SUPERVISED"
-	backendPolicy["supervision"] = "Reading is allowed"
 	c.mustDo("PUT", "/api/v1/backends/"+c.backendID+"/policy", backendPolicy, nil, 200)
 	update := receive(t, "running job policy update", backend.policies)
 	if update.GetExecutionPolicy().GetMode() != backendv1.ExecutionMode_EXECUTION_MODE_SUPERVISED {
@@ -71,11 +70,11 @@ func TestPolicyUsesTheJobsBackendAndNarrowerOverrides(t *testing.T) {
 	c.mustDo("PUT", "/api/v1/me/policy", guarded(), nil, 200)
 	session := c.startSession(projectID, c.backendID, dirID, "Inspect")
 	start := receive(t, "first job", backend.starts)
-	c.mustDo("PUT", "/api/v1/backends/"+c.backendID+"/policy", map[string]any{"mode": "SUPERVISED", "supervision": "Read freely"}, nil, 200)
+	c.mustDo("PUT", "/api/v1/backends/"+c.backendID+"/policy", map[string]any{"mode": "SUPERVISED"}, nil, 200)
 	ctx := context.Background()
 	jobID := domain.JobID(start.GetJobId())
 	effective, err := c.store.EffectivePolicy(ctx, jobID)
-	if err != nil || effective.Mode != domain.ExecutionSupervised || effective.Supervision != "Read freely" {
+	if err != nil || effective.Mode != domain.ExecutionSupervised {
 		t.Fatalf("job backend policy: %+v, %v", effective, err)
 	}
 	c.mustDo("PUT", "/api/v1/sessions/"+session+"/policy", guarded(), nil, 200)

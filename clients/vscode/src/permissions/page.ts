@@ -3,8 +3,12 @@ import type { PolicyView } from '../api/types';
 const escape = (value: string) => value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 const json = (value: unknown) => JSON.stringify(value).replace(/</g, '\\u003c');
 
-/** Edit only this level's own policy; inherited rules remain separate. */
-export function permissionsPage(nonce: string, label: string, view: PolicyView): string {
+/**
+ * Edit only this level's own policy; inherited rules remain separate. Only a
+ * session's policy holds what the reviewer should know: above it, that text is
+ * set with the instructions, and Core refuses it in a policy.
+ */
+export function permissionsPage(nonce: string, label: string, view: PolicyView, session = false): string {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${escape(nonce)}'; script-src 'nonce-${escape(nonce)}';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Permissions</title>
@@ -31,7 +35,7 @@ ${[['allowFilesystemWrite', 'Write files'], ['allowGitCommit', 'Commit'], ['allo
 <p id="error" role="alert"></p><p id="status" role="status"></p>
 <footer><button id="save" type="submit">Save permissions</button><button id="reset" type="button">Follow parent defaults</button><button id="reload" type="button">Reload / discard changes</button></footer></form>
 <script nonce="${escape(nonce)}">
-const vscode = acquireVsCodeApi(); let view = ${json(view)}; let editing = !view.inherited; let pending = false;
+const vscode = acquireVsCodeApi(); let view = ${json(view)}; let editing = !view.inherited; let pending = false; const session = ${json(session)};
 const field = (id) => document.getElementById(id);
 const switches = ['allowFilesystemWrite','allowGitCommit','allowGitPush','allowNetwork'];
 const options = (values, chosen) => values.map(([value, label]) => { const option = document.createElement('option'); option.value = value; option.textContent = label; option.selected = value === chosen; return option; });
@@ -46,12 +50,13 @@ function addRule(rule = {effect:'ASK', capability:'SHELL', match:'', note:''}) {
 }
 function policy() {
   const result = { mode:field('mode').value, supervision:field('supervision').value, maxDurationSeconds:Number(field('maxDurationSeconds').value), maxActions:Number(field('maxActions').value), rules:[...field('rules').children].map(row => { const [effect, capability, match, note] = row.querySelectorAll('select,input'); return {effect:effect.value, capability:capability.value, match:match.value, note:note.value}; }) };
+  if (!session) delete result.supervision;
   for (const key of switches) result[key] = field(key).checked; return result;
 }
 function persist() { vscode.setState({draft:policy(), editing, dirty:true}); field('status').textContent = ''; }
 function controls() {
   field('fields').disabled = !editing || pending; field('save').disabled = !editing || pending; field('reset').disabled = view.inherited || pending; field('reload').disabled = pending;
-  field('override').hidden = editing; field('override').disabled = pending; field('supervision-label').hidden = field('mode').value !== 'SUPERVISED';
+  field('override').hidden = editing; field('override').disabled = pending; field('supervision-label').hidden = !session || field('mode').value !== 'SUPERVISED';
 }
 function fill(draft = view.own ?? {...view.effective, rules:[]}) {
   field('mode').value = draft.mode; for (const key of switches) field(key).checked = draft[key];

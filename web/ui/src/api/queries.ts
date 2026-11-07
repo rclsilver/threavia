@@ -13,6 +13,9 @@ import type {
   Decision,
   Event,
   ExecutionPolicy,
+  Instructions,
+  InstructionsView,
+  ProjectInstructionsUpdate,
   PolicyView,
   PushConfig,
   FileDiff,
@@ -75,6 +78,8 @@ export function useUpdateProject(projectId: string) {
     onSuccess: (project) => {
       queries.setQueryData(keys.project(projectId), project);
       void queries.invalidateQueries({ queryKey: ['projects'] });
+      // The agent text is also the Project level of the layered instructions.
+      void queries.invalidateQueries({ queryKey: ['instructions'] });
     },
   });
 }
@@ -755,6 +760,8 @@ export function useSetPolicy(sessionId: string) {
     onSuccess: () => {
       void queries.invalidateQueries({ queryKey: keys.policy(sessionId) });
       void queries.invalidateQueries({ queryKey: keys.audit() });
+      // Its supervision is the Session layer of what the reviewer reads.
+      void queries.invalidateQueries({ queryKey: ['instructions', 'preview'] });
     },
   });
 }
@@ -809,6 +816,67 @@ export function useSetDefaultPolicy(backendId?: string) {
         void queries.invalidateQueries({ queryKey: [key] });
       }
     },
+  });
+}
+
+// -------------------------------------------------------------- instructions
+
+/** A level that holds its own agent and supervisor instructions. */
+export type InstructionsScope =
+  | { kind: 'instance' }
+  | { kind: 'project'; projectId: string }
+  | { kind: 'backend'; backendId: string };
+
+function instructionsPath(scope: InstructionsScope) {
+  if (scope.kind === 'project') return `/api/v1/projects/${scope.projectId}/instructions`;
+  if (scope.kind === 'backend') return `/api/v1/backends/${scope.backendId}/instructions`;
+  return '/api/v1/me/instructions';
+}
+
+function instructionsKey(scope: InstructionsScope) {
+  const id = scope.kind === 'project' ? scope.projectId : scope.kind === 'backend' ? scope.backendId : 'me';
+  return ['instructions', scope.kind, id] as const;
+}
+
+export function useInstructions(scope: InstructionsScope) {
+  return useQuery({
+    queryKey: instructionsKey(scope),
+    queryFn: () => api.get<InstructionsView>(instructionsPath(scope)),
+  });
+}
+
+/**
+ * The texts of a level. The global and backend levels take the pair, so a
+ * caller that edits one sends the other as it stands; a project may leave out
+ * its agent text, which Core then keeps.
+ */
+export function useSetInstructions(scope: InstructionsScope) {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (instructions: Instructions | ProjectInstructionsUpdate) => api.put<InstructionsView>(instructionsPath(scope), instructions),
+    onSuccess: (view) => {
+      queries.setQueryData(instructionsKey(scope), view);
+      // The levels below read this one as inherited, the preview reads them
+      // all, and the project agent text is the Project's own field.
+      for (const key of ['instructions', 'project', 'audit']) {
+        void queries.invalidateQueries({ queryKey: [key] });
+      }
+    },
+  });
+}
+
+/**
+ * What a Job of this Project on that backend would read, assembled by Core
+ * exactly as for the Job. Under 'instructions', so saving any level refreshes it.
+ */
+export function useInstructionsPreview(projectId: string, backendId: string | undefined, sessionId?: string) {
+  return useQuery({
+    queryKey: ['instructions', 'preview', projectId, backendId ?? '', sessionId ?? ''],
+    queryFn: () => {
+      const query = new URLSearchParams({ backendId: backendId ?? '', ...(sessionId && { sessionId }) });
+      return api.get<Instructions>(`/api/v1/projects/${projectId}/instructions/preview?${query}`);
+    },
+    enabled: Boolean(projectId && backendId),
   });
 }
 

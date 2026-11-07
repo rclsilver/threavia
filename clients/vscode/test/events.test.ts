@@ -38,6 +38,17 @@ describe('what an event changes', () => {
     expect(kinds(effectsOf(event('project.updated'), at))).toEqual(['projects']);
     expect(kinds(effectsOf(event('project.deleted', { sessionId: undefined }), at))).toEqual(['projects', 'sessions', 'attention']);
   });
+
+  it('names the instructions editor an edit made elsewhere makes stale', () => {
+    const none = { sessionId: undefined };
+    expect(effectsOf(event('instructions.updated', { ...none, payload: { level: 'instance' } }), at)).toEqual([{ kind: 'instructions', path: '/api/v1/me/instructions' }]);
+    expect(effectsOf(event('instructions.updated', { ...none, payload: { level: 'backend', backendId: 'b1' } }), at)).toEqual([{ kind: 'instructions', path: '/api/v1/backends/b1/instructions' }]);
+    expect(effectsOf(event('project.updated', { ...none, payload: { projectId: 'p1', name: 'P', changedFields: ['supervisionInstructions'] } }), at)).toEqual([
+      { kind: 'projects' }, { kind: 'instructions', path: '/api/v1/projects/p1/instructions' },
+    ]);
+    expect(effectsOf(event('project.updated', { ...none, payload: { projectId: 'p1', name: 'P', changedFields: ['name'] } }), at)).toEqual([{ kind: 'projects' }]);
+  });
+
   it('re-reads what waits when a request arrives', () => {
     expect(kinds(effectsOf(event('validation.requested'), at))).toEqual(['attention', 'sessions', 'snapshot']);
   });

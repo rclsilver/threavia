@@ -1773,10 +1773,11 @@ paths:
       summary: Set the caller's instance defaults
       description: |
         Account-scoped. Inheritance order is instance, backend, project, session,
-        job. The narrowest configured level sets mode, switches, supervision and
-        limits. Rules are merged; DENY cannot be lifted below. An empty object
-        restores built-in defaults. Changes are sent to running jobs; a provider
-        may only apply its native permissions on its next process start.
+        job. The narrowest configured level sets mode, switches and limits.
+        Rules are merged; DENY cannot be lifted below. An empty object restores
+        built-in defaults. Changes are sent to running jobs; a provider may only
+        apply its native permissions on its next process start. Supervision is
+        refused here: it is set with `/api/v1/me/instructions`.
       requestBody:
         required: true
         content:
@@ -1811,7 +1812,7 @@ paths:
     put:
       tags: [backends]
       summary: Override the instance defaults on a backend
-      description: An empty object returns to instance inheritance. Does not change the project's own settings.
+      description: An empty object returns to instance inheritance. Does not change the project's own settings. Supervision is refused here; it is set with the backend's `/instructions`.
       requestBody:
         required: true
         content:
@@ -1871,6 +1872,9 @@ paths:
         The switches are defaults a Session may loosen. A rule here with effect
         DENY is not: it is carried into every Session and answered first, so no
         Session can lift it.
+
+        Supervision is refused here: it is set with the Project's
+        `/instructions`.
       parameters:
         - $ref: "#/components/parameters/Channel"
       requestBody:
@@ -1885,6 +1889,152 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ExecutionPolicy" }
         "400":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/me/instructions:
+    get:
+      tags: [sessions]
+      summary: The caller's global agent and supervisor instructions
+      responses:
+        "200":
+          description: The global instructions. Nothing is inherited above them.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstructionsView" }
+    put:
+      tags: [sessions]
+      summary: Set the caller's global agent and supervisor instructions
+      description: |
+        Account-scoped, like the instance policy. Every level adds to the ones
+        above it, broadest first: global, project, backend, then the session and
+        job supervision. When two conflict, the narrower wins. Both texts are
+        replaced; a blank text removes the level. Changes reach the next Job:
+        running Jobs are not told.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BoundedInstructions" }
+      responses:
+        "200":
+          description: The global instructions now stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstructionsView" }
+        "400":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/backends/{backendId}/instructions:
+    parameters:
+      - name: backendId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    get:
+      tags: [backends]
+      summary: Backend agent and supervisor instructions, and the global ones above them
+      responses:
+        "200":
+          description: The instructions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstructionsView" }
+        "404":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [backends]
+      summary: Set the agent and supervisor instructions of a backend
+      description: |
+        They apply to every Job this backend runs, after the global and project
+        ones. Changes reach the next Job.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BoundedInstructions" }
+      responses:
+        "200":
+          description: The instructions now stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstructionsView" }
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/projects/{projectId}/instructions:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      tags: [projects]
+      summary: Project agent and supervisor instructions, and the global ones above them
+      description: The agent text is the Project's `instructions` field.
+      responses:
+        "200":
+          description: The instructions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstructionsView" }
+        "404":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [projects]
+      summary: Set the agent and supervisor instructions of a Project
+      description: |
+        The agent text is the Project's `instructions` field, which the project
+        form edits too, and like there it has no length limit; the supervision
+        is bounded as at every level. Changes reach the next Job, and the
+        Project is announced as `project.updated`. Leave out the agent text to
+        keep the stored one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectInstructionsUpdate" }
+      responses:
+        "200":
+          description: The instructions now stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstructionsView" }
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/projects/{projectId}/instructions/preview:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      tags: [projects]
+      summary: The instructions a Job started here would read
+      description: |
+        Assembled from every level as for a Job: global, project, backend and,
+        when `sessionId` is given, the supervision of that Session's own policy.
+        The agent text is what opens the instructions of the Job, before the
+        notes Core adds for that Job alone (delegation, transferred excerpts,
+        unavailable MCP servers).
+      parameters:
+        - name: backendId
+          in: query
+          required: true
+          description: The backend the Job would run on.
+          schema: { type: string }
+        - name: sessionId
+          in: query
+          required: false
+          description: An existing Session of this Project.
+          schema: { type: string }
+      responses:
+        "200":
+          description: The assembled instructions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Instructions" }
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
 
   /api/v1/sessions/{sessionId}/policy:
@@ -3559,6 +3709,9 @@ components:
             - `monitor.changed`: session-scoped watch state or output changed; refresh monitor lists. Payload contains the watch id and state, with observation fields when available. Output is untrusted data.
             - `mcp.changed`: owner-scoped MCP declaration, activation or restriction changed; refresh MCP views. No credentials are included.
             - `control_access.changed`: `{ accessId, action: "created" | "revoked" }`, owner-scoped; refresh MCP accesses and audit. No secret or hash is included.
+            - `instructions.updated`: `{ level: "instance" | "backend", backendId? }`, owner-scoped;
+              the global or a backend's instructions changed. Refresh the instructions
+              and previews. A Project's are announced as `project.updated`.
             - `user.message` may carry `actorId: "mcp:<accessId>"` for a remote controller, distinct from a human message and from a local delegation's `actorJobId`. The provider receives this provenance with the prompt.
             - `directory.changed`: `{ knownDirectoryId }`, owner-scoped; refresh
               directory lists and bindings after metadata or paths change.
@@ -4031,6 +4184,12 @@ components:
 
             A statement, never a guarantee: a rule is what holds whatever the
             conversation looks like.
+
+            Session and Job policies only. The instance, backend and project
+            levels write theirs with their instructions (`/instructions`), where
+            each level adds to the ones above it instead of replacing them; a
+            policy carrying a non-blank supervision at those levels is refused
+            with 400. On a session read, it is the Session's own statement.
         maxDurationSeconds:
           type: integer
           description: Stops a Run that has been going too long. Zero means no limit.
@@ -4077,6 +4236,71 @@ components:
           type: string
           maxLength: 512
           description: Why. Kept for the audit and shown beside the rule, because a rule nobody can explain is a rule nobody dares remove.
+
+    Instructions:
+      type: object
+      description: |
+        What one level tells the agent and its reviewer. The agent reads its
+        text in its system prompt; the reviewer of SUPERVISED reads only what
+        the user said, so the supervision text reaches it that way. Blank texts
+        are skipped. Both texts are required on a global or backend write,
+        since both are replaced; send an empty text to clear one. The project
+        agent text, the Project's `instructions` field, has no length limit.
+      required: [agent, supervision]
+      properties:
+        agent:
+          type: string
+          description: How to work, added to the agent's system prompt.
+        supervision:
+          type: string
+          maxLength: 4000
+          description: What counts as ordinary work and what to stop, told to the reviewer of SUPERVISED.
+
+    BoundedInstructions:
+      type: object
+      description: |
+        Instructions written at the global or backend level, where the agent
+        text is bounded like the supervision.
+      required: [agent, supervision]
+      properties:
+        agent:
+          type: string
+          maxLength: 4000
+          description: How to work, added to the agent's system prompt.
+        supervision:
+          type: string
+          maxLength: 4000
+          description: What counts as ordinary work and what to stop, told to the reviewer of SUPERVISED.
+
+    ProjectInstructionsUpdate:
+      type: object
+      description: |
+        Instructions written at the project level. The agent text is the
+        Project's `instructions` field, which the project form edits too: leave
+        it out to keep the stored text, so an editor that only changed the
+        supervision cannot write back an old copy of it. It has no length
+        limit. The supervision is required; send an empty text to clear it.
+      required: [supervision]
+      properties:
+        agent:
+          type: string
+          description: How to work, added to the agent's system prompt. Left out, the stored text is kept.
+        supervision:
+          type: string
+          maxLength: 4000
+          description: What counts as ordinary work and what to stop, told to the reviewer of SUPERVISED.
+
+    InstructionsView:
+      type: object
+      description: A level's own instructions and what the levels above it already say.
+      required: [own, inherited]
+      properties:
+        own: { $ref: "#/components/schemas/Instructions" }
+        inherited:
+          allOf: [{ $ref: "#/components/schemas/Instructions" }]
+          description: |
+            The global instructions as a Job reads them, for a project or a
+            backend. Empty at the global level.
 
     PolicyView:
       type: object

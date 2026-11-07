@@ -116,10 +116,12 @@ server to install. Its responsive layout works in a desktop or mobile browser.
 - **Project views** manage tasks and dependencies, memory, instructions,
   directories, Skills, permissions and audit history.
 - **Account settings** manage backends, the default backend, provider quotas,
-  global memory and directories, and account audit history.
+  global instructions, memory and directories, and account audit history.
 
-Use project instructions for standing rules, and pin important decisions so
-agents receive them on future jobs. Global memory belongs to your account on
+Use instructions for standing rules, and pin important decisions so agents
+receive them on future jobs. Instructions for the agent and for the reviewer of
+supervised work can be written globally, per project and per backend, and the
+narrower level wins a conflict; a project can preview the text a job will read. Global memory belongs to your account on
 this Core; it is shared across your projects, rather than across users.
 
 ### VS Code — keep the conversation beside your code

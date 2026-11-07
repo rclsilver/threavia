@@ -283,6 +283,11 @@ export class EventStream {
         void this.invalidate({ queryKey: ['control-accesses'] });
         void this.invalidate({ queryKey: ['audit'] });
         break;
+      // Another client saved the global or a backend's instructions: the
+      // editors and every preview read them.
+      case 'instructions.updated':
+        void this.invalidate({ queryKey: ['instructions'] });
+        break;
       case 'monitor.changed':
         void this.invalidate({ queryKey: ['monitors'] });
         break;
@@ -457,6 +462,9 @@ export class EventStream {
         void this.invalidate({ queryKey: keys.audit() });
         void this.invalidate({ queryKey: ['projects'] });
         void this.invalidate({ queryKey: ['project'] });
+        // Its instructions are a level the preview reads, edited from any
+        // client, and its name labels that level.
+        if (event.type === 'project.updated') void this.invalidate({ queryKey: ['instructions'] });
         if (event.type === 'project.deleted') {
           void this.invalidate({ queryKey: ['sessions'] });
           void this.invalidate({ queryKey: keys.attention() });

@@ -73,8 +73,16 @@ pinned global decisions are read by agents in all your projects on that Core.
   global, or uninstall one. Changes apply to the next Job.
 - **Permissions.** **Threavia: Manage Permissions…** edits instance, backend,
   project or session permissions in an editor tab. Project, session and backend
-  rows also offer it in their context menu. Set the mode, switches, supervision,
-  limits and rules, or return to parent defaults; inherited rules stay separate.
+  rows also offer it in their context menu. Set the mode, switches, limits and
+  rules, or return to parent defaults; inherited rules stay separate. What the
+  reviewer should know is set here only for a session; above it, it belongs to
+  the instructions.
+- **Instructions.** **Threavia: Instructions…** edits the global, backend or
+  project agent and supervisor instructions in an editor tab, with what the
+  levels above already say shown beside them. Project and backend rows also
+  offer it in their context menu. Levels only add to each other, the narrower
+  one winning a conflict, and changes apply from the next job. For a project,
+  **Preview…** asks for a backend and shows the two texts a job would read.
 - **Notifications.** An approval or a question pops up once, with Approve and
   Deny, or its choices and Answer…, right there. Work that ends in a session
   you are not looking at says so quietly. A request's notification disappears

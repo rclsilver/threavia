@@ -1,3 +1,4 @@
+import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
 import { CoreClient } from '../src/api/client';
@@ -38,5 +39,26 @@ describe('permissions across Core and the editor', () => {
     expect(html).toContain("default-src 'none'");
     expect(html).toContain("script-src 'nonce-test-nonce'");
     expect(html).toContain('view.own ?? {...view.effective, rules:[]}');
+  });
+
+  it('asks what the reviewer should know only for a session, the levels above setting it with the instructions', () => {
+    const supervised: PolicyView = { effective: { ...policy, mode: 'SUPERVISED' }, parent: policy, inherited: false, own: { ...policy, mode: 'SUPERVISED', supervision: 'Reading is ordinary.' } };
+    const open = (session: boolean) => {
+      const sent: { type: string; policy: ExecutionPolicy }[] = [];
+      const dom = new JSDOM(permissionsPage('test-nonce', 'Level', supervised, session), {
+        runScripts: 'dangerously',
+        beforeParse(window) { Object.assign(window, { acquireVsCodeApi: () => ({ postMessage: (message: { type: string; policy: ExecutionPolicy }) => sent.push(message), getState: () => undefined, setState: () => {} }) }); },
+      });
+      const document = dom.window.document;
+      (document.getElementById('save') as HTMLButtonElement).click();
+      return { hidden: document.getElementById('supervision-label')!.hidden, sent };
+    };
+    // Instance, backend and project pages alike: Core refuses supervision there.
+    const above = open(false);
+    expect(above.hidden).toBe(true);
+    expect(above.sent[0].policy).not.toHaveProperty('supervision');
+    const session = open(true);
+    expect(session.hidden).toBe(false);
+    expect(session.sent[0].policy.supervision).toBe('Reading is ordinary.');
   });
 });
