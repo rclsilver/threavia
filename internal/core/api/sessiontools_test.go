@@ -653,3 +653,16 @@ func TestSessionToolsSendCallsTheSenderBack(t *testing.T) {
 		t.Fatalf("wait = %v, want the finished job", ended)
 	}
 }
+
+// A delegate writing to its manager does not get to answer the manager's
+// questions, which are the person's.
+func TestSessionToolsSendToTheManagerCallsNobodyBack(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	c.startSession(projectID, c.backendID, dirID, "Coordinate")
+	manager := receive(t, "the manager", backend.starts)
+	_, child := delegatedSession(t, backend, manager, map[string]any{"message": "Inspect the parser"})
+	sent := backend.callCoreTool(t, context.Background(), child.GetRunId(), child.GetJobId(), "session_send", map[string]any{"sessionId": manager.GetSessionId(), "message": "The parser is fine"})
+	if _, found := sent["job"].(map[string]any)["callbackSessionId"]; found {
+		t.Fatalf("sent job = %v, want no callback to the delegate", sent)
+	}
+}

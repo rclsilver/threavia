@@ -113,6 +113,9 @@ type Job struct {
 	// this Job. It is told of the Job's questions, permissions and end, and
 	// may answer them (docs/session-management.md).
 	CallbackSessionID *SessionID `json:"callbackSessionId,omitempty"`
+	// SenderSessionID is the session whose agent sent that message, with or
+	// without a callback. Its reply to that session calls nobody back.
+	SenderSessionID *SessionID `json:"-"`
 }
 
 // BackendWait describes a stopped provider attempt that Core can retry.

@@ -97,23 +97,26 @@ deleting it detaches workers and keeps their sessions and files.
 ### Callbacks to a sender
 
 A conversation that messages a session it does not manage is called back the
-same way for the Job its message made (decided 2026-11-07). A `QUEUE` message
-records the sending session on the new Job (`callbackSessionId`); a `NOW` with
-files, or one replacing a Job that waits for its backend, makes a Job too and
-records it the same way. When that Job asks a question, requests permission or
-ends, the sender receives a queued message naming the session and the Job, and
-may answer with `session_answer` or relay with `session_resolve_validation`,
-for that Job only. The relay still needs the person's approval in the sender's
-own Job, as for a manager. The person can still answer from their clients; the
-first answer wins.
+same way for the Job its message made (decided 2026-11-07). A `QUEUE` message,
+or a `NOW` that replaces a Job waiting for its backend, makes a Job that
+records the sending session (`callbackSessionId`). When that Job asks a
+question, requests permission or ends, the sender receives a queued message
+naming the session and the Job, and may answer with `session_answer` or relay
+with `session_resolve_validation`, for that Job only. The relay still needs
+the person's approval in the sender's own Job, as for a manager. The person
+can still answer from their clients; the first answer wins.
 
 There is no callback when:
-- the message joins a running Job (`NEXT`, or `NOW` without files): it does not
-  take that Job over; use `session_wait` with its `jobId`;
+- the message joins a running Job (`NEXT`, or `NOW` on a running Job): it does
+  not take that Job over; use `session_wait` with its `jobId`. Likewise a
+  message that someone else adds to a Job with a callback leaves the callback
+  with the original sender;
 - the sender manages the target: it is told as the manager;
-- the sender replies to the session whose message started its own Job: that
-  session hears when this turn ends anyway, and two agents answering each
-  other's callbacks would never stop.
+- the target manages the sender: a delegate does not answer its manager's
+  questions, which are the person's;
+- the sender replies to the session whose `session_send` made its own Job,
+  with or without a callback: that session hears when this turn ends anyway,
+  and two agents answering each other's messages would never stop.
 
 A client that cannot be called back, such as a control client
 ([control-mcp.md](control-mcp.md)), calls `session_wait` with the `jobId` that

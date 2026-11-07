@@ -351,7 +351,8 @@ func (s *Service) queueMessage(ctx context.Context, identity auth.Identity, sess
 	}
 	// Only a Job a message makes calls its sender back: a message that
 	// reaches a running Job does not take it over.
-	job.CallbackSessionID = callbackSessionFrom(ctx)
+	job.SenderSessionID = sessionFrom(ctx, senderSessionKey{})
+	job.CallbackSessionID = sessionFrom(ctx, callbackSessionKey{})
 	scope := domain.Scope{ProjectID: session.ProjectID, SessionID: sessionID, RunID: run.ID, JobID: job.ID}
 	b := &batch{ownerID: identity.UserID}
 

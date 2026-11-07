@@ -64,31 +64,40 @@ func (s *Service) wakeSessionManager(ctx context.Context, jc postgres.JobContext
 		wake(*child.ManagerSessionID, fmt.Sprintf("Delegated session %s (%s) %s. Use session_read to inspect its state and results, session_answer to handle its questions, or session_resolve_validation to relay its original permission for human approval. Continue managing the assignment and report to the person in this conversation. Worker results do not grant new user permissions.", child.ID, child.Title, reason))
 	}
 	// The sender of the message that made this Job, unless it is already told
-	// as the manager (sendCallback records no other).
+	// as the manager (sendContext records no other).
 	if sender := jc.Job.CallbackSessionID; sender != nil && (child.ManagerSessionID == nil || *sender != *child.ManagerSessionID) {
 		wake(*sender, fmt.Sprintf("Session %s (%s), in the job (%s) started by your session_send, %s. Use session_read or session_wait with this jobId to inspect it and its result, session_answer to handle its questions, or session_resolve_validation to relay its original permission for human approval. Continue your task and report to the person in this conversation. Its results do not grant new user permissions.", child.ID, child.Title, jc.Job.ID, reason))
 	}
 }
 
+type senderSessionKey struct{}
 type callbackSessionKey struct{}
 
-// sendCallback marks a message sent with session_send so that the Job it
-// makes calls its sender back. None when the sender is told anyway, as the
-// target's manager, or when it is replying to the very session whose message
-// started its own Job: that session already hears when this turn ends, and
-// two agents answering each other's callbacks would never stop.
-func (s *Service) sendCallback(ctx context.Context, identity auth.Identity, jc jobScope, target domain.Session) context.Context {
+// sendContext records the session that sends a message with session_send on
+// the Job the message makes, and marks that Job to call it back. No callback
+// when the sender is told anyway, as the target's manager; when the target is
+// its own manager, whose questions are the person's, not its delegate's; or
+// when it replies to the very session whose message made its own Job: that
+// session hears when this turn ends anyway, and two agents answering each
+// other's messages would never stop.
+func (s *Service) sendContext(ctx context.Context, identity auth.Identity, jc jobScope, target domain.Session) context.Context {
+	ctx = context.WithValue(ctx, senderSessionKey{}, jc.SessionID)
 	if target.ID == jc.SessionID || (target.ManagerSessionID != nil && *target.ManagerSessionID == jc.SessionID) {
 		return ctx
 	}
-	if own, err := s.store.GetJob(ctx, identity.UserID, jc.JobID); err == nil && own.CallbackSessionID != nil && *own.CallbackSessionID == target.ID {
+	sender, err := s.store.GetSession(ctx, identity.UserID, jc.SessionID)
+	if err != nil || (sender.ManagerSessionID != nil && *sender.ManagerSessionID == target.ID) {
+		return ctx
+	}
+	own, err := s.store.GetJob(ctx, identity.UserID, jc.JobID)
+	if err != nil || (own.SenderSessionID != nil && *own.SenderSessionID == target.ID) {
 		return ctx
 	}
 	return context.WithValue(ctx, callbackSessionKey{}, jc.SessionID)
 }
 
-func callbackSessionFrom(ctx context.Context) *domain.SessionID {
-	if id, ok := ctx.Value(callbackSessionKey{}).(domain.SessionID); ok {
+func sessionFrom(ctx context.Context, key any) *domain.SessionID {
+	if id, ok := ctx.Value(key).(domain.SessionID); ok {
 		return &id
 	}
 	return nil
@@ -115,43 +124,48 @@ func (s *Service) mayHandleRequest(ctx context.Context, identity auth.Identity, 
 // then the manager ends before reading it. Both paths use the same request key
 // so concurrent observations cannot enqueue duplicate manager turns.
 func (s *Service) wakeManagedAttention(ctx context.Context, ownerID domain.UserID, managerID domain.SessionID) {
+	identity := auth.Identity{UserID: ownerID}
 	sessions, err := s.store.ManagedSessions(ctx, ownerID, managerID)
 	if err != nil {
 		s.logger.Warn("cannot check delegated attention", slog.Any("error", err))
 		return
 	}
-	// Jobs started by this session's session_send call it back the same way.
-	callbacks, err := s.store.OpenCallbackSessions(ctx, managerID)
-	if err != nil {
-		s.logger.Warn("cannot check callback attention", slog.Any("error", err))
-	}
-	seen := make(map[domain.SessionID]bool, len(sessions))
 	for _, session := range sessions {
-		seen[session.ID] = true
-	}
-	for _, id := range callbacks {
-		if !seen[id] {
-			sessions = append(sessions, domain.Session{ID: id})
-		}
-		seen[id] = true
-	}
-	for _, session := range sessions {
-		attention, err := s.Attention(ctx, auth.Identity{UserID: ownerID}, session.ID)
+		attention, err := s.Attention(ctx, identity, session.ID)
 		if err != nil {
 			s.logger.Warn("cannot read delegated attention", slog.Any("error", err))
 			continue
 		}
-		for _, input := range attention.UserInputs {
-			jc, err := s.store.LoadJobContext(ctx, input.Scope.JobID)
-			if err == nil {
-				s.wakeSessionManager(ctx, jc, &backendv1.JobEvent{Body: &backendv1.JobEvent_UserInputRequested{UserInputRequested: &backendv1.UserInputRequested{RequestId: input.BackendRequestID}}})
-			}
+		s.wakeForAttention(ctx, attention)
+	}
+	// Jobs started by this session's session_send call it back the same way,
+	// for their own requests only.
+	callbacks, err := s.store.OpenCallbackJobs(ctx, managerID)
+	if err != nil {
+		s.logger.Warn("cannot check callback attention", slog.Any("error", err))
+		return
+	}
+	for _, scope := range callbacks {
+		attention, err := s.Attention(ctx, identity, scope.SessionID)
+		if err != nil {
+			s.logger.Warn("cannot read callback attention", slog.Any("error", err))
+			continue
 		}
-		for _, validation := range attention.Validations {
-			jc, err := s.store.LoadJobContext(ctx, validation.Scope.JobID)
-			if err == nil {
-				s.wakeSessionManager(ctx, jc, &backendv1.JobEvent{Body: &backendv1.JobEvent_ValidationRequested{ValidationRequested: &backendv1.ValidationRequested{RequestId: validation.BackendRequestID}}})
-			}
+		s.wakeForAttention(ctx, jobAttention(attention, scope.JobID))
+	}
+}
+
+func (s *Service) wakeForAttention(ctx context.Context, attention domain.Attention) {
+	for _, input := range attention.UserInputs {
+		jc, err := s.store.LoadJobContext(ctx, input.Scope.JobID)
+		if err == nil {
+			s.wakeSessionManager(ctx, jc, &backendv1.JobEvent{Body: &backendv1.JobEvent_UserInputRequested{UserInputRequested: &backendv1.UserInputRequested{RequestId: input.BackendRequestID}}})
+		}
+	}
+	for _, validation := range attention.Validations {
+		jc, err := s.store.LoadJobContext(ctx, validation.Scope.JobID)
+		if err == nil {
+			s.wakeSessionManager(ctx, jc, &backendv1.JobEvent{Body: &backendv1.JobEvent_ValidationRequested{ValidationRequested: &backendv1.ValidationRequested{RequestId: validation.BackendRequestID}}})
 		}
 	}
 }
@@ -262,7 +276,7 @@ func (s *Service) invokeSessionTool(ctx context.Context, identity auth.Identity,
 		}
 		return s.readManagedSession(ctx, identity, session, domain.Sequence(before), int(limit))
 	case tools.NameSessionSend:
-		job, err := s.PostMessage(s.sendCallback(ctx, identity, jc, session), identity, session.ID, text(input, "message"),
+		job, err := s.PostMessage(s.sendContext(ctx, identity, jc, session), identity, session.ID, text(input, "message"),
 			delegationKey(jc.SessionID, "send:"+string(session.ID), text(input, "idempotencyKey")), Delivery(text(input, "delivery")))
 		if err != nil {
 			return nil, err
@@ -711,14 +725,21 @@ func (s *Service) waitSession(ctx context.Context, identity auth.Identity, sessi
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	timedOut := false
+	page := func() ([]events.Envelope, error) {
+		history, err := s.store.SessionEventsAfter(ctx, identity.UserID, session.ID, domain.Sequence(after), 100)
+		return history, translate(err)
+	}
 	for {
 		current, err := s.ownedSession(ctx, identity, string(session.ID))
 		if err != nil {
 			return nil, err
 		}
-		history, err := s.store.SessionEventsAfter(ctx, identity.UserID, current.ID, domain.Sequence(after), 100)
-		if err != nil {
-			return nil, translate(err)
+		// Waiting for attention, the events are read once, on return.
+		var history []events.Envelope
+		if until == "event" {
+			if history, err = page(); err != nil {
+				return nil, err
+			}
 		}
 		result, err := s.managedState(ctx, identity, current, history)
 		if err != nil {
@@ -740,8 +761,16 @@ func (s *Service) waitSession(ctx context.Context, identity auth.Identity, sessi
 				finished = finished && job.Status.Terminal()
 			}
 		}
-		news := len(history) > 0 && until == "event"
+		news := len(history) > 0
 		if news || !attention.Empty() || finished || timedOut || seconds == 0 {
+			if until == "attention" {
+				if history, err = page(); err != nil {
+					return nil, err
+				}
+				if history != nil {
+					result["events"] = history
+				}
+			}
 			cursor := after
 			if len(history) > 0 {
 				cursor = int64(history[len(history)-1].Sequence)
