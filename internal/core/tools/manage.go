@@ -236,7 +236,7 @@ func manageSpecs() []Spec {
 		},
 		{
 			Name:        NameProjectRead,
-			Description: "Read a project, including the instructions every one of its jobs receives.",
+			Description: "Read a project, including the instructions every one of its jobs receives and the supervisor instructions their reviewer receives.",
 			InputSchema: object(map[string]any{"projectId": str("Defaults to the current project.")}),
 		},
 		{
@@ -247,12 +247,13 @@ func manageSpecs() []Spec {
 		{
 			Name:               NameProjectUpdate,
 			RequiresValidation: true,
-			Description:        "Rename a project or change its description or instructions, after the person validates. Omitted fields keep their value; an empty description or instructions clears it. Instructions reach every later job of the project: change them only as the person asked.",
+			Description:        "Rename a project or change its description, instructions or supervisor instructions, after the person validates. Omitted fields keep their value; an empty description or instructions clears it. Both kinds of instructions reach every later job of the project: change them only as the person asked.",
 			InputSchema: object(map[string]any{
-				"projectId":    str("Defaults to the current project."),
-				"name":         str("Its new name."),
-				"description":  str("Its new description."),
-				"instructions": str("Its new instructions, in full."),
+				"projectId":               str("Defaults to the current project."),
+				"name":                    str("Its new name."),
+				"description":             str("Its new description."),
+				"instructions":            str("Its new instructions, in full."),
+				"supervisionInstructions": str("Its new supervisor instructions, in full."),
 			}),
 		},
 		{

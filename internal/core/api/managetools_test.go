@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/types/known/structpb"
@@ -344,6 +345,73 @@ func TestManageToolsProjectsAndAudit(t *testing.T) {
 
 // A delegate's validated call goes through: the person approves the manager's
 // relay, which resolves the delegate's own request, and Core accepts it.
+// The supervisor instructions of a project are read and written through the
+// project tools, under the same validation as the agent instructions, and
+// changing one text leaves the other as it was.
+func TestManageProjectSupervisionInstructions(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	c.startSession(projectID, c.backendID, dirID, "Organise")
+	start := receive(t, "the job", backend.starts)
+	ctx := context.Background()
+	call := func(name string, input map[string]any) map[string]any {
+		return backend.callCoreTool(t, ctx, start.GetRunId(), start.GetJobId(), name, input)
+	}
+	fail := func(name string, input map[string]any) {
+		backend.callCoreToolExpectingFailure(t, ctx, start.GetRunId(), start.GetJobId(), name, input)
+	}
+
+	sideID := call("project_create", map[string]any{"name": "Side"})["projectId"].(string)
+	agent := map[string]any{"projectId": sideID, "instructions": "Be brief"}
+	approveCall(t, c, backend, start, "agent-side", "project_update", agent)
+	call("project_update", agent)
+
+	supervise := map[string]any{"projectId": sideID, "supervisionInstructions": "Refuse force pushes"}
+	fail("project_update", supervise)
+	approveCall(t, c, backend, start, "supervise-side", "project_update", supervise)
+	if got := call("project_update", supervise); got["supervisionInstructions"] != "Refuse force pushes" || got["instructions"] != "Be brief" {
+		t.Fatalf("project_update supervision = %v", got)
+	}
+	fail("project_update", supervise)
+	if got := call("project_read", map[string]any{"projectId": sideID}); got["supervisionInstructions"] != "Refuse force pushes" || got["instructions"] != "Be brief" {
+		t.Fatalf("project_read = %v", got)
+	}
+
+	// An agent-only change keeps the supervision.
+	terse := map[string]any{"projectId": sideID, "instructions": "Be terse"}
+	approveCall(t, c, backend, start, "terse-side", "project_update", terse)
+	if got := call("project_update", terse); got["supervisionInstructions"] != "Refuse force pushes" || got["instructions"] != "Be terse" {
+		t.Fatalf("project_update agent = %v", got)
+	}
+
+	// Both texts and the name change together under one validation.
+	both := map[string]any{"projectId": sideID, "name": "Side B", "instructions": "Be thorough", "supervisionInstructions": "Ask before deleting"}
+	approveCall(t, c, backend, start, "both-side", "project_update", both)
+	if got := call("project_update", both); got["name"] != "Side B" || got["instructions"] != "Be thorough" || got["supervisionInstructions"] != "Ask before deleting" {
+		t.Fatalf("project_update both = %v", got)
+	}
+	var view struct {
+		Own struct {
+			Agent       string `json:"agent"`
+			Supervision string `json:"supervision"`
+		} `json:"own"`
+	}
+	c.mustDo(http.MethodGet, "/api/v1/projects/"+sideID+"/instructions", nil, &view, http.StatusOK)
+	if view.Own.Agent != "Be thorough" || view.Own.Supervision != "Ask before deleting" {
+		t.Fatalf("stored instructions = %+v", view.Own)
+	}
+
+	// An empty text clears the supervision.
+	unset := map[string]any{"projectId": sideID, "supervisionInstructions": ""}
+	approveCall(t, c, backend, start, "unset-side", "project_update", unset)
+	if got := call("project_update", unset); got["supervisionInstructions"] != "" || got["instructions"] != "Be thorough" {
+		t.Fatalf("clearing the supervision = %v", got)
+	}
+
+	tooLong := map[string]any{"projectId": sideID, "supervisionInstructions": strings.Repeat("x", 4001)}
+	approveCall(t, c, backend, start, "long-side", "project_update", tooLong)
+	fail("project_update", tooLong)
+}
+
 func TestManageToolsDelegateValidatedThroughRelay(t *testing.T) {
 	c, backend, projectID, dirID := setup(t)
 	c.startSession(projectID, c.backendID, dirID, "Coordinate")

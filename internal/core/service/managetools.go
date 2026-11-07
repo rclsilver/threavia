@@ -470,6 +470,21 @@ func projectEntry(project domain.Project, full bool) map[string]any {
 	return entry
 }
 
+// projectDetail answers with one project in full, both instruction texts
+// included. They are read beside the Project rather than taken from it: the
+// supervision is not part of it, and after an instructions change the Project
+// at hand still holds the old agent text.
+func (s *Service) projectDetail(ctx context.Context, identity auth.Identity, project domain.Project) (map[string]any, error) {
+	own, err := s.store.ProjectInstructionsOf(ctx, identity.UserID, project.ID)
+	if err != nil {
+		return nil, translate(err)
+	}
+	entry := projectEntry(project, true)
+	entry["instructions"] = own.Agent
+	entry["supervisionInstructions"] = own.Supervision
+	return sessionToolResult(entry)
+}
+
 func (s *Service) projectTool(ctx context.Context, identity auth.Identity, jc jobScope, name tools.Name, input map[string]any) (map[string]any, error) {
 	switch name {
 	case tools.NameProjectList:
@@ -493,7 +508,7 @@ func (s *Service) projectTool(ctx context.Context, identity auth.Identity, jc jo
 		if err != nil {
 			return nil, err
 		}
-		return sessionToolResult(projectEntry(project, true))
+		return s.projectDetail(ctx, identity, project)
 	}
 	projectID, err := sessionToolProject(input, jc.ProjectID)
 	if err != nil {
@@ -505,7 +520,7 @@ func (s *Service) projectTool(ctx context.Context, identity auth.Identity, jc jo
 	}
 	switch name {
 	case tools.NameProjectRead:
-		return sessionToolResult(projectEntry(project, true))
+		return s.projectDetail(ctx, identity, project)
 	case tools.NameProjectUpdate:
 		fields := map[string]string{}
 		for _, key := range []string{"name", "description", "instructions"} {
@@ -527,14 +542,42 @@ func (s *Service) projectTool(ctx context.Context, identity auth.Identity, jc jo
 			}
 			fields[key] = *value
 		}
-		if len(fields) == 0 {
-			return nil, fmt.Errorf("%w: give name, description or instructions to change", ErrInvalid)
-		}
-		updated, err := s.UpdateProject(ctx, identity, project.ID, fields["name"], fields["description"], fields["instructions"])
+		supervision, err := presentString(input, "supervisionInstructions")
 		if err != nil {
 			return nil, err
 		}
-		return sessionToolResult(projectEntry(updated, true))
+		if len(fields) == 0 && supervision == nil {
+			return nil, fmt.Errorf("%w: give name, description, instructions or supervisionInstructions to change", ErrInvalid)
+		}
+		if supervision == nil {
+			updated, err := s.UpdateProject(ctx, identity, project.ID, fields["name"], fields["description"], fields["instructions"])
+			if err != nil {
+				return nil, err
+			}
+			return s.projectDetail(ctx, identity, updated)
+		}
+		// The supervision is written with the agent text, both in full: when
+		// the call gives both they land together, and when it gives only the
+		// supervision the agent text goes back as it is. The supervision is
+		// checked before a name or description change so that a refused text
+		// does not leave the call half applied.
+		next := domain.Instructions{Agent: project.Instructions, Supervision: strings.TrimSpace(*supervision)}
+		if agent, given := fields["instructions"]; given {
+			next.Agent = agent
+			delete(fields, "instructions")
+		}
+		if err := (domain.Instructions{Supervision: next.Supervision}).Validate(); err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+		}
+		if len(fields) > 0 {
+			if project, err = s.UpdateProject(ctx, identity, project.ID, fields["name"], fields["description"], ""); err != nil {
+				return nil, err
+			}
+		}
+		if _, err := s.SetProjectInstructions(ctx, identity, project.ID, next); err != nil {
+			return nil, err
+		}
+		return s.projectDetail(ctx, identity, project)
 	case tools.NameProjectArchive:
 		archived, err := boolInput(input, "archived", false)
 		if err != nil {
