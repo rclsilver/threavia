@@ -15,6 +15,7 @@ import type {
   ExecutionPolicy,
   Instructions,
   InstructionsView,
+  ProjectInstructionsUpdate,
   PolicyView,
   PushConfig,
   FileDiff,
@@ -845,13 +846,14 @@ export function useInstructions(scope: InstructionsScope) {
 }
 
 /**
- * Both texts of a level, replaced together: Core takes the pair, so a caller
- * that edits one sends the other as it stands.
+ * The texts of a level. The global and backend levels take the pair, so a
+ * caller that edits one sends the other as it stands; a project may leave out
+ * its agent text, which Core then keeps.
  */
 export function useSetInstructions(scope: InstructionsScope) {
   const queries = useQueryClient();
   return useMutation({
-    mutationFn: (instructions: Instructions) => api.put<InstructionsView>(instructionsPath(scope), instructions),
+    mutationFn: (instructions: Instructions | ProjectInstructionsUpdate) => api.put<InstructionsView>(instructionsPath(scope), instructions),
     onSuccess: (view) => {
       queries.setQueryData(instructionsKey(scope), view);
       // The levels below read this one as inherited, the preview reads them

@@ -39,6 +39,7 @@ export type PolicyView = Schemas['PolicyView'];
 export type SessionPolicy = Schemas['SessionPolicy'];
 export type Instructions = Schemas['Instructions'];
 export type InstructionsView = Schemas['InstructionsView'];
+export type ProjectInstructionsUpdate = Schemas['ProjectInstructionsUpdate'];
 export type Usage = Schemas['Usage'];
 export type Task = Schemas['Task'];
 export type TaskStatus = Schemas['TaskStatus'];

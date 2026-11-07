@@ -28,6 +28,7 @@ export type ExecutionPolicy = Schemas['ExecutionPolicy'];
 export type PolicyView = Schemas['PolicyView'];
 export type Instructions = Schemas['Instructions'];
 export type InstructionsView = Schemas['InstructionsView'];
+export type ProjectInstructionsUpdate = Schemas['ProjectInstructionsUpdate'];
 export type ExecutionMode = Schemas['ExecutionMode'];
 export type PermissionRule = Schemas['PermissionRule'];
 export type PermissionEffect = Schemas['PermissionEffect'];

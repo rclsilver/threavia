@@ -1985,12 +1985,13 @@ paths:
         The agent text is the Project's `instructions` field, which the project
         form edits too, and like there it has no length limit; the supervision
         is bounded as at every level. Changes reach the next Job, and the
-        Project is announced as `project.updated`.
+        Project is announced as `project.updated`. Leave out the agent text to
+        keep the stored one.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/Instructions" }
+            schema: { $ref: "#/components/schemas/ProjectInstructionsUpdate" }
       responses:
         "200":
           description: The instructions now stored
@@ -4239,9 +4240,9 @@ components:
         What one level tells the agent and its reviewer. The agent reads its
         text in its system prompt; the reviewer of SUPERVISED reads only what
         the user said, so the supervision text reaches it that way. Blank texts
-        are skipped. Both texts are required on a write, since both are
-        replaced; send an empty text to clear one. The project agent text, the
-        Project's `instructions` field, has no length limit.
+        are skipped. Both texts are required on a global or backend write,
+        since both are replaced; send an empty text to clear one. The project
+        agent text, the Project's `instructions` field, has no length limit.
       required: [agent, supervision]
       properties:
         agent:
@@ -4263,6 +4264,24 @@ components:
           type: string
           maxLength: 4000
           description: How to work, added to the agent's system prompt.
+        supervision:
+          type: string
+          maxLength: 4000
+          description: What counts as ordinary work and what to stop, told to the reviewer of SUPERVISED.
+
+    ProjectInstructionsUpdate:
+      type: object
+      description: |
+        Instructions written at the project level. The agent text is the
+        Project's `instructions` field, which the project form edits too: leave
+        it out to keep the stored text, so an editor that only changed the
+        supervision cannot write back an old copy of it. It has no length
+        limit. The supervision is required; send an empty text to clear it.
+      required: [supervision]
+      properties:
+        agent:
+          type: string
+          description: How to work, added to the agent's system prompt. Left out, the stored text is kept.
         supervision:
           type: string
           maxLength: 4000

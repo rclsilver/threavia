@@ -99,7 +99,10 @@ func (s *Service) ProjectInstructions(ctx context.Context, identity auth.Identit
 	return InstructionsView{Own: own, Inherited: inherited}, err
 }
 
-// SetProjectInstructions replaces both instruction texts of a Project.
+// SetProjectInstructions replaces the instruction texts of a Project. A nil
+// agent keeps the stored agent text. It is read under the project lock, so a
+// caller that changes only the supervision cannot write back an agent text
+// someone else replaced in the meantime.
 //
 // The agent text is projects.instructions, the one the project form edits too,
 // so a change to it is announced as project.updated like a change made there:
@@ -109,15 +112,7 @@ func (s *Service) ProjectInstructions(ctx context.Context, identity auth.Identit
 //
 // The agent text has no length limit, as through the project form: it predates
 // the limit and may already be longer. Only the supervision is bounded.
-func (s *Service) SetProjectInstructions(ctx context.Context, identity auth.Identity, id domain.ProjectID, in domain.Instructions) (InstructionsView, error) {
-	return s.setProjectInstructions(ctx, identity, id, &in.Agent, in.Supervision)
-}
-
-// setProjectInstructions is SetProjectInstructions where a nil agent keeps
-// the stored agent text. It is read under the project lock, so a caller that
-// changes only the supervision cannot write back an agent text someone else
-// replaced in the meantime.
-func (s *Service) setProjectInstructions(ctx context.Context, identity auth.Identity, id domain.ProjectID, agent *string, supervision string) (InstructionsView, error) {
+func (s *Service) SetProjectInstructions(ctx context.Context, identity auth.Identity, id domain.ProjectID, agent *string, supervision string) (InstructionsView, error) {
 	in := domain.Instructions{Supervision: strings.TrimSpace(supervision)}
 	if err := in.Validate(); err != nil {
 		return InstructionsView{}, fmt.Errorf("%w: %s", ErrInvalid, err)

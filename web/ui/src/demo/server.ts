@@ -432,15 +432,19 @@ function layered(preamble: string, layers: [string, string][]) {
   ].join('\n\n');
 }
 
-/** Both texts of a write, required and bounded as Core has them. */
-function instructionsBody(body: Json, bounded: boolean) {
-  if (typeof body.agent !== 'string' || typeof body.supervision !== 'string') {
+/**
+ * The texts of a write, required and bounded as Core has them. A project may
+ * leave out its agent text, given here as `storedAgent`, which is then kept.
+ */
+function instructionsBody(body: Json, bounded: boolean, storedAgent?: string) {
+  const agent = body.agent === undefined && storedAgent !== undefined ? storedAgent : body.agent;
+  if (typeof agent !== 'string' || typeof body.supervision !== 'string') {
     throw new ApiError(400, 'invalid', 'Send both the agent and the supervision text; an empty text clears one.');
   }
-  if ((bounded && body.agent.length > 4000) || body.supervision.length > 4000) {
+  if ((bounded && agent.length > 4000) || body.supervision.length > 4000) {
     throw new ApiError(400, 'invalid', 'Each text holds at most 4000 characters.');
   }
-  return { agent: body.agent, supervision: body.supervision };
+  return { agent, supervision: body.supervision };
 }
 
 function projectInstructionsView(projectId: string) {
@@ -562,7 +566,7 @@ const routes: [string, RegExp, Handler][] = [
   ['GET', /^\/api\/v1\/projects\/([^/]+)\/instructions$/, (m) => projectInstructionsView(m[1])],
   ['PUT', /^\/api\/v1\/projects\/([^/]+)\/instructions$/, (m, body) => {
     const before = projectInstructionsView(m[1]).own;
-    const next = instructionsBody(body, false);
+    const next = instructionsBody(body, false, before.agent);
     const project = state.projects.find((entry) => entry.id === m[1]) as Json;
     const changedFields = [
       ...(next.agent !== before.agent ? ['instructions'] : []),

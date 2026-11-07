@@ -16,6 +16,7 @@ import type {
   SessionPolicy,
   Instructions,
   InstructionsView,
+  ProjectInstructionsUpdate,
   FileDiff,
   Job,
   KnownDirectory,
@@ -392,8 +393,8 @@ export class CoreClient {
     return this.get<InstructionsView>(path);
   }
 
-  /** Replaces both texts of a level: an empty one clears it. */
-  setInstructions(path: string, instructions: Instructions) {
+  /** Replaces the texts of a level: an empty one clears it. A project may leave out its agent text to keep it. */
+  setInstructions(path: string, instructions: Instructions | ProjectInstructionsUpdate) {
     return this.request<InstructionsView>('PUT', path, instructions);
   }
 

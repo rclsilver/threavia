@@ -42,7 +42,7 @@ ${scope === 'project' ? `<section id="preview-panel" hidden><h2 id="preview-titl
 <p class="hint">The saved instructions, as a job started now would read them. The Threavia base prompt, this machine's LOCAL_INSTRUCTIONS and per-job notes are added when a job starts.</p>
 <h3>Agent instructions</h3><pre id="preview-agent"></pre><h3>Supervisor instructions</h3><pre id="preview-supervision"></pre></section>` : ''}
 <script nonce="${escape(nonce)}">
-const vscode = acquireVsCodeApi(); let view = ${json(view)}; let pending = false;
+const vscode = acquireVsCodeApi(); const scope = ${json(scope)}; let view = ${json(view)}; let pending = false;
 const field = (id) => document.getElementById(id);
 const texts = () => ({ agent: field('agent').value, supervision: field('supervision').value });
 const show = (id, text, empty) => { const block = field(id); if (block) block.textContent = text.trim() || empty; };
@@ -52,7 +52,14 @@ function fill(draft = view.own) {
   show('inherited-agent', view.inherited.agent, 'Nothing inherited.'); show('inherited-supervision', view.inherited.supervision, 'Nothing inherited.'); controls();
 }
 document.querySelector('form').oninput = () => { vscode.setState({ draft: texts() }); field('status').textContent = ''; };
-function send(type) { pending = true; controls(); field('error').textContent = ''; vscode.postMessage(type === 'save' ? { type, instructions: texts() } : { type }); }
+// A project agent text left as loaded is left out, so Core keeps what it has:
+// it is also edited through the project form, and a tab open for long would
+// otherwise send back an old copy. The other levels replace both texts.
+function changes() {
+  const draft = texts();
+  return scope === 'project' && draft.agent === view.own.agent ? { supervision: draft.supervision } : draft;
+}
+function send(type) { pending = true; controls(); field('error').textContent = ''; vscode.postMessage(type === 'save' ? { type, instructions: changes() } : { type }); }
 document.querySelector('form').onsubmit = (event) => { event.preventDefault(); if (!pending) send('save'); };
 field('reload').onclick = () => send('reload');
 if (field('preview')) field('preview').onclick = () => send('preview');

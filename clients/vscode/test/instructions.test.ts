@@ -48,6 +48,17 @@ describe('layered instructions across Core and the editor', () => {
     expect(sent).toEqual([{ type: 'save', instructions: { agent: 'Use worktrees.', supervision: 'Stop before a push.' } }]);
   });
 
+  it('leaves out an unchanged project agent text, so a stale tab cannot revert it', () => {
+    const { sent, field, receive } = open('project');
+    field<HTMLTextAreaElement>('supervision').value = 'Stop before a push.';
+    field<HTMLButtonElement>('save').click();
+    expect(sent).toEqual([{ type: 'save', instructions: { supervision: 'Stop before a push.' } }]);
+    receive({ type: 'saved', view: { ...view, own: { agent: 'Use worktrees.', supervision: 'Stop before a push.' } } });
+    field<HTMLTextAreaElement>('agent').value = 'Use worktrees and rebase.';
+    field<HTMLButtonElement>('save').click();
+    expect(sent[1]).toEqual({ type: 'save', instructions: { agent: 'Use worktrees and rebase.', supervision: 'Stop before a push.' } });
+  });
+
   it('bounds every text but the project agent text, which has never had a limit', () => {
     for (const scope of ['global', 'backend'] as const) {
       const { field } = open(scope);

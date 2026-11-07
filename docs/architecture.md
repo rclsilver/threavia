@@ -456,8 +456,10 @@ is still pushed to the running Job, with the supervision reassembled.
 `GET/PUT /api/v1/me/instructions`, `/api/v1/projects/{projectId}/instructions`
 and `/api/v1/backends/{backendId}/instructions` read and replace both texts of
 one level, and show the global text above a project or a backend. A project's
-agent text is its `instructions` field, so the project `PATCH` still edits it.
-The project above a backend depends on the Job, so it is not shown there.
+agent text is its `instructions` field, so the project `PATCH` still edits it,
+and a project `PUT` may leave the agent text out to keep the stored one: an
+editor open on an old copy that only changed the supervision would otherwise
+write it back. The clients send it only when it was edited. The project above a backend depends on the Job, so it is not shown there.
 `GET /api/v1/projects/{projectId}/instructions/preview?backendId=…[&sessionId=…]`
 returns the two texts a Job of that project would read on that backend. The
 function that builds it is the one that builds a Job's, so the preview cannot

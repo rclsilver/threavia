@@ -96,23 +96,21 @@ func TestProjectAgentTextHasNoLengthLimit(t *testing.T) {
 		instructions{Agent: changed, Supervision: strings.Repeat("a", 4001)}, nil, http.StatusBadRequest)
 }
 
-// TestInstructionsRequireBothTexts pins that a PUT names both texts: it
-// replaces both, so a client that only knew one would wipe the other.
+// TestInstructionsRequireBothTexts pins that a PUT names both texts where it
+// replaces both, so a client that only knew one would wipe the other. A
+// project PUT may leave out the agent text, which it then keeps; it still
+// needs the supervision.
 func TestInstructionsRequireBothTexts(t *testing.T) {
 	c, _, projectID, _ := setup(t)
 	c.mustDo(http.MethodPatch, "/api/v1/projects/"+projectID, map[string]any{"instructions": "Use worktrees."}, nil, http.StatusOK)
 
-	for _, path := range []string{
-		"/api/v1/me/instructions",
-		"/api/v1/backends/" + c.backendID + "/instructions",
-		"/api/v1/projects/" + projectID + "/instructions",
-	} {
-		for _, body := range []any{
-			nil,
-			map[string]any{},
-			map[string]any{"agent": "x"},
-			map[string]any{"supervision": "x"},
-		} {
+	refused := map[string][]any{
+		"/api/v1/me/instructions":                           {nil, map[string]any{}, map[string]any{"agent": "x"}, map[string]any{"supervision": "x"}},
+		"/api/v1/backends/" + c.backendID + "/instructions": {nil, map[string]any{}, map[string]any{"agent": "x"}, map[string]any{"supervision": "x"}},
+		"/api/v1/projects/" + projectID + "/instructions":   {nil, map[string]any{}, map[string]any{"agent": "x"}},
+	}
+	for path, bodies := range refused {
+		for _, body := range bodies {
 			c.mustDo(http.MethodPut, path, body, nil, http.StatusBadRequest)
 		}
 	}
@@ -120,6 +118,23 @@ func TestInstructionsRequireBothTexts(t *testing.T) {
 	c.mustDo(http.MethodGet, "/api/v1/projects/"+projectID+"/instructions", nil, &view, http.StatusOK)
 	if view.Own.Agent != "Use worktrees." {
 		t.Fatalf("a refused PUT changed the project agent text: %+v", view)
+	}
+}
+
+// TestProjectInstructionsKeepTheAgentTextWhenLeftOut pins the fix for a stale
+// overwrite: an editor left open on an old agent text, which changes only the
+// supervision, must not write that old text back.
+func TestProjectInstructionsKeepTheAgentTextWhenLeftOut(t *testing.T) {
+	c, _, projectID, _ := setup(t)
+	path := "/api/v1/projects/" + projectID + "/instructions"
+	c.mustDo(http.MethodPut, path, instructions{Agent: "Old text."}, nil, http.StatusOK)
+	// Someone else changes the agent text in the meantime.
+	c.mustDo(http.MethodPatch, "/api/v1/projects/"+projectID, map[string]any{"instructions": "New text."}, nil, http.StatusOK)
+
+	var view instructionsView
+	c.mustDo(http.MethodPut, path, map[string]any{"supervision": "Stop before any push."}, &view, http.StatusOK)
+	if view.Own.Agent != "New text." || view.Own.Supervision != "Stop before any push." {
+		t.Fatalf("project view = %+v, want the agent text kept and the supervision set", view)
 	}
 }
 

@@ -574,7 +574,7 @@ func (s *Service) projectTool(ctx context.Context, identity auth.Identity, jc jo
 				return nil, err
 			}
 		}
-		if _, err := s.setProjectInstructions(ctx, identity, project.ID, agent, *supervision); err != nil {
+		if _, err := s.SetProjectInstructions(ctx, identity, project.ID, agent, *supervision); err != nil {
 			return nil, err
 		}
 		return s.projectDetail(ctx, identity, project)

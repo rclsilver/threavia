@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-import type { Instructions } from '../api/types';
+import type { Instructions, ProjectInstructionsUpdate } from '../api/types';
 import { nonce } from '../conversation/html';
 import type { Core } from '../cores/core';
 import { pickBackend } from '../start/pickers';
@@ -27,7 +27,7 @@ export class InstructionEditors implements vscode.Disposable {
     let disposed = false;
     const received = panel.webview.onDidReceiveMessage((message: unknown) => {
       if (busy || !message || typeof message !== 'object') return;
-      const data = message as { type?: string; instructions?: Instructions };
+      const data = message as { type?: string; instructions?: Partial<Instructions> };
       if (data.type !== 'save' && data.type !== 'reload' && !(data.type === 'preview' && projectId)) return;
       busy = true;
       void (async () => {
@@ -40,8 +40,14 @@ export class InstructionEditors implements vscode.Disposable {
             if (!disposed) await panel.webview.postMessage({ type: 'preview', backend: backend?.name, preview });
             return;
           }
-          if (data.type === 'save' && (typeof data.instructions?.agent !== 'string' || typeof data.instructions.supervision !== 'string')) throw new Error('Both texts are required.');
-          const result = data.type === 'reload' ? await core.client.instructions(path) : await core.client.setInstructions(path, { agent: data.instructions!.agent, supervision: data.instructions!.supervision });
+          let body: Instructions | ProjectInstructionsUpdate | undefined;
+          if (data.type === 'save') {
+            const { agent, supervision } = data.instructions ?? {};
+            // Only a project may leave out its agent text, which Core then keeps.
+            if (typeof supervision !== 'string' || (agent === undefined ? !projectId : typeof agent !== 'string')) throw new Error('Both texts are required.');
+            body = agent === undefined ? { supervision } : { agent, supervision };
+          }
+          const result = body ? await core.client.setInstructions(path, body) : await core.client.instructions(path);
           if (!disposed) await panel.webview.postMessage({ type: 'saved', view: result, reloaded: data.type === 'reload' });
         } catch (error) {
           if (!disposed) await panel.webview.postMessage({ type: 'error', message: error instanceof Error ? error.message : String(error), preview: data.type === 'preview' });

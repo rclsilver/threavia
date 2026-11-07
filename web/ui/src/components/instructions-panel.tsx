@@ -59,8 +59,9 @@ export function InheritedText({ text, note }: { text: string; note?: string }) {
  *
  * Only what was touched is held here, over what Core returned: a refresh
  * brought by another client or by the other field's save shows through
- * instead of being written back over. Core replaces both texts on a save, so
- * the untouched one goes back as it stands.
+ * instead of being written back over. At the global and backend levels Core
+ * replaces both texts on a save, so the untouched one goes back as it stands;
+ * a project's untouched agent text is left out.
  */
 export function InstructionsPanel({
   scope,
@@ -95,9 +96,14 @@ export function InstructionsPanel({
   if (!data) return <p className="text-muted text-sm">Reading the instructions…</p>;
 
   const value: Instructions = { ...data.own, ...edits };
+  // A project agent text that was not edited stays out of the save, so Core
+  // keeps the one it has: the project form edits it too, and the copy here may
+  // be older. The other levels take both texts.
+  const agentEdited = edits.agent !== undefined && edits.agent !== data.own.agent;
+  const body = scope.kind === 'project' && !agentEdited ? { supervision: value.supervision } : value;
   const commit = () => {
     if (!dirty || save.isPending) return;
-    save.mutate(value, { onSuccess: () => { setEdits({}); setSaved(true); } });
+    save.mutate(body, { onSuccess: () => { setEdits({}); setSaved(true); } });
   };
 
   return (

@@ -4022,7 +4022,8 @@ export interface paths {
          * @description The agent text is the Project's `instructions` field, which the project
          *     form edits too, and like there it has no length limit; the supervision
          *     is bounded as at every level. Changes reach the next Job, and the
-         *     Project is announced as `project.updated`.
+         *     Project is announced as `project.updated`. Leave out the agent text to
+         *     keep the stored one.
          *
          */
         put: {
@@ -4036,7 +4037,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["Instructions"];
+                    "application/json": components["schemas"]["ProjectInstructionsUpdate"];
                 };
             };
             responses: {
@@ -7114,9 +7115,9 @@ export interface components {
         /** @description What one level tells the agent and its reviewer. The agent reads its
          *     text in its system prompt; the reviewer of SUPERVISED reads only what
          *     the user said, so the supervision text reaches it that way. Blank texts
-         *     are skipped. Both texts are required on a write, since both are
-         *     replaced; send an empty text to clear one. The project agent text, the
-         *     Project's `instructions` field, has no length limit.
+         *     are skipped. Both texts are required on a global or backend write,
+         *     since both are replaced; send an empty text to clear one. The project
+         *     agent text, the Project's `instructions` field, has no length limit.
          *      */
         Instructions: {
             /** @description How to work, added to the agent's system prompt. */
@@ -7130,6 +7131,18 @@ export interface components {
         BoundedInstructions: {
             /** @description How to work, added to the agent's system prompt. */
             agent: string;
+            /** @description What counts as ordinary work and what to stop, told to the reviewer of SUPERVISED. */
+            supervision: string;
+        };
+        /** @description Instructions written at the project level. The agent text is the
+         *     Project's `instructions` field, which the project form edits too: leave
+         *     it out to keep the stored text, so an editor that only changed the
+         *     supervision cannot write back an old copy of it. It has no length
+         *     limit. The supervision is required; send an empty text to clear it.
+         *      */
+        ProjectInstructionsUpdate: {
+            /** @description How to work, added to the agent's system prompt. Left out, the stored text is kept. */
+            agent?: string;
             /** @description What counts as ordinary work and what to stop, told to the reviewer of SUPERVISED. */
             supervision: string;
         };

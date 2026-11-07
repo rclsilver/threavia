@@ -8,9 +8,9 @@ import (
 )
 
 // instructionsBody is a PUT of one level's instructions. Both fields are
-// required: a PUT replaces both texts, so a client that only knows about one of
-// them would otherwise wipe the other, such as a project agent text written
-// long ago through the project form.
+// required at the global and backend levels: a PUT replaces both texts, so a
+// client that only knows about one of them would otherwise wipe the other. The
+// project level may leave out the agent text, which it then keeps.
 type instructionsBody struct {
 	Agent       *string `json:"agent"`
 	Supervision *string `json:"supervision"`
@@ -61,12 +61,21 @@ func (h *handler) getProjectInstructions(w http.ResponseWriter, r *http.Request,
 	writeJSON(w, http.StatusOK, view)
 }
 
+// setProjectInstructions may leave out the agent text, which is then kept as
+// stored. The project agent text is also edited through the project form, so
+// an editor open on an old copy that only changed the supervision must not
+// send that copy back.
 func (h *handler) setProjectInstructions(w http.ResponseWriter, r *http.Request, identity auth.Identity) {
-	body, ok := decodeInstructions(w, r)
+	body, ok := decode[instructionsBody](w, r)
 	if !ok {
 		return
 	}
-	view, err := h.svc.SetProjectInstructions(r.Context(), identity, domain.ProjectID(r.PathValue("projectId")), body)
+	if body.Supervision == nil {
+		writeError(w, http.StatusBadRequest, "invalid_request",
+			"supervision is required; send an empty text to clear it")
+		return
+	}
+	view, err := h.svc.SetProjectInstructions(r.Context(), identity, domain.ProjectID(r.PathValue("projectId")), body.Agent, *body.Supervision)
 	if err != nil {
 		h.fail(w, err)
 		return
