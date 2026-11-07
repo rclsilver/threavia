@@ -297,11 +297,19 @@ func TestManageToolsProjectsAndAudit(t *testing.T) {
 
 	created := call("project_create", map[string]any{"name": "Side", "description": "A side project"})
 	sideID := created["projectId"].(string)
-	call("project_update", map[string]any{"projectId": sideID, "instructions": "Be brief"})
+	// Instructions reach every later job of a project: changing them waits for
+	// the person, and one approval covers one call.
+	instruct := map[string]any{"projectId": sideID, "instructions": "Be brief"}
+	fail("project_update", instruct)
+	approveCall(t, c, backend, start, "instruct-side", "project_update", instruct)
+	call("project_update", instruct)
+	fail("project_update", instruct)
 	if got := call("project_read", map[string]any{"projectId": sideID}); got["instructions"] != "Be brief" || got["description"] != "A side project" {
 		t.Fatalf("project_read = %v", got)
 	}
-	if got := call("project_update", map[string]any{"projectId": sideID, "description": ""}); got["description"] != "" || got["instructions"] != "Be brief" {
+	cleared := map[string]any{"projectId": sideID, "description": ""}
+	approveCall(t, c, backend, start, "clear-side", "project_update", cleared)
+	if got := call("project_update", cleared); got["description"] != "" || got["instructions"] != "Be brief" {
 		t.Fatalf("clearing the description = %v", got)
 	}
 	if got := call("project_list", map[string]any{}); len(got["projects"].([]any)) != 2 {

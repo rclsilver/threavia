@@ -7,7 +7,7 @@ export function demoControl(action: string, id: string, body: Record<string, unk
   if (action === 'list') return { items: structuredClone(accesses) };
   if (action === 'create') {
     const granted = body.scopes as Access['scopes'];
-    if (typeof body.label !== 'string' || !body.label.trim() || !Array.isArray(granted) || !granted.length || new Set(granted).size !== granted.length || granted.some(s => !['read', 'manage', 'answer', 'approve'].includes(s))) throw new ApiError(400, 'invalid', 'Choose a name and explicit rights');
+    if (typeof body.label !== 'string' || !body.label.trim() || !Array.isArray(granted) || !granted.length || new Set(granted).size !== granted.length || granted.some(s => !['read', 'manage', 'delete', 'answer', 'approve'].includes(s))) throw new ApiError(400, 'invalid', 'Choose a name and explicit rights');
     const access: Access = { id: `91000000-0000-4000-8000-${String(next++).padStart(12, '0')}`, label: body.label, scopes: [...granted], createdAt: new Date().toISOString(), bootstrap: false, ...(typeof body.expiresAt === 'string' ? { expiresAt: body.expiresAt } : {}) };
     accesses = [...accesses, access]; return { access: structuredClone(access), token: 'fictional-demo-token-not-a-real-credential' };
   }

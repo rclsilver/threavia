@@ -24,16 +24,16 @@ type ControlAccess struct {
 	OAuthClient string `json:"oauthClient,omitempty"`
 }
 
-var ControlScopes = []string{"read", "manage", "answer", "approve"}
+var ControlScopes = []string{"read", "manage", "delete", "answer", "approve"}
 
 func ValidateControlScopes(scopes []string) error {
 	if len(scopes) == 0 || len(scopes) > len(ControlScopes) {
-		return fmt.Errorf("choose at least one of read, manage, answer, approve")
+		return fmt.Errorf("choose at least one of read, manage, delete, answer, approve")
 	}
 	seen := map[string]bool{}
 	for _, scope := range scopes {
 		if !slices.Contains(ControlScopes, scope) || seen[scope] {
-			return fmt.Errorf("scopes must be unique: read, manage, answer, approve")
+			return fmt.Errorf("scopes must be unique: read, manage, delete, answer, approve")
 		}
 		seen[scope] = true
 	}

@@ -96,7 +96,7 @@ func TestControlWaitPagesSurviveReconnectWithoutGaps(t *testing.T) {
 func TestControlTwoCoresThroughRealBackendMCPProxy(t *testing.T) {
 	ctx := context.Background()
 	target := newCore(t)
-	_, token := createControlAccess(t, target, "read", "manage")
+	_, token := createControlAccess(t, target, "read", "manage", "delete")
 	t.Setenv("CONTROL_TEST_AUTHORIZATION", "Bearer "+token)
 	main := newCore(t)
 	project := main.createProject("Controller")
@@ -163,7 +163,17 @@ func TestControlTwoCoresThroughRealBackendMCPProxy(t *testing.T) {
 	if len(projects.Items) != 1 || string(projects.Items[0].ID) != remoteProject {
 		t.Fatal("controller did not mutate the target Core")
 	}
-	invoke("project_delete", map[string]any{"projectId": remoteProject})
+	// The target marks deletions destructive: listed in writeTools or not, the
+	// person on the calling instance approves each one.
+	deleted := make(chan map[string]any, 1)
+	go func() { deleted <- invoke("project_delete", map[string]any{"projectId": remoteProject}) }()
+	waitUntil(t, "the deletion to be asked about", func() bool { return len(main.snapshot(session).Attention.Validations) == 1 })
+	target.mustDo("GET", "/api/v1/projects", nil, &projects, 200)
+	if len(projects.Items) != 1 {
+		t.Fatal("a destructive call ran before the person approved it")
+	}
+	main.mustDo("POST", "/api/v1/validations/"+main.snapshot(session).Attention.Validations[0].ID+"/resolve", map[string]any{"approved": true, "channel": "web"}, nil, 200)
+	receive(t, "the approved deletion", deleted)
 	target.mustDo("GET", "/api/v1/projects", nil, &projects, 200)
 	if len(projects.Items) != 0 {
 		t.Fatal("remote cleanup failed")
@@ -288,7 +298,7 @@ func TestControlSessionQuestionsPermissionsCancellationAndCleanup(t *testing.T) 
 	ctx := context.Background()
 	backendID, credential := c.registerBackend("target-backend")
 	backend := c.connectBackend(credential)
-	a, token := createControlAccess(t, c, "read", "manage", "answer", "approve")
+	a, token := createControlAccess(t, c, "read", "manage", "delete", "answer", "approve")
 	conn := connectControl(t, c, token)
 	project := controlCall(t, conn, "project_create", map[string]any{"name": "Remote integration"})["id"].(string)
 	directory := controlCall(t, conn, "project_directory_create", map[string]any{"projectId": project, "name": "workspace"})["id"].(string)
@@ -377,8 +387,10 @@ func TestControlManagesTasksDecisionsAndArtifacts(t *testing.T) {
 	project := c.createProject("Knowledge fixture")
 	_, readToken := createControlAccess(t, c, "read")
 	_, manageToken := createControlAccess(t, c, "read", "manage")
+	_, deleteToken := createControlAccess(t, c, "read", "delete")
 	reader := connectControl(t, c, readToken)
 	manager := connectControl(t, c, manageToken)
+	deleter := connectControl(t, c, deleteToken)
 
 	controlRefused(t, reader, "task_create", map[string]any{"projectId": project, "title": "forbidden"})
 	first := controlCall(t, manager, "task_create", map[string]any{"projectId": project, "title": "First"})["id"].(string)
@@ -388,7 +400,9 @@ func TestControlManagesTasksDecisionsAndArtifacts(t *testing.T) {
 		t.Fatalf("task_ready = %v", ready)
 	}
 	controlCall(t, manager, "task_dependency_remove", map[string]any{"taskId": second, "dependsOnId": first})
-	controlCall(t, manager, "task_delete", map[string]any{"taskId": second})
+	// Deleting is its own right: manage alone does not offer it.
+	controlRefused(t, manager, "task_delete", map[string]any{"taskId": second})
+	controlCall(t, deleter, "task_delete", map[string]any{"taskId": second})
 	if listed := controlCall(t, reader, "task_list", map[string]any{"projectId": project}); len(listed["items"].([]any)) != 1 {
 		t.Fatalf("task_list = %v", listed)
 	}
@@ -398,7 +412,7 @@ func TestControlManagesTasksDecisionsAndArtifacts(t *testing.T) {
 	if listed := controlCall(t, reader, "decision_list", map[string]any{"projectId": project}); len(listed["items"].([]any)) != 1 {
 		t.Fatalf("decision_list = %v", listed)
 	}
-	controlCall(t, manager, "decision_delete", map[string]any{"decisionId": decision})
+	controlCall(t, deleter, "decision_delete", map[string]any{"decisionId": decision})
 
 	var artifact struct {
 		ID string `json:"id"`
@@ -413,7 +427,7 @@ func TestControlManagesTasksDecisionsAndArtifacts(t *testing.T) {
 	if renamed := controlCall(t, manager, "artifact_rename", map[string]any{"artifactId": artifact.ID, "filename": "renamed.txt"}); renamed["filename"] != "renamed.txt" {
 		t.Fatalf("artifact_rename = %v", renamed)
 	}
-	controlCall(t, manager, "artifact_delete", map[string]any{"artifactId": artifact.ID})
+	controlCall(t, deleter, "artifact_delete", map[string]any{"artifactId": artifact.ID})
 	if listed := controlCall(t, reader, "artifact_list", map[string]any{"projectId": project}); len(listed["items"].([]any)) != 0 {
 		t.Fatalf("artifact_list = %v", listed)
 	}

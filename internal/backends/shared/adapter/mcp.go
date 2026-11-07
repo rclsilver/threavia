@@ -138,6 +138,14 @@ func (a *Adapter) prepareMCP(ctx context.Context, p *runner.StartParams, pc *bac
 						continue
 					}
 					name := tool.Name
+					declaration := e.Server
+					if tool.Annotations != nil && tool.Annotations.DestructiveHint != nil && *tool.Annotations.DestructiveHint {
+						// A tool its server says destroys something is asked about on
+						// every call, whatever was preauthorized or classified as a read.
+						// A server hint only ever tightens: it never relaxes a decision.
+						declaration.ReadTools = slices.DeleteFunc(slices.Clone(declaration.ReadTools), func(n string) bool { return n == name })
+						declaration.WriteTools = slices.DeleteFunc(slices.Clone(declaration.WriteTools), func(n string) bool { return n == name })
+					}
 					localName := "external_" + e.Name + "__" + name
 					var schema map[string]any
 					raw, _ := json.Marshal(tool.InputSchema)
@@ -147,7 +155,7 @@ func (a *Adapter) prepareMCP(ctx context.Context, p *runner.StartParams, pc *bac
 					}
 					localName = externalToolName(e.Name, "tool", name)
 					p.ExternalTools = append(p.ExternalTools, mcp.LocalTool{Name: localName, Description: "[External MCP " + e.Name + "] " + tool.Description, InputSchema: schema, RawResult: true, Call: func(callCtx context.Context, args map[string]any) (any, error) {
-						return a.callExternalMCP(callCtx, p.JobID, e.Server, name, args, func() (any, error) { return c.Call(callCtx, name, args) })
+						return a.callExternalMCP(callCtx, p.JobID, declaration, name, args, func() (any, error) { return c.Call(callCtx, name, args) })
 					}})
 					// Native hooks recognize this as a Threavia endpoint operation; the local
 					// handler above enforces the original MCP tool identity and current policy.

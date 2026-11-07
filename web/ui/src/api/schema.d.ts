@@ -622,7 +622,7 @@ export interface paths {
                         /** @enum {string} */
                         codeChallengeMethod: "S256";
                         resource?: string;
-                        scopes: ("read" | "manage" | "answer" | "approve")[];
+                        scopes: ("read" | "manage" | "delete" | "answer" | "approve")[];
                         approved: boolean;
                     };
                 };
@@ -691,7 +691,7 @@ export interface paths {
                 content: {
                     "application/json": {
                         label: string;
-                        scopes: ("read" | "manage" | "answer" | "approve")[];
+                        scopes: ("read" | "manage" | "delete" | "answer" | "approve")[];
                         /** Format: date-time */
                         expiresAt?: string;
                     };
@@ -5952,7 +5952,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             label: string;
-            scopes: ("read" | "manage" | "answer" | "approve")[];
+            scopes: ("read" | "manage" | "delete" | "answer" | "approve")[];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */

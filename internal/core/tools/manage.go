@@ -50,7 +50,7 @@ var ValidatedReceiptTools = map[Name]bool{
 	NameDecisionDelete: true, NameTaskDelete: true, NameArtifactDelete: true,
 	NameSessionControl: true, NameSessionDelete: true, NameJobDelete: true,
 	NameProjectArchive: true, NameProjectDelete: true,
-	NameSessionAdopt: true, NameSessionMove: true,
+	NameSessionAdopt: true, NameSessionMove: true, NameProjectUpdate: true,
 }
 
 const otherProject = "Another project owned by the user to act on instead of the current one; find identifiers with project_list."
@@ -245,8 +245,9 @@ func manageSpecs() []Spec {
 			InputSchema: object(map[string]any{"name": str("Its name."), "description": str("What it is about.")}, "name"),
 		},
 		{
-			Name:        NameProjectUpdate,
-			Description: "Rename a project or change its description or instructions. Omitted fields keep their value; an empty description or instructions clears it. Instructions reach every later job of the project: change them only as the person asked.",
+			Name:               NameProjectUpdate,
+			RequiresValidation: true,
+			Description:        "Rename a project or change its description or instructions, after the person validates. Omitted fields keep their value; an empty description or instructions clears it. Instructions reach every later job of the project: change them only as the person asked.",
 			InputSchema: object(map[string]any{
 				"projectId":    str("Defaults to the current project."),
 				"name":         str("Its new name."),

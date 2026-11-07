@@ -29,7 +29,7 @@ it('defaults to read access and keeps the one-time token out of shared caches', 
   await settle(() => root!.render(h(QueryClientProvider, { client }, h(ControlAccessPane))));
   await settle(() => button('Create MCP access').click());
   const boxes = [...document.querySelectorAll<HTMLElement>('[role="checkbox"]')];
-  expect(boxes.map(b => b.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false', 'false']);
+  expect(boxes.map(b => b.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false', 'false', 'false']);
   const name = document.querySelector<HTMLInputElement>('input[maxlength="120"]')!;
   await settle(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(name, 'Development controller');

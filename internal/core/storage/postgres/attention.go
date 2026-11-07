@@ -261,3 +261,16 @@ func (s *Store) AttentionContexts(ctx context.Context, ownerID domain.UserID, ru
 	}
 	return out, classify(rows.Err(), "read attention context")
 }
+
+// UseValidationReceipt consumes an approved validation as the receipt of one
+// Core Tool call. It reports false when that approval was already used, so
+// two calls racing on one approval cannot both pass.
+func (s *Store) UseValidationReceipt(ctx context.Context, id domain.ValidationRequestID) (bool, error) {
+	tag, err := s.q.Exec(ctx, `
+		UPDATE validation_requests SET receipt_used_at = now()
+		WHERE id = $1 AND status = 'RESOLVED' AND approved AND receipt_used_at IS NULL`, id)
+	if err != nil {
+		return false, classify(err, "use validation receipt")
+	}
+	return tag.RowsAffected() == 1, nil
+}

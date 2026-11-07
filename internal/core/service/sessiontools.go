@@ -426,12 +426,21 @@ func (s *Service) requireHumanReceipt(ctx context.Context, identity auth.Identit
 			Tool  string         `json:"tool"`
 			Input map[string]any `json:"input"`
 		}
-		if json.Unmarshal(receipt.RequestPayload, &payload) == nil &&
-			(payload.Tool == "mcp__threavia__"+name.String() || payload.Tool == name.String()) && reflect.DeepEqual(payload.Input, input) {
+		if json.Unmarshal(receipt.RequestPayload, &payload) != nil ||
+			(payload.Tool != "mcp__threavia__"+name.String() && payload.Tool != name.String()) || !reflect.DeepEqual(payload.Input, input) {
+			continue
+		}
+		// One approval covers one call: a repeated identical call needs the
+		// person again, even within the same Job.
+		used, err := s.store.UseValidationReceipt(ctx, receipt.ID)
+		if err != nil {
+			return translate(err)
+		}
+		if used {
 			return nil
 		}
 	}
-	return fmt.Errorf("%w: %s requires the person's approval of this exact call in the current job", ErrConflict, name)
+	return fmt.Errorf("%w: %s requires the person's approval of this exact call in the current job; each approval covers one call", ErrConflict, name)
 }
 
 func sessionToolProject(input map[string]any, fallback domain.ProjectID) (domain.ProjectID, error) {

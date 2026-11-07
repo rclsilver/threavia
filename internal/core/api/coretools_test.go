@@ -443,6 +443,7 @@ func TestScopeAndPermissionToolsRequireValidation(t *testing.T) {
 		"job_delete":                 true,
 		"project_archive":            true,
 		"project_delete":             true,
+		"project_update":             true,
 	}
 	declared := start.GetProjectContext().GetTools()
 	if len(declared) <= len(want) {

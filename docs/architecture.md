@@ -345,15 +345,18 @@ An agent can consult and manage everything a person can in the clients:
   [session-management.md](session-management.md).
 
 Anything that deletes (`decision_delete`, `task_delete`, `artifact_delete`,
-`session_delete`, `job_delete`, `project_delete`), archives a project, adopts
+`session_delete`, `job_delete`, `project_delete`), archives a project, changes a
+project (`project_update`: its instructions reach every later job), adopts
 or moves a session, or acts on a session that is neither the conversation nor
 one of its direct delegates (`session_control`) requires validation. The
 backend asks the person in every execution mode, and Core also requires their
 approval receipt for that exact call in the calling Job, so a direct call or a
 backend ignoring `requires_validation` cannot skip them. A delegate's request
 approved through its manager's relay counts, since the relay itself needs the
-person's receipt. A receipt is matched by tool and exact input, not consumed: a
-repeated identical call in the same Job is covered by the same approval.
+person's receipt. A receipt is matched by tool and exact input and is used up
+when Core accepts the call: one approval covers one call, so a repeated
+identical call asks again, and an approved call refused afterwards (for
+example, a conflict) needs a new approval.
 A conversation cannot delete itself, or archive or delete its own project.
 
 ### What a Run context carries

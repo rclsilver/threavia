@@ -26,12 +26,15 @@ Rights are independent and cover this account's resources across its projects:
 | Scope | Operations |
 | --- | --- |
 | `read` | Identify target and grants; read projects, directories, bindings, sessions, history, jobs, attention, backends, models, policies, MCP configuration and audit; wait for events |
-| `manage` | Create/update/archive/restore/delete resources, bind directories, send messages, move sessions, stop Jobs, claim/revoke backends, issue one-shot backend registration tokens, choose default backend and set policies, configure external MCP servers and backend connections |
+| `manage` | Create/update/archive/restore resources, bind and unbind directories, send messages, move sessions, stop Jobs, claim backends, issue one-shot backend registration tokens, choose default backend and set policies, configure external MCP servers and backend connections |
+| `delete` | Delete projects, directories, sessions, queued jobs, MCP declarations, tasks, decisions and artifacts; revoke backends |
 | `answer` | Answer a pending question in a specified owned session |
 | `approve` | Accept **or refuse** a specific permission, with its unchanged payload hash |
 
 The form defaults to **read only**. Delegated approval is a separate explicit
-grant; it is never implied by `manage`. Tokens cannot create other control
+grant; it is never implied by `manage`, and neither is `delete`. Tools needing
+`delete` are annotated `destructiveHint`, so clients that honour it confirm
+each call. Tokens cannot create other control
 tokens, change their own scopes or execute commands on Core. Tools are hidden
 when their scope is absent, and calls check the live grant again.
 
@@ -164,6 +167,14 @@ effective. Both settings changes and Job snapshots take effect for subsequent
 Jobs; update calling backends to use write preauthorization. Older backends
 continue asking rather than silently accepting writes.
 
+A tool its server annotates `destructiveHint: true` — every target tool that
+needs the `delete` scope — is asked about on **every** call, even when listed
+in `writeTools` or `readTools`: the person approves each deletion on the
+calling instance. A server hint only ever tightens this; it never relaxes a
+choice. Backends older than this rule still honour `writeTools` for them, so
+leave deletions out of `writeTools` until the calling backends are updated.
+To delete at all, the target access also needs the separate `delete` scope.
+
 ## Run and observe a recipe
 
 Start with `instance_info` to confirm the target and effective scopes. Directory
@@ -204,11 +215,12 @@ Project knowledge and files are reachable too. `read` covers `task_list`,
 `project_history_search`, `artifact_list`, `artifact_metadata`, `artifact_read`
 (text up to 256 KiB, metadata only for binary files), `attention_list`,
 `session_pinned_list`, `session_files`, `session_diff`, `session_repository` and
-`audit_read`. `manage` covers `task_create`, `task_update`, `task_delete`,
+`audit_read`. `manage` covers `task_create`, `task_update`,
 `task_dependency_add/remove`, `decision_create`, `decision_global_create`,
-`decision_set_importance`, `decision_make_global`, `decision_delete`,
-`artifact_rename`, `artifact_delete`, `session_snooze`, `session_unsnooze` and
-`session_mark_read`. Each maps to the HTTP route of the same contract.
+`decision_set_importance`, `decision_make_global`,
+`artifact_rename`, `session_snooze`, `session_unsnooze` and
+`session_mark_read`; `delete` covers `task_delete`, `decision_delete` and
+`artifact_delete`. Each maps to the HTTP route of the same contract.
 
 For the external MCP recipe, configure only the fictional
 [OAuth mock](mcp-oauth-mock.md), refuse the first note creation, accept the

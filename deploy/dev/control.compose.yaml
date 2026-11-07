@@ -32,7 +32,7 @@ services:
       THREAVIA_AUTH_DEV_USER_ID: dev
       THREAVIA_POSTGRES_URL: "postgres://control_dev:control_dev@127.0.0.1:55458/control_dev?sslmode=disable&connect_timeout=5"
       THREAVIA_MCP_BOOTSTRAP_OWNER: dev
-      THREAVIA_MCP_BOOTSTRAP_SCOPES: "read,manage,answer,approve"
+      THREAVIA_MCP_BOOTSTRAP_SCOPES: "read,manage,delete,answer,approve"
     depends_on:
       postgres: { condition: service_healthy }
     read_only: true

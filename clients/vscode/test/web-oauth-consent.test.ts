@@ -38,7 +38,7 @@ it('grants read only unless more is ticked, whatever the client asked, and retur
   expect(document.body.textContent).toContain('Connect ChatGPT to Threavia?');
   expect(document.body.textContent).toContain('chatgpt.com');
   const boxes = [...document.querySelectorAll<HTMLElement>('[role="checkbox"]')];
-  expect(boxes.map(b => b.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false', 'false']);
+  expect(boxes.map(b => b.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false', 'false', 'false']);
   await settle(() => button('Allow').click());
   expect(mocks.post).toHaveBeenCalledWith('/api/v1/oauth/authorize', expect.objectContaining({ clientId: 'c1', redirectUri: redirect, state: '0123', scopes: ['read'], approved: true }));
 });

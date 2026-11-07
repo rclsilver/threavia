@@ -66,7 +66,10 @@ func (h *handler) registerControl(mux *http.ServeMux) {
 			if !slices.Contains(a.Scopes, def.scope) {
 				continue
 			}
-			sdk.AddTool(m, &sdk.Tool{Name: def.name, Description: def.description, InputSchema: def.schema, Annotations: &sdk.ToolAnnotations{ReadOnlyHint: def.scope == "read"}}, func(ctx context.Context, call *sdk.CallToolRequest, in map[string]any) (*sdk.CallToolResult, any, error) {
+			// Callers that honour hints confirm destructive calls; a Threavia
+			// caller asks about them on every call, whatever it preauthorized.
+			destructive := def.scope == "delete"
+			sdk.AddTool(m, &sdk.Tool{Name: def.name, Description: def.description, InputSchema: def.schema, Annotations: &sdk.ToolAnnotations{ReadOnlyHint: def.scope == "read", DestructiveHint: &destructive}}, func(ctx context.Context, call *sdk.CallToolRequest, in map[string]any) (*sdk.CallToolResult, any, error) {
 				raw, _ := json.Marshal(in)
 				return h.callControl(ctx, a, def, raw), nil, nil
 			})
