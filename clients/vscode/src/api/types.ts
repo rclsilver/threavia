@@ -99,9 +99,10 @@ export interface EventPayloads {
   'job.waiting_backend': { reason: string; message: string; retryAt?: string; usage?: Usage };
   'session.model_changed': { model: string; effort: string };
   // dismissed: a quiet schedule's run ended with nothing to report. It is
-  // folded away and announced nowhere.
-  'job.completed': { summary?: string; usage?: Usage; model?: string; effort?: string; dismissed?: boolean };
-  'job.failed': { error?: string; usage?: Usage; model?: string; effort?: string };
+  // folded away and announced nowhere. delegated: an active manager Session
+  // received the end and reports it, so nothing announces the worker's.
+  'job.completed': { summary?: string; usage?: Usage; model?: string; effort?: string; dismissed?: boolean; delegated?: boolean };
+  'job.failed': { error?: string; usage?: Usage; model?: string; effort?: string; delegated?: boolean };
   'validation.resolved': { validationId: string; approved: boolean; note?: string; title?: string; actorJobId?: string };
   'user_input.resolved': { requestId: string; value: string; actorJobId?: string };
   'session.pinned': { pinned: boolean };

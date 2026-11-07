@@ -159,8 +159,10 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
       const effects: Effect[] = [...clearedAttention(event), { kind: 'sessions' }, { kind: 'attention' }, ...repository(sessionId)];
       // Told as it happens, not as it is replayed: a reconnection resends what
       // was missed, and work that ended an hour ago is not news.
-      // A quiet schedule's run that found nothing to report is not news at all.
-      if (sessionId && now - Date.parse(event.timestamp) < JOB_ENDED_FRESH_FOR && !payloadOf(event, 'job.completed')?.dismissed) {
+      // A quiet schedule's run that found nothing to report is not news at all,
+      // and a delegated Session's end is its manager's to report.
+      const delegated = payloadOf(event, 'job.completed')?.delegated || payloadOf(event, 'job.failed')?.delegated;
+      if (sessionId && now - Date.parse(event.timestamp) < JOB_ENDED_FRESH_FOR && !payloadOf(event, 'job.completed')?.dismissed && !delegated) {
         const completed = payloadOf(event, 'job.completed');
         const failed = payloadOf(event, 'job.failed');
         effects.push({

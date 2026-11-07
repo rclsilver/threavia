@@ -485,12 +485,13 @@ func TestSessionToolsChildQuestionWakesTheIdleManager(t *testing.T) {
 	var childAttention struct {
 		Attention struct {
 			UserInputs []struct {
-				Notify bool `json:"notify"`
+				Notify    bool `json:"notify"`
+				Delegated bool `json:"delegated"`
 			} `json:"userInputs"`
 		} `json:"attention"`
 	}
 	c.mustDo(http.MethodGet, "/api/v1/sessions/"+childID, nil, &childAttention, http.StatusOK)
-	if len(childAttention.Attention.UserInputs) != 1 || childAttention.Attention.UserInputs[0].Notify {
+	if len(childAttention.Attention.UserInputs) != 1 || childAttention.Attention.UserInputs[0].Notify || !childAttention.Attention.UserInputs[0].Delegated {
 		t.Fatalf("child input relevance = %+v, want a question handled by the manager without notifying the human directly", childAttention)
 	}
 	pending := c.snapshot(childID).Attention.UserInputs[0].ID
@@ -561,5 +562,30 @@ func TestSessionToolsChildCompletionQueuesOneManagerCallback(t *testing.T) {
 	}
 	if len(c.snapshot(managerID).Jobs) != 2 {
 		t.Fatal("one worker completion must enqueue exactly one manager callback")
+	}
+	// The manager reports the worker's result; clients announce only its own.
+	delegated := func(sessionID string) []bool {
+		var snapshot struct {
+			Events []struct {
+				Type    string `json:"type"`
+				Payload struct {
+					Delegated bool `json:"delegated"`
+				} `json:"payload"`
+			} `json:"events"`
+		}
+		c.mustDo(http.MethodGet, "/api/v1/sessions/"+sessionID, nil, &snapshot, http.StatusOK)
+		var ends []bool
+		for _, event := range snapshot.Events {
+			if event.Type == "job.completed" {
+				ends = append(ends, event.Payload.Delegated)
+			}
+		}
+		return ends
+	}
+	if ends := delegated(childID); len(ends) != 1 || !ends[0] {
+		t.Fatalf("worker job.completed delegated = %v, want [true]", ends)
+	}
+	if ends := delegated(managerID); len(ends) != 1 || ends[0] {
+		t.Fatalf("manager job.completed delegated = %v, want [false]", ends)
 	}
 }

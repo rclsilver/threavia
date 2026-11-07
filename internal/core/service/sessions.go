@@ -918,23 +918,20 @@ func (s *Service) markRelevance(ctx context.Context, ownerID domain.UserID, atte
 		if value, ok := managed[id]; ok {
 			return value
 		}
-		session, err := s.store.GetSession(ctx, ownerID, id)
-		value := false
-		if err == nil && session.ManagerSessionID != nil {
-			manager, managerErr := s.store.GetSession(ctx, ownerID, *session.ManagerSessionID)
-			value = managerErr == nil && manager.Status == domain.SessionActive
-		}
+		value := s.delegated(ctx, ownerID, id)
 		managed[id] = value
 		return value
 	}
 	for i := range attention.UserInputs {
 		if checkManaged(attention.UserInputs[i].Scope.SessionID) {
 			attention.UserInputs[i].Notify = false
+			attention.UserInputs[i].Delegated = true
 		}
 	}
 	for i := range attention.Validations {
 		if checkManaged(attention.Validations[i].Scope.SessionID) {
 			attention.Validations[i].Notify = false
+			attention.Validations[i].Delegated = true
 		}
 	}
 }

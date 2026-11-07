@@ -76,7 +76,10 @@ a Job. An idle manager resumes immediately; a busy one receives the callback
 after its current turn and can also observe those states with `session_wait`.
 Worker questions and completion notifications do not separately notify the
 person while their manager is active; the manager's own questions, approvals
-and final report do. Requests remain visible through the existing API for
+and final report do. Core marks what it keeps quiet so clients stay quiet too:
+the worker's pending requests carry `delegated: true` and its `job.completed`
+and `job.failed` events carry `delegated: true`, which the Web and VS Code
+clients do not announce. Requests remain visible through the existing API for
 manual recovery. Archiving the manager restores ordinary worker notifications;
 deleting it detaches workers and keeps their sessions and files.
 

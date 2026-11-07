@@ -570,6 +570,7 @@ func (s *Service) JobEvent(ctx context.Context, instanceID domain.BackendInstanc
 		ended.Model = jc.Job.Model
 		ended.Effort = jc.Job.Effort
 		ended.Dismissed = dismissedEnd(jc.Job, event)
+		ended.Delegated = s.delegated(ctx, jc.OwnerID, jc.SessionID)
 		history, err := s.store.JobProviderHistory(ctx, jobID)
 		if err != nil {
 			return 0, err

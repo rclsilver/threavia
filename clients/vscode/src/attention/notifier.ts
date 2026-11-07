@@ -58,7 +58,9 @@ export class Notifier implements vscode.Disposable {
     // An empty list before the first answer is "not known yet", and taking it
     // would forget everything already announced.
     if (!core.attention.ready) return;
-    const fresh = new Set(this.cores.ledgers.take(core.id, [...validations, ...userInputs].map((request) => request.id)));
+    // A delegated request is the manager's to relay. It stays out of the
+    // ledger, so it is announced if the manager hands it back.
+    const fresh = new Set(this.cores.ledgers.take(core.id, [...validations, ...userInputs].filter((request) => !request.delegated).map((request) => request.id)));
     void this.cores.saveLedgers();
     if (!notifyAttention()) return;
 

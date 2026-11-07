@@ -113,3 +113,14 @@ it('encodes choices containing parentheses and escapes prompt text in notificati
   await mocks.commands.get('threavia.notificationAction')!(args[0]);
   expect(clients.get('core')!.resolveUserInput).toHaveBeenCalledWith(request.id, 'staging (test)');
 });
+
+it('leaves a delegated request to its manager, and announces it once handed back', async () => {
+  const delegated: UserInputRequest = { ...prompt, notify: false, delegated: true };
+  const { core } = await setup(['core'], delegated);
+  expect(core.attention.current.userInputs).toHaveLength(1);
+  expect(mocks.notices).toHaveLength(0);
+  // Archiving the manager gives the question back to the person.
+  delete delegated.delegated;
+  await core.attention.refresh();
+  expect(mocks.notices).toHaveLength(1);
+});

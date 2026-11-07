@@ -151,6 +151,9 @@ type JobEndedPayload struct {
 	// Dismissed is set on job.completed when the agent of a quiet schedule run
 	// had nothing to report: clients fold the run away and announce nothing.
 	Dismissed bool `json:"dismissed,omitempty"`
+	// Delegated is set when an active manager Session receives this end: the
+	// manager reports it, so clients announce nothing for the worker.
+	Delegated bool `json:"delegated,omitempty"`
 }
 
 // UsagePayload is what a Job consumed, as the backend reported it.

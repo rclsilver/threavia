@@ -89,6 +89,13 @@ describe('what an event changes', () => {
     expect(kinds(dismissed)).toContain('sessions');
   });
 
+  it("announces nothing for a delegated session's end, which its manager reports", () => {
+    const done = effectsOf(event('job.completed', { payload: { summary: 'Done', delegated: true } }), at);
+    expect(kinds(done)).not.toContain('jobEnded');
+    expect(kinds(done)).toContain('sessions');
+    expect(kinds(effectsOf(event('job.failed', { payload: { error: 'boom', delegated: true } }), at))).not.toContain('jobEnded');
+  });
+
   it('ignores what no view shows', () => {
     expect(effectsOf(event('agent.message'), at)).toEqual([]);
   });

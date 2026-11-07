@@ -6427,7 +6427,9 @@ export interface components {
              *     - `job.completed`, `job.failed`: `{ summary | error, usage }`;
              *       job.completed carries `dismissed: true` when the agent of a quiet
              *       schedule run ended it with nothing to report: fold the run away
-             *       and announce nothing
+             *       and announce nothing. Either carries `delegated: true` when an
+             *       active manager Session receives the end and reports it: announce
+             *       nothing for the worker either
              *     - `workspace.changed`: `{ knownDirectoryId, files, additions,
              *       deletions, directory?, baseTree?, headTree? }`, the last three
              *       present when the diff of a file can be asked for
@@ -6665,6 +6667,8 @@ export interface components {
             originChannel?: components["schemas"]["Channel"];
             /** @description False while the client that started the work still holds a live stream. */
             notify: boolean;
+            /** @description An active manager Session handles this request and tells the person itself. List it; do not announce it. */
+            delegated?: boolean;
             context?: components["schemas"]["AttentionContext"];
             approved?: boolean;
             resolvedByUserId?: string;
@@ -6693,6 +6697,8 @@ export interface components {
             freeText: boolean;
             originChannel?: components["schemas"]["Channel"];
             notify: boolean;
+            /** @description An active manager Session handles this request and tells the person itself. List it; do not announce it. */
+            delegated?: boolean;
             context?: components["schemas"]["AttentionContext"];
             value?: string;
             resolvedByUserId?: string;

@@ -208,12 +208,10 @@ func (s *Service) deliver(ctx context.Context, subs []domain.PushSubscription, m
 // focused, used in the last minutes — that screen already shows it and
 // nothing rings; otherwise every subscribed device does.
 func (s *Service) notifyAttention(ctx context.Context, jc postgres.JobContext, event *backendv1.JobEvent) {
-	if session, err := s.store.GetSession(ctx, jc.OwnerID, jc.SessionID); err == nil && session.ManagerSessionID != nil {
+	if s.delegated(ctx, jc.OwnerID, jc.SessionID) {
 		// The manager handles worker questions and reports their results. Its
 		// own input/validation requests still notify the person as usual.
-		if manager, err := s.store.GetSession(ctx, jc.OwnerID, *session.ManagerSessionID); err == nil && manager.Status == domain.SessionActive {
-			return
-		}
+		return
 	}
 	var title, body string
 	switch payload := event.GetBody().(type) {
@@ -245,6 +243,18 @@ func (s *Service) notifyAttention(ctx context.Context, jc postgres.JobContext, e
 		// One notification per Session: a newer one replaces the older.
 		Tag: string(jc.SessionID),
 	})
+}
+
+// delegated says whether an active manager Session handles this Session's
+// questions and results, so the person hears of them from the manager only.
+// Archiving the manager hands them back; deleting it detaches the worker.
+func (s *Service) delegated(ctx context.Context, ownerID domain.UserID, sessionID domain.SessionID) bool {
+	session, err := s.store.GetSession(ctx, ownerID, sessionID)
+	if err != nil || session.ManagerSessionID == nil {
+		return false
+	}
+	manager, err := s.store.GetSession(ctx, ownerID, *session.ManagerSessionID)
+	return err == nil && manager.Status == domain.SessionActive
 }
 
 func clip(text string, limit int) string {
