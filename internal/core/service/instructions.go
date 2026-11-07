@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/rclsilver/threavia/internal/core/auth"
 	"github.com/rclsilver/threavia/internal/core/domain"
@@ -270,6 +271,30 @@ func (s *Service) SetBackendInstructions(ctx context.Context, identity auth.Iden
 	return s.BackendInstructions(ctx, identity, id)
 }
 
+// labelName makes a project or backend name fit a section label. The label is
+// the "[...]" line a reader takes as the start of a level, so a name must not
+// end it early, break it across lines or forge another one: brackets are
+// dropped and every run of whitespace or control characters becomes a space.
+func labelName(name string) string {
+	var b strings.Builder
+	gap := false
+	for _, r := range name {
+		switch {
+		case r == '[' || r == ']':
+			continue
+		case unicode.IsSpace(r) || unicode.IsControl(r):
+			gap = true
+			continue
+		}
+		if gap && b.Len() > 0 {
+			b.WriteByte(' ')
+		}
+		gap = false
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 // assembleInstructions orders and labels the layers of a Job. It is the only
 // place that does, so a preview and the Job it previews cannot drift apart.
 //
@@ -279,13 +304,13 @@ func assembleInstructions(l postgres.JobLayers) domain.Instructions {
 	return domain.Instructions{
 		Agent: domain.Layered(domain.LayeredPreamble, []domain.Layer{
 			{Label: "Global", Text: l.Global.Agent},
-			{Label: "Project " + l.ProjectName, Text: l.Project.Agent},
-			{Label: "Backend " + l.BackendName, Text: l.Backend.Agent},
+			{Label: "Project " + labelName(l.ProjectName), Text: l.Project.Agent},
+			{Label: "Backend " + labelName(l.BackendName), Text: l.Backend.Agent},
 		}),
 		Supervision: domain.Layered(domain.LayeredSupervisionPreamble, []domain.Layer{
 			{Label: "Global", Text: l.Global.Supervision},
-			{Label: "Project " + l.ProjectName, Text: l.Project.Supervision},
-			{Label: "Backend " + l.BackendName, Text: l.Backend.Supervision},
+			{Label: "Project " + labelName(l.ProjectName), Text: l.Project.Supervision},
+			{Label: "Backend " + labelName(l.BackendName), Text: l.Backend.Supervision},
 			{Label: "Session", Text: l.SessionSupervision},
 			{Label: "Job", Text: l.JobSupervision},
 		}),
