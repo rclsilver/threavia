@@ -457,6 +457,9 @@ export class EventStream {
         void this.invalidate({ queryKey: keys.audit() });
         void this.invalidate({ queryKey: ['projects'] });
         void this.invalidate({ queryKey: ['project'] });
+        // Its instructions are a level the preview reads, edited from any
+        // client, and its name labels that level.
+        if (event.type === 'project.updated') void this.invalidate({ queryKey: ['instructions'] });
         if (event.type === 'project.deleted') {
           void this.invalidate({ queryKey: ['sessions'] });
           void this.invalidate({ queryKey: keys.attention() });

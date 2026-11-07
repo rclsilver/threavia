@@ -27,6 +27,7 @@ import {
   useDeleteArtifact,
   useDeleteDecision,
   useInstallSkill,
+  useInstructions,
   useMakeSkillGlobal,
   useProjects,
   useSetSkillActivation,
@@ -47,6 +48,8 @@ import { DirectoriesPane } from '@/components/directories-pane';
 import { Markdown } from '@/components/markdown';
 import { ArtifactViewer, DownloadButton } from '@/components/artifact-preview';
 import { kindOf } from '@/lib/artifact';
+import { InheritedText, InstructionsPanel } from '@/components/instructions-panel';
+import { InstructionsPreviewButton } from '@/components/instructions-preview';
 import { PolicyForm, RulesEditor } from '@/components/policy-form';
 import { SkillViewer } from '@/components/skill-viewer';
 import {
@@ -205,18 +208,28 @@ export function InstructionsView() {
       title="Instructions"
       subtitle="The standing rules every Job of this Project reads first."
       action={
-        !editing && (
-          <Button size="lg" className="gap-1.5" title="Edit the instructions (E)" aria-keyshortcuts="E" onClick={() => setEditing(true)}>
-            <Pencil />
-            Edit
-            <kbd className="text-muted border-border ml-1 hidden rounded border px-1 font-sans text-[0.6875rem] leading-4 sm:inline">
-              E
-            </kbd>
-          </Button>
-        )
+        <div className="flex items-center gap-2">
+          <InstructionsPreviewButton projectId={projectId} size="lg" variant="ghost" />
+          {!editing && (
+            <Button size="lg" className="gap-1.5" title="Edit the instructions (E)" aria-keyshortcuts="E" onClick={() => setEditing(true)}>
+              <Pencil />
+              Edit
+              <kbd className="text-muted border-border ml-1 hidden rounded border px-1 font-sans text-[0.6875rem] leading-4 sm:inline">
+                E
+              </kbd>
+            </Button>
+          )}
+        </div>
       }
     >
+      <h3 className="-mb-2 text-base font-semibold">For the agent</h3>
       <InstructionsPane projectId={projectId} editing={editing} onEditingChange={setEditing} />
+      {/* The reviewer's half, saved on its own: the agent's text above keeps
+          its editor and its save, and this one never sends it back changed. */}
+      <section aria-labelledby="project-supervision-title" className="max-w-reading space-y-3 pt-4">
+        <h3 id="project-supervision-title" className="text-base font-semibold">For the reviewer</h3>
+        <InstructionsPanel scope={{ kind: 'project', projectId }} only="supervision" />
+      </section>
     </Section>
   );
 }
@@ -908,6 +921,8 @@ function InstructionsPane({
   onEditingChange: (editing: boolean) => void;
 }) {
   const project = useProject(projectId);
+  // Only for what the levels above say; the text itself stays the Project's field.
+  const layers = useInstructions({ kind: 'project', projectId });
   const [saved, setSaved] = useState(false);
   const text = project.data?.instructions ?? '';
 
@@ -954,6 +969,11 @@ function InstructionsPane({
         <p className="text-ok -mt-2 flex items-center gap-1 text-xs">
           <Check className="size-3.5" /> Saved.
         </p>
+      )}
+      {layers.data && (
+        <div className="max-w-reading">
+          <InheritedText text={layers.data.inherited.agent} note="Global, set in Settings → Permissions. When they conflict, these instructions win." />
+        </div>
       )}
       <p className="text-muted max-w-reading text-xs">
         Provider-independent: the backend running a Job hands them to its agent in whatever form that

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { usePolicy, useSetPolicy, useSnapshot } from '@/api/queries';
 import type { ExecutionPolicy } from '@/api/types';
+import { InstructionsPreviewButton } from '@/components/instructions-preview';
 import { PolicyForm, RulesEditor } from '@/components/policy-form';
 import { ActionError } from '@/components/ui/action-error';
 import { Button } from '@/components/ui/button';
@@ -31,6 +32,9 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
   const [draft, setDraft] = useState<ExecutionPolicy | null>(null);
 
   const editing = Boolean(data && (!data.inherited || overriding));
+  const projectId = snapshot.data?.session.projectId;
+  // The backend of the latest Run is the one the next Job goes to.
+  const backendId = [...(snapshot.data?.runs ?? [])].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1)?.backendInstanceId;
 
   // Two different things to show. While following, this is a view of what
   // applies, Project rules included. While editing, it is what this Session
@@ -81,13 +85,22 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
         )}
       </div>
 
-      <PolicyForm value={draft} onChange={setDraft} idPrefix="session-policy" disabled={!editing} />
+      <PolicyForm value={draft} onChange={setDraft} idPrefix="session-policy" disabled={!editing} showSupervision />
 
       <RulesEditor
         rules={draft.rules ?? []}
         onChange={(rules) => setDraft({ ...draft, rules })}
         disabled={!editing}
       />
+
+      {projectId && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted text-xs">
+            The agent and supervisor instructions of this session's next Job, every level assembled.
+          </span>
+          <InstructionsPreviewButton projectId={projectId} backendId={backendId} sessionId={sessionId} size="sm" variant="ghost" className="text-xs" />
+        </div>
+      )}
 
       <p className="text-muted text-xs">
         A guard rail, not a sandbox: filesystem and process access stay the real permissions of the

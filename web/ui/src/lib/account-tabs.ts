@@ -10,7 +10,7 @@ export const ACCOUNT_TABS: { tab: AccountTab; label: string; Icon: LucideIcon; d
   { tab: 'memory', label: 'Core memory', Icon: BookText, detail: 'Facts and decisions shared across all your projects on this Core. Pinned ones travel with every Job; the others remain searchable.' },
   { tab: 'audit', label: 'Audit', Icon: History, detail: 'Who changed what across your projects and Core memory. Records remain available after a project or its subjects are deleted.' },
   { tab: 'directories', label: 'Directories', Icon: Folder, detail: 'Manage known directories on this Core, in a project or globally across your projects.' },
-  { tab: 'permissions', label: 'Permissions', Icon: ShieldCheck, detail: 'The defaults for all your projects and backends on this instance. Backends, projects and sessions can override them.' },
+  { tab: 'permissions', label: 'Permissions', Icon: ShieldCheck, detail: 'The instructions and permissions for all your projects and backends on this instance. Backends, projects and sessions add to the instructions and can override the permissions.' },
   { tab: 'appearance', label: 'Appearance', Icon: Monitor, detail: 'How this client looks and lays itself out, on this device.' },
   {
     tab: 'notifications',
