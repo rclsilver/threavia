@@ -85,7 +85,10 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
         )}
       </div>
 
-      <PolicyForm value={draft} onChange={setDraft} idPrefix="session-policy" disabled={!editing} showSupervision />
+      {/* The reviewer's box belongs to this Session's own policy. While it
+          follows, the Session says nothing to the reviewer itself, and an
+          empty box in grey would read as a text that was cleared. */}
+      <PolicyForm value={draft} onChange={setDraft} idPrefix="session-policy" disabled={!editing} showSupervision={editing} />
 
       <RulesEditor
         rules={draft.rules ?? []}
@@ -96,7 +99,9 @@ export function PolicyPanel({ sessionId }: { sessionId: string }) {
       {projectId && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-muted text-xs">
-            The agent and supervisor instructions of this session's next Job, every level assembled.
+            {editing
+              ? "The agent and supervisor instructions of this session's next Job, every level assembled."
+              : 'The reviewer reads the supervisor instructions of the global, project and backend levels.'}
           </span>
           <InstructionsPreviewButton projectId={projectId} backendId={backendId} sessionId={sessionId} size="sm" variant="ghost" className="text-xs" />
         </div>
