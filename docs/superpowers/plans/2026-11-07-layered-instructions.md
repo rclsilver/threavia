@@ -126,7 +126,7 @@
 - [ ] **Step 4: Run** the same tests, then `make web-generate-check`. Expected: PASS.
 - [ ] **Step 5: Commit** `feat(api): edit agent and supervisor instructions per level`.
 
-### Task 4: Assemble per job, and fix delegation
+### Task 4: Assemble per job, preview, and fix delegation
 
 **Files:**
 - Modify: `internal/core/service/jobs.go`. Around line 133 (dispatch), and in `projectContext` (line ~279), where the base becomes the assembled agent text instead of `jc.ProjectInstructions`.
@@ -136,7 +136,12 @@
 
 **Interfaces:**
 - Consumes: `Store.JobInstructionLayers`, `domain.Layered`.
-- Produces: `func (s *Service) jobInstructions(ctx, jobID domain.JobID) (agent, supervision string, err error)`.
+- Produces:
+  - `func assembleInstructions(l postgres.JobLayers) domain.Instructions`: the single place where the layers are ordered and labelled. Both the job path and the preview call it.
+  - `func (s *Service) jobInstructions(ctx, jobID domain.JobID) (domain.Instructions, error)`: `JobInstructionLayers` then `assembleInstructions`.
+  - `func (s *Store) PreviewInstructionLayers(ctx, ownerID domain.UserID, projectID domain.ProjectID, backendID domain.BackendInstanceID, sessionID *domain.SessionID) (JobLayers, error)`, in `internal/core/storage/postgres/instructions.go`. It returns `ErrNotFound` when the project, backend or session is not the owner's, or when the session belongs to another project. `JobSupervision` stays empty.
+  - `func (s *Service) PreviewInstructions(ctx, identity, projectID, backendID, sessionID *domain.SessionID) (domain.Instructions, error)`.
+  - Route `GET /api/v1/projects/{projectId}/instructions/preview?backendId=&sessionId=`, added to `api/openapi.yaml` (response schema `Instructions`). A missing `backendId` gives 400. Regenerate the TS types.
   - The agent layers are Global, Project, Backend.
   - The supervision layers are Global, Project, Backend, Session (`SessionSupervision`), Job (`JobSupervision`).
   - Both dispatch and `pushPolicy` overwrite `policy.Supervision` with the assembled supervision. Leave `domain.Effective` unchanged: after Task 2, only session/job policies carry supervision, so views keep showing only the session's own text.
@@ -147,7 +152,8 @@
   - `TestGlobalSupervisionSurvivesProjectMode`: set global supervision `S`, then PUT a project policy with only `mode: SUPERVISED`. The started job's `ExecutionPolicy.Supervision` equals `S`.
   - `TestSupervisionLayeredWithSession`: global `S1`, backend `S2` and a session policy with supervision `S3` give a supervision with the sections Global, Backend <name>, Session, in that order. A session policy change pushes `UpdateJobPolicy` with the same assembled text.
   - `TestDelegatedSessionDoesNotInheritManagerSupervision`: the manager's project B has supervision `M`. The child in project A, with supervision `A`, gets `A` only, and its stored session policy has no `supervision`.
-- [ ] **Step 2: Run** `go test ./internal/core/api -run 'AgentInstructions|Supervision(Survives|Layered)|DelegatedSession'`. Expected: FAIL.
+  - `TestInstructionsPreviewMatchesJob`: with global, project and backend texts set, the preview for (project, backend) equals the agent text (minus any dynamic notes) and the supervision of a job started there. With `sessionId` of a session holding supervision `S3`, the preview supervision ends with `[Session]\nS3`. Another user, an unknown backend, or a session of another project gives 404. A missing `backendId` gives 400.
+- [ ] **Step 2: Run** `go test ./internal/core/api -run 'AgentInstructions|Supervision(Survives|Layered)|DelegatedSession|InstructionsPreview'`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the same tests, then `make test`. Expected: PASS. The existing `resume_test.go` instructions assertions must still pass.
 - [ ] **Step 5: Commit** `feat(core): send layered agent and supervisor instructions to every job`.
@@ -173,7 +179,10 @@
 - Modify: `web/ui/src/routes/settings.tsx:106` and `:305`. Render `InstructionsPanel` next to `DefaultPolicyPane` (instance tab and backend page).
 - Modify: `web/ui/src/routes/project.tsx`, `InstructionsView` (~198). Keep the existing agent editor, which already edits `projects.instructions`. Below it, add the supervisor textarea and the inherited blocks by rendering `InstructionsPanel` in project scope, restricted to the supervision field, or by merging the two. The builder picks whichever reads better, as long as there is a single save path per field.
 - Modify: `web/ui/src/components/policy-form.tsx:155`. Add a `showSupervision?: boolean` prop, default `false`. Pass `true` only from `policy-panel.tsx` (session).
-- Modify: `web/ui/src/demo/server.ts`. Answer the three `/instructions` routes.
+- Create: `web/ui/src/components/instructions-preview.tsx`. Export `InstructionsPreview({ projectId, backendId, sessionId }: { projectId: string; backendId?: string; sessionId?: string })`. It has a backend select (pre-selected: `backendId`, else the default backend, else the first), and shows the two final texts read-only, each with an empty state ("Nothing from the levels."). One muted line says: "The Threavia base prompt, this machine's LOCAL_INSTRUCTIONS and per-job notes are added when a job starts."
+- Modify: `web/ui/src/api/queries.ts`. Add `useInstructionsPreview(projectId, backendId, sessionId?)`, with query key `['instructions', 'preview', …]`, so that the existing invalidation also refreshes it.
+- Modify: `web/ui/src/routes/project.tsx` `InstructionsView`, to add a "Preview" button that opens `InstructionsPreview`. Also modify `web/ui/src/components/policy-panel.tsx`, to add the same preview with the session id and its current backend.
+- Modify: `web/ui/src/demo/server.ts`. Answer the three `/instructions` routes and `/instructions/preview`.
 
 - [ ] **Step 1:** Implement, then run `make web-lint web-demo-check`. Expected: PASS.
 - [ ] **Step 2:** In a docker-compose environment from the worktree (`docker compose -p threavia-layered-instr up -d --build`), save instructions at each level. Check the inherited block and the absence of the supervision field in the project, backend and instance policy forms. Publish a screenshot.
@@ -186,7 +195,8 @@
 - Modify: `clients/vscode/src/extension.ts`. Add the command `threavia.manageInstructions`, copying the target resolution of `threavia.managePermissions` (line ~357) with the scopes `Global`, `Backend` and `Project`, and paths `/api/v1/me|backends/{id}|projects/{id}/instructions`.
 - Modify: `clients/vscode/package.json`. Declare the command (title "Instructions…", category Threavia) and add it to the same context menus as `threavia.managePermissions`, for project and backend nodes.
 - Modify: `clients/vscode/src/permissions/page.ts:25,54`. Show the supervision label only when the path is a session path, even in SUPERVISED mode.
-- Test: `clients/vscode/test/instructions.test.ts`. Follow `permissions.test.ts`: the page's save posts `{agent, supervision}` to the right path, and the inherited text renders escaped.
+- In the project scope, the instructions page has a "Preview" button. The extension asks for a backend with `pickBackend`, calls `GET /api/v1/projects/{id}/instructions/preview?backendId=`, and posts the result to the page, which renders both texts read-only and escaped, together with the same one-line note as the web.
+- Test: `clients/vscode/test/instructions.test.ts`. Follow `permissions.test.ts`: the page's save posts `{agent, supervision}` to the right path, the inherited text and the preview texts render escaped, and the Preview button is present only in the project scope.
 - Test: update `clients/vscode/test/permissions.test.ts` for the hidden supervision field at the project, backend and instance levels.
 
 - [ ] **Step 1: Write the failing tests** above.

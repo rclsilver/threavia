@@ -187,7 +187,15 @@ d'un backend varie selon le job, il n'est donc pas montré).
 - OpenAPI mis à jour, schémas TS régénérés (web et vscode).
 - Audit : chaque écriture journalisée (`instructions.instance_set`,
   `instructions.project_set`, `instructions.backend_set`).
-- Pas d'aperçu du texte final dans cette itération.
+- **Aperçu du texte final** (demande utilisateur) :
+  `GET /api/v1/projects/{projectId}/instructions/preview?backendId=…[&sessionId=…]`
+  → `{agent, supervision}`, assemblés exactement comme pour un job de ce
+  projet sur ce backend (et cette session si donnée : sa supervision propre
+  est alors incluse). Même code d'assemblage que l'envoi aux jobs. Ne
+  contient pas ce qui s'ajoute au moment du job : notes dynamiques
+  (délégation, reprise, MCP indisponibles), texte Threavia fixe et
+  `LOCAL_INSTRUCTIONS` du backend — l'interface le précise en une ligne.
+  Le niveau job n'y figure pas (il n'existe qu'au lancement).
 
 ### Outils MCP
 
@@ -204,6 +212,10 @@ global/backend dans cette itération.
   backend et projet (`policy-form.tsx`), reste pour session/job.
 - Sous chaque zone, le texte hérité des niveaux du dessus en lecture seule,
   pour que l'on sache ce qu'on complète.
+- Page projet, vue « Instructions » : un bouton « Aperçu » avec un choix de
+  backend (le backend par défaut présélectionné) affiche les deux textes
+  finaux en lecture seule. Le panneau de politique d'une session offre le
+  même aperçu, avec la session et son backend courant.
 - Le serveur `/demo` répond aux nouvelles routes (`make web-demo-check`).
 
 ### VS Code (demande utilisateur : configurable depuis web **et** VS Code)
@@ -213,6 +225,8 @@ global/backend dans cette itération.
   l'arbre, ou par un choix Global / Backend / Projet.
 - Elle ouvre un éditeur webview avec les deux zones et le texte hérité en
   lecture seule, et enregistre via le `PUT …/instructions`.
+- Pour un projet, l'éditeur propose aussi « Aperçu » : choix du backend, puis
+  les deux textes finaux en lecture seule (même endpoint que le web).
 - L'éditeur de permissions (`permissions/page.ts`) n'affiche plus le champ
   supervision qu'au niveau session.
 
