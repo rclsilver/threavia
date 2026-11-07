@@ -1,8 +1,8 @@
 -- The supervision goes back into the policy of its level where there is one.
 -- A level without a policy cannot take it back without gaining one, which
 -- would replace the broader policies wholesale, so its text is lost. So are the
--- agent instructions of the global and backend levels, and the Session and Job
--- copies removed on the way up (the audit keeps them).
+-- agent instructions of the global and backend levels, and the copies of the
+-- broader supervision removed on the way up (the audit keeps them).
 UPDATE instance_execution_policies i
 SET execution_policy = jsonb_set(i.execution_policy, '{supervision}', to_jsonb(ii.supervision))
 FROM instance_instructions ii

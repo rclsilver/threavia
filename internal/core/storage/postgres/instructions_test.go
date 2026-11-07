@@ -250,6 +250,25 @@ func TestMigrationStripsInheritedCopies(t *testing.T) {
 		}
 		return s.ID
 	}
+	// A Project and a backend whose policies hold what "Override" pre-filled
+	// from the instance: once the levels add up, the global text would show
+	// twice.
+	copied := domain.Project{
+		ID: domain.NewProjectID(), OwnerID: f.owner, Name: "copied",
+		Status: domain.ProjectActive,
+	}
+	if err := store.CreateProject(ctx, &copied); err != nil {
+		t.Fatal(err)
+	}
+	server := domain.BackendInstance{
+		ID: domain.NewBackendInstanceID(), OwnerID: &f.owner, Name: "server",
+		OwnershipStatus: domain.BackendClaimed,
+		Capabilities:    []domain.Capability{domain.CapabilityCode},
+		Capacity:        domain.Capacity{MaxConcurrentRuns: 1},
+	}
+	if err := store.CreateBackendInstance(ctx, &server, "hash-"+domain.NewUUID(), nil, nil); err != nil {
+		t.Fatal(err)
+	}
 	other := session(f.project.ID, "Another session")
 	backendOnly := session(bare.ID, "Always on the laptop", f.backend.ID, f.backend.ID)
 	twoBackends := session(bare.ID, "Laptop and desktop", desktop.ID, f.backend.ID)
@@ -275,6 +294,12 @@ func TestMigrationStripsInheritedCopies(t *testing.T) {
 		}
 	}
 	if err := store.SetProjectExecutionPolicy(ctx, f.owner, f.project.ID, policy("Stop before deploys.")); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetProjectExecutionPolicy(ctx, f.owner, copied.ID, policy("Global rule.\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetBackendExecutionPolicy(ctx, f.owner, server.ID, policy(" Global rule.")); err != nil {
 		t.Fatal(err)
 	}
 	sessions := map[domain.SessionID]string{
@@ -324,29 +349,46 @@ func TestMigrationStripsInheritedCopies(t *testing.T) {
 	if got, err := store.ProjectInstructionsOf(ctx, f.owner, f.project.ID); err != nil || got.Supervision != "Stop before deploys." {
 		t.Errorf("project supervision = %+v, %v", got, err)
 	}
+	if got, err := store.BackendInstructions(ctx, f.owner, f.backend.ID); err != nil || got.Supervision != "Backend rule." {
+		t.Errorf("backend supervision = %+v, %v", got, err)
+	}
+	if got, err := store.ProjectInstructionsOf(ctx, f.owner, copied.ID); err != nil || got.Supervision != "" {
+		t.Errorf("project with a copy of the global text now has %+v, %v; want it removed", got, err)
+	}
+	if got, err := store.BackendInstructions(ctx, f.owner, server.ID); err != nil || got.Supervision != "" {
+		t.Errorf("backend with a copy of the global text now has %+v, %v; want it removed", got, err)
+	}
+	if hasSupervisionKey(t, db, `SELECT execution_policy ? 'supervision' FROM projects WHERE id = $1`, copied.ID) ||
+		hasSupervisionKey(t, db, `SELECT execution_policy ? 'supervision' FROM backend_instances WHERE id = $1`, server.ID) {
+		t.Error("a policy kept its copy of the global supervision")
+	}
 
 	rows, err := db.Pool().Query(ctx, `
-		SELECT owner_id, actor_id, project_id, session_id, COALESCE(job_id, ''), detail
+		SELECT owner_id, actor_id, COALESCE(project_id, ''), COALESCE(session_id, ''), COALESCE(job_id, ''),
+		       COALESCE(subject_id, ''), detail
 		FROM audit_entries WHERE action = 'instructions.migration_copy_removed'`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
 	type entry struct {
-		owner, actor, project, session, job string
-		detail                              map[string]string
+		owner, actor, project, session, job, subject string
+		detail                                       map[string]string
 	}
 	got := map[string]entry{}
 	for rows.Next() {
 		var e entry
 		var raw []byte
-		if err := rows.Scan(&e.owner, &e.actor, &e.project, &e.session, &e.job, &raw); err != nil {
+		if err := rows.Scan(&e.owner, &e.actor, &e.project, &e.session, &e.job, &e.subject, &raw); err != nil {
 			t.Fatal(err)
 		}
 		if err := json.Unmarshal(raw, &e.detail); err != nil {
 			t.Fatal(err)
 		}
-		key := e.session
+		key := e.subject
+		if e.session != "" {
+			key = e.session
+		}
 		if e.job != "" {
 			key = e.job
 		}
@@ -363,6 +405,8 @@ func TestMigrationStripsInheritedCopies(t *testing.T) {
 		string(f.session.ID): {project: string(f.project.ID), session: string(f.session.ID)},
 		string(backendOnly):  {project: string(bare.ID), session: string(backendOnly)},
 		string(instanceCopy): {project: string(bare.ID), session: string(instanceCopy)},
+		string(copied.ID):    {project: string(copied.ID), subject: string(copied.ID)},
+		string(server.ID):    {subject: string(server.ID)},
 	}
 	if len(got) != len(want) {
 		t.Errorf("audit entries = %+v, want one per removed copy (%d)", got, len(want))
@@ -374,7 +418,7 @@ func TestMigrationStripsInheritedCopies(t *testing.T) {
 			continue
 		}
 		if e.owner != string(f.owner) || e.actor != "migration" || e.project != w.project ||
-			e.session != w.session || e.job != w.job || e.detail["supervision"] == "" {
+			e.session != w.session || e.job != w.job || e.subject != w.subject || e.detail["supervision"] == "" {
 			t.Errorf("audit entry for %s = %+v", key, e)
 		}
 	}

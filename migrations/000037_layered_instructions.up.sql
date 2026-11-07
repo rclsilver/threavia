@@ -94,6 +94,43 @@ WITH copies AS (
 UPDATE sessions SET execution_policy = sessions.execution_policy - 'supervision'
 FROM copies WHERE sessions.id = copies.session_id;
 
+-- Backend and project policies were pre-filled the same way, from the
+-- instance policy, so many hold a copy of the instance supervision. These go
+-- after the Sessions and Jobs, whose copies are judged against these policies
+-- as they were. A project is only matched against the instance, never a
+-- backend: it is not pinned to one.
+WITH copies AS (
+    SELECT b.id AS backend_id, b.owner_id, b.execution_policy->>'supervision' AS supervision
+    FROM backend_instances b
+    JOIN instance_execution_policies i ON i.owner_id = b.owner_id
+    WHERE btrim(COALESCE(b.execution_policy->>'supervision', ''), E' \t\n\r\f\v') <> ''
+      AND btrim(b.execution_policy->>'supervision', E' \t\n\r\f\v') =
+          btrim(COALESCE(i.execution_policy->>'supervision', ''), E' \t\n\r\f\v')
+), audited AS (
+    INSERT INTO audit_entries (id, owner_id, actor_id, action, subject_id, detail)
+    SELECT gen_random_uuid(), owner_id, 'migration', 'instructions.migration_copy_removed',
+           backend_id, jsonb_build_object('supervision', supervision)
+    FROM copies
+)
+UPDATE backend_instances SET execution_policy = backend_instances.execution_policy - 'supervision'
+FROM copies WHERE backend_instances.id = copies.backend_id;
+
+WITH copies AS (
+    SELECT p.id AS project_id, p.owner_id, p.execution_policy->>'supervision' AS supervision
+    FROM projects p
+    JOIN instance_execution_policies i ON i.owner_id = p.owner_id
+    WHERE btrim(COALESCE(p.execution_policy->>'supervision', ''), E' \t\n\r\f\v') <> ''
+      AND btrim(p.execution_policy->>'supervision', E' \t\n\r\f\v') =
+          btrim(COALESCE(i.execution_policy->>'supervision', ''), E' \t\n\r\f\v')
+), audited AS (
+    INSERT INTO audit_entries (id, owner_id, actor_id, action, project_id, subject_id, detail)
+    SELECT gen_random_uuid(), owner_id, 'migration', 'instructions.migration_copy_removed',
+           project_id, project_id, jsonb_build_object('supervision', supervision)
+    FROM copies
+)
+UPDATE projects SET execution_policy = projects.execution_policy - 'supervision'
+FROM copies WHERE projects.id = copies.project_id;
+
 -- Move the supervision of the three broad levels to their new place. A blank
 -- text carries nothing and is dropped without an audit row.
 INSERT INTO instance_instructions (owner_id, supervision)
