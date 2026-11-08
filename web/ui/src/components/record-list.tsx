@@ -58,7 +58,7 @@ export function RecordRow({
           <Icon className={cn('size-4', tone)} />
         </span>
       )}
-      <div className="min-w-0 flex-1 py-0.5 sm:py-1">
+      <div className="min-w-0 flex-1 basis-40 py-0.5 sm:py-1">
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className={cn('min-w-0 text-sm font-medium break-words', muted && 'text-muted')}>{title}</span>
           {badges}
@@ -79,7 +79,7 @@ export function RecordRow({
         )}
         {meta && <p className="text-muted figures mt-1 font-mono text-xs [overflow-wrap:anywhere]">{meta}</p>}
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="ml-auto flex shrink-0 items-center gap-1">
         {action}
         {menu && (
           <Menu>
