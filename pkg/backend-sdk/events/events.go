@@ -186,9 +186,9 @@ func (f *Factory) JobFailed(ctx context.Context, runID, jobID, code, message str
 
 // JobCancelled confirms that the backend actually stopped the work. Only then
 // does Core move the Job from CANCELLING to CANCELLED.
-func (f *Factory) JobCancelled(ctx context.Context, runID, jobID string) (*backendv1.JobEvent, error) {
+func (f *Factory) JobCancelled(ctx context.Context, runID, jobID string, usage *backendv1.Usage) (*backendv1.JobEvent, error) {
 	return f.build(ctx, runID, jobID, func(e *backendv1.JobEvent) {
-		e.Body = &backendv1.JobEvent_JobCancelled{JobCancelled: &backendv1.JobCancelled{}}
+		e.Body = &backendv1.JobEvent_JobCancelled{JobCancelled: &backendv1.JobCancelled{Usage: usage}}
 	})
 }
 

@@ -85,7 +85,7 @@ func TestEventBodies(t *testing.T) {
 		t.Errorf("summary = %q, want %q", got, "done")
 	}
 
-	cancelled, _ := factory.JobCancelled(ctx, "run-1", "job-1")
+	cancelled, _ := factory.JobCancelled(ctx, "run-1", "job-1", nil)
 	if cancelled.GetJobCancelled() == nil {
 		t.Error("the cancellation body must be set")
 	}

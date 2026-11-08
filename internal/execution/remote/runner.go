@@ -210,7 +210,7 @@ func (r *Runner) Run(ctx context.Context, p runner.StartParams, sink runner.Sink
 		live.cancelAttempt = nil
 		live.mu.Unlock()
 		if ctx.Err() != nil && (terminal == nil || terminal.Kind != "completed") {
-			return sink.JobCancelled(reportCtx, p.RunID, p.JobID)
+			return sink.JobCancelled(reportCtx, p.RunID, p.JobID, terminalUsage(terminal))
 		}
 		if changed && (terminal == nil || terminal.Kind == "cancelled" || terminal.Kind == "failed") {
 			if nativeID == "" && (actions > 0 || wasStarted) {
@@ -393,7 +393,7 @@ func deliver(ctx context.Context, p runner.StartParams, s runner.Sink, e protoco
 	case "failed":
 		return s.JobFailed(ctx, run, job, e.Code, e.Text, e.Usage)
 	case "cancelled":
-		return s.JobCancelled(ctx, run, job)
+		return s.JobCancelled(ctx, run, job, e.Usage)
 	case "blocked":
 		return runner.ReportProviderBlock(ctx, s, run, job, e.Block, e.Usage)
 	case "quotas":
@@ -404,4 +404,13 @@ func deliver(ctx context.Context, p runner.StartParams, s runner.Sink, e protoco
 	default:
 		return errors.New("unknown execution event")
 	}
+}
+
+// terminalUsage keeps what a worker reported consuming when the Job is
+// cancelled around its terminal event: stopped work still spent its tokens.
+func terminalUsage(terminal *protocol.Event) *backendv1.Usage {
+	if terminal == nil {
+		return nil
+	}
+	return terminal.Usage
 }

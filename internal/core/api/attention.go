@@ -17,6 +17,7 @@ func (h *handler) registerAttention(mux *http.ServeMux) {
 
 	h.handle(mux, "GET /api/v1/me", h.me)
 	h.handle(mux, "GET /api/v1/me/attention", h.attention)
+	h.handle(mux, "GET /api/v1/usage", h.sessionUsage)
 	h.handle(mux, "POST /api/v1/validations/{validationId}/resolve", h.resolveValidation)
 	h.handle(mux, "POST /api/v1/user-input/{requestId}/resolve", h.resolveUserInput)
 }

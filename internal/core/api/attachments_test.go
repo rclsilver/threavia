@@ -103,7 +103,7 @@ func TestInterruptingWithFilesReplacesAJobWaitingForAnAnswer(t *testing.T) {
 		t.Fatal("the cancel went to another job")
 	}
 	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
-		return backend.events.JobCancelled(ctx, start.GetRunId(), start.GetJobId())
+		return backend.events.JobCancelled(ctx, start.GetRunId(), start.GetJobId(), nil)
 	}))
 	next := receive(t, "the files to be sent in its place", backend.starts)
 	if next.GetJobId() != replaced.ID || next.GetRunId() != start.GetRunId() || len(next.Attachments) != 1 || string(next.Attachments[0].Content) != "image bytes" {

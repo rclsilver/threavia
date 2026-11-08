@@ -4484,6 +4484,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rank Sessions by what they consumed
+         * @description One row per Session, backend, model and effort, ordered by tokens of
+         *     every kind, the largest first. Figures are those backends reported for
+         *     ended Jobs, including cancelled ones, by UTC day of the end. Jobs minus
+         *     reportedJobs consumed an amount nobody knows. A deleted Session no
+         *     longer appears.
+         *
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description First UTC day included. Six days before `to` by default. */
+                    from?: string;
+                    /** @description Last UTC day included. Today by default. A period covers at most 366 days. */
+                    to?: string;
+                    /** @description Restrict to one Project. */
+                    projectId?: components["schemas"]["UUID"];
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The ranking */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SessionUsage"];
+                    };
+                };
+                400: components["responses"]["Error"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/push": {
         parameters: {
             query?: never;
@@ -6481,6 +6534,45 @@ export interface components {
              */
             costUsd?: number;
         };
+        SessionUsage: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            rows: components["schemas"]["UsageRow"][];
+        };
+        UsageRow: {
+            sessionId: components["schemas"]["UUID"];
+            sessionTitle: string;
+            projectId: components["schemas"]["UUID"];
+            projectName: string;
+            /** @description Empty when the Job ended without a known backend. */
+            backendInstanceId: string;
+            /** @description Empty when the Job ran on the backend's default model. */
+            model: string;
+            /** @description Empty when the Job ran on the default effort. */
+            effort: string;
+            /** Format: int64 */
+            jobs: number;
+            /**
+             * Format: int64
+             * @description Ended Jobs whose backend reported their usage.
+             */
+            reportedJobs: number;
+            /** Format: int64 */
+            inputTokens: number;
+            /** Format: int64 */
+            outputTokens: number;
+            /** Format: int64 */
+            cacheReadTokens: number;
+            /** Format: int64 */
+            cacheWriteTokens: number;
+            /**
+             * Format: double
+             * @description What providers said it cost. Zero when they said nothing.
+             */
+            costUsd: number;
+        };
         Project: {
             id: components["schemas"]["UUID"];
             ownerId: string;
@@ -6755,6 +6847,8 @@ export interface components {
              *       and announce nothing. Either carries `delegated: true` when an
              *       active manager Session receives the end and reports it: announce
              *       nothing for the worker either
+             *     - `job.cancelled`: `{ reason?, usage? }`, usage being what the work
+             *       consumed before it stopped, when the backend reported it
              *     - `workspace.changed`: `{ knownDirectoryId, files, additions,
              *       deletions, directory?, baseTree?, headTree? }`, the last three
              *       present when the diff of a file can be asked for

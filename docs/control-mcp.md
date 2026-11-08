@@ -214,7 +214,9 @@ Project knowledge and files are reachable too. `read` covers `task_list`,
 `task_ready`, `decision_list`, `decision_global_list`, `memory_search`,
 `project_history_search`, `artifact_list`, `artifact_metadata`, `artifact_read`
 (text up to 256 KiB, metadata only for binary files), `attention_list`,
-`session_pinned_list`, `session_files`, `session_diff`, `session_repository` and
+`usage_read` (sessions ranked by tokens consumed, per backend, model and
+effort), `session_pinned_list`, `session_files`, `session_diff`,
+`session_repository` and
 `audit_read`. `manage` covers `task_create`, `task_update`,
 `task_dependency_add/remove`, `decision_create`, `decision_global_create`,
 `decision_set_importance`, `decision_make_global`,

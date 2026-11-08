@@ -60,7 +60,7 @@ type Sink interface {
 	// nothing: unknown accounting must not read as a free Job.
 	JobCompleted(ctx context.Context, runID, jobID, summary string, usage *backendv1.Usage) error
 	JobFailed(ctx context.Context, runID, jobID, code, message string, usage *backendv1.Usage) error
-	JobCancelled(ctx context.Context, runID, jobID string) error
+	JobCancelled(ctx context.Context, runID, jobID string, usage *backendv1.Usage) error
 
 	// Progress streams a liveness-only signal. It is never persisted.
 	Progress(ctx context.Context, runID, jobID, kind, detail string)

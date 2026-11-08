@@ -65,7 +65,7 @@ func (s *sink) JobFailed(_ context.Context, _, _, code, message string, _ *backe
 	s.failure = code + ": " + message
 	return nil
 }
-func (s *sink) JobCancelled(context.Context, string, string) error {
+func (s *sink) JobCancelled(context.Context, string, string, *backendv1.Usage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.failure = "cancelled"

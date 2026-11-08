@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -106,7 +107,10 @@ func (s *recordingSink) JobFailed(_ context.Context, _, _, code, detail string, 
 	s.append("failed")
 	return nil
 }
-func (s *recordingSink) JobCancelled(context.Context, string, string) error {
+func (s *recordingSink) JobCancelled(_ context.Context, _, _ string, usage *backendv1.Usage) error {
+	s.mu.Lock()
+	s.usage = usage
+	s.mu.Unlock()
 	s.append("cancelled")
 	return nil
 }
@@ -477,6 +481,11 @@ func TestProviderProcess(t *testing.T) {
 			}
 			if scenario == "malformed" {
 				_, _ = os.Stdout.WriteString("invalid JSON\n")
+				continue
+			}
+			if scenario == "hang-usage" {
+				notify("thread/tokenUsage/updated", map[string]any{"threadId": "thread-1", "turnId": turn, "tokenUsage": map[string]any{"last": map[string]any{"inputTokens": 8, "outputTokens": 2}}})
+				notify("item/completed", map[string]any{"threadId": "thread-1", "item": map[string]any{"type": "agentMessage", "id": "message-1", "text": "working"}})
 				continue
 			}
 			if scenario == "hang" || strings.HasPrefix(scenario, "helper-") || strings.HasPrefix(scenario, "supervised") {
@@ -851,5 +860,41 @@ func TestNativePromptAttachment(t *testing.T) {
 	}
 	if sink.code != "" || !strings.Contains(strings.Join(sink.events, ","), "completed") {
 		t.Fatalf("image prompt did not complete: %#v", sink)
+	}
+}
+
+// A cancelled Job still consumed what its turn used before the interrupt.
+func TestCancellationReportsUsage(t *testing.T) {
+	c, p, sink := provider(t, "hang-usage")
+	done := make(chan error, 1)
+	go func() { done <- c.Run(context.Background(), p, sink) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		sink.mu.Lock()
+		working := slices.Contains(sink.events, "message:working")
+		sink.mu.Unlock()
+		if working {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the turn did not report")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := c.Cancel(p.JobID); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("did not stop")
+	}
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	if sink.events[len(sink.events)-1] != "cancelled" || sink.usage.GetInputTokens() != 8 || sink.usage.GetOutputTokens() != 2 {
+		t.Fatalf("events %v, usage %+v", sink.events, sink.usage)
 	}
 }

@@ -59,7 +59,7 @@ func (f *fixture) Run(ctx context.Context, p runner.StartParams, s runner.Sink) 
 	call := s.(caller)
 	fail := func(err error) error {
 		if ctx.Err() != nil {
-			return s.JobCancelled(context.Background(), p.RunID, p.JobID)
+			return s.JobCancelled(context.Background(), p.RunID, p.JobID, nil)
 		}
 		return s.JobFailed(ctx, p.RunID, p.JobID, "FIXTURE", err.Error(), nil)
 	}

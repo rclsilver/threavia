@@ -103,6 +103,11 @@ name stays and the connection goes on.
 
 ## Quotas
 
+`JobCancelled` carries the usage of the stopped work when the provider said
+anything about it: Codex counts the requests of the interrupted turn, Claude
+Code the API calls of the turn in flight, priced only for the turns that ended.
+Core reads an absent usage as unknown, which is what older backends send.
+
 Explicit auth/quota refusals can stop an attempt without ending its Job through
 `JobWaitingBackend`, negotiated by `Welcome.provider_recovery`. The event
 carries a reason, message, earliest retry timestamp, known attempt usage and

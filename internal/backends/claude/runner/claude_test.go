@@ -114,7 +114,10 @@ func (s *recordingSink) JobFailed(_ context.Context, _, _, code, message string,
 	return nil
 }
 
-func (s *recordingSink) JobCancelled(context.Context, string, string) error {
+func (s *recordingSink) JobCancelled(_ context.Context, _, _ string, usage *backendv1.Usage) error {
+	s.mu.Lock()
+	s.usage = usage
+	s.mu.Unlock()
 	s.record("job.cancelled")
 	return nil
 }
@@ -947,4 +950,55 @@ wait
 		}
 		return false
 	})
+}
+
+// TestCancelReportsWhatTheJobConsumed covers a Job stopped mid-turn: the turns
+// that ended count with their cost, and the API calls of the one in flight
+// count by message, a repeated message replacing its earlier report.
+func TestCancelReportsWhatTheJobConsumed(t *testing.T) {
+	t.Parallel()
+
+	binary, _ := fakeClaude(t, `
+echo '{"type":"system","subtype":"init","session_id":"s"}'
+echo '{"type":"result","subtype":"success","is_error":false,"result":"first","usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":100,"cache_creation_input_tokens":0},"total_cost_usd":0.25}'
+echo '{"type":"assistant","message":{"id":"m1","role":"assistant","content":[{"type":"text","text":"a"}],"usage":{"input_tokens":3,"output_tokens":1,"cache_read_input_tokens":20,"cache_creation_input_tokens":0}}}'
+echo '{"type":"assistant","message":{"id":"m1","role":"assistant","content":[{"type":"text","text":"b"}],"usage":{"input_tokens":3,"output_tokens":2,"cache_read_input_tokens":20,"cache_creation_input_tokens":0}}}'
+echo '{"type":"assistant","message":{"id":"m2","role":"assistant","content":[{"type":"text","text":"c"}],"usage":{"input_tokens":4,"output_tokens":6,"cache_read_input_tokens":0,"cache_creation_input_tokens":7}}}'
+sleep 300`)
+	sink := &recordingSink{}
+	claude := newRunner(t, binary)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- claude.Run(context.Background(), runner.StartParams{
+			RunID: "run-1", JobID: "job-1", WorkingDirectory: t.TempDir(),
+		}, sink)
+	}()
+	waitFor(t, "the turn in flight", func() bool {
+		sink.mu.Lock()
+		defer sink.mu.Unlock()
+		return len(sink.messages) == 3
+	})
+	if err := claude.Cancel("job-1"); err != nil {
+		t.Fatalf("cancelling the job: %v", err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("the cancelled run returned %v", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the cancelled process did not stop")
+	}
+
+	sink.mu.Lock()
+	usage := sink.usage
+	sink.mu.Unlock()
+	if !contains(sink.timeline(), "job.cancelled") || usage == nil {
+		t.Fatalf("timeline = %v, usage = %v", sink.timeline(), usage)
+	}
+	if usage.InputTokens != 17 || usage.OutputTokens != 13 || usage.CacheReadTokens != 120 ||
+		usage.CacheWriteTokens != 7 || usage.CostUsd != 0.25 {
+		t.Fatalf("cancelled usage = %+v", usage)
+	}
 }

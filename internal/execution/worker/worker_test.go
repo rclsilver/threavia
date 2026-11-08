@@ -148,7 +148,9 @@ func (s *recordingSink) JobCompleted(context.Context, string, string, string, *b
 func (s *recordingSink) JobFailed(_ context.Context, _, _, code, message string, _ *backendv1.Usage) error {
 	return errors.New(code + ": " + message)
 }
-func (s *recordingSink) JobCancelled(context.Context, string, string) error       { return nil }
+func (s *recordingSink) JobCancelled(context.Context, string, string, *backendv1.Usage) error {
+	return nil
+}
 func (s *recordingSink) Progress(context.Context, string, string, string, string) {}
 
 func TestWorkerRoundTripKeepsToolsScopedAndWaitsForContainerStop(t *testing.T) {
@@ -287,7 +289,7 @@ func TestPolicyChangeConfirmsOldContainerBeforeResumingNativeSession(t *testing.
 				}
 				close(actionObserved)
 				<-ctx.Done()
-				return s.JobCancelled(context.WithoutCancel(ctx), p.RunID, p.JobID)
+				return s.JobCancelled(context.WithoutCancel(ctx), p.RunID, p.JobID, nil)
 			}
 			if p.NativeSessionID != "native-session" || p.ActionsUsed != 1 || p.ActiveSecondsUsed < 1 || p.Prompt == "original prompt" {
 				return errors.New("native session or cumulative budget lost")

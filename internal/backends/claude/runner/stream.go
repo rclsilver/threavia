@@ -48,8 +48,45 @@ type providerUsage struct {
 }
 
 type providerMessage struct {
+	ID      string         `json:"id"`
 	Role    string         `json:"role"`
 	Content []contentBlock `json:"content"`
+	// What the API call behind this message consumed. The provider repeats
+	// one message per content block, each with the usage of the same call.
+	Usage *providerUsage `json:"usage"`
+}
+
+// turnUsage is the usage of each API call of a turn still in flight, by
+// message id: a repeated message replaces its earlier report.
+type turnUsage map[string]*backendv1.Usage
+
+func (t turnUsage) observe(message *providerMessage) turnUsage {
+	if message == nil || message.ID == "" || message.Usage == nil {
+		return t
+	}
+	if t == nil {
+		t = turnUsage{}
+	}
+	t[message.ID] = &backendv1.Usage{
+		InputTokens:      message.Usage.InputTokens,
+		OutputTokens:     message.Usage.OutputTokens,
+		CacheReadTokens:  message.Usage.CacheReadTokens,
+		CacheWriteTokens: message.Usage.CacheCreationTokens,
+	}
+	return t
+}
+
+// stoppedUsage is what a Job stopped mid-turn consumed: the turns that ended,
+// and the API calls of the one that did not. The cost stays that of the ended
+// turns, since the provider prices a turn only on its result line.
+func (o outcome) stoppedUsage() *backendv1.Usage {
+	total := o.usage
+	for _, call := range o.pending {
+		cost := total.GetCostUsd()
+		total = addUsage(total, call)
+		total.CostUsd = cost
+	}
+	return total
 }
 
 type contentBlock struct {
@@ -79,7 +116,10 @@ type outcome struct {
 	stoppedBy string
 	// usage is nil when the provider reported none, which a terminal event
 	// carries through: no accounting is not the same as a free Job.
-	usage          *backendv1.Usage
+	usage *backendv1.Usage
+	// pending is what the turn still in flight has consumed so far. Only a
+	// result line accounts for a turn, so a cancellation adds this instead.
+	pending        turnUsage
 	blocked        *contract.ProviderBlock
 	inputDelivered bool
 	nativeBound    bool
@@ -149,6 +189,7 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 			}
 
 		case "assistant":
+			result.pending = result.pending.observe(line.Message)
 			if len(line.Error) > 0 {
 				var code string
 				if json.Unmarshal(line.Error, &code) != nil {
@@ -200,6 +241,7 @@ func (c *Claude) consume(ctx context.Context, stdout io.Reader, params StartPara
 				result.summary = "claude code reported an error (" + line.Subtype + ")"
 			}
 			result.usage = addUsage(result.usage, normaliseUsage(line))
+			result.pending = nil
 			c.turnEnded(params.JobID)
 
 		default:

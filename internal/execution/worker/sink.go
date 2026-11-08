@@ -53,8 +53,8 @@ func (s *remoteSink) JobCompleted(ctx context.Context, run, job, summary string,
 func (s *remoteSink) JobFailed(ctx context.Context, run, job, code, message string, usage *backendv1.Usage) error {
 	return s.post(ctx, run, job, protocol.Event{Kind: "failed", Code: code, Text: message, Usage: usage})
 }
-func (s *remoteSink) JobCancelled(ctx context.Context, run, job string) error {
-	return s.post(ctx, run, job, protocol.Event{Kind: "cancelled"})
+func (s *remoteSink) JobCancelled(ctx context.Context, run, job string, usage *backendv1.Usage) error {
+	return s.post(ctx, run, job, protocol.Event{Kind: "cancelled", Usage: usage})
 }
 func (s *remoteSink) ProviderBlocked(ctx context.Context, run, job string, block *runner.ProviderBlock, usage *backendv1.Usage) error {
 	return s.post(ctx, run, job, protocol.Event{Kind: "blocked", Block: block, Usage: usage})

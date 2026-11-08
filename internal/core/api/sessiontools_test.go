@@ -248,7 +248,7 @@ func TestSessionToolsQueueCancelAndArchive(t *testing.T) {
 		t.Fatalf("cancel = %+v, want the child's Job", cancelled)
 	}
 	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
-		return backend.events.JobCancelled(ctx, next.GetRunId(), next.GetJobId())
+		return backend.events.JobCancelled(ctx, next.GetRunId(), next.GetJobId(), nil)
 	}))
 	waitUntil(t, "the cancelled child", func() bool { return c.jobStatus(childID, next.GetJobId()) == "CANCELLED" })
 	backend.callCoreTool(t, ctx, manager.GetRunId(), manager.GetJobId(), "session_archive", map[string]any{"sessionId": childID, "archived": true})

@@ -243,10 +243,10 @@ func (a *Adapter) JobFailed(ctx context.Context, runID, jobID, code, message str
 // JobCancelled implements runner.Sink. Core moves the Job to CANCELLED only
 // when this arrives: the backend is the source of truth for what actually
 // stopped.
-func (a *Adapter) JobCancelled(ctx context.Context, runID, jobID string) error {
+func (a *Adapter) JobCancelled(ctx context.Context, runID, jobID string, usage *backendv1.Usage) error {
 	a.recordTerminal(ctx, runID, jobID, backendv1.JobStatus_JOB_STATUS_CANCELLED)
 	return a.send(ctx, func() (*backendv1.JobEvent, error) {
-		return a.sdk().Events().JobCancelled(ctx, runID, jobID)
+		return a.sdk().Events().JobCancelled(ctx, runID, jobID, usage)
 	})
 }
 

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -14,6 +15,7 @@ import (
 	"github.com/rclsilver/threavia/internal/core/domain"
 	"github.com/rclsilver/threavia/internal/core/events"
 	"github.com/rclsilver/threavia/internal/core/storage/postgres"
+	"github.com/rclsilver/threavia/pkg/backend-sdk/quotas"
 )
 
 type snapshotReader struct {
@@ -144,5 +146,83 @@ func TestFailedDatabaseCollectionFailsScrape(t *testing.T) {
 	m.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/metrics", nil))
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("failed scrape = %d", rr.Code)
+	}
+}
+
+func TestScrapeReportsUsageAndQuotas(t *testing.T) {
+	percent, used := 61.5, 3.0
+	resets := time.Unix(1_800_000_000, 0)
+	snapshot := postgres.MetricsSnapshot{
+		Usage: []postgres.UsageGroup{
+			{ProjectID: "p", SessionID: "s", BackendInstanceID: "b", Model: "opus", Effort: "high", Outcome: "COMPLETED",
+				Jobs: 3, ReportedJobs: 3, InputTokens: 10, OutputTokens: 20, CacheReadTokens: 300, CacheWriteTokens: 4, CostUSD: 1.25},
+			{ProjectID: "p", SessionID: "s", BackendInstanceID: "b", Model: "opus", Effort: "high", Outcome: "CANCELLED",
+				Jobs: 2, ReportedJobs: 1, InputTokens: 1, OutputTokens: 2},
+		},
+		Waits:   []postgres.WaitGroup{{ProjectID: "p", BackendInstanceID: "b", Reason: "QUOTA_EXCEEDED", Count: 4}},
+		Waiting: []postgres.WaitGroup{{ProjectID: "p", BackendInstanceID: "b", Reason: "BACKEND_DISCONNECTED", Count: 1}},
+		Quotas: []postgres.QuotaSnapshot{
+			{BackendInstanceID: "b", Status: quotas.Status{Availability: "AVAILABLE", ObservedAt: resets.Add(-time.Hour),
+				Limits: []quotas.Limit{{ID: "weekly", Label: "Weekly", Unit: "percent", PercentUsed: &percent, Used: &used, WindowSeconds: 604800, ResetsAt: &resets}}}},
+			// An unreadable report exports nothing rather than zeros.
+			{BackendInstanceID: "broken"},
+		},
+		Names: []postgres.MetricName{{Kind: "session", ID: "s", Name: "Refactor"}},
+	}
+	m, broker, registry := newTestMetrics(snapshotReader{snapshot: snapshot})
+	rr := httptest.NewRecorder()
+	m.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/metrics", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("scrape: %s", rr.Body.String())
+	}
+	body := rr.Body.String()
+	labels := `backend_instance_id="b",effort="high",model="opus",project_id="p",session_id="s"`
+	for _, want := range []string{
+		`threavia_core_job_tokens_total{` + labels + `,type="input"} 11`,
+		`threavia_core_job_tokens_total{` + labels + `,type="output"} 22`,
+		`threavia_core_job_tokens_total{` + labels + `,type="cache_read"} 300`,
+		`threavia_core_job_tokens_total{` + labels + `,type="cache_write"} 4`,
+		`threavia_core_job_cost_usd_total{` + labels + `} 1.25`,
+		`threavia_core_job_usage_jobs_total{backend_instance_id="b",effort="high",model="opus",outcome="CANCELLED",project_id="p",session_id="s",usage="unreported"} 1`,
+		`threavia_core_job_usage_jobs_total{backend_instance_id="b",effort="high",model="opus",outcome="COMPLETED",project_id="p",session_id="s",usage="reported"} 3`,
+		`threavia_core_job_backend_waits_total{backend_instance_id="b",project_id="p",reason="QUOTA_EXCEEDED"} 4`,
+		`threavia_core_jobs_waiting_backend{backend_instance_id="b",project_id="p",reason="BACKEND_DISCONNECTED"} 1`,
+		`threavia_core_backend_quota_available{backend_instance_id="b"} 1`,
+		`threavia_core_backend_quota_info{backend_instance_id="b",label="Weekly",limit_id="weekly",unit="percent"} 1`,
+		`threavia_core_backend_quota_used_percent{backend_instance_id="b",limit_id="weekly"} 61.5`,
+		`threavia_core_backend_quota_used{backend_instance_id="b",limit_id="weekly"} 3`,
+		`threavia_core_backend_quota_window_seconds{backend_instance_id="b",limit_id="weekly"} 604800`,
+		`threavia_core_backend_quota_resets_at_seconds{backend_instance_id="b",limit_id="weekly"} 1.8e+09`,
+		`threavia_core_session_info{name="Refactor",session_id="s"} 1`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	for _, absent := range []string{"threavia_core_backend_quota_limit{", "threavia_core_backend_quota_remaining{", `backend_instance_id="broken"`} {
+		if strings.Contains(body, absent) {
+			t.Errorf("unexpected %s", absent)
+		}
+	}
+	// A Session identifier is exported for consumption only.
+	families, err := m.registry.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowed := map[string]bool{"threavia_core_job_tokens_total": true, "threavia_core_job_cost_usd_total": true,
+		"threavia_core_job_usage_jobs_total": true, "threavia_core_session_info": true}
+	for _, family := range families {
+		for _, metric := range family.Metric {
+			for _, label := range metric.Label {
+				if label.GetName() == "session_id" && !allowed[family.GetName()] {
+					t.Errorf("%s carries session_id", family.GetName())
+				}
+			}
+		}
+	}
+	pedantic := prometheus.NewPedanticRegistry()
+	pedantic.MustRegister(newStateCollector(nil, snapshotReader{snapshot: snapshot}, broker, registry))
+	if _, err := pedantic.Gather(); err != nil {
+		t.Fatal(err)
 	}
 }

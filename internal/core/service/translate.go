@@ -111,7 +111,7 @@ func translateJobEvent(event *backendv1.JobEvent) (events.Type, any, error) {
 		}, nil
 
 	case *backendv1.JobEvent_JobCancelled:
-		return events.TypeJobCancelled, JobEndedPayload{}, nil
+		return events.TypeJobCancelled, JobEndedPayload{Usage: usageFromProto(body.JobCancelled.GetUsage())}, nil
 
 	case *backendv1.JobEvent_JobWaitingBackend:
 		wait := body.JobWaitingBackend

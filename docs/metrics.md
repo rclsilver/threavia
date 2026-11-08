@@ -56,12 +56,31 @@ Application metrics have the prefix `threavia_core_`. Standard `go_*` and
 | `project_info` | Gauge, always 1 | `project_id`, `name` |
 | `backend_info` | Gauge, always 1 | `backend_instance_id`, `name` |
 | `known_directory_info` | Gauge, always 1 | `known_directory_id`, `name` |
+| `session_info` | Gauge, always 1 | `session_id`, `name` (its title) |
+| `job_tokens_total` | Counter | Usage dimensions + `type`: input, output, cache_read, cache_write |
+| `job_cost_usd_total` | Counter | Usage dimensions |
+| `job_usage_jobs_total` | Counter | Usage dimensions + `outcome` + `usage`: reported, unreported |
+| `job_backend_waits_total` | Counter | `project_id`, `backend_instance_id`, `reason` |
+| `jobs_waiting_backend` | Gauge | `project_id`, `backend_instance_id`, `reason` |
+| `backend_quota_available` | Gauge, 0 or 1 | `backend_instance_id` |
+| `backend_quota_observed_at_seconds` | Gauge | `backend_instance_id` |
+| `backend_quota_info` | Gauge, always 1 | Quota dimensions + `label`, `unit` |
+| `backend_quota_used_percent` | Gauge | Quota dimensions |
+| `backend_quota_used`, `backend_quota_limit`, `backend_quota_remaining` | Gauge | Quota dimensions |
+| `backend_quota_window_seconds` | Gauge | Quota dimensions |
+| `backend_quota_resets_at_seconds` | Gauge | Quota dimensions |
 | `metrics_database_collection_success` | Gauge | — |
 
 Job dimensions are **`project_id`, `backend_instance_id`, `known_directory_id`**:
-UUIDs, with an empty directory label when none is configured. No session/job
+UUIDs, with an empty directory label when none is configured. No job
 identifiers, physical paths, prompts or user identifiers are exported. Only
 observed combinations are exported, not a Cartesian product.
+
+Usage dimensions are **`project_id`, `session_id`, `backend_instance_id`,
+`model`, `effort`**. Consumption is the one place a Session identifier is
+exported: which Session spends a quota is the question these metrics answer.
+An empty `model` or `effort` is the backend's default. Quota dimensions are
+**`backend_instance_id`, `limit_id`**, the provider's identifier of a limit.
 
 HTTP routes are matched patterns such as `/api/v1/jobs/{jobId}`, never raw
 paths. Unknown routes use `unmatched`; static UI paths use `web`. Unsupported
@@ -103,6 +122,59 @@ failed collection returns HTTP 500, making Prometheus `up` zero, instead of
 serving stale or invented zero job metrics. Missing groups mean no current jobs
 or no observed aggregate; use `or vector(0)` for a global zero when appropriate.
 
+## Consumption and quotas
+
+Migration 38 counts what each ended Job consumed, as its backend reported it,
+from the event that ends it: completed, failed or cancelled. A database trigger
+updates the counters in the transaction that appends the event; a replayed
+backend event is not appended, so it is not counted twice. Unlike durations,
+this history is in the events: the migration rebuilds it from them, except for
+Sessions already deleted. Counters then survive Session deletion.
+
+Usage is counted once the Job ends, with every provider attempt it took: a Job
+waiting on a quota has consumed tokens that appear when it ends. Tokens and cost
+add up all outcomes; `job_usage_jobs_total` says how many Jobs ended with an
+unknown usage (`usage="unreported"`), which are not free Jobs. Cancelled Jobs
+report their usage from backends that include this change; earlier backends
+send none. Claude Code's cost is the provider's API-price estimate, not a share
+of a subscription quota; Codex reports no cost.
+
+`job_backend_waits_total` counts every stop to wait for a backend by the
+provider's reason (`QUOTA_EXCEEDED`, `RATE_LIMITED`,
+`AUTHENTICATION_REQUIRED`, …). `jobs_waiting_backend` also covers Jobs parked
+because their backend disconnected, as `BACKEND_DISCONNECTED`.
+
+Quota gauges read the latest report of each backend. Values the provider did not
+report are absent, never zero. Prometheus keeps the history Core does not.
+
+Top Sessions by tokens over the last week, with their title:
+
+```promql
+topk(10, sum by (session_id) (
+  max by (project_id, session_id, backend_instance_id, model, effort, type) (
+    increase(threavia_core_job_tokens_total[7d]))))
+  * on (session_id) group_left(name) max by (session_id, name) (threavia_core_session_info)
+```
+
+Output tokens by model and effort over a day:
+
+```promql
+sum by (model, effort) (
+  max by (project_id, session_id, backend_instance_id, model, effort) (
+    increase(threavia_core_job_tokens_total{type="output"}[1d])))
+```
+
+Weekly quota use, per backend and limit:
+
+```promql
+max by (backend_instance_id, limit_id) (threavia_core_backend_quota_used_percent)
+  * on (backend_instance_id, limit_id) group_left(label)
+    max by (backend_instance_id, limit_id, label) (threavia_core_backend_quota_info)
+```
+
+The same ranking by Session is available to clients as `GET /api/v1/usage`, by
+UTC day, for Sessions that still exist.
+
 ## Replicas and display names
 
 Runtime, HTTP, pool, SSE and backend connections belong to each Core process.
@@ -127,6 +199,4 @@ max by (project_id, backend_instance_id, known_directory_id, status) (threavia_c
 Prometheus supplies target labels such as `instance` and, depending on discovery,
 `namespace` and `pod`. Names are visible to anyone reaching the listener.
 
-No web demo or VS Code change is needed: this is infrastructure monitoring,
-without a client API or UI feature. Dashboards and alert rules are not installed
-by this change.
+Dashboards and alert rules are not installed by this change.

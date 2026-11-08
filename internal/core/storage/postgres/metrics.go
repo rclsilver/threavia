@@ -2,8 +2,11 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/rclsilver/threavia/pkg/backend-sdk/quotas"
 )
 
 // MetricGroup contains no execution identifiers or filesystem paths.
@@ -14,10 +17,36 @@ type MetricGroup struct {
 
 type MetricName struct{ Kind, ID, Name string }
 
+// UsageGroup is what the Jobs of one Session consumed with one model and
+// effort, by outcome. ReportedJobs counts those whose backend said anything.
+type UsageGroup struct {
+	ProjectID, SessionID, BackendInstanceID, Model, Effort, Outcome string
+	Jobs, ReportedJobs                                              float64
+	InputTokens, OutputTokens, CacheReadTokens, CacheWriteTokens    float64
+	CostUSD                                                         float64
+}
+
+// WaitGroup counts Jobs waiting for their backend, by reason.
+type WaitGroup struct {
+	ProjectID, BackendInstanceID, Reason string
+	Count                                float64
+}
+
+// QuotaSnapshot is the latest quota report of a backend.
+type QuotaSnapshot struct {
+	BackendInstanceID string
+	Status            quotas.Status
+}
+
 // MetricsSnapshot is a database-wide snapshot, shared by all Core replicas.
 type MetricsSnapshot struct {
 	Active, Finished, Durations []MetricGroup
-	Names                       []MetricName
+	Usage                       []UsageGroup
+	// Waits are wait periods entered since the history began; Waiting are the
+	// Jobs waiting now.
+	Waits, Waiting []WaitGroup
+	Quotas         []QuotaSnapshot
+	Names          []MetricName
 }
 
 // ReadMetrics bounds reads to active jobs and compact durable aggregates. A
@@ -43,40 +72,73 @@ func (s *Store) ReadMetrics(ctx context.Context) (MetricsSnapshot, error) {
 		{`SELECT project_id, backend_instance_id, known_directory_id, state, exits::float8, seconds FROM job_state_metric_totals`, &snapshot.Durations},
 	}
 	for _, query := range queries {
-		rows, err := tx.Query(ctx, query.sql)
-		if err != nil {
-			return snapshot, err
-		}
-		for rows.Next() {
-			var g MetricGroup
-			if err := rows.Scan(&g.ProjectID, &g.BackendInstanceID, &g.KnownDirectoryID, &g.State, &g.Count, &g.Seconds); err != nil {
-				rows.Close()
-				return snapshot, err
-			}
-			*query.target = append(*query.target, g)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
+		if err := collectMetrics(ctx, tx, query.sql, query.target, func(rows pgx.Rows, g *MetricGroup) error {
+			return rows.Scan(&g.ProjectID, &g.BackendInstanceID, &g.KnownDirectoryID, &g.State, &g.Count, &g.Seconds)
+		}); err != nil {
 			return snapshot, err
 		}
 	}
-	rows, err := tx.Query(ctx, `SELECT 'project', id::text, name FROM projects
-        UNION ALL SELECT 'backend', id::text, name FROM backend_instances
-        UNION ALL SELECT 'known_directory', id::text, name FROM known_directories`)
-	if err != nil {
+	if err := collectMetrics(ctx, tx, `SELECT project_id, session_id, backend_instance_id, model, effort, outcome,
+            jobs::float8, reported_jobs::float8, input_tokens::float8, output_tokens::float8,
+            cache_read_tokens::float8, cache_write_tokens::float8, cost_usd
+          FROM job_usage_metric_totals`, &snapshot.Usage, func(rows pgx.Rows, g *UsageGroup) error {
+		return rows.Scan(&g.ProjectID, &g.SessionID, &g.BackendInstanceID, &g.Model, &g.Effort, &g.Outcome,
+			&g.Jobs, &g.ReportedJobs, &g.InputTokens, &g.OutputTokens, &g.CacheReadTokens, &g.CacheWriteTokens, &g.CostUSD)
+	}); err != nil {
 		return snapshot, err
 	}
-	for rows.Next() {
-		var n MetricName
-		if err := rows.Scan(&n.Kind, &n.ID, &n.Name); err != nil {
-			rows.Close()
-			return snapshot, err
-		}
-		snapshot.Names = append(snapshot.Names, n)
+	scanWait := func(rows pgx.Rows, g *WaitGroup) error {
+		return rows.Scan(&g.ProjectID, &g.BackendInstanceID, &g.Reason, &g.Count)
 	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+	if err := collectMetrics(ctx, tx, `SELECT project_id, backend_instance_id, reason, total::float8 FROM job_wait_metric_totals`,
+		&snapshot.Waits, scanWait); err != nil {
+		return snapshot, err
+	}
+	// A Job parked without a provider report waits for its backend to come
+	// back: a disconnection or a lost dispatch.
+	if err := collectMetrics(ctx, tx, `SELECT s.project_id::text, r.backend_instance_id::text,
+            COALESCE(NULLIF(j.backend_wait->>'reason', ''), 'BACKEND_DISCONNECTED'), count(*)::float8
+          FROM jobs j JOIN runs r ON r.id = j.run_id JOIN sessions s ON s.id = r.session_id
+          WHERE j.status = 'WAITING_BACKEND' GROUP BY 1,2,3`, &snapshot.Waiting, scanWait); err != nil {
+		return snapshot, err
+	}
+	if err := collectMetrics(ctx, tx, `SELECT id::text, quotas FROM backend_instances WHERE quotas IS NOT NULL`,
+		&snapshot.Quotas, func(rows pgx.Rows, q *QuotaSnapshot) error {
+			var raw []byte
+			if err := rows.Scan(&q.BackendInstanceID, &raw); err != nil {
+				return err
+			}
+			// An unreadable report costs its own gauges, not the whole scrape.
+			if json.Unmarshal(raw, &q.Status) != nil {
+				q.Status = quotas.Status{}
+			}
+			return nil
+		}); err != nil {
+		return snapshot, err
+	}
+	if err := collectMetrics(ctx, tx, `SELECT 'project', id::text, name FROM projects
+        UNION ALL SELECT 'backend', id::text, name FROM backend_instances
+        UNION ALL SELECT 'known_directory', id::text, name FROM known_directories
+        UNION ALL SELECT 'session', id::text, title FROM sessions`, &snapshot.Names, func(rows pgx.Rows, n *MetricName) error {
+		return rows.Scan(&n.Kind, &n.ID, &n.Name)
+	}); err != nil {
 		return snapshot, err
 	}
 	return snapshot, tx.Commit(ctx)
+}
+
+func collectMetrics[T any](ctx context.Context, tx pgx.Tx, sql string, target *[]T, scan func(pgx.Rows, *T) error) error {
+	rows, err := tx.Query(ctx, sql)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item T
+		if err := scan(rows, &item); err != nil {
+			return err
+		}
+		*target = append(*target, item)
+	}
+	return rows.Err()
 }

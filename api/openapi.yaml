@@ -47,6 +47,8 @@ tags:
     description: Units of agent work
   - name: attention
     description: What is currently waiting for the user
+  - name: usage
+    description: What Sessions consumed, by backend, model and effort
   - name: knowledge
     description: Tasks, decisions and project history
   - name: artifacts
@@ -2200,6 +2202,40 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Attention" }
 
+  /api/v1/usage:
+    get:
+      tags: [usage]
+      summary: Rank Sessions by what they consumed
+      description: |
+        One row per Session, backend, model and effort, ordered by tokens of
+        every kind, the largest first. Figures are those backends reported for
+        ended Jobs, including cancelled ones, by UTC day of the end. Jobs minus
+        reportedJobs consumed an amount nobody knows. A deleted Session no
+        longer appears.
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+          description: First UTC day included. Six days before `to` by default.
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+          description: Last UTC day included. Today by default. A period covers at most 366 days.
+        - name: projectId
+          in: query
+          schema: { $ref: "#/components/schemas/UUID" }
+          description: Restrict to one Project.
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+      responses:
+        "200":
+          description: The ranking
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionUsage" }
+        "400": { $ref: "#/components/responses/Error" }
+
   /api/v1/me/push:
     get:
       tags: [attention]
@@ -3529,6 +3565,48 @@ components:
           format: double
           description: What the provider says it cost. Absent when it says nothing.
 
+    SessionUsage:
+      type: object
+      required: [from, to, rows]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/UsageRow" }
+
+    UsageRow:
+      type: object
+      required: [sessionId, sessionTitle, projectId, projectName, backendInstanceId, model, effort,
+        jobs, reportedJobs, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, costUsd]
+      properties:
+        sessionId: { $ref: "#/components/schemas/UUID" }
+        sessionTitle: { type: string }
+        projectId: { $ref: "#/components/schemas/UUID" }
+        projectName: { type: string }
+        backendInstanceId:
+          type: string
+          description: Empty when the Job ended without a known backend.
+        model:
+          type: string
+          description: Empty when the Job ran on the backend's default model.
+        effort:
+          type: string
+          description: Empty when the Job ran on the default effort.
+        jobs: { type: integer, format: int64 }
+        reportedJobs:
+          type: integer
+          format: int64
+          description: Ended Jobs whose backend reported their usage.
+        inputTokens: { type: integer, format: int64 }
+        outputTokens: { type: integer, format: int64 }
+        cacheReadTokens: { type: integer, format: int64 }
+        cacheWriteTokens: { type: integer, format: int64 }
+        costUsd:
+          type: number
+          format: double
+          description: What providers said it cost. Zero when they said nothing.
+
     Project:
       type: object
       required: [id, ownerId, name, status, createdAt, updatedAt]
@@ -3796,6 +3874,8 @@ components:
               and announce nothing. Either carries `delegated: true` when an
               active manager Session receives the end and reports it: announce
               nothing for the worker either
+            - `job.cancelled`: `{ reason?, usage? }`, usage being what the work
+              consumed before it stopped, when the backend reported it
             - `workspace.changed`: `{ knownDirectoryId, files, additions,
               deletions, directory?, baseTree?, headTree? }`, the last three
               present when the diff of a file can be asked for

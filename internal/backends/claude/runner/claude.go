@@ -270,7 +270,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	// Reporting and cleanup outlive execution cancellation.
 	ctx = context.WithoutCancel(ctx)
 	if executionCtx.Err() != nil {
-		return sink.JobCancelled(ctx, params.RunID, params.JobID)
+		return sink.JobCancelled(ctx, params.RunID, params.JobID, nil)
 	}
 	if err := c.Available(); err != nil {
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "PROVIDER_UNAVAILABLE", err.Error(), nil)
@@ -357,7 +357,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 
 	if err := cmd.Start(); err != nil {
 		if errors.Is(runCtx.Err(), context.Canceled) {
-			return sink.JobCancelled(ctx, params.RunID, params.JobID)
+			return sink.JobCancelled(ctx, params.RunID, params.JobID, nil)
 		}
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "SPAWN_FAILED", err.Error(), nil)
 	}
@@ -412,18 +412,18 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 	// asked for it to stop, and it did.
 	if cancelled || errors.Is(executionCtx.Err(), context.Canceled) {
 		c.logger.Info("claude code cancelled", slog.String("jobId", params.JobID))
-		return sink.JobCancelled(ctx, params.RunID, params.JobID)
+		return sink.JobCancelled(ctx, params.RunID, params.JobID, outcome.stoppedUsage())
 	}
 
 	// A policy stop is not a user cancellation and not a provider failure: the
 	// Run was stopped because it reached a limit someone set, and the agent and
 	// the timeline should both say so.
 	if outcome.stoppedBy != "" {
-		return sink.JobFailed(ctx, params.RunID, params.JobID, "POLICY_LIMIT", outcome.stoppedBy, outcome.usage)
+		return sink.JobFailed(ctx, params.RunID, params.JobID, "POLICY_LIMIT", outcome.stoppedBy, outcome.stoppedUsage())
 	}
 	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 		return sink.JobFailed(ctx, params.RunID, params.JobID, "POLICY_LIMIT",
-			fmt.Sprintf("stopped by the execution policy after %d seconds", params.Policy.MaxDurationSeconds), outcome.usage)
+			fmt.Sprintf("stopped by the execution policy after %d seconds", params.Policy.MaxDurationSeconds), outcome.stoppedUsage())
 	}
 
 	if outcome.blocked != nil {
@@ -431,7 +431,7 @@ func (c *Claude) Run(ctx context.Context, params StartParams, sink Sink) error {
 		if outcome.inputDelivered && (resuming || outcome.nativeBound) {
 			outcome.blocked.InputReceipt = resume.InputReceipt(params.JobID, nativeSessionID)
 		}
-		return runner.ReportProviderBlock(ctx, sink, params.RunID, params.JobID, outcome.blocked, outcome.usage)
+		return runner.ReportProviderBlock(ctx, sink, params.RunID, params.JobID, outcome.blocked, outcome.stoppedUsage())
 	}
 	if resuming && !outcome.bound && (!outcome.completed || outcome.failed) {
 		diagnostic := outcome.summary

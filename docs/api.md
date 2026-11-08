@@ -207,6 +207,13 @@ long-lived by design.
 
 `job.completed` and `job.failed` carry a `usage` object: input and output
 tokens, the cache halves kept apart, and the cost the provider reported.
+`job.cancelled` carries one too when the backend said what the stopped work
+consumed; backends older than this field never do.
+
+`GET /api/v1/usage` adds these up by Session, backend, model and effort over a
+period of UTC days, the last seven by default, the most consuming first. A
+Session deleted since no longer appears; the Prometheus counters described in
+[metrics](metrics.md) keep it.
 
 It is absent when the backend reported nothing, and that absence is meaningful:
 a Job whose accounting is unknown must not read as a Job that cost nothing, so a

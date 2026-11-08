@@ -353,7 +353,7 @@ func TestControlSessionQuestionsPermissionsCancellationAndCleanup(t *testing.T) 
 		t.Fatal("wrong cancelled job")
 	}
 	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
-		return backend.events.JobCancelled(ctx, start.GetRunId(), start.GetJobId())
+		return backend.events.JobCancelled(ctx, start.GetRunId(), start.GetJobId(), nil)
 	}))
 	waitUntil(t, "cancelled job", func() bool { return c.jobStatus(session, start.GetJobId()) == "CANCELLED" })
 	controlCall(t, conn, "session_archive", map[string]any{"sessionId": session})

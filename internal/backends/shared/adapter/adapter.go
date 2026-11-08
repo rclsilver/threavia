@@ -352,7 +352,7 @@ func (a *Adapter) OnCancelJob(ctx context.Context, cmd *backendv1.CancelJob) err
 			if a.endedLocally(ctx, cmd.GetJobId()) {
 				return nil
 			}
-			return a.JobCancelled(ctx, cmd.GetRunId(), cmd.GetJobId())
+			return a.JobCancelled(ctx, cmd.GetRunId(), cmd.GetJobId(), nil)
 		}
 		return err
 	}

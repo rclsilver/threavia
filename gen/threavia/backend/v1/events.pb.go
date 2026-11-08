@@ -1287,7 +1287,10 @@ func (x *JobFailed) GetUsage() *Usage {
 }
 
 type JobCancelled struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What the work consumed before it stopped. Absent when the provider said
+	// nothing, as older backends always do.
+	Usage         *Usage `protobuf:"bytes,1,opt,name=usage,proto3" json:"usage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1320,6 +1323,13 @@ func (x *JobCancelled) ProtoReflect() protoreflect.Message {
 // Deprecated: Use JobCancelled.ProtoReflect.Descriptor instead.
 func (*JobCancelled) Descriptor() ([]byte, []int) {
 	return file_threavia_backend_v1_events_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *JobCancelled) GetUsage() *Usage {
+	if x != nil {
+		return x.Usage
+	}
+	return nil
 }
 
 // The provider attempt has stopped; Core owns when the same Job may retry.
@@ -1513,8 +1523,9 @@ const file_threavia_backend_v1_events_proto_rawDesc = "" +
 	"\x05usage\x18\x02 \x01(\v2\x1a.threavia.backend.v1.UsageR\x05usage\"o\n" +
 	"\tJobFailed\x120\n" +
 	"\x05error\x18\x01 \x01(\v2\x1a.threavia.backend.v1.ErrorR\x05error\x120\n" +
-	"\x05usage\x18\x02 \x01(\v2\x1a.threavia.backend.v1.UsageR\x05usage\"\x0e\n" +
-	"\fJobCancelled\"\xfa\x01\n" +
+	"\x05usage\x18\x02 \x01(\v2\x1a.threavia.backend.v1.UsageR\x05usage\"@\n" +
+	"\fJobCancelled\x120\n" +
+	"\x05usage\x18\x01 \x01(\v2\x1a.threavia.backend.v1.UsageR\x05usage\"\xfa\x01\n" +
 	"\x11JobWaitingBackend\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x125\n" +
@@ -1591,13 +1602,14 @@ var file_threavia_backend_v1_events_proto_depIdxs = []int32{
 	13, // 21: threavia.backend.v1.JobCompleted.usage:type_name -> threavia.backend.v1.Usage
 	20, // 22: threavia.backend.v1.JobFailed.error:type_name -> threavia.backend.v1.Error
 	13, // 23: threavia.backend.v1.JobFailed.usage:type_name -> threavia.backend.v1.Usage
-	18, // 24: threavia.backend.v1.JobWaitingBackend.retry_at:type_name -> google.protobuf.Timestamp
-	13, // 25: threavia.backend.v1.JobWaitingBackend.usage:type_name -> threavia.backend.v1.Usage
-	26, // [26:26] is the sub-list for method output_type
-	26, // [26:26] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	13, // 24: threavia.backend.v1.JobCancelled.usage:type_name -> threavia.backend.v1.Usage
+	18, // 25: threavia.backend.v1.JobWaitingBackend.retry_at:type_name -> google.protobuf.Timestamp
+	13, // 26: threavia.backend.v1.JobWaitingBackend.usage:type_name -> threavia.backend.v1.Usage
+	27, // [27:27] is the sub-list for method output_type
+	27, // [27:27] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_threavia_backend_v1_events_proto_init() }

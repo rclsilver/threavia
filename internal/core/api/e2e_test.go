@@ -416,11 +416,30 @@ func TestCancellationNeedsBackendConfirmation(t *testing.T) {
 
 	ctx := context.Background()
 	backend.emit(t, ctx, backend.mustEvent(t, ctx, func() (*backendv1.JobEvent, error) {
-		return backend.events.JobCancelled(ctx, start.GetRunId(), start.GetJobId())
+		return backend.events.JobCancelled(ctx, start.GetRunId(), start.GetJobId(), &backendv1.Usage{InputTokens: 40, OutputTokens: 2})
 	}))
 	waitUntil(t, "the job to reach CANCELLED", func() bool {
 		return c.jobStatus(session, start.GetJobId()) == "CANCELLED"
 	})
+
+	// What the stopped work consumed is still accounted for, by Session.
+	var usage struct {
+		From, To string
+		Rows     []struct {
+			SessionID    string `json:"sessionId"`
+			Jobs         int64  `json:"jobs"`
+			ReportedJobs int64  `json:"reportedJobs"`
+			InputTokens  int64  `json:"inputTokens"`
+			OutputTokens int64  `json:"outputTokens"`
+		}
+	}
+	c.mustDo(http.MethodGet, "/api/v1/usage?projectId="+projectID, nil, &usage, http.StatusOK)
+	if len(usage.Rows) != 1 || usage.Rows[0].SessionID != session || usage.Rows[0].Jobs != 1 ||
+		usage.Rows[0].ReportedJobs != 1 || usage.Rows[0].InputTokens != 40 || usage.Rows[0].OutputTokens != 2 {
+		t.Fatalf("usage = %+v", usage)
+	}
+	c.mustDo(http.MethodGet, "/api/v1/usage?from=2026-13-01", nil, nil, http.StatusBadRequest)
+	c.mustDo(http.MethodGet, "/api/v1/usage?from=2020-01-01&to=2026-01-01", nil, nil, http.StatusBadRequest)
 }
 
 // TestCancellingAQueuedJobIsImmediate pins the other half of the rule: a queued

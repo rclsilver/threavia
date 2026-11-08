@@ -164,7 +164,11 @@ message JobFailed {
   Usage usage = 2;
 }
 
-message JobCancelled {}
+message JobCancelled {
+  // What the work consumed before it stopped. Absent when the provider said
+  // nothing, as older backends always do.
+  Usage usage = 1;
+}
 
 // The provider attempt has stopped; Core owns when the same Job may retry.
 // This is not a terminal outcome, and does not release the Run's active slot.

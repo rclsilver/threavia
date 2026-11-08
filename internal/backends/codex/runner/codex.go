@@ -313,7 +313,7 @@ func (c *Codex) Run(ctx context.Context, params contract.StartParams, sink contr
 	// Reporting and cleanup outlive execution cancellation.
 	ctx = context.WithoutCancel(ctx)
 	if executionCtx.Err() != nil {
-		return sink.JobCancelled(ctx, params.RunID, params.JobID)
+		return sink.JobCancelled(ctx, params.RunID, params.JobID, nil)
 	}
 	fail := func(code string, err error) error {
 		return sink.JobFailed(ctx, params.RunID, params.JobID, code, err.Error(), nil)
@@ -402,11 +402,11 @@ func (c *Codex) Run(ctx context.Context, params contract.StartParams, sink contr
 	diagnostics := &tailWriter{}
 	cmd.Stderr = diagnostics
 	if errors.Is(runCtx.Err(), context.Canceled) {
-		return sink.JobCancelled(ctx, params.RunID, params.JobID)
+		return sink.JobCancelled(ctx, params.RunID, params.JobID, nil)
 	}
 	if err := cmd.Start(); err != nil {
 		if errors.Is(runCtx.Err(), context.Canceled) {
-			return sink.JobCancelled(ctx, params.RunID, params.JobID)
+			return sink.JobCancelled(ctx, params.RunID, params.JobID, nil)
 		}
 		return fail("SPAWN_FAILED", err)
 	}
@@ -471,7 +471,7 @@ func (c *Codex) Run(ctx context.Context, params contract.StartParams, sink contr
 	cancelled, policyErr := live.cancelled, live.policyError
 	live.mu.Unlock()
 	if cancelled || errors.Is(executionCtx.Err(), context.Canceled) {
-		return sink.JobCancelled(ctx, params.RunID, params.JobID)
+		return sink.JobCancelled(ctx, params.RunID, params.JobID, outcome.usage)
 	}
 	if policyErr != nil {
 		return fail("POLICY_UNSUPPORTED", policyErr)
