@@ -9,8 +9,15 @@ import { ActionError } from './ui/action-error';
 import { Button } from './ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from './ui/dialog';
 
-export function LearningCapture({ snapshot, backend }: { snapshot: Snapshot; backend?: BackendInstance }) {
-  const [open, setOpen] = useState(false);
+/**
+ * Asks the agent to propose what is worth remembering from a result. Owns its
+ * button unless the caller passes `open`, as a menu does: it then keeps only
+ * the dialog and the caller says when it shows.
+ */
+export function LearningCapture({ snapshot, backend, open: controlled, onOpenChange }: { snapshot: Snapshot; backend?: BackendInstance; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+  const [own, setOwn] = useState(false);
+  const open = controlled ?? own;
+  const setOpen = onOpenChange ?? setOwn;
   const submitting = useRef(false);
   const queries = useQueryClient();
   const sessionId = snapshot.session.id;
@@ -33,7 +40,7 @@ export function LearningCapture({ snapshot, backend }: { snapshot: Snapshot; bac
   return <Dialog open={open} onOpenChange={(next) => { if (!capture.isPending) { setOpen(next); capture.reset(); } }}>
     {/* An icon on a phone, like the header actions beside it: with its label
         the row no longer fits and pushes Session settings off the screen. */}
-    <DialogTrigger asChild><Button variant="ghost" size="lg" className="h-11 max-sm:size-11 max-sm:p-0 md:h-9" data-tour="capture-learnings"><BookOpen className="size-4" /><span className="max-sm:sr-only">Capture learnings</span></Button></DialogTrigger>
+    {controlled === undefined && <DialogTrigger asChild><Button variant="ghost" size="lg" className="h-11 max-sm:size-11 max-sm:p-0 md:h-9" data-tour="capture-learnings"><BookOpen className="size-4" /><span className="max-sm:sr-only">Capture learnings</span></Button></DialogTrigger>}
     <DialogContent onEscapeKeyDown={(event) => { if (capture.isPending) event.preventDefault(); }} onPointerDownOutside={(event) => { if (capture.isPending) event.preventDefault(); }}>
       <DialogTitle>Capture learnings from this resolution</DialogTitle>
       <DialogDescription>Ask the agent to compare this result with existing memory and propose up to three useful facts, procedures or project rules.</DialogDescription>
