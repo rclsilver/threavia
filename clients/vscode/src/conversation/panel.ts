@@ -1,6 +1,6 @@
 import { mediaType } from '../../../shared/media';
 import { learningSource, requestLearningCapture } from '../../../shared/learnings';
-import { readUpTo, wokeFromSnooze } from '../../../shared/sessions';
+import { firstUnread, readUpTo, wokeFromSnooze } from '../../../shared/sessions';
 import { backendTargets, modelPill } from '../../../shared/composer';
 import { artifactKind } from './format';
 import * as vscode from 'vscode';
@@ -297,6 +297,7 @@ class ConversationPanel {
   private runs: Run[] = [];
   private jobs: Job[] = [];
   private events: Event[] = [];
+  private unreadFrom?: number;
   private snapshotAttention: { validations: ValidationRequest[]; userInputs: UserInputRequest[] } = {
     validations: [],
     userInputs: [],
@@ -516,6 +517,9 @@ class ConversationPanel {
       this.events = mergeEvents(this.events, snapshot.events);
       this.panel.title = titleOf(this.session);
       const firstRead = !this.loaded;
+      // Taken once, before the mark moves to the end: the line stays where
+      // the unread began for as long as the Session is open here.
+      if (firstRead) this.unreadFrom = firstUnread(snapshot.session.readSequence, snapshot.events);
       this.loaded = true;
       if (this.pinned !== wasPinned) this.onPinned();
       if (firstRead) this.onLoaded();
@@ -640,6 +644,7 @@ class ConversationPanel {
       held: heldDeliveriesFor(active, this.backend),
       validations: requests.validations,
       questions: requests.userInputs,
+      unreadFrom: this.unreadFrom,
       more: hasEarlier(this.events, this.exhausted),
     };
   }

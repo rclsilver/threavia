@@ -41,6 +41,7 @@ export type Row =
   | { kind: 'event'; key: number; event: Event; startedAt?: string }
   | { kind: 'tool'; key: number; call: ToolCall; jobId?: string }
   | { kind: 'day'; key: number; label: string }
+  | { kind: 'unread'; key: number }
   | { kind: 'steps'; key: number; at: string; steps: Steps; open: boolean }
   | { kind: 'quiet'; key: number; at: string; open: boolean };
 
@@ -230,7 +231,7 @@ export function foldFinished(rows: Row[], opened: ReadonlySet<number>): Row[] {
 
   const folds = (row: Row) => {
     const job = jobOf(row);
-    if (!job || !finished.has(job) || row.kind === 'day' || row.kind === 'steps' || row.kind === 'quiet') return false;
+    if (!job || !finished.has(job) || row.kind === 'day' || row.kind === 'unread' || row.kind === 'steps' || row.kind === 'quiet') return false;
     if (row.kind === 'tool') return true;
     const type = row.event.type;
     return !(
@@ -518,4 +519,18 @@ export function describe(event: Event): { icon: string; tone?: 'ok' | 'danger' |
     default:
       return { icon: 'circle-outline', text: event.type };
   }
+}
+
+/**
+ * The line saying where what was not read begins, drawn before the first row
+ * at or past `unreadFrom` that is a line of its own, not before the day
+ * separator ahead of it. Nothing is drawn when everything above is separators:
+ * that is a Session read from its start, which a line at the top would only
+ * repeat.
+ */
+export function withUnreadMarker(rows: Row[], unreadFrom: number | undefined): Row[] {
+  if (unreadFrom === undefined) return rows;
+  const at = rows.findIndex((row) => row.kind !== 'day' && row.key >= unreadFrom);
+  if (at < 0 || rows.slice(0, at).every((row) => row.kind === 'day')) return rows;
+  return [...rows.slice(0, at), { kind: 'unread', key: -1_000_000_000 - unreadFrom }, ...rows.slice(at)];
 }

@@ -17,7 +17,7 @@ const { createRoot } = requireUI('react-dom/client') as {
 const mocks = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), post: vi.fn() }));
 vi.mock('@/api/client', () => ({ api: mocks }));
 vi.mock('../../../web/ui/node_modules/@tanstack/react-router', () => ({
-  useParams: () => ({ sessionId: 'session' }), Link: ({ children }: { children: string }) => h('a', {}, children),
+  useParams: () => ({ sessionId: 'session' }), useNavigate: () => () => undefined, Link: ({ children }: { children: string }) => h('a', {}, children),
 }));
 vi.mock('@/use-stream', () => ({ useStream: () => ({ activity: () => undefined }) }));
 vi.mock('@/components/timeline', () => ({ Timeline: () => null }));

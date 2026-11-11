@@ -5,6 +5,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { api, idempotencyKey } from './client';
 import { dropInterruptedAttention, dropResolvedAttention } from './attention-cache';
 import { keys } from './keys';
+import { projectsByName } from '../../../../clients/shared/sessions';
 import type {
   Artifact,
   AuditEntry,
@@ -51,6 +52,8 @@ export function useProjects() {
   return useQuery({
     queryKey: keys.projects(),
     queryFn: () => api.get<List<Project>>('/api/v1/projects').then(items),
+    // Alphabetical wherever they are listed, whatever order Core answers in.
+    select: projectsByName,
   });
 }
 

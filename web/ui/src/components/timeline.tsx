@@ -72,6 +72,7 @@ type Row =
   | { kind: 'event'; key: number; event: Event; startedAt?: string }
   | { kind: 'tool'; key: number; call: ToolCall; jobId?: string }
   | { kind: 'day'; key: number; label: string }
+  | { kind: 'unread'; key: number }
   | { kind: 'steps'; key: number; at: string; steps: Steps; open: boolean }
   | { kind: 'quiet'; key: number; at: string; open: boolean };
 
@@ -266,7 +267,7 @@ function foldFinished(rows: Row[], opened: ReadonlySet<number>): Row[] {
 
   const folds = (row: Row) => {
     const job = jobOf(row);
-    if (!job || !finished.has(job) || row.kind === 'day' || row.kind === 'steps' || row.kind === 'quiet') return false;
+    if (!job || !finished.has(job) || row.kind === 'day' || row.kind === 'unread' || row.kind === 'steps' || row.kind === 'quiet') return false;
     if (row.kind === 'tool') return true;
     const type = row.event.type;
     // What the job changed in the files, and what it published, are part of
@@ -394,8 +395,11 @@ export function Timeline({
   onStop,
   onEdit,
   earlier,
+  unreadFrom,
 }: {
   events: Event[];
+  /** The first event the person had not read when the Session was opened: the line is drawn before it. */
+  unreadFrom?: number;
   pending: Pending;
   onStop: (jobId: string) => void;
   /** Takes back a queued message to rewrite it; absent where that cannot be done. */
@@ -410,7 +414,18 @@ export function Timeline({
   // not only when the next event arrives.
   const today = useToday();
   const all = useMemo(() => rowsOf(events), [events, today]);
-  const rows = useMemo(() => foldFinished(foldDismissed(all, opened), opened), [all, opened]);
+  const rows = useMemo(() => {
+    const shown = foldFinished(foldDismissed(all, opened), opened);
+    if (unreadFrom === undefined) return shown;
+    // Before the first row at or past it that is a line of its own, not the
+    // day separator ahead of it: the day was already read up to this point.
+    const at = shown.findIndex((row) => row.kind !== 'day' && row.key >= unreadFrom);
+    // Nothing but separators above it means it all is unread, which a line at
+    // the very top would only repeat.
+    if (at < 0 || shown.slice(0, at).every((row) => row.kind === 'day')) return shown;
+    return [...shown.slice(0, at), { kind: 'unread' as const, key: -1_000_000_000 - unreadFrom }, ...shown.slice(at)];
+  }, [all, opened, unreadFrom]);
+  const unreadAt = rows.findIndex((row) => row.kind === 'unread');
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -618,6 +633,17 @@ export function Timeline({
     if (fresh) setAnchor(lastSent);
   }, [lastSent]);
 
+  // Opening a Session with something unread lands on the line saying where it
+  // begins, not on the end of a conversation read from its middle. Once per
+  // Session: after that the reader is free, and the line stays where it is.
+  const placed = useRef<number>(undefined);
+  useEffect(() => {
+    if (unreadAt < 0 || placed.current === unreadFrom) return;
+    placed.current = unreadFrom;
+    stick.current = false;
+    virtualizer.scrollToIndex(unreadAt, { align: 'start' });
+  }, [unreadAt, unreadFrom]);
+
   const anchorIndex = anchor === undefined ? -1 : rows.findIndex((row) => row.key === anchor);
   const anchorStart =
     anchorIndex >= 0 ? (virtualizer.measurementsCache[anchorIndex]?.start ?? 0) : 0;
@@ -748,6 +774,8 @@ export function Timeline({
               >
                 {row.kind === 'day' ? (
                   <DaySeparator label={row.label} />
+                ) : row.kind === 'unread' ? (
+                  <UnreadSeparator />
                 ) : (
                   // The log's spine: every row's time in one column, so the
                   // session reads down a timeline the way an operations log
@@ -937,7 +965,7 @@ function StickyPrompt({ event, onJump }: { event: Event; onJump: () => void }) {
 }
 
 /** The time of a row, in the log's gutter, aligned with its first line. */
-function Gutter({ row }: { row: Exclude<Row, { kind: 'day' }> }) {
+function Gutter({ row }: { row: Exclude<Row, { kind: 'day' | 'unread' }> }) {
   if (row.kind === 'event' && row.event.type === 'agent.message') return <span />;
   const at = row.kind === 'tool' ? row.call.at : row.kind === 'steps' || row.kind === 'quiet' ? row.at : row.event.timestamp;
   const user = row.kind === 'event' && row.event.type === 'user.message';
@@ -1018,6 +1046,17 @@ function QuietEntry({ row, onToggle }: { row: Extract<Row, { kind: 'quiet' }>; o
 }
 
 /** Where one day of a Session ends and the next begins. */
+/** Where what was not read begins, in the accent so it is found at a glance. */
+function UnreadSeparator() {
+  return (
+    <div className="text-accent flex items-center gap-3 py-2" role="separator" data-unread-marker>
+      <span className="bg-accent/40 h-px flex-1" />
+      <span className="text-xs font-medium">New since you last read</span>
+      <span className="bg-accent/40 h-px flex-1" />
+    </div>
+  );
+}
+
 function DaySeparator({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3 py-3">

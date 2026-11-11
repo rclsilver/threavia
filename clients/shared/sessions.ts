@@ -15,9 +15,30 @@ export function sessionsByTitle<T extends TitledSession>(sessions: readonly T[])
   );
 }
 
+/** Projects in alphabetical order, by the same collation as titles. */
+export function projectsByName<T extends { id: string; name: string }>(projects: readonly T[]): T[] {
+  return [...projects].sort((a, b) => titles.compare(a.name, b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
 // What a person comes back to a Session for: something the agent said, or a
 // Job that failed. Core counts the same events when it lists a Session unread.
 const UNREAD_TYPES = new Set(['agent.message', 'job.failed']);
+
+/**
+ * Where what the person has not read begins: the first event past what they
+ * read that they come back for. It is read when a Session is opened, before
+ * it is marked read, so the place can be shown after the mark has moved.
+ */
+export function firstUnread(
+  readSequence: number,
+  events: readonly { sequence: number; type: string }[],
+): number | undefined {
+  let first: number | undefined;
+  for (const event of events) {
+    if (event.sequence > readSequence && UNREAD_TYPES.has(event.type) && (first === undefined || event.sequence < first)) first = event.sequence;
+  }
+  return first;
+}
 
 /**
  * How far to mark a Session read once it is on screen: its last event, when
