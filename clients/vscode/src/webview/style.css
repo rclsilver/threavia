@@ -1158,3 +1158,26 @@ body.vscode-reduce-motion .codicon-modifier-spin {
 /* A choice the running Job cannot take now: there, but not offered. */
 .delivery:disabled { opacity: 0.4; cursor: not-allowed; }
 .delivery:disabled:hover { color: var(--muted); }
+
+.row.unread {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  color: var(--vscode-textLink-foreground);
+}
+.row.unread::before,
+.row.unread::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.4;
+}
+.row.unread::before {
+  margin-left: calc(var(--gutter) + 8px);
+}
+.unread-label {
+  font-size: 0.85em;
+  font-weight: 600;
+}

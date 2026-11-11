@@ -1,4 +1,5 @@
 import { mediaType } from '../../../shared/media';
+import { projectsByName } from '../../../shared/sessions';
 import type {
   Artifact,
   Monitor,
@@ -245,7 +246,7 @@ export class CoreClient {
   async stopMonitor(id: string): Promise<void> { await this.post(`/api/v1/monitors/${id}/stop`); }
 
   projects() {
-    return this.get<List<Project>>('/api/v1/projects').then(items);
+    return this.get<List<Project>>('/api/v1/projects').then(items).then(projectsByName);
   }
 
   project(projectId: string) {

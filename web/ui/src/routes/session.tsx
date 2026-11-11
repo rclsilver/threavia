@@ -35,7 +35,7 @@ import { useDraft } from '@/lib/draft';
 import { isActive } from '@/lib/presence';
 import { sendsMessage, useTouchKeyboard } from '@/lib/message-keyboard';
 import { cn, humanise } from '@/lib/utils';
-import { readUpTo, wokeFromSnooze } from '../../../../clients/shared/sessions';
+import { firstUnread, readUpTo, wokeFromSnooze } from '../../../../clients/shared/sessions';
 import { SessionHeaderMenu } from '@/components/session-actions';
 import { backendTargets, composerCommands, promptHistory, recall, renameRequest } from '../../../../clients/shared/composer';
 
@@ -97,6 +97,12 @@ export function SessionView() {
   // once it is on a screen the person is looking at. A tab left open on an
   // empty desk is not looking: the mark waits for them to come back.
   const readTo = snapshot.data && readUpTo(snapshot.data.session.readSequence, snapshot.data.events);
+  // Where the unread began, taken once as the Session opens: the mark moves to
+  // the end a moment later, and the place it was is what the person wants.
+  const opened = useRef<{ id: string; from?: number }>(undefined);
+  if (snapshot.data && opened.current?.id !== sessionId) {
+    opened.current = { id: sessionId, from: firstUnread(snapshot.data.session.readSequence, snapshot.data.events) };
+  }
 
   // A Session that came back from a snooze is the person's again once open:
   // the snooze is forgotten, on every device.
@@ -269,6 +275,7 @@ export function SessionView() {
         onStop={(jobId) => cancel.mutate(jobId)}
         onEdit={edit}
         earlier={earlier}
+        unreadFrom={opened.current?.id === sessionId ? opened.current.from : undefined}
       />
 
       {/* What is waiting for the user sits between the last thing the agent

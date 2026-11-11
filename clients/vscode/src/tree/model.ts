@@ -121,7 +121,7 @@ export function isCurrentProject(project: Project, setting: string): boolean {
   return project.id === wanted || project.name.toLowerCase() === wanted.toLowerCase();
 }
 
-/** The workspace's Project first, the others in Core's order; archived ones out. */
+/** The workspace's Project first, the others as the client lists them (alphabetical); archived ones out. */
 export function orderProjects(projects: Project[], setting: string): Project[] {
   const active = projects.filter((project) => project.status !== 'ARCHIVED');
   const current = active.filter((project) => isCurrentProject(project, setting));

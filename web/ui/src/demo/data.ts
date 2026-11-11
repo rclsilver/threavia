@@ -14,6 +14,7 @@ const id = (prefix: string, n: number) => `${prefix}-0000-4000-8000-${String(n).
 export const IDS = {
   homelab: id('d0000001', 1),
   website: id('d0000001', 2),
+  dotfiles: id('d0000001', 3),
   laptop: id('d0000002', 1),
   nas: id('d0000002', 2),
   ci: id('d0000002', 3),
@@ -78,6 +79,17 @@ export const projects = [
     status: 'ACTIVE',
     createdAt: at(60 * 24 * 20),
     updatedAt: at(60 * 26),
+  },
+  // Listed last here, and first by the client: the order is not Core's.
+  {
+    id: IDS.dotfiles,
+    ownerId: 'alex',
+    name: 'dotfiles',
+    description: 'Shell, editor and window manager settings',
+    instructions: '',
+    status: 'ACTIVE',
+    createdAt: at(60 * 24 * 60),
+    updatedAt: at(60 * 24 * 9),
   },
 ];
 
@@ -187,7 +199,9 @@ export const sessions = [
   // Put away until tomorrow morning: the Snoozed section has one to show.
   session(IDS.ingress, IDS.homelab, 'Fix the flaky deploy of the ingress controller', 70, 22, { model: 'sonnet', effort: 'medium', snoozed: true, snoozedUntil: tomorrowAt(9) }),
   session(IDS.ingressCheck, IDS.homelab, 'Check the ingress rollout', 24, 22, { managerSessionId: IDS.ingress }),
-  session(IDS.backups, IDS.homelab, 'Check last night’s backups', 60 * 9, 30, { activeJobStatus: 'WAITING_INPUT' }),
+  // Read up to the first morning's answer: the second one is what the line
+  // saying where the unread begins is there to show.
+  session(IDS.backups, IDS.homelab, 'Check last night’s backups', 60 * 9, 30, { activeJobStatus: 'WAITING_INPUT', readSequence: 3008 }),
   // Pinned, as someone going back and forth between two Projects would.
   session(IDS.grafana, IDS.homelab, 'Grafana dashboard for the UPS', 60 * 30, 60 * 28, { pinnedAt: at(60 * 29) }),
   session(IDS.oldSession, IDS.homelab, 'Move Puppet to the new CA', 60 * 24 * 12, 60 * 24 * 11, {
@@ -553,6 +567,7 @@ export const projectPolicies: Record<string, Record<string, unknown>> = {
     ],
   },
   [IDS.website]: { mode: 'INTERACTIVE', allowFilesystemWrite: true, allowGitCommit: true, allowGitPush: false, allowNetwork: true },
+  [IDS.dotfiles]: { mode: 'INTERACTIVE', allowFilesystemWrite: true, allowGitCommit: true, allowGitPush: false, allowNetwork: false },
 };
 
 // -------------------------------------------------------------- knowledge

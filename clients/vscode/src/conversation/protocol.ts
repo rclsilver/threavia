@@ -37,6 +37,8 @@ export interface SessionView {
   held?: ('NEXT' | 'NOW')[];
   validations: ValidationRequest[];
   questions: UserInputRequest[];
+  /** Where what was not read began when the Session was opened: a line is drawn before it. */
+  unreadFrom?: number;
   /** Whether history goes further back than what was sent. */
   more: boolean;
 }

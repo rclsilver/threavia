@@ -25,6 +25,7 @@ import {
   stickyPrompt,
   summariseInput,
   toolName,
+  withUnreadMarker,
   type Row,
 } from '../conversation/timeline';
 import { ago, headlineOf, toolLabel } from '../tree/model';
@@ -68,6 +69,7 @@ const post = (message: WebviewMessage) => vscode.postMessage(message);
 let events: Event[] = [];
 let view: SessionView | undefined;
 let rows: Row[] = [];
+let placedUnread: number | undefined;
 let loadingEarlier = false;
 let delivery: Delivery = saved.delivery ?? 'QUEUE';
 const opened = new Set<number>(saved.opened ?? []);
@@ -510,6 +512,8 @@ function signature(row: Row): string {
   switch (row.kind) {
     case 'day':
       return `d${row.label}`;
+    case 'unread':
+      return 'u';
     case 'steps':
       return JSON.stringify([row.steps, row.open]);
     case 'quiet':
@@ -525,7 +529,7 @@ function signature(row: Row): string {
 }
 
 function renderTimeline() {
-  rows = foldFinished(foldDismissed(rowsOf(events), opened), opened);
+  rows = withUnreadMarker(foldFinished(foldDismissed(rowsOf(events), opened), opened), view?.unreadFrom);
   const keep = new Set<string>();
   let previous: HTMLElement | null = null;
   for (const row of rows) {
@@ -556,9 +560,21 @@ function renderTimeline() {
   }
   linkPaths(list);
   follower.settle();
+  // Opening a Session with something unread lands on the line saying where it
+  // begins, once; after that the reader is free and the line stays put.
+  const marker = rows.find((row) => row.kind === 'unread');
+  if (marker && placedUnread !== view?.unreadFrom) {
+    placedUnread = view?.unreadFrom;
+    follower.holdStill();
+    scroller.scrollTop = Math.max(0, (rowElements.get(String(marker.key))?.element.offsetTop ?? 0) - 8);
+    updateSticky();
+  }
 }
 
 function renderRow(row: Row): HTMLElement {
+  if (row.kind === 'unread') {
+    return h('div', { class: 'row unread', role: 'separator' }, h('span', { class: 'unread-label' }, 'New since you last read'));
+  }
   if (row.kind === 'day') {
     return h('div', { class: 'row day', role: 'listitem' }, h('span', { class: 'day-label' }, row.label));
   }
