@@ -2,7 +2,7 @@ import { AttachButton, AttachedFiles } from '@/components/prompt-attachments';
 import { usePromptAttachments, type AttachedFile } from '@/lib/prompt-attachments';
 import { useComposerSuggestions, useSessionSkills } from '@/components/composer-suggestions';
 import { Link, useParams } from '@tanstack/react-router';
-import { AlarmClock, ArrowUp, ChevronDown, FileDiff, LoaderCircle, Pin, Settings2, Square } from 'lucide-react';
+import { ArrowUp, ChevronDown, LoaderCircle, SquarePen, Square } from 'lucide-react';
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 
 import {
@@ -14,8 +14,6 @@ import {
   useRenameSession,
   useEarlierEvents,
   useMarkSessionRead,
-  usePinSession,
-  usePinnedSessions,
   useSnapshot,
   useSessionModel,
   useMoveSession,
@@ -29,7 +27,6 @@ import { ActionError } from '@/components/ui/action-error';
 import { Badge } from '@/components/ui/badge';
 import { RepositoryStatus } from '@/components/repository-status';
 import { MonitorsPanel } from '@/components/monitors';
-import { LearningCapture } from '@/components/learning-capture';
 import { ReviewNotice } from '@/components/review-notice';
 import { Timeline, type Pending } from '@/components/timeline';
 import { Button } from '@/components/ui/button';
@@ -38,9 +35,8 @@ import { useDraft } from '@/lib/draft';
 import { isActive } from '@/lib/presence';
 import { sendsMessage, useTouchKeyboard } from '@/lib/message-keyboard';
 import { cn, humanise } from '@/lib/utils';
-import { isSnoozed, readUpTo, snoozeBack, wokeFromSnooze } from '../../../../clients/shared/sessions';
-import { SnoozeMenu } from '@/components/snooze-menu';
-import { ArchiveButton } from '@/components/session-actions';
+import { readUpTo, wokeFromSnooze } from '../../../../clients/shared/sessions';
+import { SessionHeaderMenu } from '@/components/session-actions';
 import { backendTargets, composerCommands, promptHistory, recall, renameRequest } from '../../../../clients/shared/composer';
 
 const FINISHED = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
@@ -217,17 +213,27 @@ export function SessionView() {
             )}
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-11 md:hidden"
-          aria-label={headerExpanded ? 'Hide session details and actions' : 'Show session details and actions'}
-          aria-expanded={headerExpanded}
-          aria-controls={headerDetailsId}
-          onClick={() => setExpandedSession(headerExpanded ? undefined : sessionId)}
-        >
-          <ChevronDown className={cn(headerExpanded && 'rotate-180')} />
-        </Button>
+        {/* Always in reach, on a phone too: a new conversation and everything
+            else that can be done to this one. */}
+        <div className="flex items-center md:row-span-2 md:gap-1">
+          <Button asChild variant="ghost" size="icon" className="size-11 md:size-8" title="New session">
+            <Link to="/sessions/new" search={{ projectId: data.session.projectId }} aria-label="New session" data-tour="new-session">
+              <SquarePen />
+            </Link>
+          </Button>
+          <SessionHeaderMenu key={sessionId} snapshot={data} backend={backend} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-11 md:hidden"
+            aria-label={headerExpanded ? 'Hide session details' : 'Show session details'}
+            aria-expanded={headerExpanded}
+            aria-controls={headerDetailsId}
+            onClick={() => setExpandedSession(headerExpanded ? undefined : sessionId)}
+          >
+            <ChevronDown className={cn(headerExpanded && 'rotate-180')} />
+          </Button>
+        </div>
         {/* Details stay one tap away on a phone instead of taking several
             lines from every conversation. Desktop keeps them visible. */}
         <div id={headerDetailsId} className={cn('col-span-2 min-w-0 pt-1 md:contents', !headerExpanded && 'hidden')}>
@@ -245,20 +251,6 @@ export function SessionView() {
               // timeline and one can arrive after the Job it describes ended.
               <span className="text-accent md:hidden">{humanise(working)}…</span>
             )}
-          </div>
-          <div className="flex items-center gap-1 md:col-start-2 md:row-span-2 md:row-start-1">
-            <LearningCapture key={sessionId} snapshot={data} backend={backend} />
-            <Button asChild size="lg" variant="ghost" className="h-11 max-sm:size-11 max-sm:p-0 md:h-9"><Link to="/sessions/$sessionId/review" params={{ sessionId }} data-tour="open-review"><FileDiff /><span className="max-sm:sr-only">Review</span></Link></Button>
-            <SnoozeButton session={data.session} />
-            <PinButton session={data.session} />
-            <ArchiveButton session={data.session} />
-            {/* Everything about the Session that is not the conversation is a
-                page of its own, one step away. */}
-            <Button asChild variant="ghost" size="icon" title="Session settings" className="size-11 md:size-8">
-              <Link to="/sessions/$sessionId/settings/$tab" params={{ sessionId, tab: 'permissions' }} aria-label="Session settings">
-                <Settings2 />
-              </Link>
-            </Button>
           </div>
         </div>
         {active?.status === 'WAITING_BACKEND' && active.backendWait && !headerExpanded && (
@@ -308,52 +300,6 @@ export function SessionView() {
         onEditLastQueued={lastQueued ? () => edit(lastQueued) : undefined}
       />
     </div>
-  );
-}
-
-
-/**
- * Puts the Session out of the way until later, or brings it back. The way to
- * snooze on a phone, where the sidebar has no pointer to hover with.
- */
-function SnoozeButton({ session }: { session: Session }) {
-  const snoozed = isSnoozed(session);
-  return (
-    <SnoozeMenu session={session}>
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn('size-11 md:size-8', snoozed && 'text-accent')}
-        title={snoozed ? `Snoozed — back ${session.snoozedUntil ? snoozeBack(session) : 'at the next message'}` : 'Snooze'}
-        aria-label={snoozed ? 'Snoozed: change or wake up' : 'Snooze'}
-      >
-        <AlarmClock />
-      </Button>
-    </SnoozeMenu>
-  );
-}
-/**
- * Pins the Session to the sidebar, under what waits, to be one click away
- * from any Project. Read from the pinned list when it is there, so the button
- * and the sidebar change together.
- */
-function PinButton({ session }: { session: Session }) {
-  const pinned = usePinnedSessions();
-  const pin = usePinSession();
-  const isPinned = pinned.data ? pinned.data.some((entry) => entry.id === session.id) : Boolean(session.pinnedAt);
-  const label = isPinned ? 'Unpin from the sidebar' : 'Pin to the sidebar';
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      title={label}
-      aria-label={label}
-      aria-pressed={isPinned}
-      onClick={() => pin.mutate({ session, pinned: !isPinned })}
-      className={cn('size-11 md:size-8', isPinned && 'text-accent hover:text-accent')}
-    >
-      <Pin className={cn(isPinned && 'fill-current')} />
-    </Button>
   );
 }
 

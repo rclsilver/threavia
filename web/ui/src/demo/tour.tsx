@@ -30,7 +30,7 @@ const SESSION = (id: string) => `/sessions/${id}`;
 const PROJECT = (page: string) => `/projects/${IDS.homelab}/${page}`;
 
 const STEPS: Step[] = [
-  { path: SESSION(IDS.grafana), target: '[data-tour="capture-learnings"]', title: 'Capture learnings', body: 'After a completed result, ask the agent to propose useful memory, skills or project rules. Try the scripted example: review its text, then Save, Edit or Ignore; only Save records the fictitious fact.' },
+  { path: SESSION(IDS.grafana), target: '[data-tour="session-menu"]', title: 'Capture learnings', body: 'Open the session menu, then Capture learnings: after a completed result, ask the agent to propose useful memory, skills or project rules. Try the scripted example: review its text, then Save, Edit or Ignore; only Save records the fictitious fact.' },
  { path: SESSION(IDS.grafana), target: '[data-tour="monitors"]', title: 'Background monitoring', body: 'The agent can finish its reply while a Threavia monitor keeps watching. Expand this panel to see its state and recent output, or stop this fictitious watch.' },
 
   { path: '/settings/mcp', target: '[data-tour="mcp"]', title: 'Existing MCP servers', body: 'Register existing servers, preview imports and choose their tools and project activation. Credentials stay on the execution backend; these demo connections are fictitious.' },
@@ -73,7 +73,7 @@ const STEPS: Step[] = [
     path: SESSION(IDS.certManager),
     target: '[data-tour="pinned"]',
     title: 'Pinned sessions',
-    body: 'The conversations you go back and forth between, one click apart even in different projects. Pin one from the button at the top of the session.',
+    body: 'The conversations you go back and forth between, one click apart even in different projects. Pin one from the session menu at the top right.',
   },
   {
     path: SESSION(IDS.certManager),
@@ -85,7 +85,7 @@ const STEPS: Step[] = [
     path: SESSION(IDS.certManager),
     target: '[data-tour="session-header"]',
     title: 'More room for the conversation',
-    body: 'On a phone, the header keeps the title, status and machine visible. Use its arrow to show repository details, Review, pinning and settings; desktop shows them directly.',
+    body: 'On a phone, the header keeps the title, status and machine visible. New session and the actions menu (review, snooze, pin, archive, settings) stay at the top right; its arrow shows repository details.',
   },
   {
     path: SESSION(IDS.certManager),
