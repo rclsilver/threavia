@@ -2,7 +2,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { AlarmClock, Archive, ArchiveRestore, BookOpen, EllipsisVertical, FileDiff, Pin, PinOff, Settings2, Trash2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
-import { useArchiveSession, useDeleteSession, usePinnedSessions, usePinSession, useSessionArtifacts } from '@/api/queries';
+import { useArchiveSession, useDeleteSession, useMe, usePinnedSessions, usePinSession, useSessionArtifacts } from '@/api/queries';
 import type { BackendInstance, Session, Snapshot } from '@/api/types';
 import { LearningCapture } from '@/components/learning-capture';
 import { ConfirmLine } from '@/components/record-list';
@@ -11,34 +11,37 @@ import { ActionError } from '@/components/ui/action-error';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/ui/menu';
+import { forgetSession } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
 import { learningSource } from '../../../../clients/shared/learnings';
 import { isSnoozed } from '../../../../clients/shared/sessions';
 
 /**
  * Archives a Session, or brings it back. Archiving keeps everything, so it
- * asks nothing: the same button undoes it.
+ * asks nothing, and the same line undoes it.
+ *
+ * An archived Session that stays on screen reads as if nothing happened, and
+ * is where the workspace would resume to: when it is the one being looked at,
+ * archiving leaves it for a new session in its Project, and forgets it as the
+ * one to come back to.
  */
-export function ArchiveButton({ session, className }: { session: Session; className?: string }) {
+function useArchiveToggle(session: Session, onScreen: boolean) {
   const archive = useArchiveSession();
+  const navigate = useNavigate();
+  const me = useMe();
   const archived = session.status === 'ARCHIVED';
-  const label = archived ? 'Restore from the archive' : 'Archive';
-  return (
-    <>
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn('size-11 md:size-8', className)}
-        title={label}
-        aria-label={label}
-        disabled={archive.isPending}
-        onClick={() => archive.mutate({ sessionId: session.id, archived: !archived })}
-      >
-        {archived ? <ArchiveRestore /> : <Archive />}
-      </Button>
-      <ActionError error={archive.error} outcome={archived ? 'Not restored' : 'Not archived'} className="text-xs" />
-    </>
-  );
+  const toggle = () =>
+    archive.mutate(
+      { sessionId: session.id, archived: !archived },
+      {
+        onSuccess: () => {
+          if (archived || !onScreen) return;
+          forgetSession(me.data?.userId, session.id);
+          void navigate({ to: '/sessions/new', search: { projectId: session.projectId } });
+        },
+      },
+    );
+  return { archive, archived, toggle };
 }
 
 /**
@@ -150,9 +153,8 @@ function DeleteSessionDialog({ session, current, open, onOpenChange }: { session
  * it: put it off, put it away, or get rid of it.
  */
 export function SessionMenu({ session, current, children }: { session: Session; current?: string; children: ReactNode }) {
-  const archive = useArchiveSession();
+  const { archive, archived, toggle } = useArchiveToggle(session, current === session.id);
   const [deleting, setDeleting] = useState(false);
-  const archived = session.status === 'ARCHIVED';
 
   return (
     <>
@@ -170,7 +172,7 @@ export function SessionMenu({ session, current, children }: { session: Session; 
               </MenuSubContent>
             </MenuSub>
           )}
-          <MenuItem className="max-md:min-h-11" onSelect={() => archive.mutate({ sessionId: session.id, archived: !archived })}>
+          <MenuItem className="max-md:min-h-11" onSelect={toggle}>
             {archived ? <ArchiveRestore className="text-muted size-4" /> : <Archive className="text-muted size-4" />}
             {archived ? 'Restore' : 'Archive'}
           </MenuItem>
@@ -193,12 +195,11 @@ export function SessionMenu({ session, current, children }: { session: Session; 
  */
 export function SessionHeaderMenu({ snapshot, backend }: { snapshot: Snapshot; backend?: BackendInstance }) {
   const session = snapshot.session;
-  const archive = useArchiveSession();
+  const { archive, archived, toggle } = useArchiveToggle(session, true);
   const pinned = usePinnedSessions();
   const pin = usePinSession();
   const [deleting, setDeleting] = useState(false);
   const [capturing, setCapturing] = useState(false);
-  const archived = session.status === 'ARCHIVED';
   const isPinned = pinned.data ? pinned.data.some((entry) => entry.id === session.id) : Boolean(session.pinnedAt);
   const snoozed = isSnoozed(session);
   const item = 'max-md:min-h-11';
@@ -240,7 +241,7 @@ export function SessionHeaderMenu({ snapshot, backend }: { snapshot: Snapshot; b
             {isPinned ? <PinOff className="text-muted size-4" /> : <Pin className="text-muted size-4" />}
             {isPinned ? 'Unpin from the sidebar' : 'Pin to the sidebar'}
           </MenuItem>
-          <MenuItem className={item} onSelect={() => archive.mutate({ sessionId: session.id, archived: !archived })}>
+          <MenuItem className={item} onSelect={toggle}>
             {archived ? <ArchiveRestore className="text-muted size-4" /> : <Archive className="text-muted size-4" />}
             {archived ? 'Restore from the archive' : 'Archive'}
           </MenuItem>
