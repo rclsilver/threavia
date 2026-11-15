@@ -14,6 +14,60 @@ import (
 	"github.com/rclsilver/threavia/pkg/backend-sdk/state"
 )
 
+// captureRunner records the parameters it was started with.
+type captureRunner struct {
+	busyRunner
+	params chan runner.StartParams
+}
+
+func (r captureRunner) Run(_ context.Context, p runner.StartParams, _ runner.Sink) error {
+	r.params <- p
+	<-r.release
+	return nil
+}
+
+// TestDecisionsReachTheRunner pins that the decisions in the project context
+// are handed to the runner, which is what puts them in the agent's prompt.
+func TestDecisionsReachTheRunner(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	store := state.NewMemoryStore()
+	capture := captureRunner{busyRunner: busyRunner{release: make(chan struct{})}, params: make(chan runner.StartParams, 1)}
+	t.Cleanup(func() { close(capture.release) })
+
+	a := adapter.New(adapter.Config{}, capture, store, logger)
+	cfg := client.DefaultConfig()
+	cfg.CoreAddress = "core.invalid:9090"
+	cfg.Token = "credential"
+	cfg.InstanceName = "laptop"
+	sdk, err := client.New(cfg, a, store, logger)
+	if err != nil {
+		t.Fatalf("building the sdk client: %v", err)
+	}
+	a.Bind(sdk)
+
+	if err := a.OnStartJob(context.Background(), &backendv1.StartJob{
+		RunId: "run-1", JobId: "job-1", Prompt: "go",
+		ProjectContext: &backendv1.ProjectContext{
+			WorkingDirectoryPath: t.TempDir(),
+			Decisions: []*backendv1.ContextDecision{
+				{Id: "g", Title: "[Core memory] Global", Content: "Applies everywhere."},
+				{Id: "p", Title: "Local", Content: "Applies here."},
+			},
+		},
+		ExecutionPolicy: &backendv1.ExecutionPolicy{Mode: backendv1.ExecutionMode_EXECUTION_MODE_INTERACTIVE},
+	}); err != nil {
+		t.Fatalf("starting the job: %v", err)
+	}
+	select {
+	case p := <-capture.params:
+		if len(p.Decisions) != 2 || p.Decisions[0].GetId() != "g" || p.Decisions[1].GetContent() != "Applies here." {
+			t.Fatalf("decisions = %v, want the two sent by Core in order", p.Decisions)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the job never started")
+	}
+}
+
 // busyRunner holds a Job open until the test ends, which is what a Job looks
 // like while the user changes its policy.
 type busyRunner struct {

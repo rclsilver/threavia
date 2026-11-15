@@ -207,6 +207,7 @@ func (a *Adapter) OnStartJob(ctx context.Context, cmd *backendv1.StartJob) error
 		Policy:              a.policyFor(cmd.GetRunId(), cmd.GetExecutionPolicy()),
 		ProjectInstructions: cmd.GetProjectContext().GetProjectInstructions(),
 		LocalInstructions:   a.cfg.Provider.LocalInstructions,
+		Decisions:           cmd.GetProjectContext().GetDecisions(),
 	}
 	if params.RunID == "" || params.JobID == "" {
 		return fmt.Errorf("a run id and a job id are required")
