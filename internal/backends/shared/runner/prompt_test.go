@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/backends/shared/mcp"
 )
 
@@ -33,6 +34,37 @@ func TestSchedulingUsesPersistentThreaviaTools(t *testing.T) {
 			if !strings.Contains(prompt, want) {
 				t.Errorf("missing %q", want)
 			}
+		}
+	}
+}
+
+func TestDecisionsAreRenderedGlobalAndProject(t *testing.T) {
+	t.Parallel()
+
+	prompt := SystemPrompt(StartParams{Decisions: []*backendv1.ContextDecision{
+		{Id: "g", Title: "[Core memory] Bind every repository", Content: "Register a known directory and bind it."},
+		{Id: "p", Title: "Use worktrees", Content: "One worktree per change."},
+	}}, nil, "")
+	for _, want := range []string{
+		"Active decisions",
+		"- [Core memory] Bind every repository: Register a known directory and bind it.",
+		"- Use worktrees: One worktree per change.",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt omits %q", want)
+		}
+	}
+	if strings.Index(prompt, "Bind every repository") > strings.Index(prompt, "Use worktrees") {
+		t.Error("global decisions must come before the project's")
+	}
+}
+
+func TestNoDecisionAddsNothing(t *testing.T) {
+	t.Parallel()
+
+	for _, params := range []StartParams{{}, {Decisions: []*backendv1.ContextDecision{{}}}} {
+		if prompt := SystemPrompt(params, nil, ""); strings.Contains(prompt, "Active decisions") {
+			t.Error("an empty decision list produced a section")
 		}
 	}
 }

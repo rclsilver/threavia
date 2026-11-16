@@ -60,6 +60,10 @@ type StartParams struct {
 	// file.
 	ProjectInstructions string
 	LocalInstructions   string
+	// Decisions are the active IMPORTANT decisions Core put in the context:
+	// the global ones first (titled "[Core memory] …"), then the project's.
+	// SystemPrompt renders them, so every provider receives them.
+	Decisions []*backendv1.ContextDecision
 	// SkillDirectory is the assembled per-Job plugin directory exposing the
 	// effective Skills, or empty when the Run has none.
 	SkillDirectory string

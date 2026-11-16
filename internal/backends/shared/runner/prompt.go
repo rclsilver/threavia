@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	backendv1 "github.com/rclsilver/threavia/gen/threavia/backend/v1"
 	"github.com/rclsilver/threavia/internal/backends/shared/mcp"
 )
 
@@ -110,11 +111,37 @@ func SystemPrompt(params StartParams, available []string, scratch string) string
 		b.WriteString("\n")
 	}
 
+	// Core already bounds the list and marks the global ones in their title, so
+	// this only renders it. Nothing is written when there is none.
+	if decisions := renderDecisions(params.Decisions); decisions != "" {
+		b.WriteString("\nActive decisions that apply to this work (titles starting with ")
+		b.WriteString("\"[Core memory]\" are global, the others belong to this project). Follow them:\n")
+		b.WriteString(decisions)
+	}
+
 	if params.SkillDirectory != "" {
 		b.WriteString("\nThis project has Skills available to you. Use them when they apply ")
 		b.WriteString("rather than improvising the same work from scratch.\n")
 	}
 
+	return b.String()
+}
+
+// renderDecisions writes one entry per decision, skipping those with nothing
+// to say.
+func renderDecisions(decisions []*backendv1.ContextDecision) string {
+	var b strings.Builder
+	for _, decision := range decisions {
+		title, content := strings.TrimSpace(decision.GetTitle()), strings.TrimSpace(decision.GetContent())
+		if title == "" && content == "" {
+			continue
+		}
+		b.WriteString("- " + title)
+		if content != "" {
+			b.WriteString(": " + content)
+		}
+		b.WriteString("\n")
+	}
 	return b.String()
 }
 
