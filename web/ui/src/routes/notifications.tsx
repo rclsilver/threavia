@@ -70,10 +70,12 @@ function NotificationItem({ notification }: { notification: Notification }) {
   const warning = notification.level === 'WARNING';
   const Icon = warning ? AlertTriangle : Info;
 
-  const join = () =>
-    read.mutate(notification.id, {
-      onSuccess: () => void navigate({ to: '/sessions/$sessionId', params: { sessionId: notification.scope.sessionId } }),
-    });
+  // Joining opens the conversation at once; reading it follows on its own and
+  // reaches the other devices through the stream.
+  const join = () => {
+    read.mutate(notification.id);
+    void navigate({ to: '/sessions/$sessionId', params: { sessionId: notification.scope.sessionId } });
+  };
 
   return (
     <li

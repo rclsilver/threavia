@@ -6942,6 +6942,12 @@ export interface components {
              *     - `session.read`: `{ readSequence }`, the person was shown the
              *       Session up to there on one of their clients. Refresh session and
              *       project lists.
+             *     - `notification.created`: `{ notificationId, level, title, message,
+             *       count }`, an agent of the Session raised a notification, or the
+             *       same unread one again (count went up). Refresh notifications.
+             *     - `notification.read`: `{ notificationIds }`, notifications of the
+             *       Session were dismissed or joined on one of the person's clients.
+             *       Refresh notifications.
              *     - `session.deleted`: `{ sessionId, title, artifactsDeleted }`,
              *       project-scoped so it survives deletion of the session history.
              *       Older events may carry the session id in the envelope instead.

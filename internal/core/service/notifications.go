@@ -27,8 +27,9 @@ func truncate(text string, limit int) string {
 }
 
 // Notify records a notification an agent raised for the person. It never
-// blocks the Job. A WARNING also reaches the person's devices when no client
-// of theirs is in use; an INFO waits in the list.
+// blocks the Job. A new WARNING also reaches the person's devices when no
+// client of theirs is in use; an INFO waits in the list, and so does the same
+// unread WARNING raised again, which only counts once more.
 func (s *Service) Notify(ctx context.Context, identity auth.Identity, jc jobScope, level domain.NotificationLevel, title, message string) (domain.Notification, error) {
 	title, message = strings.TrimSpace(title), strings.TrimSpace(message)
 	switch {
@@ -43,13 +44,14 @@ func (s *Service) Notify(ctx context.Context, identity auth.Identity, jc jobScop
 		Scope: domain.Scope{ProjectID: jc.ProjectID, SessionID: jc.SessionID, JobID: jc.JobID},
 		Level: level, Title: truncate(title, maxNotificationTitle), Message: truncate(message, maxNotificationMessage),
 	}
-	if _, err := s.store.CreateNotification(ctx, &n); err != nil {
+	created, err := s.store.CreateNotification(ctx, &n)
+	if err != nil {
 		return domain.Notification{}, translate(err)
 	}
 	s.emit(ctx, identity.UserID, events.TypeNotificationCreated,
 		domain.Scope{ProjectID: n.Scope.ProjectID, SessionID: n.Scope.SessionID},
 		NotificationPayload{NotificationID: n.ID, Level: n.Level, Title: n.Title, Message: n.Message, Count: n.Count})
-	if n.Level == domain.NotificationWarning {
+	if created && n.Level == domain.NotificationWarning {
 		s.pushWarning(ctx, identity.UserID, n)
 	}
 	return n, nil
@@ -108,11 +110,16 @@ func (s *Service) MarkNotificationsRead(ctx context.Context, identity auth.Ident
 	if len(changed) == 0 {
 		return nil
 	}
-	ids := make([]domain.NotificationID, len(changed))
-	for i, n := range changed {
-		ids[i] = n.ID
+	// One event per Session, each scoped to it, as for a single read.
+	bySession := map[domain.SessionID][]domain.NotificationID{}
+	scopes := map[domain.SessionID]domain.Scope{}
+	for _, n := range changed {
+		bySession[n.Scope.SessionID] = append(bySession[n.Scope.SessionID], n.ID)
+		scopes[n.Scope.SessionID] = n.Scope
 	}
-	s.announceRead(ctx, identity, changed[0].Scope, ids)
+	for sessionID, ids := range bySession {
+		s.announceRead(ctx, identity, scopes[sessionID], ids)
+	}
 	return nil
 }
 

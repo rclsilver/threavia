@@ -10,7 +10,7 @@ import (
 
 func notificationOf(f fixture, level domain.NotificationLevel, title, message string) *domain.Notification {
 	return &domain.Notification{
-		Scope: domain.Scope{ProjectID: f.project.ID, SessionID: f.session.ID, RunID: f.run.ID, JobID: f.job.ID},
+		Scope: domain.Scope{SessionID: f.session.ID, JobID: f.job.ID},
 		Level: level, Title: title, Message: message,
 	}
 }
@@ -118,5 +118,30 @@ func TestNotificationsFollowSessionDeletion(t *testing.T) {
 	}
 	if list, _ := store.ListNotifications(ctx, f.owner, false, ""); len(list) != 0 {
 		t.Fatalf("notifications outlived their session: %v", list)
+	}
+}
+
+// The Run comes from the Job, and the Project from the Session: a Session
+// moved to another Project takes its notifications along.
+func TestNotificationScopeFollowsTheSession(t *testing.T) {
+	store, ctx := newTestStore(t)
+	f := newFixture(t, store, ctx)
+	n := notificationOf(f, domain.NotificationInfo, "t", "m")
+	if _, err := store.CreateNotification(ctx, n); err != nil {
+		t.Fatal(err)
+	}
+	if n.Scope.RunID != f.run.ID {
+		t.Fatalf("run = %q, want the job's %q", n.Scope.RunID, f.run.ID)
+	}
+	other := domain.Project{ID: domain.NewProjectID(), OwnerID: f.owner, Name: "other", Status: domain.ProjectActive}
+	if err := store.CreateProject(ctx, &other); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.MoveSessionToProject(ctx, f.owner, f.session.ID, other.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	list, err := store.ListNotifications(ctx, f.owner, true, f.session.ID)
+	if err != nil || len(list) != 1 || list[0].Scope.ProjectID != other.ID || list[0].Scope.RunID != f.run.ID {
+		t.Fatalf("after the move = %+v, %v; want project %s", list, err, other.ID)
 	}
 }

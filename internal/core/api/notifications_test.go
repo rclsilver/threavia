@@ -35,6 +35,9 @@ func TestNotifyToolRaisesCountsAndClears(t *testing.T) {
 	if got := len(long["message"].(string)); got != 2000 {
 		t.Fatalf("message = %d characters, want 2000", got)
 	}
+	if scope := long["scope"].(map[string]any); scope["runId"] != start.GetRunId() || scope["projectId"] != projectID {
+		t.Fatalf("scope = %v, want the job's run and the session's project", scope)
+	}
 
 	for i := 0; i < 3; i++ {
 		call("notify", map[string]any{"level": "WARNING", "title": "Disk", "message": "90% full"})
