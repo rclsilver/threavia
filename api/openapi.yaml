@@ -47,6 +47,8 @@ tags:
     description: Units of agent work
   - name: attention
     description: What is currently waiting for the user
+  - name: notifications
+    description: What agents told the person, until they dismiss it or join the conversation
   - name: usage
     description: What Sessions consumed, by backend, model and effort
   - name: knowledge
@@ -2202,6 +2204,71 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Attention" }
 
+  /api/v1/me/notifications:
+    get:
+      tags: [notifications]
+      summary: The notifications agents raised for the person
+      description: |
+        WARNING first, then the most recently raised. An identical unread
+        notification raised again is counted in `count`, not repeated. A
+        `notification.created` event tells the clients of a new one or a new
+        count, a `notification.read` event of the ones read.
+      parameters:
+        - name: unread
+          in: query
+          schema: { type: boolean }
+          description: Only unread notifications.
+        - name: sessionId
+          in: query
+          schema: { $ref: "#/components/schemas/UUID" }
+          description: Restrict to one Session.
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Notification" }
+
+  /api/v1/notifications/{notificationId}/read:
+    parameters:
+      - name: notificationId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UUID" }
+    post:
+      tags: [notifications]
+      summary: Mark a notification read
+      description: |
+        Dismissing it, or joining its conversation. Idempotent: reading it
+        again, from another device, changes and announces nothing.
+      responses:
+        "204":
+          description: Read
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/notifications/read:
+    post:
+      tags: [notifications]
+      summary: Mark every unread notification read
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sessionId: { $ref: "#/components/schemas/UUID" }
+      responses:
+        "204":
+          description: Read
+
   /api/v1/usage:
     get:
       tags: [usage]
@@ -4141,6 +4208,22 @@ components:
         userInputs:
           type: [array, "null"]
           items: { $ref: "#/components/schemas/UserInputRequest" }
+
+    Notification:
+      type: object
+      required: [id, scope, level, title, message, count, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        scope: { $ref: "#/components/schemas/Scope" }
+        level: { type: string, enum: [INFO, WARNING] }
+        title: { type: string }
+        message: { type: string }
+        count:
+          type: integer
+          description: How many times the same unread notification was raised.
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        readAt: { type: string, format: date-time }
 
     Scope:
       type: object

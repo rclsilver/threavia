@@ -4484,6 +4484,140 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The notifications agents raised for the person
+         * @description WARNING first, then the most recently raised. An identical unread
+         *     notification raised again is counted in `count`, not repeated. A
+         *     `notification.created` event tells the clients of a new one or a new
+         *     count, a `notification.read` event of the ones read.
+         *
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Only unread notifications. */
+                    unread?: boolean;
+                    /** @description Restrict to one Session. */
+                    sessionId?: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Notifications */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["Notification"][];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/{notificationId}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notificationId: components["schemas"]["UUID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a notification read
+         * @description Dismissing it, or joining its conversation. Idempotent: reading it
+         *     again, from another device, changes and announces nothing.
+         *
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    notificationId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Read */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark every unread notification read */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        sessionId?: components["schemas"]["UUID"];
+                    };
+                };
+            };
+            responses: {
+                /** @description Read */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/usage": {
         parameters: {
             query?: never;
@@ -7062,6 +7196,22 @@ export interface components {
         Attention: {
             validations: components["schemas"]["ValidationRequest"][] | null;
             userInputs: components["schemas"]["UserInputRequest"][] | null;
+        };
+        Notification: {
+            id: components["schemas"]["UUID"];
+            scope: components["schemas"]["Scope"];
+            /** @enum {string} */
+            level: "INFO" | "WARNING";
+            title: string;
+            message: string;
+            /** @description How many times the same unread notification was raised. */
+            count: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            readAt?: string;
         };
         Scope: {
             projectId: components["schemas"]["UUID"];

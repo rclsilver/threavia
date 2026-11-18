@@ -94,6 +94,7 @@ func NewRouter(opts Options) http.Handler {
 	h.registerReviews(mux)
 	h.registerJobs(mux)
 	h.registerAttention(mux)
+	h.registerNotifications(mux)
 	h.registerKnowledge(mux)
 	h.registerPolicy(mux)
 	h.registerArtifacts(mux)

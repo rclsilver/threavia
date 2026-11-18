@@ -61,6 +61,8 @@ var controlOperations = []struct{ name, scope, pattern string }{
 	{"mcp_backend_operation", "manage", "POST /api/v1/backends/{backendId}/mcp"},
 	{"audit_read", "read", "GET /api/v1/me/audit"},
 	{"attention_list", "read", "GET /api/v1/me/attention"},
+	{"notification_list", "read", "GET /api/v1/me/notifications"},
+	{"notification_mark_read", "manage", "POST /api/v1/notifications/{notificationId}/read"},
 	{"usage_read", "read", "GET /api/v1/usage"},
 	{"session_pinned_list", "read", "GET /api/v1/me/pinned-sessions"},
 	{"session_snooze", "manage", "PUT /api/v1/sessions/{sessionId}/snooze"},

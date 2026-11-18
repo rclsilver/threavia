@@ -181,6 +181,11 @@ Two properties shape every endpoint above:
 - **Pending attention is current state**, not an unread-event counter. Once a
   validation or input request is resolved, it disappears everywhere, and a
   reconnecting client never turns old events into stale notifications.
+- **Notifications are what agents tell the person.** `GET /api/v1/me/notifications`
+  lists them, WARNING first; `POST /api/v1/notifications/{id}/read` (or
+  `/api/v1/notifications/read` for all, optionally of one `sessionId`) marks them
+  read. `notification.created` and `notification.read` events keep every client
+  current.
 
 ## SSE
 

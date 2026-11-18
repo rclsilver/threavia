@@ -2,8 +2,11 @@ package api_test
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/rclsilver/threavia/internal/core/domain"
 )
 
 // An agent raises notifications for the person without waiting: they are
@@ -57,5 +60,41 @@ func TestNotifyToolRaisesCountsAndClears(t *testing.T) {
 	}
 	if all := call("notification_list", map[string]any{"unread": false})["notifications"].([]any); len(all) != 2 {
 		t.Fatalf("read notifications are listed with unread=false: %v", all)
+	}
+}
+
+func TestNotificationEndpoints(t *testing.T) {
+	c, backend, projectID, dirID := setup(t)
+	c.startSession(projectID, c.backendID, dirID, "Watch")
+	start := receive(t, "the job", backend.starts)
+	ctx := context.Background()
+	notify := func(level, title string) {
+		backend.callCoreTool(t, ctx, start.GetRunId(), start.GetJobId(), "notify", map[string]any{"level": level, "title": title, "message": "details"})
+	}
+	notify("INFO", "fyi")
+	notify("WARNING", "look")
+
+	var unread struct {
+		Items []struct {
+			ID    string `json:"id"`
+			Level string `json:"level"`
+		} `json:"items"`
+	}
+	c.mustDo(http.MethodGet, "/api/v1/me/notifications?unread=true", nil, &unread, http.StatusOK)
+	if len(unread.Items) != 2 || unread.Items[0].Level != "WARNING" {
+		t.Fatalf("unread = %+v, want the WARNING first", unread.Items)
+	}
+
+	c.mustDo(http.MethodPost, "/api/v1/notifications/"+unread.Items[0].ID+"/read", nil, nil, http.StatusNoContent)
+	c.mustDo(http.MethodPost, "/api/v1/notifications/"+unread.Items[0].ID+"/read", nil, nil, http.StatusNoContent)
+	c.mustDo(http.MethodPost, "/api/v1/notifications/"+domain.NewUUID()+"/read", nil, nil, http.StatusNotFound)
+	c.mustDo(http.MethodGet, "/api/v1/me/notifications?unread=true", nil, &unread, http.StatusOK)
+	if len(unread.Items) != 1 || unread.Items[0].Level != "INFO" {
+		t.Fatalf("after one read: %+v", unread.Items)
+	}
+	c.mustDo(http.MethodPost, "/api/v1/notifications/read", nil, nil, http.StatusNoContent)
+	c.mustDo(http.MethodGet, "/api/v1/me/notifications?unread=true", nil, &unread, http.StatusOK)
+	if len(unread.Items) != 0 {
+		t.Fatalf("after read all: %+v", unread.Items)
 	}
 }
