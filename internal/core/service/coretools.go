@@ -116,6 +116,8 @@ func (s *Service) invokeTool(ctx context.Context, identity auth.Identity, jc job
 		return s.reviewTool(ctx, identity, jc, name, input)
 	case tools.NameScheduleList, tools.NameScheduleCreate, tools.NameScheduleUpdate, tools.NameScheduleDelete, tools.NameScheduleDismiss:
 		return s.scheduleTool(ctx, identity, jc, name, input)
+	case tools.NameNotify, tools.NameNotificationList, tools.NameNotificationMarkRead:
+		return s.notificationTool(ctx, identity, jc, name, input)
 	case tools.NameArtifactPublish:
 		return s.publishArtifact(ctx, identity, jc, input, file)
 

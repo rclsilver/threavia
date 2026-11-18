@@ -335,3 +335,18 @@ type SessionSnoozedPayload struct {
 type SessionReadPayload struct {
 	ReadSequence domain.Sequence `json:"readSequence"`
 }
+
+// NotificationPayload is the body of a notification.created event.
+type NotificationPayload struct {
+	NotificationID domain.NotificationID    `json:"notificationId"`
+	Level          domain.NotificationLevel `json:"level"`
+	Title          string                   `json:"title"`
+	Message        string                   `json:"message"`
+	Count          int                      `json:"count"`
+}
+
+// NotificationReadPayload is the body of a notification.read event: these
+// notifications were dismissed or joined, on one of the person's clients.
+type NotificationReadPayload struct {
+	NotificationIDs []domain.NotificationID `json:"notificationIds"`
+}
