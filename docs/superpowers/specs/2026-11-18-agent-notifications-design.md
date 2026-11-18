@@ -84,6 +84,10 @@ se marquent comme lues.
   déléguée (cohérent avec `delegated`, la notification reste listée).
 - **Lecture automatique** : ouvrir la session depuis la notification la marque
   lue. ⚑ Ouvrir la session par un autre chemin ne la marque pas.
+- **Session ouverte** (décision de l'utilisateur) : toute notification est créée
+  dans la cloche, même si la session est ouverte et visible. Pas de carte dans
+  la conversation, pas de marquage lu automatique ; seuls « Fermer » et
+  « Rejoindre » (depuis la cloche) la marquent lue.
 - **Web** (`web/ui`) : cloche dans l'en-tête avec compteur, panneau/route
   listant les non lues (WARNING d'abord, puis plus récentes), actions
   « Rejoindre » et « Fermer », « Tout marquer lu ». Cache React Query mis à jour
