@@ -77,7 +77,7 @@ describe('lifecycle events across clients', () => {
       const event: Event = { id: String(legacy), sequence: 4, timestamp: new Date().toISOString(), type: 'session.deleted', projectId: 'project',
         ...(legacy ? { sessionId: 'session', payload: {} } : { payload: { sessionId: 'session', title: 'Old session', artifactsDeleted: false } }) };
       web.deliver(event);
-      expect(effectsOf(event)).toEqual([{ kind: 'sessions' }, { kind: 'attention' }, { kind: 'snapshot', sessionId: 'session' }]);
+      expect(effectsOf(event)).toEqual([{ kind: 'sessions' }, { kind: 'attention' }, { kind: 'notifications' }, { kind: 'snapshot', sessionId: 'session' }]);
     }
     expect(invalidated.filter((key) => key[0] === 'snapshot')).toEqual([['snapshot', 'session'], ['snapshot', 'session']]);
     expect(invalidated.filter((key) => key[0] === 'audit')).toHaveLength(2);

@@ -7,6 +7,7 @@ import { Answers } from '../attention/answer';
 import { AttentionStore } from '../attention/store';
 import { CoreAuth, type Callbacks } from '../auth/core';
 import { Connection } from '../connection';
+import { NotificationStore } from '../notifications/store';
 import { Artifacts } from '../conversation/artifacts';
 import { RepositoryMonitor } from '../conversation/repository';
 import type { VirtualDocuments } from '../diff/documents';
@@ -36,6 +37,7 @@ export class Core implements vscode.Disposable {
   readonly auth: CoreAuth;
   readonly client: CoreClient;
   readonly attention: AttentionStore;
+  readonly notifications: NotificationStore;
   readonly answers: Answers;
   readonly presence: Presence;
   readonly connection: Connection;
@@ -65,6 +67,7 @@ export class Core implements vscode.Disposable {
       onUnauthorized: () => this.auth.recover(),
     });
     this.attention = new AttentionStore(this.client, this.bus);
+    this.notifications = new NotificationStore(this.client, this.bus);
     this.answers = new Answers(this.client, this.attention);
     this.presence = new Presence(this.client);
     this.connection = new Connection(
@@ -83,6 +86,13 @@ export class Core implements vscode.Disposable {
       vscode.window.onDidChangeWindowState((state) => this.repositories.setFocused(state.focused)),
       this.bus.on('effect', (effect) => { if (effect.kind === 'backends') this.invalidateBackends(); }),
       this.bus.on('connection', () => this.invalidateBackends()),
+      // Read once signed in and again when the stream comes back; forgotten
+      // otherwise, as what waits is.
+      this.connection.onDidChange((state) => {
+        if (state === 'ready') void this.notifications.refresh();
+        else this.notifications.reset();
+      }),
+      this.bus.on('connection', (up) => { if (up) this.notifications.schedule(); }),
     );
   }
 
@@ -142,6 +152,7 @@ export class Core implements vscode.Disposable {
     this.connection.dispose();
     this.presence.dispose();
     this.attention.dispose();
+    this.notifications.dispose();
     this.auth.dispose();
   }
 }

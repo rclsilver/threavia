@@ -88,8 +88,14 @@ pinned global decisions are read by agents in all your projects on that Core.
   you are not looking at says so quietly. A request's notification disappears
   when it is answered, including on another device, or abandoned by an interrupt.
   Dismissing the notification leaves the request in Waiting.
+- **Agent notifications.** An agent can tell you something without asking: an
+  INFO or a WARNING attached to its session, listed under **Notifications** in
+  the sidebar, warnings first. Click one to join its conversation, or dismiss
+  it from its row; either marks it read on every device. A new warning also
+  pops up once (`threavia.notifications.agentWarnings`).
 - **Status bar.** `$(inbox) N` while something waits, on every Core together;
-  click it to see what.
+  click it to see what. `$(bell-dot) N` beside it counts unread agent
+  notifications, on a warning background when one of them is a WARNING.
 - **Conversation.** Opening a session shows its conversation in an editor tab,
   in the colours of your theme: what you asked, what the agent said
   (markdown), its tool calls (one line each, click for the input and output),
@@ -249,8 +255,8 @@ which) or from the Core's row in the sidebar.
 
 - **Sidebar.** With one Core, the sidebar is as described above. With several,
   each Core has a row (its name, its host, and whether it is connected,
-  connecting, signed out, or not answering), and its own Waiting, Pinned and
-  Projects under it. A Core that cannot be asked says so under its row, with
+  connecting, signed out, or not answering), and its own Waiting,
+  Notifications, Pinned and Projects under it. A Core that cannot be asked says so under its row, with
   Sign In or Try Again, and the others carry on.
 - **Status bar.** The count is the sum over every Core; its tooltip says how
   many wait where.

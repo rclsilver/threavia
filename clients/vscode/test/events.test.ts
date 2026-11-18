@@ -36,7 +36,7 @@ describe('what an event changes', () => {
     expect(kinds(effectsOf(event('backend.quotas_updated', { sessionId: undefined }), at))).toEqual(['backends']);
     expect(kinds(effectsOf(event('backend.models_updated', { sessionId: undefined }), at))).toEqual(['backends']);
     expect(kinds(effectsOf(event('project.updated'), at))).toEqual(['projects']);
-    expect(kinds(effectsOf(event('project.deleted', { sessionId: undefined }), at))).toEqual(['projects', 'sessions', 'attention']);
+    expect(kinds(effectsOf(event('project.deleted', { sessionId: undefined }), at))).toEqual(['projects', 'sessions', 'attention', 'notifications']);
   });
 
   it('names the instructions editor an edit made elsewhere makes stale', () => {
