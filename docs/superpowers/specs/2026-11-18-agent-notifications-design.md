@@ -49,7 +49,7 @@ se marquent comme lues.
 
 ## Anti-objectifs
 
-- Un schedule bavard ne doit pas noyer l'utilisateur : les limites ci-dessous
+- Un schedule bavard ne doit pas noyer l'utilisateur : la déduplication ci-dessous
   existent pour cela.
 - Une notification ne doit jamais bloquer ni réveiller un job.
 
@@ -67,8 +67,7 @@ se marquent comme lues.
 
 - **Outil** : `notify` dans `internal/core/tools`, sans `RequiresValidation`.
   ⚑ Taille : titre ≤ 120, message ≤ 2000 caractères, tronqués côté Core.
-  ⚑ Limite de débit : au plus 20 notifications par session et par heure ;
-  au-delà l'outil répond par une erreur claire. ⚑ Doublon : une notification
+  Pas de limite de débit (décision de l'utilisateur). ⚑ Doublon : une notification
   non lue de même session, niveau, titre et message est dédupliquée
   (compteur `count` incrémenté, `updated_at` rafraîchi) plutôt que recréée,
   ce qui protège des schedules répétitifs.
@@ -96,7 +95,7 @@ se marquent comme lues.
 
 ## Tests
 
-Go : store (création, dédup, limite, lecture), service, outil via
+Go : store (création, dédup, lecture), service, outil via
 `managetools_test.go`, catalogue de contrôle. Web : tests du cache et du
 composant. VS Code : tests du store et de l'arbre. Vérification en docker-compose
 depuis la worktree avec un project-name distinct.
