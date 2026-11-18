@@ -126,13 +126,14 @@
 ### Task 5: Extension VS Code
 
 **Files:**
-- Create: `clients/vscode/src/notifications/store.ts`
+- Create: `clients/vscode/src/notifications/store.ts`, `clients/vscode/src/notifications/status.ts`
 - Modify: `clients/vscode/src/api/client.ts` (méthodes `notifications()`, `markNotificationRead(id)`, `markNotificationsRead()`), `clients/vscode/src/api/types.ts` (payloads d'événements, à côté de la ligne 114), `clients/vscode/src/api/events.ts` (nouvel effet `{ kind: 'notifications' }` pour les deux types), `clients/vscode/src/tree/provider.ts` et `model.ts` (section « Notifications » de l'arbre, WARNING avec icône d'alerte), `clients/vscode/src/tree/badge.ts` et `model.ts` (`activityBadge` compte aussi les non lues), `clients/vscode/src/extension.ts` et `package.json` (commandes « Rejoindre », « Fermer », « Tout marquer lu »)
 - Test: `clients/vscode/test/notifications.test.ts`, étendre `events.test.ts` et `attention.test.ts`
 
 **Interfaces:**
 - Consumes: endpoints de la Task 3 ; effet `kind: 'notifications'` produit par `effectsOf`.
 - Produces: `NotificationStore` (liste triée, `unreadCount`, rechargé sur l'effet `notifications`) ; commandes `threavia.notification.open|dismiss|dismissAll`.
+- Produces: `NotificationStatus` (barre de statut, modèle `WaitingStatus` de `src/attention/notifier.ts:159`) : `$(bell) N` à gauche, masqué à zéro, fond `statusBarItem.warningBackground` si au moins une WARNING non lue, tooltip par Core, clic → commande qui ouvre la section Notifications (demande de l'utilisateur, en plus de l'arbre).
 
 - [ ] **Step 1: Tests** : `effectsOf(event('notification.created'))` et `notification.read` contiennent `{ kind: 'notifications' }` ; le store trie WARNING d'abord et `unreadCount` ignore les lues ; `activityBadge` additionne les non lues.
 - [ ] **Step 2: Lancer** `cd clients/vscode && npx vitest run` (ou la commande de `package.json`) — attendu : FAIL.
