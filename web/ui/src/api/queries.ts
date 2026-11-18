@@ -6,7 +6,9 @@ import { api, idempotencyKey } from './client';
 import { dropInterruptedAttention, dropResolvedAttention } from './attention-cache';
 import { keys } from './keys';
 import { projectsByName } from '../../../../clients/shared/sessions';
+import { sortNotifications } from '../../../../clients/shared/notifications';
 import type {
+  Notification,
   Artifact,
   AuditEntry,
   BackendInstance,
@@ -1286,5 +1288,37 @@ export function useConnectedClients() {
     queryFn: () => api.get<List<ConnectedClient>>('/api/v1/me/clients').then(items),
     // Presence changes without an event; a dialog left open follows it.
     refetchInterval: 15_000,
+  });
+}
+
+// --------------------------------------------------------------- notifications
+
+/** What agents told the person, unread first by level and recency. */
+export function useNotifications() {
+  return useQuery({
+    queryKey: keys.notifications(),
+    queryFn: () => api.get<List<Notification>>('/api/v1/me/notifications?unread=true').then(items),
+    select: sortNotifications,
+  });
+}
+
+/** Dismissing one, or joining its conversation. The stream confirms it everywhere. */
+export function useMarkNotificationRead() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/api/v1/notifications/${id}/read`),
+    onMutate: (id) => {
+      queries.setQueryData<Notification[]>(keys.notifications(), (current) => current?.filter((n) => n.id !== id));
+    },
+    onSettled: () => void queries.invalidateQueries({ queryKey: keys.notifications() }),
+  });
+}
+
+export function useMarkAllNotificationsRead() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post('/api/v1/notifications/read'),
+    onMutate: () => queries.setQueryData<Notification[]>(keys.notifications(), []),
+    onSettled: () => void queries.invalidateQueries({ queryKey: keys.notifications() }),
   });
 }

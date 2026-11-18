@@ -208,15 +208,17 @@ describe('the sidebar with one Core or several', () => {
     ).toEqual({ kind: 'cores', coreIds: ['a', 'b'] });
   });
 
-  it('lists a Core’s Waiting, Pinned when something is, and its Projects, its own first', () => {
+  it('lists a Core’s Waiting, Notifications, Pinned when something is, and its Projects, its own first', () => {
     const projects = [project('p1', 'web'), project('p2', 'api'), project('p3', 'old', 'ARCHIVED')];
     expect(coreSections(0, projects, 'api')).toEqual([
       { type: 'waiting' },
+      { type: 'notifications' },
       { type: 'project', project: projects[1] },
       { type: 'project', project: projects[0] },
     ]);
     expect(coreSections(2, projects, '').map((section) => section.type)).toEqual([
       'waiting',
+      'notifications',
       'pinned',
       'project',
       'project',

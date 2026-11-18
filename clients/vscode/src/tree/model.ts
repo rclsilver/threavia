@@ -1,4 +1,4 @@
-import type { Project, Repository, Session, UserInputRequest, ValidationRequest } from '../api/types';
+import type { Notification, Project, Repository, Session, UserInputRequest, ValidationRequest } from '../api/types';
 import { sessionSections } from '../../../shared/sessions';
 
 /**
@@ -97,8 +97,12 @@ export function stateIcon(state: SessionActivity, unread = false): IconSpec {
  * when anything is: `1 waiting · 2 unread`. Quiet otherwise, like the rest of
  * the list.
  */
-export function activityDescription(waiting: number, unread: number): string | undefined {
-  const parts = [waiting > 0 && `${waiting} waiting`, unread > 0 && `${unread} unread`].filter(Boolean);
+export function activityDescription(waiting: number, unread: number, notifications = 0): string | undefined {
+  const parts = [
+    waiting > 0 && `${waiting} waiting`,
+    unread > 0 && `${unread} unread`,
+    notifications > 0 && `${notifications} ${notifications === 1 ? 'notification' : 'notifications'}`,
+  ].filter(Boolean);
   return parts.length ? parts.join(' · ') : undefined;
 }
 
@@ -173,11 +177,13 @@ export function sidebarRoots(
 }
 
 /** One Core's part of the sidebar: what waits, what is pinned, its Projects. */
-export type Section = { type: 'waiting' } | { type: 'pinned' } | { type: 'project'; project: Project };
+export type Section = { type: 'waiting' } | { type: 'notifications' } | { type: 'pinned' } | { type: 'project'; project: Project };
 
 export function coreSections(pinned: number, projects: Project[], setting: string): Section[] {
   return [
     { type: 'waiting' },
+    // What agents told the person, right under what waits for them.
+    { type: 'notifications' },
     // Nothing at all until something is pinned, so a person who never pins
     // sees the sidebar they had.
     ...(pinned > 0 ? [{ type: 'pinned' } as const] : []),
@@ -248,6 +254,8 @@ export interface CoreActivity {
   name: string;
   waiting: number;
   unread: number;
+  /** Unread notifications agents raised. */
+  notifications?: number;
 }
 
 /**
@@ -258,15 +266,16 @@ export interface CoreActivity {
 export function activityBadge(cores: readonly CoreActivity[]): { value: number; tooltip: string } | undefined {
   const waiting = cores.reduce((sum, core) => sum + core.waiting, 0);
   const unread = cores.reduce((sum, core) => sum + core.unread, 0);
-  if (waiting + unread === 0) return undefined;
-  const summary = activityDescription(waiting, unread)!;
+  const notifications = cores.reduce((sum, core) => sum + (core.notifications ?? 0), 0);
+  if (waiting + unread + notifications === 0) return undefined;
+  const summary = activityDescription(waiting, unread, notifications)!;
   const lines = cores.length > 1
     ? cores.flatMap((core) => {
-      const description = activityDescription(core.waiting, core.unread);
+      const description = activityDescription(core.waiting, core.unread, core.notifications);
       return description ? [`${core.name}: ${description}`] : [];
     })
     : [];
-  return { value: waiting + unread, tooltip: [`Threavia: ${summary}`, ...lines].join('\n') };
+  return { value: waiting + unread + notifications, tooltip: [`Threavia: ${summary}`, ...lines].join('\n') };
 }
 
 /** A notification names its Core only when it could have come from another. */
@@ -421,4 +430,33 @@ export function ago(iso: string, now: number = Date.now()): string {
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours} h ago`;
   return `${Math.round(hours / 24)} d ago`;
+}
+
+// ------------------------------------------------------------ notifications
+
+/** What a notification row says: its title, then how often and how long ago. */
+export function notificationRow(notification: Notification, now: number = Date.now()): { label: string; description: string; tooltip: string } {
+  const count = notification.count > 1 ? `×${notification.count} · ` : '';
+  return {
+    label: oneLine(notification.title),
+    description: `${count}${ago(notification.updatedAt, now)}`,
+    tooltip: `${notification.level} · ${notification.title}\n\n${notification.message}`,
+  };
+}
+
+/** One Core's unread notifications, for the status bar. */
+export interface CoreNotifications {
+  name: string;
+  count: number;
+  warning: boolean;
+}
+
+/** The status bar's bell: how many, whether one is a warning, and where. */
+export function notificationSummary(cores: readonly CoreNotifications[]): { count: number; warning: boolean; tooltip: string } {
+  const count = cores.reduce((sum, core) => sum + core.count, 0);
+  const warning = cores.some((core) => core.warning);
+  const head = `${count} unread ${count === 1 ? 'notification' : 'notifications'} in Threavia${warning ? ', with a warning' : ''}`;
+  if (cores.length <= 1) return { count, warning, tooltip: head };
+  const lines = cores.filter((core) => core.count > 0).map((core) => `${core.name}: ${core.count}`);
+  return { count, warning, tooltip: [head, ...lines].join('\n') };
 }

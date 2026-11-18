@@ -3,6 +3,7 @@ import { projectsByName } from '../../../shared/sessions';
 import type {
   Artifact,
   Monitor,
+  Notification,
   Attention,
   AuthPublic,
   BackendInstance,
@@ -285,6 +286,20 @@ export class CoreClient {
   async attention(): Promise<{ validations: ValidationRequest[]; userInputs: UserInputRequest[] }> {
     const attention = await this.get<Attention>('/api/v1/me/attention');
     return { validations: attention.validations ?? [], userInputs: attention.userInputs ?? [] };
+  }
+
+  /** What agents told the person and is still unread, WARNING first. */
+  async notifications(): Promise<Notification[]> {
+    return (await this.get<List<Notification>>('/api/v1/me/notifications?unread=true')).items;
+  }
+
+  /** Dismissing one, or joining its conversation. */
+  async markNotificationRead(id: string): Promise<void> {
+    await this.post(`/api/v1/notifications/${id}/read`);
+  }
+
+  async markNotificationsRead(): Promise<void> {
+    await this.post('/api/v1/notifications/read');
   }
 
   /** Where the Session's repository stands; `fetch` asks origin first. */

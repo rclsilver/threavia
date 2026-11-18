@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import { ApiError } from './api/client';
 import { askAboutThis } from './ask/ask';
 import { Notifier, WaitingStatus } from './attention/notifier';
+import { NotificationStatus, WarningAnnouncer } from './notifications/status';
 import { promptName, promptUrl } from './config';
 import { ConversationPanels } from './conversation/panel';
 import type { Core } from './cores/core';
@@ -22,7 +23,7 @@ import { TasksView } from './knowledge/tasks';
 import { ProjectEditors } from './projects/editor';
 import { InstructionEditors } from './instructions/editor';
 import { PermissionEditors } from './permissions/editor';
-import { openInBrowser, runOpenSession, setSessionOpener } from './sessions';
+import { openInBrowser, openSession, runOpenSession, setSessionOpener } from './sessions';
 import { closeSessionViews, sessionRestored } from './session-views';
 import { chooseNewSession } from './start/new';
 import { pickBackend, pickProject } from './start/pickers';
@@ -30,7 +31,7 @@ import { ActivityBadge } from './tree/badge';
 import { BackendsView } from './tree/backends';
 import { UNTITLED, titleOf } from './tree/model';
 import { isSnoozed, sessionsByTitle, snoozeBack, snoozeChoices } from '../../shared/sessions';
-import { SidebarProvider, type Node, type RequestNode, type SessionNode } from './tree/provider';
+import { SidebarProvider, type Node, type NotificationNode, type RequestNode, type SessionNode } from './tree/provider';
 import { PathResolver } from './workspace/resolve';
 import { moveSessionToBackend } from './handoff';
 import { Reviews } from './review/view';
@@ -141,6 +142,8 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     artifacts,
     backends,
     new WaitingStatus(cores),
+    new NotificationStatus(cores),
+    new WarningAnnouncer(cores),
     new ActivityBadge(cores, sidebar, tree),
     new Notifier(cores, sessionTitle),
   );
@@ -280,6 +283,18 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     let focus = true;
     for (const core of waiting.length > 0 ? waiting : ready.slice(0, 1)) {
       await tree.reveal(sidebar.waitingNode(core.id), { expand: true, select: focus, focus });
+      focus = false;
+    }
+  });
+
+  command('threavia.showNotifications', async () => {
+    await vscode.commands.executeCommand('threavia.sidebar.focus');
+    // Every Core with something unread has its Notifications node opened.
+    const ready = cores.ready();
+    const notified = ready.filter((core) => core.notifications.current.length > 0);
+    let focus = true;
+    for (const core of notified.length > 0 ? notified : ready.slice(0, 1)) {
+      await tree.reveal(sidebar.notificationsNode(core.id), { expand: true, select: focus, focus });
       focus = false;
     }
   });
@@ -653,6 +668,23 @@ export function activate(context: vscode.ExtensionContext): Threavia {
     const core = coreOf(node);
     const request = node.item.kind === 'input' ? core?.attention.findUserInput(node.item.id) : undefined;
     if (core && request) await core.answers.ask(request);
+  });
+
+  // Joining opens the conversation at once; reading it follows and reaches
+  // the other clients through the stream.
+  command('threavia.notification.join', async (node: NotificationNode) => {
+    const core = coreOf(node);
+    if (!core) return;
+    void core.notifications.markRead(node.notification.id).catch((error) => failed(error, 'Not marked read'));
+    await openSession({ coreId: core.id, sessionId: node.notification.scope.sessionId });
+  });
+  command('threavia.notification.dismiss', async (node: NotificationNode) => {
+    const core = coreOf(node);
+    if (core) await core.notifications.markRead(node.notification.id).catch((error) => failed(error, 'Not dismissed'));
+  });
+  command('threavia.notifications.dismissAll', async (target?: Node) => {
+    const core = await coreFor(target, 'Dismiss all notifications', cores.ready().filter((candidate) => candidate.notifications.current.length > 0));
+    if (core) await core.notifications.markAllRead().catch((error) => failed(error, 'Not dismissed'));
   });
 
   void cores.start();

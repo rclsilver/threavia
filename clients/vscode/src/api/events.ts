@@ -11,6 +11,8 @@ import { payloadOf, type Event } from './types';
 export type Effect =
   /** What waits for the user is stale: re-read /me/attention. */
   | { kind: 'attention' }
+  /** What agents told the person is stale: re-read /me/notifications. */
+  | { kind: 'notifications' }
   /** Session lists, pinned ones included, are stale. */
   | { kind: 'sessions' }
   /** The snapshot of one Session is stale (title, runs, attention). */
@@ -90,7 +92,12 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
       return [{ kind: 'projects' }, { kind: 'instructions', path: `/api/v1/projects/${payload.projectId}/instructions` }];
     }
     case 'project.deleted':
-      return [{ kind: 'projects' }, { kind: 'sessions' }, { kind: 'attention' }];
+      return [{ kind: 'projects' }, { kind: 'sessions' }, { kind: 'attention' }, { kind: 'notifications' }];
+    // An agent raised one, or one was read on another device: the list is
+    // current state, re-read like what waits.
+    case 'notification.created':
+    case 'notification.read':
+      return [{ kind: 'notifications' }];
     // Pending attention is current state, not a count of unread events, so it
     // is re-read rather than built from the event: what makes an item worth a
     // notification is decided by Core, and this payload does not carry it.
@@ -116,7 +123,7 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
 
     case 'session.deleted': {
       const id = sessionId || payloadOf(event, 'session.deleted')?.sessionId || '';
-      return [{ kind: 'sessions' }, { kind: 'attention' }, ...snapshot(id)];
+      return [{ kind: 'sessions' }, { kind: 'attention' }, { kind: 'notifications' }, ...snapshot(id)];
     }
     case 'session.created':
     case 'session.renamed':
@@ -134,6 +141,7 @@ export function effectsOf(event: Event, now: number = Date.now()): Effect[] {
         { kind: 'sessions' },
         { kind: 'projects' },
         { kind: 'attention' },
+        { kind: 'notifications' },
         { kind: 'tasks' },
         { kind: 'decisions' },
         { kind: 'artifacts' },

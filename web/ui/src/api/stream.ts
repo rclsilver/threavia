@@ -331,6 +331,8 @@ export class EventStream {
         void this.invalidate({ queryKey: keys.snapshot(id) });
         void this.invalidate({ queryKey: keys.attention() });
         void this.invalidate({ queryKey: keys.audit() });
+        // Its notifications went with it.
+        void this.invalidate({ queryKey: keys.notifications() });
         break;
       }
 
@@ -338,7 +340,7 @@ export class EventStream {
       // with them what followed it — tasks, decisions, files — and its
       // directory, which the move may have detached.
       case 'session.project_moved':
-        for (const queryKey of [['sessions'], ['projects'], ['tasks'], ['decisions'], ['artifacts'], ['directories'], keys.attention(), keys.audit()]) {
+        for (const queryKey of [['sessions'], ['projects'], ['tasks'], ['decisions'], ['artifacts'], ['directories'], keys.attention(), keys.audit(), keys.notifications()]) {
           void this.invalidate({ queryKey });
         }
         void this.invalidate({ queryKey: keys.snapshot(event.sessionId ?? '') });
@@ -349,6 +351,13 @@ export class EventStream {
       case 'session.read':
         void this.invalidate({ queryKey: ['sessions'] });
         void this.invalidate({ queryKey: ['projects'] });
+        break;
+
+      // An agent raised a notification, or it was read on another device: the
+      // list is current state, so it is read again.
+      case 'notification.created':
+      case 'notification.read':
+        void this.invalidate({ queryKey: keys.notifications() });
         break;
 
       case 'session.created':
@@ -468,6 +477,7 @@ export class EventStream {
         if (event.type === 'project.deleted') {
           void this.invalidate({ queryKey: ['sessions'] });
           void this.invalidate({ queryKey: keys.attention() });
+          void this.invalidate({ queryKey: keys.notifications() });
         }
         break;
 

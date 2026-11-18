@@ -61,3 +61,7 @@ export function notifyAttention(): boolean {
 export function notifyJobEnded(): boolean {
   return vscode.workspace.getConfiguration('threavia').get<boolean>('notifications.jobEnded', true);
 }
+
+export function notifyAgentWarnings(): boolean {
+  return vscode.workspace.getConfiguration('threavia').get<boolean>('notifications.agentWarnings', true);
+}

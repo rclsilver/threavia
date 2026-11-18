@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import { isSnoozed, sessionsByTitle, snoozeBack, wokeFromSnooze } from '../../../shared/sessions';
 
 import { ApiError } from '../api/client';
-import type { Monitor, Project, Repository, Session } from '../api/types';
+import { hasUnreadWarning } from '../../../shared/notifications';
+import type { Monitor, Notification, Project, Repository, Session } from '../api/types';
 import type { Core } from '../cores/core';
 import type { Cores } from '../cores/registry';
 import { isActive } from '../presence';
@@ -14,6 +15,7 @@ import {
   coreMessage,
   coreSections,
   isCurrentProject,
+  notificationRow,
   orderSessions,
   pinnedDescription,
   repositoryDescription,
@@ -37,6 +39,8 @@ export type Node =
   | { type: 'core'; coreId: string }
   | { type: 'waiting'; coreId: string }
   | { type: 'request'; coreId: string; item: WaitingItem }
+  | { type: 'notifications'; coreId: string }
+  | { type: 'notification'; coreId: string; notification: Notification }
   | { type: 'pinned'; coreId: string }
   | { type: 'project'; coreId: string; project: Project }
   | { type: 'session'; coreId: string; session: Session; under: 'pinned' | 'project' }
@@ -47,6 +51,7 @@ export type SessionNode = Extract<Node, { type: 'session' }>;
 export type RequestNode = Extract<Node, { type: 'request' }>;
 export type ProjectNode = Extract<Node, { type: 'project' }>;
 export type CoreNode = Extract<Node, { type: 'core' }>;
+export type NotificationNode = Extract<Node, { type: 'notification' }>;
 
 const SESSION_MIME = 'application/vnd.code.tree.threavia.sidebar';
 
@@ -76,11 +81,13 @@ class CoreCache {
    */
   readonly core: CoreNode;
   readonly waiting: Node;
+  readonly notifications: Node;
   readonly pinnedNode: Node;
 
   constructor(coreId: string) {
     this.core = { type: 'core', coreId };
     this.waiting = { type: 'waiting', coreId };
+    this.notifications = { type: 'notifications', coreId };
     this.pinnedNode = { type: 'pinned', coreId };
   }
 
@@ -176,6 +183,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Tr
     this.disposables.push({ dispose: () => clearInterval(monitorTimer) });
     this.disposables.push(
       cores.onAttention(() => this.redraw()),
+      cores.onNotifications(() => this.redraw()),
       cores.on('effect', (core, effect) => {
         if (effect.kind === 'projects') this.reload(core.id);
         if (effect.kind === 'sessions') this.invalidateSessions(core.id);
@@ -238,6 +246,11 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Tr
     return this.cache(coreId).waiting;
   }
 
+  /** The Notifications node of a Core, which `reveal` expands when the bell is clicked. */
+  notificationsNode(coreId: string): Node {
+    return this.cache(coreId).notifications;
+  }
+
   /** Every Session the sidebar has loaded on a Core, for a title the event does not carry. */
   findSession(coreId: string, sessionId: string): Session | undefined {
     const cache = this.caches.get(coreId);
@@ -261,6 +274,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Tr
           return await this.coreChildren(core);
         case 'waiting':
           return this.waitingChildren(core);
+        case 'notifications':
+          return this.notificationChildren(core);
         case 'pinned':
           return await this.pinnedChildren(core);
         case 'project':
@@ -309,6 +324,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Tr
       switch (section.type) {
         case 'waiting':
           return cache.waiting;
+        case 'notifications':
+          return cache.notifications;
         case 'pinned':
           return cache.pinnedNode;
         case 'project':
@@ -328,6 +345,13 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Tr
     const parent = this.cache(core.id).waiting;
     if (items.length === 0) return [{ type: 'message', text: 'Nothing waits for you.', parent }];
     return items.map((item): Node => ({ type: 'request', coreId: core.id, item }));
+  }
+
+  private notificationChildren(core: Core): Node[] {
+    const parent = this.cache(core.id).notifications;
+    const list = core.notifications.current;
+    if (list.length === 0) return [{ type: 'message', text: 'Nothing from your agents.', parent }];
+    return list.map((notification): Node => ({ type: 'notification', coreId: core.id, notification }));
   }
 
   private async loadMonitors(core: Core, projectId: string) {
@@ -394,11 +418,14 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Tr
       case 'core':
         return undefined;
       case 'waiting':
+      case 'notifications':
       case 'pinned':
       case 'project':
         return top;
       case 'request':
         return cache.waiting;
+      case 'notification':
+        return cache.notifications;
       case 'session': {
         if (node.under === 'pinned') return cache.pinnedNode;
         const project = cache.projects?.find((candidate) => candidate.id === node.session.projectId);
@@ -415,6 +442,10 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Tr
         return this.coreItem(node.coreId);
       case 'waiting':
         return this.waitingItem(node.coreId);
+      case 'notifications':
+        return this.notificationsItem(node.coreId);
+      case 'notification':
+        return notificationItem(node);
       case 'pinned': {
         const item = new vscode.TreeItem('Pinned', vscode.TreeItemCollapsibleState.Expanded);
         item.id = `${node.coreId}:pinned`;
@@ -451,13 +482,31 @@ export class SidebarProvider implements vscode.TreeDataProvider<Node>, vscode.Tr
     if (!core) return item;
     const icon = coreIcon(core.state);
     const activity = core.state === 'ready'
-      ? activityDescription(waitingCount(core.attention.current), this.cache(coreId).unread)
+      ? activityDescription(waitingCount(core.attention.current), this.cache(coreId).unread, core.notifications.current.length)
       : undefined;
     item.description = [activity, core.host].filter(Boolean).join(' · ');
     item.iconPath = themeIcon(icon);
     item.contextValue = `core.${core.state}${core.auth.signedIn ? '.signedIn' : ''}`;
     const account = core.auth.accountLabel;
     item.tooltip = [`${core.name} — ${core.url}`, account ? `${icon.label} as ${account}` : icon.label].join('\n');
+    return item;
+  }
+
+  /** Quiet when nothing is unread; loud as soon as one of them is a warning. */
+  private notificationsItem(coreId: string): vscode.TreeItem {
+    const list = this.cores.get(coreId)?.notifications.current ?? [];
+    const warning = hasUnreadWarning(list);
+    const item = new vscode.TreeItem(
+      'Notifications',
+      list.length > 0 ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
+    );
+    item.id = `${coreId}:notifications`;
+    item.description = list.length > 0 ? String(list.length) : undefined;
+    item.tooltip = list.length > 0 ? `${list.length} unread${warning ? ', with a warning' : ''}` : 'Nothing from your agents';
+    item.contextValue = list.length > 0 ? 'notifications.unread' : 'notifications';
+    item.iconPath = warning
+      ? new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('list.warningForeground'))
+      : new vscode.ThemeIcon(list.length > 0 ? 'bell-dot' : 'bell');
     return item;
   }
 
@@ -636,6 +685,22 @@ function requestItem(node: RequestNode): vscode.TreeItem {
     title: 'Open Session',
     arguments: [{ coreId: node.coreId, sessionId: waiting.sessionId }],
   };
+  return item;
+}
+
+/** A notification: clicking it joins its conversation, which reads it. */
+function notificationItem(node: NotificationNode): vscode.TreeItem {
+  const { notification } = node;
+  const row = notificationRow(notification);
+  const item = new vscode.TreeItem(row.label, vscode.TreeItemCollapsibleState.None);
+  item.id = `${node.coreId}:notification:${notification.id}`;
+  item.description = row.description;
+  item.tooltip = row.tooltip;
+  item.contextValue = 'notification';
+  item.iconPath = notification.level === 'WARNING'
+    ? new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'))
+    : new vscode.ThemeIcon('info');
+  item.command = { command: 'threavia.notification.join', title: 'Join the Conversation', arguments: [node] };
   return item;
 }
 

@@ -43,6 +43,9 @@ as `mcp__threavia__<name>` when a Job starts:
 | `session_snooze` | Snooze this conversation or a direct delegate until an RFC 3339 `until`, or `untilChange`, or bring it back with `clear`. |
 | `session_mark_read` | Mark this conversation or a direct delegate read up to `sequence` (default: its latest event). |
 | `attention_list` | List questions and permissions waiting for the person, across sessions or for one `sessionId`. |
+| `notify` | Raise a notification for the person on this session: `level` INFO or WARNING, `title` (120 characters) and `message` (2000). It never waits and never blocks the job. The same unread notification raised again is counted, not repeated; a WARNING also sends a Web Push when no client of the person is in use. |
+| `notification_list` | List notifications, WARNING first then most recent: unread ones unless `unread` is false, or for one `sessionId`. |
+| `notification_mark_read` | Mark one `notificationId` read, or every unread one of a `sessionId`. |
 
 `session_list` also returns a `projects` directory with each relevant project's
 `id`, `name` and `status`, including projects without sessions. This lets the

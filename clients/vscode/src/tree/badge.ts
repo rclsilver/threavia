@@ -5,10 +5,11 @@ import { activityBadge, waitingCount } from './model';
 import type { SidebarProvider } from './provider';
 
 /**
- * The count on the Threavia icon of the activity bar: what waits, and the
- * Sessions holding something unread, on every Core. It matters most while the
- * view is closed, so the Projects are read again when a Job moves or a Session
- * is read, whether or not the tree is drawn.
+ * The count on the Threavia icon of the activity bar: what waits, the
+ * Sessions holding something unread and the unread notifications, on every
+ * Core. It matters most while the view is closed, so the Projects are read
+ * again when a Job moves or a Session is read, whether or not the tree is
+ * drawn.
  */
 export class ActivityBadge implements vscode.Disposable {
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -21,6 +22,7 @@ export class ActivityBadge implements vscode.Disposable {
   ) {
     this.subscriptions = [
       cores.onAttention(() => this.schedule()),
+      cores.onNotifications(() => this.schedule()),
       cores.onDidChange(() => this.schedule()),
       cores.on('effect', (_core, effect) => {
         if (effect.kind === 'sessions' || effect.kind === 'projects') this.schedule();
@@ -41,6 +43,7 @@ export class ActivityBadge implements vscode.Disposable {
       waiting: waitingCount(core.attention.current),
       // A Core that cannot be asked counts what waits, as the status bar does.
       unread: core.ready ? await this.sidebar.unread(core).catch(() => 0) : 0,
+      notifications: core.notifications.current.length,
     })));
     this.view.badge = activityBadge(activity);
   }

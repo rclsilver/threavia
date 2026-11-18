@@ -28,6 +28,11 @@ const (
 	TypeSessionRead         Type = "session.read"
 	TypeSessionModelChanged Type = "session.model_changed"
 
+	// TypeNotificationCreated says an agent raised a notification, or raised the
+	// same unread one again. TypeNotificationRead says some were read.
+	TypeNotificationCreated Type = "notification.created"
+	TypeNotificationRead    Type = "notification.read"
+
 	TypeRunCreated           Type = "run.created"
 	TypeRunResumeUnavailable Type = "run.resume_unavailable"
 	TypeRunResumeAvailable   Type = "run.resume_available"
@@ -120,6 +125,8 @@ var persistentTypes = map[Type]bool{
 	TypeSessionSnoozed:          true,
 	TypeSessionRead:             true,
 	TypeSessionModelChanged:     true,
+	TypeNotificationCreated:     true,
+	TypeNotificationRead:        true,
 	TypeRunCreated:              true,
 	TypeJobCreated:              true,
 	TypeJobStarted:              true,

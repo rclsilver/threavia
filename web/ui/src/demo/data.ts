@@ -858,3 +858,28 @@ export const repositories: Record<string, Record<string, unknown>> = {
   [IDS.blog]: repository('/home/alex/src/site', { branch: 'drafts/homelab-rebuild', head: '12ab9f4', upstream: 'origin/drafts/homelab-rebuild', ahead: 1, fetchedAt: at(60 * 26) }),
   [IDS.oldSession]: { directory: '/home/alex', tracked: false, ahead: 0, behind: 0, upstreamGone: false, staged: 0, unstaged: 0, untracked: 0, conflicted: 0 },
 };
+
+// ----------------------------------------------------------- notifications
+
+export const notifications = [
+  {
+    id: id('d000000a', 1),
+    scope: { projectId: IDS.homelab, sessionId: IDS.backups, runId: id('d0000005', 3), jobId: id('d0000006', 5) },
+    level: 'WARNING',
+    title: 'Backup disk almost full',
+    message: 'The nightly check found the backup disk at 97%. The oldest snapshots can go; say if you want me to prune.',
+    count: 3,
+    createdAt: at(180),
+    updatedAt: at(12),
+  },
+  {
+    id: id('d000000a', 2),
+    scope: { projectId: IDS.homelab, sessionId: IDS.certManager, runId: id('d0000005', 2), jobId: id('d0000006', 3) },
+    level: 'INFO',
+    title: 'cert-manager 1.16.2 is out',
+    message: 'A patch release is available; nothing to do unless you want it.',
+    count: 1,
+    createdAt: at(95),
+    updatedAt: at(95),
+  },
+];

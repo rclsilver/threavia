@@ -27,6 +27,7 @@ const SessionSettingsView = lazyRouteComponent(() => import('@/routes/session-se
 const TasksView = lazyRouteComponent(() => import('@/routes/tasks'), 'TasksView');
 const HomeView = lazyRouteComponent(() => import('@/routes/waiting'), 'HomeView');
 const WaitingView = lazyRouteComponent(() => import('@/routes/waiting'), 'WaitingView');
+const NotificationsView = lazyRouteComponent(() => import('@/routes/notifications'), 'NotificationsView');
 const ArtifactsView = lazyRouteComponent(() => import('@/routes/project'), 'ArtifactsView');
 const AuditView = lazyRouteComponent(() => import('@/routes/project'), 'AuditView');
 const InstructionsView = lazyRouteComponent(() => import('@/routes/project'), 'InstructionsView');
@@ -63,6 +64,12 @@ const waitingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/waiting',
   component: WaitingView,
+});
+
+const notificationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/notifications',
+  component: NotificationsView,
 });
 
 const draftRoute = createRoute({
@@ -214,6 +221,7 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   callbackRoute,
   waitingRoute,
+  notificationsRoute,
   draftRoute,
   sessionRoute,
   reviewRoute,

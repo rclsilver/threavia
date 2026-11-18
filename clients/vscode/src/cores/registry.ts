@@ -38,6 +38,7 @@ export class Cores implements vscode.Disposable {
   private readonly moves = new Map<string, Promise<void>>();
   private readonly listeners = new Map<keyof Topics, Set<Listener<never>>>();
   private readonly attentionListeners = new Set<(core: Core) => void>();
+  private readonly notificationListeners = new Set<(core: Core) => void>();
   private readonly changed = new vscode.EventEmitter<Core | undefined>();
   /** A Core was added, removed, renamed, or changed state; undefined when the list changed. */
   readonly onDidChange = this.changed.event;
@@ -195,6 +196,9 @@ export class Cores implements vscode.Disposable {
     core.attention.onChange(() => {
       for (const listener of this.attentionListeners) listener(core);
     });
+    core.notifications.onChange(() => {
+      for (const listener of this.notificationListeners) listener(core);
+    });
     core.connection.onDidChange(() => {
       this.changed.fire(core);
       void this.publishContext();
@@ -273,6 +277,12 @@ export class Cores implements vscode.Disposable {
   onAttention(listener: (core: Core) => void): vscode.Disposable {
     this.attentionListeners.add(listener);
     return { dispose: () => void this.attentionListeners.delete(listener) };
+  }
+
+  /** Told when what agents told the person changed on any Core. */
+  onNotifications(listener: (core: Core) => void): vscode.Disposable {
+    this.notificationListeners.add(listener);
+    return { dispose: () => void this.notificationListeners.delete(listener) };
   }
 
   /**

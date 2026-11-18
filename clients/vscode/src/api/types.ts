@@ -20,6 +20,7 @@ export type WorkspaceFiles = Schemas['WorkspaceFiles'];
 export type BackendSkill = Schemas['BackendSkill'];
 export type Snapshot = Schemas['Snapshot'];
 export type Attention = Schemas['Attention'];
+export type Notification = Schemas['Notification'];
 export type ValidationRequest = Schemas['ValidationRequest'];
 export type UserInputRequest = Schemas['UserInputRequest'];
 export type AuthPublic = Schemas['AuthPublic'];
@@ -112,6 +113,8 @@ export interface EventPayloads {
   'session.pinned': { pinned: boolean };
   'session.project_moved': { fromProjectId: string; toProjectId: string; workingDirectoryCleared?: boolean; knowledge?: SessionMoveKnowledge };
   'session.read': { readSequence: number };
+  'notification.created': { notificationId: string; level: 'INFO' | 'WARNING'; title: string; message: string; count: number };
+  'notification.read': { notificationIds: string[] };
   'artifact.created': { artifactId: string; filename: string; mimeType: string; size: number; title?: string };
   'workspace.changed': {
     knownDirectoryId?: string;
