@@ -19,6 +19,7 @@ export type Repository = Schemas['Repository'];
 export type WorkspaceFiles = Schemas['WorkspaceFiles'];
 export type Monitor = Schemas['Monitor'];
 export type Schedule = Schemas['Schedule'];
+export type Notification = Schemas['Notification'];
 export type PushConfig = Schemas['PushConfig'];
 export type Snapshot = Schemas['Snapshot'];
 export type Attention = Schemas['Attention'];

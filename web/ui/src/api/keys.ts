@@ -12,6 +12,7 @@ export const keys = {
   policy: (sessionId: string) => ['policy', sessionId] as const,
   projectPolicy: (projectId: string) => ['project-policy', projectId] as const,
   attention: () => ['attention'] as const,
+  notifications: () => ['notifications'] as const,
   audit: () => ['audit'] as const,
   me: () => ['me'] as const,
   backends: () => ['backends'] as const,

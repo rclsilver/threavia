@@ -351,6 +351,13 @@ export class EventStream {
         void this.invalidate({ queryKey: ['projects'] });
         break;
 
+      // An agent raised a notification, or it was read on another device: the
+      // list is current state, so it is read again.
+      case 'notification.created':
+      case 'notification.read':
+        void this.invalidate({ queryKey: keys.notifications() });
+        break;
+
       case 'session.created':
       case 'session.renamed':
       case 'session.archived':

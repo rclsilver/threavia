@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-route
 import {
   Ellipsis,
   Archive,
+  Bell,
   ArchiveRestore,
   BookText,
   Check,
@@ -36,10 +37,12 @@ import {
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { matchesSearch, SESSION_SECTIONS, sessionSections, sessionsByTitle, snoozeBack, wokeFromSnooze } from '../../../../clients/shared/sessions';
+import { hasUnreadWarning } from '../../../../clients/shared/notifications';
 import { SessionMenu } from '@/components/session-actions';
 
 import {
   useAttention,
+  useNotifications,
   useBackends,
   useCreateProject,
   useMe,
@@ -165,6 +168,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // What waits for the user, by Session. The attention route is already the
   // live answer to that question, kept current by the stream.
   const attention = useAttention();
+  const notifications = useNotifications();
+  const unreadNotifications = notifications.data ?? [];
+  const notified = { count: unreadNotifications.length, warning: hasUnreadWarning(unreadNotifications) };
   const waiting = new Map<string, 'validation' | 'input'>();
   for (const request of attention.data?.userInputs ?? []) waiting.set(request.scope.sessionId, 'input');
   // A permission outranks a question: it is the one blocking a tool call.
@@ -218,6 +224,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             <Inbox className="size-4" />
             {waitingCount} waiting
+          </Link>
+        )}
+        {/* What agents told the person, one tap away like what waits. A
+            warning is loud; a note is a quiet count. */}
+        {notified.count > 0 && (
+          <Link
+            to="/notifications"
+            className={cn(
+              'ml-1 inline-flex h-11 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium md:h-9',
+              notified.warning ? 'bg-warn/15 text-warn-text' : 'bg-surface-2 text-muted',
+            )}
+          >
+            <Bell className="size-4" />
+            {notified.count}
           </Link>
         )}
         <StreamBadge connected={connected} />
@@ -297,6 +317,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           // characters would be worse than not showing one.
           <>
             <WaitingLink count={waitingCount} active={pathname === '/waiting'} collapsed />
+            <NotificationsLink {...notified} active={pathname === '/notifications'} collapsed />
             {projectId && <ProjectNav projectId={projectId} collapsed />}
             <UserMenu collapsed />
           </>
@@ -305,6 +326,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* On a phone the top bar already carries what waits, as a button
             that only shows when something does. */}
         {wide && <WaitingLink count={waitingCount} active={pathname === '/waiting'} />}
+        {wide && <NotificationsLink {...notified} active={pathname === '/notifications'} />}
         <PinnedSessions current={params.sessionId} projectId={projectId} projects={projects.data ?? []} waiting={waiting} limit={wide ? undefined : 3} />
         <section className="space-y-2">
           <ProjectSwitcher projects={projects.data ?? []} current={projectId} onSwitch={switchProject} />
@@ -717,6 +739,29 @@ function WaitingLink({ count, active, collapsed = false }: { count: number; acti
       <Inbox className={cn('size-4', count > 0 ? 'text-warn-text' : 'text-muted')} />
       <span className={cn('flex-1', count > 0 && 'font-medium')}>Waiting</span>
       {count > 0 && <Badge tone="warn" className="figures">{count}</Badge>}
+    </Link>
+  );
+}
+
+/**
+ * The way to what agents told the person. Quiet when nothing is unread, and
+ * loud as soon as one of them is a warning.
+ */
+function NotificationsLink({ count, warning, active, collapsed = false }: { count: number; warning: boolean; active: boolean; collapsed?: boolean }) {
+  const label = count > 0 ? `${count} unread ${count === 1 ? 'notification' : 'notifications'}${warning ? ', with a warning' : ''}` : 'No notifications';
+  if (collapsed) {
+    return (
+      <Link to="/notifications" title={label} aria-label={label} className={cn(rail.className, active && rail.activeProps.className, 'relative')}>
+        <Bell />
+        {count > 0 && <span className={cn('ring-surface absolute top-1 right-1 size-2 rounded-full ring-2', warning ? 'bg-warn' : 'bg-accent')} />}
+      </Link>
+    );
+  }
+  return (
+    <Link to="/notifications" data-tour="notifications" className={cn(nav.className, active && nav.activeProps.className)}>
+      <Bell className={cn('size-4', warning ? 'text-warn-text' : 'text-muted')} />
+      <span className={cn('flex-1', count > 0 && 'font-medium')}>Notifications</span>
+      {count > 0 && <Badge tone={warning ? 'warn' : 'neutral'} className="figures">{count}</Badge>}
     </Link>
   );
 }

@@ -51,6 +51,7 @@ const state = {
   backendInstructions: {} as Record<string, { agent: string; supervision: string }>,
   projectSupervision: {} as Record<string, string>,
   pushSubscriptions: clone(data.pushConfig.subscriptions) as Json[],
+  notifications: clone(data.notifications) as Json[],
   files: {} as Record<string, Blob>,
 };
 
@@ -608,6 +609,19 @@ const routes: [string, RegExp, Handler][] = [
   ['GET', /^\/api\/v1\/me$/, () => data.me],
   ['POST', /^\/api\/v1\/me\/presence$/, () => undefined],
   ['GET', /^\/api\/v1\/me\/attention$/, () => attentionFor()],
+  ['GET', /^\/api\/v1\/me\/notifications$/, (_m, _b, query) =>
+    list(state.notifications.filter((n) => query.get('unread') !== 'true' || !n.readAt))],
+  ['POST', /^\/api\/v1\/notifications\/read$/, () => {
+    const readAt = nowIso();
+    for (const n of state.notifications) n.readAt ??= readAt;
+    emitLifecycle('notification.read', undefined, { notificationIds: state.notifications.map((n) => n.id) });
+  }],
+  ['POST', /^\/api\/v1\/notifications\/([^/]+)\/read$/, (m) => {
+    const n = state.notifications.find((entry) => entry.id === m[1]);
+    if (!n) throw new ApiError(404, 'not_found', 'notification not found');
+    n.readAt ??= nowIso();
+    emitLifecycle('notification.read', undefined, { notificationIds: [m[1]] });
+  }],
   ['GET', /^\/api\/v1\/me\/pinned-sessions$/, () =>
     list(state.sessions
       .filter((session) => session.pinnedAt && session.status === 'ACTIVE')
