@@ -71,7 +71,8 @@ se marquent comme lues.
   non lue de même session, niveau, titre et message est dédupliquée
   (compteur `count` incrémenté, `updated_at` rafraîchi) plutôt que recréée,
   ce qui protège des schedules répétitifs.
-- **Core** : migration 39 `notifications`, store Postgres, méthodes de service,
+- **Core** : migration 39 `notifications` (le projet est lu via la session, pour
+  suivre une session déplacée ; le run est celui du job), store Postgres, méthodes de service,
   endpoints `GET /api/v1/me/notifications` (filtre `unread`, `sessionId`),
   `POST /api/v1/notifications/{id}/read`, `POST /api/v1/notifications/read`
   (tout marquer lu), entrées dans `api/openapi.yaml` et regénération des
@@ -79,8 +80,9 @@ se marquent comme lues.
   `notification_mark_read` manage).
 - **Flux** : événements `notification.created` et `notification.read` sur le
   flux utilisateur.
-- **Push** : ⚑ WARNING envoie un Web Push via `notifyOwner` (règle de présence
-  inchangée, tag par session). INFO n'envoie rien. Pas de push si la session est
+- **Push** : ⚑ un WARNING **nouveau** envoie un Web Push via `notifyOwner` (règle
+  de présence inchangée, tag par session) ; le même WARNING relevé à nouveau
+  (déduplication) incrémente le compteur sans sonner une seconde fois. INFO n'envoie rien. Pas de push si la session est
   déléguée (cohérent avec `delegated`, la notification reste listée).
 - **Lecture automatique** : ouvrir la session depuis la notification la marque
   lue. ⚑ Ouvrir la session par un autre chemin ne la marque pas.
@@ -93,8 +95,10 @@ se marquent comme lues.
   « Rejoindre » et « Fermer », « Tout marquer lu ». Cache React Query mis à jour
   par le flux.
 - **VS Code** (`clients/vscode`) : vue/section « Notifications » de l'arbre,
-  badge, mêmes actions ; réutilise le client API et le flux. ⚑ WARNING peut aussi
-  afficher une notification VS Code native si la fenêtre est active.
+  badge, mêmes actions ; réutilise le client API et le flux. Widget de barre de
+  statut `$(bell-dot) N` à côté de « Waiting » (demande de l'utilisateur), fond
+  d'alerte si un WARNING est non lu. ⚑ Un WARNING nouveau affiche aussi une
+  notification VS Code native (réglage `threavia.notifications.agentWarnings`).
 - **Doc** : `docs/session-management.md`, `docs/control-mcp.md`, `docs/api.md`.
 
 ## Tests
